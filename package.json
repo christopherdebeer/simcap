@@ -1,0 +1,18 @@
+{
+  "name": "SIMCAP",
+  "version": "0.1.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "raspi": "^5.0.2",
+    "raspi-i2c": "^6.1.0"
+  },
+  "dependencies": {
+    "serialport": "^6.0.4"
+  }
+}
