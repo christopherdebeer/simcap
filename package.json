@@ -13,6 +13,7 @@
     "raspi-i2c": "^6.1.0"
   },
   "dependencies": {
+    "express": "^4.16.2",
     "serialport": "^6.0.4"
   }
 }
