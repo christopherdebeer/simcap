@@ -1,11 +1,24 @@
 <!DOCTYPE html>
 <head>
 	<title>SIMCAP</title>
+	<meta name="viewport" content="initial-scale=1.0, user-scalable=no, width=device-width">
+	<link rel="apple-touch-icon" href="/assets/img/logo.png">
+	<link rel="apple-touch-startup-image" href="/assets/img/splash.png">
+	<meta name="apple-mobile-web-app-title" content="SIMCAP">
+	<meta name="apple-mobile-web-app-capable" content="yes">
+	<meta name="apple-touch-fullscreen" content="yes">
+	<meta name="apple-mobile-web-app-status-bar-style" content="white">
+
+	<script src="/assets/jquery.min.js"></script>
+	<script src="/assets/d3.v5.min.js"></script>
+
 	<style>
 		html, body {
 			display: block;
 			margin: 0 auto;
 			max-width: 800px;
+			font-family: monospace;
+			overflow: hidden;
 		}
 
 		iframe {
@@ -13,11 +26,165 @@
 			display: block;
 			width: 100%;
 		}
+
+		.labels, .runs {
+			list-style: none;
+			margin: 0;
+			padding: 0;
+			overflow: auto;
+			height: 40vh;
+		}
+
+		.labels li {
+			width: 33vw;
+			height: 33%;
+			padding: 1em;
+			text-align: center;
+			float: left;
+			box-sizing: border-box;
+			border: 1px solid #ccc;
+			cursor: pointer;
+		}
+
+		.labels .active {
+			background-color: #52da52;
+		}
+
+
+		.runs li {
+			padding: 0.4em;
+			box-sizing: border-box;
+			cursor: pointer;
+			color: #ccc;
+		}
+
+		.runs li:first-child {
+			color: #333;
+		}
+
+		.runs li .id {
+			font-weight: bold;
+			margin-right: 0.4em;
+			color: black;
+		}
+
+		.data {
+			height: 10vh;
+			padding: 2vh;
+			text-align: center;
+			box-sizing: border-box;
+		}
+
+		h1 {
+			margin: 0;
+			text-align: center;
+			padding: 2vh;
+			height: 10vh;
+			box-sizing: border-box;
+		}
+
+		h1 .status {
+			display: inline-block;
+			text-transform: uppercase;
+			color: #ccc;
+			font-weight: normal;
+			font-size: 0.5em;
+		}
+
+		h1 > .active {
+			display: none;
+		}
+
+		h1.active {
+			color: green;
+		}
+
+		h1.active > .active { display: inline-block; }
+		h1.active > .inactive { display: none; }
+
+
 	</style>
 </head>
 <body>
-	<h1>SIMCAP</h1>
-	<iframe src="/data"></iframe>
-	<a href="/toggle">TOGGLE</a>
+	<h1>SIMCAP <span class="active status">active</span><span class="status inactive">inactive</span></h1>
+	<div id="chart"></div>
+	<ol class="labels"></ol>
+	<div class="data">Attempting to connect...</div>
+	<ul class="runs"></ul>
+	<script>
+
+		document.body.addEventListener('touchmove', function(event) {
+			console.log(event.target)
+			if (!$(event.target).closest('.runs').length) event.preventDefault();
+		}, false);
+
+		function app() {
+			window.WebSocket = window.WebSocket || window.MozWebSocket;
+			var connection = new WebSocket('ws://raspberrypi.local:3000');
+			connection.onopen = function () {
+				// connection is opened and ready to use
+				console.log('WS connection open')
+
+				$('h1').click((ev) => {
+					connection.send(JSON.stringify({
+						toggle: 'serialConnected'
+					}));
+				})
+			};
+			connection.onerror = function (error) {
+				// an error occurred when sending/receiving data
+				console.error('WS connection error', error)
+				// setTimeout( app, 5000 )
+			};
+
+			connection.onclose = function(arg){
+			    console.error('WS connection closed', arg)
+			  	// setTimeout( app, 5000 )  
+		  	};
+			connection.onmessage = function (message) {
+				// try to decode json (I assume that each message
+				// from server is json)
+				// console.log( 'WS Message', message )
+
+				try {
+					var json = JSON.parse(message.data);
+					console.log( json )
+					$('.labels').html( json.labels.map( (l) => {
+						return $('<li/>').text(l)
+							.toggleClass('active', json.activeLabel === l)
+							.click((ev) => {
+								connection.send( JSON.stringify({
+									set: ['activeLabel', l]
+								}))
+							})
+					}) )
+
+					$('h1').toggleClass('active', json.serialConnected )
+					$('.data').html( json.lastData ? json.lastData.join(' ') : '' )
+
+					$('.runs').html( json.runs.reverse().map( (r) => {
+						return $('<li/>').append( $('<span/>')
+											.text(r)
+											.addClass('id')
+										)
+										.append( $('<span/>')
+											.text( (new Date(parseInt(r))).toGMTString() )
+										)
+										.click((ev) => {
+											window.open()
+										})
+					}))
+				} catch (e) {
+					console.error(e)
+					console.log('This doesn\'t look like a valid JSON: ', message.data);
+					return;
+				}
+				// handle incoming message
+			};
+		}
+
+		$(document).ready(app());
+	</script>
+	
 
 </body>
