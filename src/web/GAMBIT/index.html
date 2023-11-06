@@ -7,20 +7,17 @@
         <meta name="apple-mobile-web-app-capable" content="yes"/>
         <meta name="mobile-web-app-capable" content="yes"/>
         <meta name="apple-mobile-web-app-status-bar-style" content="black">
+        <script src="puck.js"></script>
     </head>
     <body>
         <h1>SIMCAP | GAMBIT</h1>
         <p>Gyroscope Accelerometer Magnetometer Baseline Inferrence Telemetry</p>
         <button id="connect">Connect</button>
 
-        <script src="espruino.js"></script>
-        <script src="espruino-core-config.js"></script>
-        <script src="espruino-core-utils.js"></script>
-        <script src="espruino-core-serial.js"></script>
-        <script src="espruino-core-serial-webble.js"></script>
+        <div id="log"></div>
         <script>
 
-            function updateConnectionStatus(connected) {
+            function updateConnectionStatus(connected, data) {
                 console.log(`Espruino.Core.Serial.isConnected: ${connected}, data: `, data)
                 if (connected) {
                     window.connect.innerHTML = "Disconnect"
@@ -29,36 +26,37 @@
                 }
             }
 
-            function start() {
-                Espruino.Core.Serial.getPorts(function(list, somethingElse) {
-                    console.log(list)
-                })
-            }
-            Espruino.addProcessor("connected", function(data, callback) {
-                updateConnectionStatus(true, data)
-            });
-
-            Espruino.addProcessor("disconnected", function(data, callback) {
-                updateConnectionStatus(false, data)
-            });
-
             const MAX_INIT_RETRIES = 9
+            let connection;
             let initTries = MAX_INIT_RETRIES
             let initInterval
 
+            function onLine(data) {
+                // CSV data is received here
+                console.log("DATA:", data)
+            }
+
             function init() {
-                if (Espruino.Core.Serial.isConnected()) {
-                    console.log("Connected.")
-                    start()
-                } else if (initTries > 0) {
-                    initTries -= 1
-                    console.log(`[${initTries}/${MAX_INIT_RETRIES}] Connecting...`)
-                    initInterval = setTimeout(init, 1000)
-                } else {
-                    console.log("Connection timed out.")
-                    clearTimeout(initInterval)
-                    initTries = MAX_INIT_RETRIES
-                }
+                Puck.connect(function(con) {
+                    if (!con) {
+                        updateConnectionStatus(false)
+                    } else {
+                        updateConnectionStatus(true)
+                        connection = con
+                        var buf = "";
+                        connection.on("data", function(d) {
+                            buf += d;
+                            var i = buf.indexOf("\n");
+                            while (i>=0) {
+                                onLine(buf.substr(0,i));
+                                buf = buf.substr(i+1);
+                                i = buf.indexOf("\n");
+                            }
+                        });
+
+                        connection.write("\x10getData()\n");
+                    }
+                })
             }
 
             window.connect.onclick = function() {
