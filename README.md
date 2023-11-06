@@ -1,1 +1,3 @@
-# simcap
+# SIMCAP
+
+Sensor Inferred MOtion CAPture
