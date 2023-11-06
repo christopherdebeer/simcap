@@ -2,9 +2,71 @@
 <html>
     <head>
         <title>SIMCAP | GAMBIT</title>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+        <meta name="apple-mobile-web-app-capable" content="yes"/>
+        <meta name="mobile-web-app-capable" content="yes"/>
+        <meta name="apple-mobile-web-app-status-bar-style" content="black">
     </head>
     <body>
         <h1>SIMCAP | GAMBIT</h1>
         <p>Gyroscope Accelerometer Magnetometer Baseline Inferrence Telemetry</p>
+        <button id="connect">Connect</button>
+
+        <script src="espruino.js"></script>
+        <script src="espruino-core-config.js"></script>
+        <script src="espruino-core-utils.js"></script>
+        <script src="espruino-core-serial.js"></script>
+        <script src="espruino-core-serial-webble.js"></script>
+        <script>
+
+            function updateConnectionStatus(connected) {
+                console.log(`Espruino.Core.Serial.isConnected: ${connected}, data: `, data)
+                if (connected) {
+                    window.connect.innerHTML = "Disconnect"
+                } else {
+                    window.connect.innerHTML = "Connect"
+                }
+            }
+
+            function start() {
+                Espruino.Core.Serial.getPorts(function(list, somethingElse) {
+                    console.log(list)
+                })
+            }
+            Espruino.addProcessor("connected", function(data, callback) {
+                updateConnectionStatus(true, data)
+            });
+
+            Espruino.addProcessor("disconnected", function(data, callback) {
+                updateConnectionStatus(false, data)
+            });
+
+            const MAX_INIT_RETRIES = 9
+            let initTries = MAX_INIT_RETRIES
+            let initInterval
+
+            function init() {
+                if (Espruino.Core.Serial.isConnected()) {
+                    console.log("Connected.")
+                    start()
+                } else if (initTries > 0) {
+                    initTries -= 1
+                    console.log(`[${initTries}/${MAX_INIT_RETRIES}] Connecting...`)
+                    initInterval = setTimeout(init, 1000)
+                } else {
+                    console.log("Connection timed out.")
+                    clearTimeout(initInterval)
+                    initTries = MAX_INIT_RETRIES
+                }
+            }
+
+            window.connect.onclick = function() {
+                 init()
+            }
+
+            init()
+            
+        </script>
     </body>
 </html>
