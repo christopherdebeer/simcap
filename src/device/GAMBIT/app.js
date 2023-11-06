@@ -64,3 +64,21 @@ Puck.on('field',function(m) {
         log.push(`m:${m.state}`)
     }
 });
+
+//Button Press
+//Turn Off/On MQTT Advertising
+var pressCount = 0;
+setWatch(function() {
+    pressCount++;
+    state = (pressCount+1)%2;
+    if ((pressCount+1)%2) digitalPulse(LED3,1,1500); //long flash blue light
+    else
+        digitalPulse(LED3,1,100); //short flash blue light
+    console.log('button_press_count : [' + pressCount + ']');
+    console.log('button_state : [' + (pressCount+1) + ']');
+    console.log('state: ' + state); 
+    NRF.setAdvertising({
+        0xFFFF : [pressCount],
+        0x183c: [((pressCount+1)%2)],
+    });
+}, BTN, { edge:"rising", repeat:true, debounce:50 });
