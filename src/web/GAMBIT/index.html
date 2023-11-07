@@ -12,7 +12,7 @@
     <body>
         <h1>SIMCAP | GAMBIT</h1>
         <p>Gyroscope Accelerometer Magnetometer Baseline Inferrence Telemetry</p>
-        <button id="connect">Connect</button>
+        <button id="connect">Connect</button> <button id="getdata">Get data</button>
 
         <code>
             <pre id="log"></pre>
@@ -38,6 +38,8 @@
                 // CSV data is received here
                 console.log("DATA:", data)
                 window.log.innerHTML += data
+
+                if (data.startsWith("GAMBIT")) console.log(JSON.parse(data.slice(6)))
             }
 
             function init() {
@@ -63,6 +65,10 @@
 
             window.connect.onclick = function() {
                  init()
+            }
+
+            window.getdata.onclick = function() {
+                Puck.write("getData();\n")
             }
             
         </script>
