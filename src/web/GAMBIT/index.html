@@ -55,6 +55,11 @@
                 font-size: 1.2em;
             }
 
+            .buttons {
+                display: flex;
+                justify-content: space-evenly;
+            }
+
             h1 {
                 font-weight: normal;
             }
@@ -95,7 +100,10 @@
     <body>
         <h1>SIMCAP | <span class="grad">GAMBIT</span></h1>
         <p>Gyroscope Accelerometer Magnetometer Baseline Inferrence Telemetry</p>
-        <button id="connect">Connect</button> <button disabled id="getdata">Get data</button>
+        
+        <div class="buttons">
+            <button id="connect">Connect</button> <button disabled id="getdata">Get data</button>
+        </div>
 
         <div class="dataView">
             <div id="button"><label>Btn: </label><span id="btn">0</span></div> <div id="battery"><label>Bat: </label><span id="b">0</span></div>
