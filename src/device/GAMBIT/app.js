@@ -11,7 +11,7 @@ var telemetry = {
     b: null,
 }
 
-function getData() {
+function emit() {
     telemetry.m = Puck.mag()
     var accel = Puck.accel()
     telemetry.a = accel.acc
@@ -23,6 +23,14 @@ function getData() {
     telemetry.b = Puck.getBatteryPercentage()
     console.log("\nGAMBIT" + JSON.stringify(telemetry))
     return telemetry;
+}
+
+var interval;
+function getData() {
+    if (internal) return;
+
+    setTimeout(function(){clearInterval(interval)}, 10000)
+    setInterval(emit, 100)
 }
 
 

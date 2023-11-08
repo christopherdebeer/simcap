@@ -129,8 +129,10 @@
                 console.log(`Espruino.Core.Serial.isConnected: ${connected}, data: `, data)
                 if (connected) {
                     window.connect.innerHTML = "Disconnect"
+                    window.getdata.disabled = false
                 } else {
                     window.connect.innerHTML = "Connect"
+                    window.getdata.disabled = true
                 }
             }
 
@@ -166,11 +168,12 @@
             }
 
             function init() {
-                window.getdata.setAttribute('disabled', false)
+                
                 Puck.connect(function(con) {
                     if (!con) {
                         updateConnectionStatus(false)
                     } else {
+                        
                         updateConnectionStatus(true)
                         connection = con
                         var buf = "";
