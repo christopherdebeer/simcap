@@ -29,8 +29,8 @@ var interval;
 function getData() {
     if (interval) return;
 
-    setTimeout(function(){clearInterval(interval)}, 10000)
-    setInterval(emit, 100)
+    setTimeout(function(){clearInterval(interval)}, 5000)
+    interval = setInterval(emit, 100)
 }
 
 
