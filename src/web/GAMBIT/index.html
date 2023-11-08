@@ -8,11 +8,84 @@
         <meta name="mobile-web-app-capable" content="yes"/>
         <meta name="apple-mobile-web-app-status-bar-style" content="black">
         <script src="puck.js"></script>
+        <style>
+
+            body, html {
+                padding: 0;
+                margin: 0;
+                background-color: black;
+                color: white;
+                text-align: center;
+            }
+
+            body {
+                padding: 0.3em;
+            }
+
+            button {
+                background-color: white;
+                color: black;
+                padding: 0.3em 0.6em;
+                border-radius: 0.4em;
+                border: 0 none;
+                cursor: pointer;
+                font-size: 1.2em;
+            }
+
+            button[disabled] {
+                opacity: 0.5;
+                cursor: default;
+            }
+
+            .dataView {
+                border: 1px solid black;
+                display: flex;
+                flex-direction: column;
+                margin-top: 1em;
+            }
+
+            .dataView > div {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .dataView > div > * {
+                padding: 1em;
+                text-align: center;
+                font-weight: bold;
+                display: flex;
+                flex-grow: 1;
+                justify-content: center;
+            }
+        </style>
     </head>
     <body>
         <h1>SIMCAP | GAMBIT</h1>
         <p>Gyroscope Accelerometer Magnetometer Baseline Inferrence Telemetry</p>
-        <button id="connect">Connect</button> <button id="getdata">Get data</button>
+        <button id="connect">Connect</button> <button disabled id="getdata">Get data</button>
+
+        <div class="dataView">
+            <div id="button"><label>Btn: </label><span id="btn">0</span></div> <div id="battery"><label>Bat: </label><span id="b">0</span></div>
+            <div id="mag">
+                <label>Mag: </label>
+                <span id="mX">0</span>
+                <span id="mY">0</span>
+                <span id="mZ">0</span>
+            </div>
+            <div id="acc">
+                <label>Acc: </label>
+                <span id="aX">0</span>
+                <span id="aY">0</span>
+                <span id="aZ">0</span>
+            </div>
+            <div id="gyr">
+                <label>Gyro: </label>
+                <span id="gX">0</span>
+                <span id="gY">0</span>
+                <span id="gZ">0</span>
+            </div>
+        </div>
 
         <code>
             <pre id="log"></pre>
@@ -39,10 +112,29 @@
                 console.log("DATA:", data)
                 window.log.innerHTML += data
 
-                if (data.startsWith("GAMBIT")) console.log(JSON.parse(data.slice(6)))
+                if (data.startsWith("GAMBIT")) {
+                    var t = JSON.parse(data.slice(6))
+                    console.log(t)
+
+                    window.b.innerHTML = t.b
+
+                    window.mX.innerHTML = t.m.x
+                    window.mY.innerHTML = t.m.y
+                    window.mZ.innerHTML = t.m.z
+
+                    window.aX.innerHTML = t.a.x
+                    window.aY.innerHTML = t.a.y
+                    window.aZ.innerHTML = t.a.z
+
+                    window.gX.innerHTML = t.g.x
+                    window.gY.innerHTML = t.g.y
+                    window.gZ.innerHTML = t.g.z
+
+                }
             }
 
             function init() {
+                window.getdata.setAttribute('disabled', false)
                 Puck.connect(function(con) {
                     if (!con) {
                         updateConnectionStatus(false)
