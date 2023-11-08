@@ -10,7 +10,6 @@ var telemetry = {
     s: state,
     b: null,
 }
-
 function emit() {
     telemetry.m = Puck.mag()
     var accel = Puck.accel()
@@ -27,13 +26,14 @@ function emit() {
 
 var interval;
 function getData() {
-    if (interval) return;
+    if (interval) return emit();
 
     setTimeout(function(){
         clearInterval(interval)
         interval = null
     }, 5000)
     interval = setInterval(emit, 100)
+    return(emit())
 }
 
 

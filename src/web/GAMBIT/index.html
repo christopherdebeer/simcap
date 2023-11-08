@@ -148,8 +148,9 @@
 
         <script>
 
-            function updateConnectionStatus(connected, data) {
-                console.log(`Espruino.Core.Serial.isConnected: ${connected}, data: `, data)
+            function updateConnectionStatus(connected, connection) {
+                console.log(`SIMCAP Device connected: ${connected}, connection: `, connection)
+                connection = connected ? connection : undefined;
                 if (connected) {
                     window.connect.innerHTML = "Disconnect"
                     window.getdata.disabled = false
@@ -166,49 +167,46 @@
 
             function onLine(data) {
                 if (data.startsWith("GAMBIT")) {
+                    console.log(data)
                     var t = JSON.parse(data.slice(6))
-                    console.log("Data: ", t)
-
-                    window.b.innerHTML = t.b
-
-                    window.mX.innerHTML = t.m.x
-                    window.mY.innerHTML = t.m.y
-                    window.mZ.innerHTML = t.m.z
-
-                    window.aX.innerHTML = t.a.x
-                    window.aY.innerHTML = t.a.y
-                    window.aZ.innerHTML = t.a.z
-
-                    window.gX.innerHTML = t.g.x
-                    window.gY.innerHTML = t.g.y
-                    window.gZ.innerHTML = t.g.z
-
-                } else {
-                    console.log("Log: ", data)
+                    updateData(t)
                 }
             }
 
-            function init() {
+            function updateData(t) {
+                console.log("Data: ", t)
+
+                window.b.innerHTML = t.b
+
+                window.mX.innerHTML = t.m.x
+                window.mY.innerHTML = t.m.y
+                window.mZ.innerHTML = t.m.z
+
+                window.aX.innerHTML = t.a.x
+                window.aY.innerHTML = t.a.y
+                window.aZ.innerHTML = t.a.z
+
+                window.gX.innerHTML = t.g.x
+                window.gY.innerHTML = t.g.y
+                window.gZ.innerHTML = t.g.z
+            }
+
+            async function init() {
                 
-                Puck.connect(function(con) {
-                    if (!con) {
-                        updateConnectionStatus(false)
-                    } else {
-                        
-                        updateConnectionStatus(true)
-                        connection = con
-                        var buf = "";
-                        connection.on("data", function(d) {
-                            buf += d;
-                            var i = buf.indexOf("\n");
-                            while (i>=0) {
-                                onLine(buf.substr(0,i));
-                                buf = buf.substr(i+1);
-                                i = buf.indexOf("\n");
-                            }
-                        });
+                if (!Puck.isConnected()) await Puck.write("console.log('Connected from GAMBIT/web')")
+                var con = Puck.getConnection()
+                updateConnectionStatus( !!con, con)
+
+                var buf = "";
+                con.on("data", function(d) {
+                    buf += d;
+                    var i = buf.indexOf("\n");
+                    while (i>=0) {
+                        onLine(buf.substr(0,i));
+                        buf = buf.substr(i+1);
+                        i = buf.indexOf("\n");
                     }
-                })
+                });
             }
 
             window.connect.onclick = function() {
@@ -216,7 +214,11 @@
             }
 
             window.getdata.onclick = function() {
-                Puck.write("getData();\n")
+                console.time("getData")
+                Puck.eval("getData()", function(d) {
+                    updateData(d)
+                    console.timeEnd('getData')
+                })
             }
             
         </script>
