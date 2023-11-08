@@ -142,13 +142,9 @@
             let initInterval
 
             function onLine(data) {
-                // CSV data is received here
-                console.log("DATA:", data)
-                window.log.innerHTML += data
-
                 if (data.startsWith("GAMBIT")) {
                     var t = JSON.parse(data.slice(6))
-                    console.log(t)
+                    console.log("Data: ", t)
 
                     window.b.innerHTML = t.b
 
@@ -164,6 +160,8 @@
                     window.gY.innerHTML = t.g.y
                     window.gZ.innerHTML = t.g.z
 
+                } else {
+                    console.log("Log: ", data)
                 }
             }
 
