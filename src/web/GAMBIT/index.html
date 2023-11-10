@@ -103,12 +103,14 @@
             }
 
             .dataView > div > * {
-                padding: 1em;
+                padding: 0.3em;
                 text-align: center;
                 font-weight: bold;
                 display: flex;
                 flex-grow: 1;
                 justify-content: center;
+                box-sizing: border-box;
+                width: 25%;
             }
 
             #three-d {
@@ -118,8 +120,8 @@
             }
 
             .cube {
-                width: 100px;
-                height: 100px;
+                width: 50px;
+                height: 50px;
                 transform-style: preserve-3d;
             }
 
@@ -131,38 +133,38 @@
                 height: 100%;
                 position: absolute;
                 backface-visibility: inherit;
-                font-size: 60px;
+                font-size: 30px;
                 color: #fff;
             }
 
             .front {
                 background: rgba(90,90,90,.7);
-                transform: translateZ(50px)
+                transform: translateZ(25px)
             }
 
             .back {
                 background: rgba(0,210,0,.7);
-                transform: rotateY(180deg) translateZ(50px)
+                transform: rotateY(180deg) translateZ(25px)
             }
 
             .right {
                 background: rgba(210,0,0,.7);
-                transform: rotateY(90deg) translateZ(50px)
+                transform: rotateY(90deg) translateZ(25px)
             }
 
             .left {
                 background: rgba(0,0,210,.7);
-                transform: rotateY(-90deg) translateZ(50px)
+                transform: rotateY(-90deg) translateZ(25px)
             }
 
             .top {
                 background: rgba(210,210,0,.7);
-                transform: rotateX(90deg) translateZ(50px)
+                transform: rotateX(90deg) translateZ(25px)
             }
 
             .bottom {
                 background: rgba(210,0,210,.7);
-                transform: rotateX(-90deg) translateZ(50px)
+                transform: rotateX(-90deg) translateZ(25px)
             }
         </style>
     </head>
@@ -175,7 +177,8 @@
         </div>
 
         <div class="dataView">
-            <div id="button"><label>Btn: </label><span id="btn">0</span></div> <div id="battery"><label>Bat: </label><span id="b">0</span></div>
+            <div id="battery"><progress max="100" value="0" id="b">0</span></div>
+            <div id="button"><label>Btn: </label><span id="btn">0</span> <span id="count">0</span> <span id="state">0</span></div>
             <div id="mag">
                 <label>Mag: </label>
                 <span id="mX">0</span>
@@ -253,7 +256,10 @@
             function updateData(t) {
                 console.log("Data: ", t)
 
-                window.b.innerHTML = t.b
+                window.b.value = t.b
+
+                window.state.innerHTML = t.s
+                window.count.innerHTML = t.count
 
                 window.mX.innerHTML = t.m.x
                 window.mY.innerHTML = t.m.y

@@ -1,4 +1,5 @@
 var state = 1;
+var pressCount = 0;
 
 var telemetry = {
     a: null,
@@ -19,6 +20,7 @@ function emit() {
     telemetry.t = Puck.magTemp()
     telemetry.c = Puck.capSense()
     telemetry.s = state
+    telemetry.count = pressCount
     telemetry.b = Puck.getBatteryPercentage()
     console.log("\nGAMBIT" + JSON.stringify(telemetry))
     return telemetry;
