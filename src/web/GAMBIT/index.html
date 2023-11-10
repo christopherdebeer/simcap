@@ -295,10 +295,11 @@
             }
 
             window.getdata.onclick = function() {
-                console.time("getData")
+                const startTime = Date.now()
                 Puck.eval("getData()", function(d) {
+                    console.log(`getData() eval response time: ${(Date.now() - startTime)}ms`)
                     updateData(d)
-                    console.timeEnd('getData')
+                    
                 })
             }
             
