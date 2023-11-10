@@ -177,7 +177,7 @@
         </div>
 
         <div class="dataView">
-            <div id="battery"><progress max="100" value="0" id="b">0</span></div>
+            <div id="battery"><progress max="100" value="0" id="b" title="0% battery"></progress></div>
             <div id="button"><label>Btn: </label><span id="btn">0</span> <span id="count">0</span> <span id="state">0</span></div>
             <div id="mag">
                 <label>Mag: </label>
@@ -257,6 +257,7 @@
                 console.log("Data: ", t)
 
                 window.b.value = t.b
+                window.b.title = t.b + '% battery'
 
                 window.state.innerHTML = t.s
                 window.count.innerHTML = t.count
