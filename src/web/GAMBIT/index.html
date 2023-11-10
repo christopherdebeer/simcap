@@ -110,6 +110,60 @@
                 flex-grow: 1;
                 justify-content: center;
             }
+
+            #three-d {
+                perspective: 550px;
+                display: flex;
+                justify-content: space-evenly;
+            }
+
+            .cube {
+                width: 100px;
+                height: 100px;
+                transform-style: preserve-3d;
+            }
+
+            .face {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 100%;
+                height: 100%;
+                position: absolute;
+                backface-visibility: inherit;
+                font-size: 60px;
+                color: #fff;
+            }
+
+            .front {
+                background: rgba(90,90,90,.7);
+                transform: translateZ(50px)
+            }
+
+            .back {
+                background: rgba(0,210,0,.7);
+                transform: rotateY(180deg) translateZ(50px)
+            }
+
+            .right {
+                background: rgba(210,0,0,.7);
+                transform: rotateY(90deg) translateZ(50px)
+            }
+
+            .left {
+                background: rgba(0,0,210,.7);
+                transform: rotateY(-90deg) translateZ(50px)
+            }
+
+            .top {
+                background: rgba(210,210,0,.7);
+                transform: rotateX(90deg) translateZ(50px)
+            }
+
+            .bottom {
+                background: rgba(210,0,210,.7);
+                transform: rotateX(-90deg) translateZ(50px)
+            }
         </style>
     </head>
     <body>
@@ -142,9 +196,32 @@
             </div>
         </div>
 
-        <code>
-            <pre id="log"></pre>
-        </code>
+        <section id="three-d" class="default-example">
+            <div id="cubeA" class="cube transition-all" style="transform: rotate3d(0, 1, 0.5, 3.142rad);">
+              <div class="face front">1</div>
+              <div class="face back">2</div>
+              <div class="face right">3</div>
+              <div class="face left">4</div>
+              <div class="face top">5</div>
+              <div class="face bottom">6</div>
+            </div>
+            <div id="cubeG" class="cube transition-all" style="transform: rotate3d(0, 1, 0.5, 3.142rad);">
+                <div class="face front">1</div>
+                <div class="face back">2</div>
+                <div class="face right">3</div>
+                <div class="face left">4</div>
+                <div class="face top">5</div>
+                <div class="face bottom">6</div>
+              </div>
+              <div id="cubeM" class="cube transition-all" style="transform: rotate3d(0, 1, 0.5, 3.142rad);">
+                <div class="face front">1</div>
+                <div class="face back">2</div>
+                <div class="face right">3</div>
+                <div class="face left">4</div>
+                <div class="face top">5</div>
+                <div class="face bottom">6</div>
+              </div>
+          </section>
 
         <script>
 
@@ -189,6 +266,10 @@
                 window.gX.innerHTML = t.g.x
                 window.gY.innerHTML = t.g.y
                 window.gZ.innerHTML = t.g.z
+
+                window.cubeA.style = `transform: rotate3d(${t.a.x}, ${t.a.y}, ${t.a.z}, 3.142rad);`
+                window.cubeG.style = `transform: rotate3d(${t.g.x}, ${t.g.y}, ${t.g.z}, 3.142rad);`
+                window.cubeM.style = `transform: rotate3d(${t.m.x}, ${t.m.y}, ${t.m.z}, 3.142rad);`
             }
 
             async function init() {
