@@ -31,8 +31,8 @@ function getData() {
     setTimeout(function(){
         clearInterval(interval)
         interval = null
-    }, 5000)
-    interval = setInterval(emit, 100)
+    }, 30000)
+    interval = setInterval(emit, 50)
     return(emit())
 }
 
