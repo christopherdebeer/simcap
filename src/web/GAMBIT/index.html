@@ -8,6 +8,7 @@
         <meta name="mobile-web-app-capable" content="yes"/>
         <meta name="apple-mobile-web-app-status-bar-style" content="black">
         <script src="puck.js"></script>
+        <script src="kalman.js"></script>
         <style>
 
             body, html {
@@ -120,8 +121,8 @@
             }
 
             .cube {
-                width: 50px;
-                height: 50px;
+                width: 4em;
+                height: 4em;
                 transform-style: preserve-3d;
             }
 
@@ -133,38 +134,38 @@
                 height: 100%;
                 position: absolute;
                 backface-visibility: inherit;
-                font-size: 30px;
+                font-size: 1em;
                 color: #fff;
             }
 
             .front {
                 background: rgba(90,90,90,.7);
-                transform: translateZ(25px)
+                transform: translateZ(2em)
             }
 
             .back {
                 background: rgba(0,210,0,.7);
-                transform: rotateY(180deg) translateZ(25px)
+                transform: rotateY(180deg) translateZ(2em)
             }
 
             .right {
                 background: rgba(210,0,0,.7);
-                transform: rotateY(90deg) translateZ(25px)
+                transform: rotateY(90deg) translateZ(2em)
             }
 
             .left {
                 background: rgba(0,0,210,.7);
-                transform: rotateY(-90deg) translateZ(25px)
+                transform: rotateY(-90deg) translateZ(2em)
             }
 
             .top {
                 background: rgba(210,210,0,.7);
-                transform: rotateX(90deg) translateZ(25px)
+                transform: rotateX(90deg) translateZ(2em)
             }
 
             .bottom {
                 background: rgba(210,0,210,.7);
-                transform: rotateX(-90deg) translateZ(25px)
+                transform: rotateX(-90deg) translateZ(2em)
             }
         </style>
     </head>
@@ -200,30 +201,31 @@
         </div>
 
         <section id="three-d" class="default-example">
+            <div id="cubeM" class="cube transition-all" style="transform: rotate3d(0, 1, 0.5, 3.142rad);">
+                <div class="face front">mag 1</div>
+                <div class="face back">mag 2</div>
+                <div class="face right">mag 3</div>
+                <div class="face left">mag 4</div>
+                <div class="face top">mag 5</div>
+                <div class="face bottom">mag 6</div>
+              </div>
             <div id="cubeA" class="cube transition-all" style="transform: rotate3d(0, 1, 0.5, 3.142rad);">
-              <div class="face front">1</div>
-              <div class="face back">2</div>
-              <div class="face right">3</div>
-              <div class="face left">4</div>
-              <div class="face top">5</div>
-              <div class="face bottom">6</div>
+              <div class="face front">acc 1</div>
+              <div class="face back">acc 2</div>
+              <div class="face right">acc 3</div>
+              <div class="face left">acc 4</div>
+              <div class="face top">acc 5</div>
+              <div class="face bottom">acc 6</div>
             </div>
             <div id="cubeG" class="cube transition-all" style="transform: rotate3d(0, 1, 0.5, 3.142rad);">
-                <div class="face front">1</div>
-                <div class="face back">2</div>
-                <div class="face right">3</div>
-                <div class="face left">4</div>
-                <div class="face top">5</div>
-                <div class="face bottom">6</div>
+                <div class="face front">gyro 1</div>
+                <div class="face back">gyro 2</div>
+                <div class="face right">gyro 3</div>
+                <div class="face left">gyro 4</div>
+                <div class="face top">gyro 5</div>
+                <div class="face bottom">gyro 6</div>
               </div>
-              <div id="cubeM" class="cube transition-all" style="transform: rotate3d(0, 1, 0.5, 3.142rad);">
-                <div class="face front">1</div>
-                <div class="face back">2</div>
-                <div class="face right">3</div>
-                <div class="face left">4</div>
-                <div class="face top">5</div>
-                <div class="face bottom">6</div>
-              </div>
+              
           </section>
 
         <script>
@@ -253,8 +255,40 @@
                 }
             }
 
-            function updateData(t) {
-                console.log("Data: ", t)
+            var kalmanBat = new KalmanFilter();
+            var kalmanMx = new KalmanFilter();
+            var kalmanMy = new KalmanFilter();
+            var kalmanMz = new KalmanFilter();
+            var kalmanAx = new KalmanFilter();
+            var kalmanAy = new KalmanFilter();
+            var kalmanAz = new KalmanFilter();
+            var kalmanGx = new KalmanFilter();
+            var kalmanGy = new KalmanFilter();
+            var kalmanGz = new KalmanFilter();
+
+            function normalise(t) {
+
+                t.b = kalmanBat.filter(t.b)
+
+                t.m.x = kalmanMx.filter(t.m.x)
+                t.m.y = kalmanMy.filter(t.m.y)
+                t.m.z = kalmanMz.filter(t.m.z)
+
+                t.a.x = kalmanAx.filter(t.a.x / 8192)
+                t.a.y = kalmanAy.filter(t.a.y / 8192)
+                t.a.z = kalmanAz.filter(t.a.z / 8192)
+
+                t.g.x = kalmanGx.filter(t.g.x / 134)
+                t.g.y = kalmanGy.filter(t.g.y / 134)
+                t.g.z = kalmanGz.filter(t.g.z / 134)
+
+                return t
+            }
+
+            function updateData(prenorm) {
+                
+                console.log("Data (prenorm): ", prenorm)
+                var t = normalise(prenorm)
 
                 window.b.value = t.b
                 window.b.title = t.b + '% battery'
@@ -277,6 +311,7 @@
                 window.cubeA.style = `transform: rotate3d(${t.a.x}, ${t.a.y}, ${t.a.z}, 3.142rad);`
                 window.cubeG.style = `transform: rotate3d(${t.g.x}, ${t.g.y}, ${t.g.z}, 3.142rad);`
                 window.cubeM.style = `transform: rotate3d(${t.m.x}, ${t.m.y}, ${t.m.z}, 3.142rad);`
+                console.log("Data (postnorm)", t)
             }
 
             async function init() {
