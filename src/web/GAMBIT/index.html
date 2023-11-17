@@ -124,6 +124,7 @@
                 width: 4em;
                 height: 4em;
                 transform-style: preserve-3d;
+                transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg);
             }
 
             .face {
@@ -201,7 +202,7 @@
         </div>
 
         <section id="three-d" class="default-example">
-            <div id="cubeM" class="cube transition-all" style="transform: rotate3d(0, 1, 0.5, 3.142rad);">
+            <div id="cubeM" class="cube transition-all">
                 <div class="face front">mag 1</div>
                 <div class="face back">mag 2</div>
                 <div class="face right">mag 3</div>
@@ -209,7 +210,7 @@
                 <div class="face top">mag 5</div>
                 <div class="face bottom">mag 6</div>
               </div>
-            <div id="cubeA" class="cube transition-all" style="transform: rotate3d(0, 1, 0.5, 3.142rad);">
+            <div id="cubeA" class="cube transition-all">
               <div class="face front">acc 1</div>
               <div class="face back">acc 2</div>
               <div class="face right">acc 3</div>
@@ -217,7 +218,7 @@
               <div class="face top">acc 5</div>
               <div class="face bottom">acc 6</div>
             </div>
-            <div id="cubeG" class="cube transition-all" style="transform: rotate3d(0, 1, 0.5, 3.142rad);">
+            <div id="cubeG" class="cube transition-all">
                 <div class="face front">gyro 1</div>
                 <div class="face back">gyro 2</div>
                 <div class="face right">gyro 3</div>
@@ -249,69 +250,94 @@
 
             function onLine(data) {
                 if (data.startsWith("GAMBIT")) {
-                    console.log(data)
-                    var t = JSON.parse(data.slice(6))
+                   
+                    var t = JSON.parse(data.slice(6, -1))
+                    console.log(data.slice(6, -1))
+                    console.log(JSON.stringify(t))
                     updateData(t)
                 }
             }
 
-            var kalmanBat = new KalmanFilter();
-            var kalmanMx = new KalmanFilter();
-            var kalmanMy = new KalmanFilter();
-            var kalmanMz = new KalmanFilter();
-            var kalmanAx = new KalmanFilter();
-            var kalmanAy = new KalmanFilter();
-            var kalmanAz = new KalmanFilter();
-            var kalmanGx = new KalmanFilter();
-            var kalmanGy = new KalmanFilter();
-            var kalmanGz = new KalmanFilter();
+            var minMaxs = {}
+
+            function updateMinMaxsReturnNorm(key, val) {
+                if (typeof minMaxs[key] === 'undefined') {
+                    var k = new KalmanFilter({R: 0.01, Q: 3})
+                    minMaxs[key] = {
+                        values: [],
+                        min: val,
+                        max: val, 
+                        kalman: k,
+                        kalmanValues: []
+                    }
+                } else if (minMaxs[key].min > val) {
+                    minMaxs[key].min = val
+                } else if (minMaxs[key].max < val) {
+                    minMaxs[key].max = val
+                }
+
+                var kalmanValue = minMaxs[key].kalman.filter(val)
+                minMaxs[key].values.push(val)
+                minMaxs[key].kalmanValues.push(kalmanValue)
+
+                if ((minMaxs[key].max - minMaxs[key].min) === 0) {
+                    return 0.5
+                }
+
+                return (val - minMaxs[key].min) / (minMaxs[key].max - minMaxs[key].min)
+            }
 
             function normalise(t) {
-
-                t.b = kalmanBat.filter(t.b)
-
-                t.m.x = kalmanMx.filter(t.m.x)
-                t.m.y = kalmanMy.filter(t.m.y)
-                t.m.z = kalmanMz.filter(t.m.z)
-
-                t.a.x = kalmanAx.filter(t.a.x / 8192)
-                t.a.y = kalmanAy.filter(t.a.y / 8192)
-                t.a.z = kalmanAz.filter(t.a.z / 8192)
-
-                t.g.x = kalmanGx.filter(t.g.x / 134)
-                t.g.y = kalmanGy.filter(t.g.y / 134)
-                t.g.z = kalmanGz.filter(t.g.z / 134)
-
-                return t
+                return {
+                    s: t.s,
+                    c: t.c,
+                    b: updateMinMaxsReturnNorm('b', t.b),
+                    m: {
+                        x: updateMinMaxsReturnNorm('mx', t.m.x),
+                        y: updateMinMaxsReturnNorm('my', t.m.y),
+                        z: updateMinMaxsReturnNorm('mz', t.m.z)
+                    },
+                    a: {
+                        x: updateMinMaxsReturnNorm('ax', t.a.x / 8192),
+                        y: updateMinMaxsReturnNorm('ay', t.a.y / 8192),
+                        z: updateMinMaxsReturnNorm('az', t.a.z / 8192)
+                    },
+                    g: {
+                        x: updateMinMaxsReturnNorm('gx', t.g.x / 134),
+                        y: updateMinMaxsReturnNorm('gy', t.g.y / 134),
+                        z: updateMinMaxsReturnNorm('gz', t.g.z / 134)
+                    }
+                }
             }
 
             function updateData(prenorm) {
                 
                 console.log("Data (prenorm): ", prenorm)
                 var t = normalise(prenorm)
+                console.log("Data (postnorm)", t)
 
-                window.b.value = t.b
+                window.b.value = Math.floor( 100 * t.b )
                 window.b.title = t.b + '% battery'
 
                 window.state.innerHTML = t.s
                 window.count.innerHTML = t.count
 
-                window.mX.innerHTML = t.m.x
-                window.mY.innerHTML = t.m.y
-                window.mZ.innerHTML = t.m.z
+                window.mX.innerHTML = t.m.x.toFixed(4)
+                window.mY.innerHTML = t.m.y.toFixed(4)
+                window.mZ.innerHTML = t.m.z.toFixed(4)
 
-                window.aX.innerHTML = t.a.x
-                window.aY.innerHTML = t.a.y
-                window.aZ.innerHTML = t.a.z
+                window.aX.innerHTML = t.a.x.toFixed(4)
+                window.aY.innerHTML = t.a.y.toFixed(4)
+                window.aZ.innerHTML = t.a.z.toFixed(4)
 
-                window.gX.innerHTML = t.g.x
-                window.gY.innerHTML = t.g.y
-                window.gZ.innerHTML = t.g.z
+                window.gX.innerHTML = t.g.x.toFixed(4)
+                window.gY.innerHTML = t.g.y.toFixed(4)
+                window.gZ.innerHTML = t.g.z.toFixed(4)
 
-                window.cubeA.style = `transform: rotate3d(${t.a.x}, ${t.a.y}, ${t.a.z}, 3.142rad);`
-                window.cubeG.style = `transform: rotate3d(${t.g.x}, ${t.g.y}, ${t.g.z}, 3.142rad);`
-                window.cubeM.style = `transform: rotate3d(${t.m.x}, ${t.m.y}, ${t.m.z}, 3.142rad);`
-                console.log("Data (postnorm)", t)
+                window.cubeA.style = `transform: rotateX(${360 * t.a.x}deg) rotateY(${360 * t.a.y}deg) rotateZ(${360 * t.a.z}deg);`
+                window.cubeG.style = `transform: rotateX(${360 * t.g.x}deg) rotateY(${360 * t.g.y}deg) rotateZ(${360 * t.g.z}deg);`
+                window.cubeM.style = `transform: rotateX(${360 * t.m.x}deg) rotateY(${360 * t.m.y}deg) rotateZ(${360 * t.m.z}deg);`
+                
             }
 
             async function init() {
@@ -340,8 +366,7 @@
                 const startTime = Date.now()
                 Puck.eval("getData()", function(d) {
                     console.log(`getData() eval response time: ${(Date.now() - startTime)}ms`)
-                    updateData(d)
-                    
+                    console.log(d)
                 })
             }
             
