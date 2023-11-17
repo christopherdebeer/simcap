@@ -2,7 +2,7 @@
 
 Gyroscope Magnetometer Accelerometer Baseline Inference Telemetry
 
-A web UI which gathers (reads) basline data from a SIMCAP PALM device running the GAMBIT firmware (Espriuno Puck applet) and communicating over BLE.
+A web UI which gathers (reads) basline data from a SIMCAP PALM device running the [GAMBIT](../../device/GAMBIT/) firmware (Espriuno Puck applet) and communicating over BLE.
 
 ## Getting started
 
@@ -10,7 +10,7 @@ A web UI which gathers (reads) basline data from a SIMCAP PALM device running th
   - or compatible Espriuno device (Puck 2? runnig GAMBIT firmware)
 - "tap" your Phone to the device
 - and follow the advertised NFC notification,
-- which will direct you to this repositories hosted Web UI
+- which will direct you to this repositories [hosted Web UI](https://christopherdebeer.github.io/simcap/src/web/GAMBIT/)
   - (currently required webble app on iOS)
 
 ## Todo
