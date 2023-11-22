@@ -398,7 +398,7 @@
             async function ghPutData(content) {
 
                 if (!ghToken) return;
-                
+
                 const d = new Date()
                 const filename = `${d.toISOString()}.csv`
 
@@ -445,7 +445,7 @@
                 ghToken = prompt("github auth token (leave empty to disable)")
 
                 var buf = "";
-                con.on("data", function(d) {
+                con && con.on("data", function(d) {
                     buf += d;
                     var i = buf.indexOf("\n");
                     while (i>=0) {
