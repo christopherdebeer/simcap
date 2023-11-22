@@ -175,7 +175,8 @@
         <p class="subtitle">Gyroscope Accelerometer Magnetometer Baseline Inferrence Telemetry</p>
         
         <div class="buttons">
-            <button id="connect">Connect</button> <button disabled id="getdata">Get data</button>
+            <button id="connect">Connect</button>
+            <button disabled id="getdata">Get data</button>
         </div>
 
         <div class="dataView">
@@ -246,9 +247,14 @@
             const MAX_INIT_RETRIES = 9
             let connection;
             let initTries = MAX_INIT_RETRIES
-            let initInterval
+            let initInterval;
+            let ghToken;
+
+            let uploadTimeout;
+            let sessionData = []
 
             function onLine(data) {
+
                 if (data.startsWith("GAMBIT")) {
                    
                     var t = JSON.parse(data.slice(6, -1))
@@ -256,6 +262,13 @@
                     console.log(JSON.stringify(t))
                     updateData(t)
                 }
+                if (uploadTimeout) clearTimeout(uploadTimeout)
+                uploadTimeout = setTimeout(function() {
+                    console.log("Uploading to gihub")
+                    ghPutData(JSON.stringify(sessionData))
+                    sessionData = []    
+                }, 1000)
+
             }
 
             var minMaxs = {}
@@ -311,7 +324,7 @@
             }
 
             function updateData(prenorm) {
-                
+                sessionData.push(prenorm)
                 console.log("Data (prenorm): ", prenorm)
                 var t = normalise(prenorm)
                 console.log("Data (postnorm)", t)
@@ -340,11 +353,96 @@
                 
             }
 
+            var newlineRegex = /\n/g;
+
+            const btoa = (str) => {
+            if (typeof window === 'undefined' || !window.btoa)  {
+                // const Buffer = require('buffer')
+                return Buffer.from(str, 'binary').toString('base64')
+            } else return window.btoa(str)
+            }
+
+            const atob = (str) => {
+            if (typeof window === 'undefined' || !window.atob)  {
+                // const Buffer = require('buffer')
+                return Buffer.from(str, 'base64').toString('binary')
+            }
+            else return window.atob(str)
+            }
+
+            function b64EncodeUnicode(str) {
+            return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1) {
+                return String.fromCharCode('0x' + p1);
+            }));
+            }
+
+            function b64DecodeUnicode(str) {
+                // atob on Mobile Safari for iOS 9 will throw an exception if there's a newline.
+                var b64Decoded = atob(str.replace(newlineRegex, ''));
+                var decodedWithUnicodeHexesRestored = Array.prototype.map.call(
+                    b64Decoded,
+                    hexEncodeCharCode
+                )
+                .join('');
+
+                return decodeURIComponent(decodedWithUnicodeHexesRestored);
+            }
+
+            function hexEncodeCharCode(c) {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }
+
+            const getEndpoint = (opts,file) => `https://api.github.com/repos/${opts.username}/${opts.repository}/${join('contents', file)}`
+
+
+            async function ghPutData(content) {
+
+                if (!ghToken) return;
+                
+                const d = new Date()
+                const filename = `${d.toISOString()}.csv`
+
+                const endpoint = getEndpoint({
+                    repository: 'simcap',
+                    username: 'christopherdebeer',
+                }, `/data/${GAMBIT}/${filename}`)
+                const resp1 = await fetch(endpoint, {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `token ${ghToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                })
+                const json1 = await resp1.json()
+                const params = {
+                    method: "PUT",
+                    headers: {
+                        "Authorization": `token ${ghToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        sha: json1.sha,
+                        message: `GAMBIT Data ingest ${filename}`,
+                        content: b64EncodeUnicode(content)
+                    })
+                }
+                console.log("ghPutData params", params)
+                let resp2;
+                try {
+                    resp2 = await fetch(endpoint, params)
+                } catch(err) {
+                    console.log("ghPutData PUT failed", err)
+                }
+
+            }
+
             async function init() {
                 
                 if (!Puck.isConnected()) await Puck.write("console.log('Connected from GAMBIT/web')")
                 var con = Puck.getConnection()
-                updateConnectionStatus( !!con, con)
+                updateConnectionStatus( !!con, con);
+
+                ghToken = prompt("github auth token (leave empty to disable)")
 
                 var buf = "";
                 con.on("data", function(d) {
