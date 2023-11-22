@@ -442,7 +442,7 @@
                 var con = Puck.getConnection()
                 updateConnectionStatus( !!con, con);
 
-                ghToken = prompt("github auth token (leave empty to disable)")
+                
 
                 var buf = "";
                 con && con.on("data", function(d) {
@@ -457,6 +457,7 @@
             }
 
             window.connect.onclick = function() {
+                 ghToken = prompt("github auth token (leave empty to disable)")
                  init()
             }
 
