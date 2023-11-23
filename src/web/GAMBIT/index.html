@@ -459,7 +459,10 @@
 
             try {
                 const t = localStorage.getItem("ghToken")
-                if (t) ghToken = t
+                if (t) {
+                    ghToken = t
+                    window.token.value = t
+                }
                 else console.log("No ghToken in localStorage")
             } catch(e) {
                 console.log("Error getting token from localStorage")
