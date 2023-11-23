@@ -177,6 +177,7 @@
         <div class="buttons">
             <button id="connect">Connect</button>
             <button disabled id="getdata">Get data</button>
+            <input id="token" type="password" placeholder="GitHub token"/>
         </div>
 
         <div class="dataView">
@@ -456,10 +457,24 @@
                 });
             }
 
+            try {
+                const t = localStorage.getItem("ghToken")
+                if (t) ghToken = t
+                else console.log("No ghToken in localStorage")
+            } catch(e) {
+                console.log("Error getting token from localStorage")
+            }
+
             window.connect.onclick = function() {
                  ghToken = prompt("github auth token (leave empty to disable)")
                  init()
             }
+
+            window.token.addEvenListener('change', function(e){
+                ghToken = e.target.value;
+                console.log("Updating ghToken")
+                localStorage.setItem("ghToken", ghToken)
+            })
 
             window.getdata.onclick = function() {
                 const startTime = Date.now()
