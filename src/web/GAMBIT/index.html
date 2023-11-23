@@ -470,7 +470,7 @@
                  init()
             }
 
-            window.token.addEvenListener('change', function(e){
+            window.token.addEventListener('change', function(e){
                 ghToken = e.target.value;
                 console.log("Updating ghToken")
                 localStorage.setItem("ghToken", ghToken)
