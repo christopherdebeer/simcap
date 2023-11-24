@@ -2,9 +2,15 @@ var state = 1;
 var pressCount = 0;
 
 var telemetry = {
-    a: null,
-    g: null,
-    m: null,
+    ax: null,
+    ay: null,
+    az: null,
+    gx: null,
+    gy: null,
+    gz: null,
+    mx: null,
+    my: null,
+    mz: null,
     l: null,
     t: null,
     c: null,
