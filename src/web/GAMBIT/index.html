@@ -257,15 +257,14 @@
             function onLine(data) {
 
                 if (data.startsWith("GAMBIT")) {
-                   
                     var t = JSON.parse(data.slice(6, -1))
-                    console.log(data.slice(6, -1))
-                    console.log(JSON.stringify(t))
+                    // console.log(data.slice(6, -1))
+                    // console.log(JSON.stringify(t))
                     updateData(t)
                 }
                 if (uploadTimeout) clearTimeout(uploadTimeout)
                 uploadTimeout = setTimeout(function() {
-                    console.log("Uploading to gihub")
+                    console.log("Uploading to gh")
                     ghPutData(JSON.stringify(sessionData))
                     sessionData = []    
                 }, 1000)
@@ -305,30 +304,30 @@
                 return {
                     s: t.s,
                     c: t.c,
-                    b: updateMinMaxsReturnNorm('b', t.b),
+                    b: t.b,
                     m: {
                         x: updateMinMaxsReturnNorm('mx', t.m.x),
                         y: updateMinMaxsReturnNorm('my', t.m.y),
                         z: updateMinMaxsReturnNorm('mz', t.m.z)
                     },
                     a: {
-                        x: updateMinMaxsReturnNorm('ax', t.a.x / 8192),
-                        y: updateMinMaxsReturnNorm('ay', t.a.y / 8192),
-                        z: updateMinMaxsReturnNorm('az', t.a.z / 8192)
+                        x: updateMinMaxsReturnNorm('ax', t.a.x ),
+                        y: updateMinMaxsReturnNorm('ay', t.a.y ),
+                        z: updateMinMaxsReturnNorm('az', t.a.z )
                     },
                     g: {
-                        x: updateMinMaxsReturnNorm('gx', t.g.x / 134),
-                        y: updateMinMaxsReturnNorm('gy', t.g.y / 134),
-                        z: updateMinMaxsReturnNorm('gz', t.g.z / 134)
+                        x: updateMinMaxsReturnNorm('gx', t.g.x ),
+                        y: updateMinMaxsReturnNorm('gy', t.g.y ),
+                        z: updateMinMaxsReturnNorm('gz', t.g.z )
                     }
                 }
             }
 
             function updateData(prenorm) {
                 sessionData.push(prenorm)
-                console.log("Data (prenorm): ", prenorm)
+                // console.log("Data (prenorm): ", prenorm)
                 var t = normalise(prenorm)
-                console.log("Data (postnorm)", t)
+                // console.log("Data (postnorm)", t)
 
                 window.b.value = Math.floor( 100 * t.b )
                 window.b.title = t.b + '% battery'
@@ -393,7 +392,7 @@
                 return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
             }
 
-            const getEndpoint = (opts,file) => `https://api.github.com/repos/${opts.username}/${opts.repository}/${join('contents', file)}`
+            const getEndpoint = (opts,file) => `https://api.github.com/repos/${opts.username}/${opts.repository}/contents/${file}`
 
 
             async function ghPutData(content) {
@@ -411,7 +410,7 @@
                 const endpoint = getEndpoint({
                     repository: 'simcap',
                     username: 'christopherdebeer',
-                }, `/data/${GAMBIT}/${filename}`)
+                }, `data/GAMBIT/${filename}`)
 
                 const resp1 = await fetch(endpoint, {
                     method: "GET",
@@ -452,7 +451,7 @@
                 var con = Puck.getConnection()
                 updateConnectionStatus( !!con, con);
 
-                
+                console.log(con)
 
                 var buf = "";
                 con && con.on("data", function(d) {
