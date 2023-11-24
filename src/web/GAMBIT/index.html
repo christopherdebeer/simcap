@@ -398,15 +398,21 @@
 
             async function ghPutData(content) {
 
-                if (!ghToken) return;
+                if (!ghToken) {
+                    console.log("ghToken not found. skipping upload.")
+                    return;
+                } else {
+
+                }
 
                 const d = new Date()
-                const filename = `${d.toISOString()}.csv`
+                const filename = `${d.toISOString()}.json`
 
                 const endpoint = getEndpoint({
                     repository: 'simcap',
                     username: 'christopherdebeer',
                 }, `/data/${GAMBIT}/${filename}`)
+
                 const resp1 = await fetch(endpoint, {
                     method: "GET",
                     headers: {
@@ -415,6 +421,7 @@
                     }
                 })
                 const json1 = await resp1.json()
+                console.log("ghGet response", json1)
                 const params = {
                     method: "PUT",
                     headers: {
@@ -431,6 +438,8 @@
                 let resp2;
                 try {
                     resp2 = await fetch(endpoint, params)
+                    var json2 = await resp2.json()
+                    console.log("ghPutData response", json2)
                 } catch(err) {
                     console.log("ghPutData PUT failed", err)
                 }
