@@ -66,6 +66,18 @@
                 justify-content: space-evenly;
             }
 
+            input#token:not(:placeholder-shown) {
+                opacity: 0.5;
+                background-color: green;
+            }
+
+            input#token {
+                border: 0;
+                border-radius: 0.3em;
+                outline: 0 none;
+                padding: 0.3em 1em;
+            }
+
             h1 {
                 font-size: 1.2em;
                 line-height: 1;
@@ -177,8 +189,8 @@
         <div class="buttons">
             <button id="connect">Connect</button>
             <button disabled id="getdata">Get data</button>
-            <input id="token" type="password" placeholder="GitHub token"/>
         </div>
+        <input id="token" type="password" placeholder="GitHub token"/>
 
         <div class="dataView">
             <div id="battery"><progress max="100" value="0" id="b" title="0% battery"></progress></div>
