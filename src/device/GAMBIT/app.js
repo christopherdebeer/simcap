@@ -12,15 +12,26 @@ var telemetry = {
     b: null,
 }
 function emit() {
-    telemetry.m = Puck.mag()
+    var mag = Puck.mag()
     var accel = Puck.accel()
-    telemetry.a = accel.acc
-    telemetry.g = accel.gyro
+
+    telemetry.ax = accel.acc.x
+    telemetry.ay = accel.acc.y
+    telemetry.az = accel.acc.z
+
+    telemetry.gx = accel.gyro.x
+    telemetry.gy = accel.gyro.y
+    telemetry.gz = accel.gyro.z
+
+    telemetry.mx = mag.x
+    telemetry.my = mag.y
+    telemetry.mz = mag.z
+
     telemetry.l = Puck.light()
     telemetry.t = Puck.magTemp()
     telemetry.c = Puck.capSense()
     telemetry.s = state
-    telemetry.count = pressCount
+    telemetry.n = pressCount
     telemetry.b = Puck.getBatteryPercentage()
     console.log("\nGAMBIT" + JSON.stringify(telemetry))
     return telemetry;

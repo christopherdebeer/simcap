@@ -314,18 +314,21 @@
 
             function normalise(t) {
                 return {
+                    l: t.l,
+                    t: t.t,
                     s: t.s,
                     c: t.c,
+                    n: t.n,
                     b: t.b,
-                    mx: updateMinMaxsReturnNorm('mx', t.m.x),
-                    my: updateMinMaxsReturnNorm('my', t.m.y),
-                    mz: updateMinMaxsReturnNorm('mz', t.m.z),
-                    ax: updateMinMaxsReturnNorm('ax', t.a.x ),
-                    ay: updateMinMaxsReturnNorm('ay', t.a.y ),
-                    az: updateMinMaxsReturnNorm('az', t.a.z ),
-                    gx: updateMinMaxsReturnNorm('gx', t.g.x ),
-                    gy: updateMinMaxsReturnNorm('gy', t.g.y ),
-                    gz: updateMinMaxsReturnNorm('gz', t.g.z ),
+                    mx: updateMinMaxsReturnNorm('mx', t.mx),
+                    my: updateMinMaxsReturnNorm('my', t.my),
+                    mz: updateMinMaxsReturnNorm('mz', t.mz),
+                    ax: updateMinMaxsReturnNorm('ax', t.ax ),
+                    ay: updateMinMaxsReturnNorm('ay', t.ay ),
+                    az: updateMinMaxsReturnNorm('az', t.az ),
+                    gx: updateMinMaxsReturnNorm('gx', t.gx ),
+                    gy: updateMinMaxsReturnNorm('gy', t.gy ),
+                    gz: updateMinMaxsReturnNorm('gz', t.gz ),
                 }
             }
 
@@ -339,7 +342,7 @@
                 window.b.title = t.b + '% battery'
 
                 window.state.innerHTML = t.s
-                window.count.innerHTML = t.count
+                window.count.innerHTML = t.n
 
                 window.mX.innerHTML = t.mx.toFixed(4)
                 window.mY.innerHTML = t.my.toFixed(4)
