@@ -317,21 +317,15 @@
                     s: t.s,
                     c: t.c,
                     b: t.b,
-                    m: {
-                        x: updateMinMaxsReturnNorm('mx', t.m.x),
-                        y: updateMinMaxsReturnNorm('my', t.m.y),
-                        z: updateMinMaxsReturnNorm('mz', t.m.z)
-                    },
-                    a: {
-                        x: updateMinMaxsReturnNorm('ax', t.a.x ),
-                        y: updateMinMaxsReturnNorm('ay', t.a.y ),
-                        z: updateMinMaxsReturnNorm('az', t.a.z )
-                    },
-                    g: {
-                        x: updateMinMaxsReturnNorm('gx', t.g.x ),
-                        y: updateMinMaxsReturnNorm('gy', t.g.y ),
-                        z: updateMinMaxsReturnNorm('gz', t.g.z )
-                    }
+                    mx: updateMinMaxsReturnNorm('mx', t.m.x),
+                    my: updateMinMaxsReturnNorm('my', t.m.y),
+                    mz: updateMinMaxsReturnNorm('mz', t.m.z),
+                    ax: updateMinMaxsReturnNorm('ax', t.a.x ),
+                    ay: updateMinMaxsReturnNorm('ay', t.a.y ),
+                    az: updateMinMaxsReturnNorm('az', t.a.z ),
+                    gx: updateMinMaxsReturnNorm('gx', t.g.x ),
+                    gy: updateMinMaxsReturnNorm('gy', t.g.y ),
+                    gz: updateMinMaxsReturnNorm('gz', t.g.z ),
                 }
             }
 
@@ -347,21 +341,21 @@
                 window.state.innerHTML = t.s
                 window.count.innerHTML = t.count
 
-                window.mX.innerHTML = t.m.x.toFixed(4)
-                window.mY.innerHTML = t.m.y.toFixed(4)
-                window.mZ.innerHTML = t.m.z.toFixed(4)
+                window.mX.innerHTML = t.mx.toFixed(4)
+                window.mY.innerHTML = t.my.toFixed(4)
+                window.mZ.innerHTML = t.mz.toFixed(4)
 
-                window.aX.innerHTML = t.a.x.toFixed(4)
-                window.aY.innerHTML = t.a.y.toFixed(4)
-                window.aZ.innerHTML = t.a.z.toFixed(4)
+                window.aX.innerHTML = t.ax.toFixed(4)
+                window.aY.innerHTML = t.ay.toFixed(4)
+                window.aZ.innerHTML = t.az.toFixed(4)
 
-                window.gX.innerHTML = t.g.x.toFixed(4)
-                window.gY.innerHTML = t.g.y.toFixed(4)
-                window.gZ.innerHTML = t.g.z.toFixed(4)
+                window.gX.innerHTML = t.gx.toFixed(4)
+                window.gY.innerHTML = t.gy.toFixed(4)
+                window.gZ.innerHTML = t.gz.toFixed(4)
 
-                window.cubeA.style = `transform: rotateX(${360 * t.a.x}deg) rotateY(${360 * t.a.y}deg) rotateZ(${360 * t.a.z}deg);`
-                window.cubeG.style = `transform: rotateX(${360 * t.g.x}deg) rotateY(${360 * t.g.y}deg) rotateZ(${360 * t.g.z}deg);`
-                window.cubeM.style = `transform: rotateX(${360 * t.m.x}deg) rotateY(${360 * t.m.y}deg) rotateZ(${360 * t.m.z}deg);`
+                window.cubeA.style = `transform: rotateX(${360 * t.ax}deg) rotateY(${360 * t.ay}deg) rotateZ(${360 * t.az}deg);`
+                window.cubeG.style = `transform: rotateX(${360 * t.gx}deg) rotateY(${360 * t.gy}deg) rotateZ(${360 * t.gz}deg);`
+                window.cubeM.style = `transform: rotateX(${360 * t.mx}deg) rotateY(${360 * t.my}deg) rotateZ(${360 * t.mz}deg);`
                 
             }
 
