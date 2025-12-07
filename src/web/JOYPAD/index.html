@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes"/>
+    <title>SIMCAP | JOYPAD</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: #0a0a0a;
+            color: #ccc;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #fff;
+            letter-spacing: 0.3rem;
+            font-weight: 300;
+        }
+        h2 {
+            color: #999;
+            font-weight: 400;
+            margin-top: 2rem;
+        }
+        p {
+            margin: 1rem 0;
+        }
+        a {
+            color: #6c6;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .status {
+            display: inline-block;
+            padding: 0.3rem 0.8rem;
+            background: #3a3a1a;
+            color: #cc6;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <h1>SIMCAP | JOYPAD</h1>
+    <span class="status">Concept Stage</span>
+
+    <p>A Web prototype of what should be a device applet advertising as a games console controller HID.</p>
+
+    <h2>The Goal</h2>
+    <p>Pair 2 SIMCAP PALM devices (one on each hand) and emulate the use of a controller based on Baseline data eg: <a href="../GAMBIT/">GAMBIT</a></p>
+
+    <h2>Status</h2>
+    <p>This component is currently in the concept stage. Implementation requires:</p>
+    <ul>
+        <li>Dual-device BLE coordination</li>
+        <li>Game controller HID profile implementation</li>
+        <li>Gesture-to-button mapping</li>
+        <li>Sensor fusion from two independent IMUs</li>
+    </ul>
+
+    <hr style="border: none; border-top: 1px solid #333; margin: 2rem 0;">
+    <p><a href="../../">← Back to SIMCAP</a> | <a href="README.md">README</a></p>
+</body>
+</html>

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes"/>
+    <title>SIMCAP | FFO$$</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            background: #0a0a0a;
+            color: #ccc;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #fff;
+            letter-spacing: 0.3rem;
+            font-weight: 300;
+        }
+        h2 {
+            color: #999;
+            font-weight: 400;
+            margin-top: 2rem;
+        }
+        p {
+            margin: 1rem 0;
+        }
+        a {
+            color: #6c6;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .status {
+            display: inline-block;
+            padding: 0.3rem 0.8rem;
+            background: #1a2a3a;
+            color: #6cc;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            margin-bottom: 1rem;
+        }
+        code {
+            background: #1a1a1a;
+            padding: 0.2rem 0.5rem;
+            border-radius: 3px;
+            color: #6c6;
+        }
+    </style>
+</head>
+<body>
+    <h1>FFO$$</h1>
+    <span class="status">Research</span>
+
+    <p><strong>Fist Full Of Dollars</strong> - using the $* family of algorithms for gesture inference from low dimensional observation</p>
+
+    <h2>Concept</h2>
+    <p>This research direction explores applying the <a href="https://depts.washington.edu/acelab/proj/dollar/index.html" target="_blank">$1 Recogniser</a> and related algorithms to SIMCAP's sensor data.</p>
+
+    <p>The $-family of gesture recognizers are designed for:</p>
+    <ul>
+        <li>Simple, efficient gesture recognition</li>
+        <li>Low-dimensional input (2D/3D point sequences)</li>
+        <li>Minimal training data requirements</li>
+        <li>Real-time performance on constrained devices</li>
+    </ul>
+
+    <h2>Application to SIMCAP</h2>
+    <p>SIMCAP's IMU data could be mapped to gesture templates using:</p>
+    <ul>
+        <li><strong>$1</strong> - Single-stroke gestures from accelerometer traces</li>
+        <li><strong>$P</strong> - Point-cloud matching for 3D hand poses</li>
+        <li><strong>$N</strong> - Multi-stroke gesture sequences</li>
+    </ul>
+
+    <p>This approach offers a lightweight alternative to neural network-based gesture recognition, particularly suitable for on-device inference.</p>
+
+    <h2>References</h2>
+    <ul>
+        <li><a href="https://depts.washington.edu/acelab/proj/dollar/index.html" target="_blank">$1 Unistroke Recognizer</a></li>
+        <li><a href="https://depts.washington.edu/acelab/proj/dollar/pdollar.html" target="_blank">$P Point-Cloud Recognizer</a></li>
+        <li><a href="https://depts.washington.edu/acelab/proj/dollar/ndollar.html" target="_blank">$N Multistroke Recognizer</a></li>
+    </ul>
+
+    <hr style="border: none; border-top: 1px solid #333; margin: 2rem 0;">
+    <p><a href="../../">← Back to SIMCAP</a> | <a href="README.md">README</a></p>
+</body>
+</html>
