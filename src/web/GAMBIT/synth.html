@@ -774,11 +774,19 @@
         // Data packet counter for debugging
         let dataPacketCount = 0;
         let lastDataTime = null;
+        let dataBuffer = ''; // CRITICAL: Buffer for incomplete BLE packets
 
         // Handle incoming data from device
         function onData(data) {
-            const lines = data.split('\n');
-            for (let line of lines) {
+            // CRITICAL FIX: BLE sends data in small chunks (20-byte MTU)
+            // Must buffer data until we have complete newline-terminated lines
+            dataBuffer += data;
+
+            let lineEnd;
+            while ((lineEnd = dataBuffer.indexOf('\n')) >= 0) {
+                const line = dataBuffer.substring(0, lineEnd).trim();
+                dataBuffer = dataBuffer.substring(lineEnd + 1);
+
                 if (line.startsWith('GAMBIT')) {
                     dataPacketCount++;
                     const now = Date.now();
@@ -824,11 +832,14 @@
 
                     } catch (e) {
                         console.error('[DEBUG] Error parsing telemetry:', e);
-                        console.error('[DEBUG] Raw data:', line);
+                        console.error('[DEBUG] Raw line:', line);
+                        console.error('[DEBUG] JSON part:', line.substring(6));
                     }
-                } else if (line.trim().length > 0) {
-                    // Log non-GAMBIT output for debugging
-                    console.log('[DEBUG] Device output:', line);
+                } else if (line.length > 0) {
+                    // Log non-GAMBIT output for debugging (ignore empty lines and prompts)
+                    if (!line.match(/^[>\s]*$/)) {
+                        console.log('[DEBUG] Device output:', line);
+                    }
                 }
             }
         }
@@ -849,6 +860,11 @@
                     device.close();
                     device = null;
                 }
+                // Clear data buffer to prevent stale data on reconnect
+                dataBuffer = '';
+                dataPacketCount = 0;
+                lastDataTime = null;
+
                 isConnected = false;
                 connectBtn.textContent = 'Connect Device';
                 connectBtn.classList.remove('connected');
@@ -900,6 +916,11 @@
                                 clearInterval(dataRefreshInterval);
                                 dataRefreshInterval = null;
                             }
+                            // Clear data buffer on disconnect
+                            dataBuffer = '';
+                            dataPacketCount = 0;
+                            lastDataTime = null;
+
                             isConnected = false;
                             connectBtn.textContent = 'Connect Device';
                             connectBtn.classList.remove('connected');
