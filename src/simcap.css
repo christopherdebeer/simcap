@@ -1,0 +1,96 @@
+/* SIMCAP Custom Styles for GitHub Pages */
+
+:root {
+    --bg-primary: #0a0a0a;
+    --bg-secondary: #1a1a1a;
+    --border-color: #333;
+    --text-primary: #fff;
+    --text-secondary: #ccc;
+    --text-muted: #888;
+    --accent: #6c6;
+    --accent-alt: #6cc;
+}
+
+body {
+    background: var(--bg-primary) !important;
+    color: var(--text-secondary) !important;
+}
+
+/* Headers */
+h1, h2, h3, h4, h5, h6 {
+    color: var(--text-primary) !important;
+    font-weight: 300 !important;
+    letter-spacing: 0.1em;
+}
+
+h1 {
+    letter-spacing: 0.3em;
+    font-size: 2.5em !important;
+}
+
+/* Links */
+a {
+    color: var(--accent) !important;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* Code blocks */
+code {
+    background: var(--bg-secondary) !important;
+    color: var(--accent) !important;
+    padding: 0.2em 0.5em;
+    border-radius: 3px;
+}
+
+pre {
+    background: var(--bg-secondary) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: 6px;
+}
+
+/* Blockquotes */
+blockquote {
+    border-left: 3px solid var(--accent) !important;
+    color: var(--text-muted) !important;
+}
+
+/* Tables */
+table {
+    border-collapse: collapse;
+}
+
+table th,
+table td {
+    border: 1px solid var(--border-color) !important;
+    padding: 0.5em 1em;
+}
+
+table th {
+    background: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+}
+
+table tr:nth-child(even) {
+    background: var(--bg-secondary);
+}
+
+/* Horizontal rules */
+hr {
+    border: none;
+    border-top: 1px solid var(--border-color) !important;
+    margin: 2em 0;
+}
+
+/* Lists */
+ul, ol {
+    color: var(--text-secondary);
+}
+
+/* Status badges in markdown */
+code[class*="language-"] {
+    background: var(--bg-secondary) !important;
+}
