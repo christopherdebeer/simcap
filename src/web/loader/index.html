@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SIMCAP | Firmware Loader</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes"/>
+    <meta name="mobile-web-app-capable" content="yes"/>
+    <script src="../GAMBIT/puck.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        :root {
+            --bg: #0f0f23;
+            --surface: #1a1a2e;
+            --surface-alt: #16213e;
+            --primary: #00d4ff;
+            --success: #00ff88;
+            --warning: #ffa502;
+            --danger: #ff4757;
+            --text: #eee;
+            --text-muted: #888;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-size: 14px;
+            min-height: 100vh;
+        }
+        body {
+            padding: 15px;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: var(--primary);
+            margin: 0 0 5px 0;
+            font-size: 1.8em;
+        }
+        .subtitle {
+            color: var(--text-muted);
+            margin-bottom: 20px;
+        }
+        .card {
+            background: var(--surface);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .card h2 {
+            margin: 0 0 12px 0;
+            color: var(--primary);
+            font-size: 1.1em;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #333;
+        }
+        .row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+        .row > * { flex: 1; min-width: 120px; }
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        button:hover { opacity: 0.9; transform: translateY(-1px); }
+        button:active { transform: translateY(0); }
+        button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .btn-primary { background: var(--primary); color: #000; }
+        .btn-success { background: var(--success); color: #000; }
+        .btn-warning { background: var(--warning); color: #000; }
+        .btn-danger { background: var(--danger); color: #fff; }
+        .btn-secondary { background: #333; color: #fff; }
+
+        /* Connection status */
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        .status-bar.disconnected { background: rgba(255,71,87,0.2); border: 1px solid var(--danger); }
+        .status-bar.connected { background: rgba(0,255,136,0.2); border: 1px solid var(--success); }
+        .status-bar.uploading { background: rgba(255,165,2,0.2); border: 1px solid var(--warning); }
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        .disconnected .status-dot { background: var(--danger); }
+        .connected .status-dot { background: var(--success); }
+        .uploading .status-dot { background: var(--warning); animation: pulse 1s infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* Firmware cards */
+        .firmware-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 12px;
+        }
+        .firmware-card {
+            background: var(--surface-alt);
+            border-radius: 8px;
+            padding: 15px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        .firmware-card:hover {
+            border-color: var(--primary);
+            transform: translateY(-2px);
+        }
+        .firmware-card.selected {
+            border-color: var(--success);
+            background: rgba(0,255,136,0.1);
+        }
+        .firmware-card h3 {
+            margin: 0 0 5px 0;
+            color: var(--primary);
+            font-size: 1.1em;
+        }
+        .firmware-card p {
+            margin: 0;
+            color: var(--text-muted);
+            font-size: 0.85em;
+        }
+        .firmware-card .size {
+            margin-top: 8px;
+            font-size: 0.75em;
+            color: var(--text-muted);
+        }
+
+        /* Progress */
+        .progress-container {
+            margin-top: 15px;
+        }
+        .progress-bar {
+            height: 8px;
+            background: #333;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .progress-bar .fill {
+            height: 100%;
+            background: var(--primary);
+            transition: width 0.1s;
+            width: 0%;
+        }
+        .progress-text {
+            margin-top: 5px;
+            font-size: 0.85em;
+            color: var(--text-muted);
+            text-align: center;
+        }
+
+        /* Console */
+        .console {
+            background: #0a0a15;
+            border-radius: 8px;
+            padding: 10px;
+            font-family: "SF Mono", Monaco, Consolas, monospace;
+            font-size: 11px;
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .console .info { color: var(--text-muted); }
+        .console .success { color: var(--success); }
+        .console .error { color: var(--danger); }
+        .console .warn { color: var(--warning); }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 15px;
+        }
+        .tab {
+            padding: 8px 16px;
+            background: var(--surface-alt);
+            border: none;
+            border-radius: 6px 6px 0 0;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .tab.active {
+            background: var(--surface);
+            color: var(--primary);
+        }
+
+        /* Custom code editor */
+        .code-editor {
+            width: 100%;
+            min-height: 200px;
+            background: #0a0a15;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 10px;
+            font-family: "SF Mono", Monaco, Consolas, monospace;
+            font-size: 12px;
+            color: var(--text);
+            resize: vertical;
+        }
+        .code-editor:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        /* Info boxes */
+        .info-box {
+            background: rgba(0,212,255,0.1);
+            border: 1px solid var(--primary);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 15px;
+            font-size: 0.9em;
+        }
+        .info-box strong {
+            color: var(--primary);
+        }
+    </style>
+</head>
+<body>
+    <h1>SIMCAP Firmware Loader</h1>
+    <p class="subtitle">Upload firmware to Espruino Puck.js devices via WebBLE</p>
+
+    <!-- Connection Status -->
+    <div id="statusBar" class="status-bar disconnected">
+        <div class="status-dot"></div>
+        <span id="statusText">Not connected</span>
+        <button id="connectBtn" class="btn-primary" style="margin-left: auto;">Connect</button>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+        <button class="tab active" data-tab="presets">Preset Firmware</button>
+        <button class="tab" data-tab="custom">Custom Code</button>
+        <button class="tab" data-tab="console">Console</button>
+    </div>
+
+    <!-- Presets Tab -->
+    <div id="tab-presets" class="card tab-content">
+        <h2>Select Firmware</h2>
+        <div class="firmware-grid" id="firmwareGrid">
+            <!-- Populated by JS -->
+        </div>
+
+        <div class="row" style="margin-top: 15px;">
+            <button id="uploadBtn" class="btn-success" disabled>Upload Selected</button>
+            <button id="saveBtn" class="btn-warning" disabled>Save to Flash</button>
+        </div>
+
+        <div class="progress-container" id="progressContainer" style="display: none;">
+            <div class="progress-bar">
+                <div class="fill" id="progressFill"></div>
+            </div>
+            <div class="progress-text" id="progressText">Uploading...</div>
+        </div>
+    </div>
+
+    <!-- Custom Code Tab -->
+    <div id="tab-custom" class="card tab-content" style="display: none;">
+        <h2>Custom Code</h2>
+
+        <div class="info-box">
+            <strong>Tip:</strong> Paste any Espruino JavaScript code below.
+            Use <code>reset()</code> first to clear existing code.
+        </div>
+
+        <textarea id="customCode" class="code-editor" placeholder="// Paste your Espruino code here...
+LED1.set();
+setTimeout(function() { LED1.reset(); }, 1000);
+"></textarea>
+
+        <div class="row" style="margin-top: 10px;">
+            <button id="uploadCustomBtn" class="btn-success" disabled>Upload Code</button>
+            <button id="resetBtn" class="btn-danger" disabled>Reset Device</button>
+        </div>
+    </div>
+
+    <!-- Console Tab -->
+    <div id="tab-console" class="card tab-content" style="display: none;">
+        <h2>Device Console</h2>
+
+        <div class="console" id="consoleOutput">
+            <span class="info">Connect to device to see output...</span>
+        </div>
+
+        <div class="row" style="margin-top: 10px;">
+            <input type="text" id="consoleInput" placeholder="Enter command..."
+                   style="flex: 2; padding: 10px; background: #0a0a15; border: 1px solid #333; border-radius: 6px; color: #fff;">
+            <button id="sendCmd" class="btn-primary" disabled>Send</button>
+        </div>
+    </div>
+
+    <!-- Device Info -->
+    <div class="card" id="deviceInfo" style="display: none;">
+        <h2>Device Info</h2>
+        <div class="row">
+            <div><strong>Battery:</strong> <span id="batteryLevel">--</span>%</div>
+            <div><strong>Temperature:</strong> <span id="tempLevel">--</span>°C</div>
+        </div>
+    </div>
+
+    <script>
+    // ===== Firmware Definitions =====
+    const FIRMWARE = {
+        gambit: {
+            name: "GAMBIT",
+            description: "9-DoF IMU telemetry for ML data collection",
+            path: "../../device/GAMBIT/app.js",
+            size: "~4 KB"
+        },
+        mouse: {
+            name: "MOUSE",
+            description: "BLE HID Mouse - tilt to move cursor",
+            path: "../../device/MOUSE/app.js",
+            size: "~3 KB"
+        },
+        keyboard: {
+            name: "KEYBOARD",
+            description: "BLE HID Keyboard - macros & gestures",
+            path: "../../device/KEYBOARD/app.js",
+            size: "~5 KB"
+        },
+        bae: {
+            name: "BAE",
+            description: "Bluetooth Advertise Everything (reference)",
+            path: "../../device/BAE/app.js",
+            size: "~2 KB"
+        }
+    };
+
+    // ===== State =====
+    let state = {
+        connected: false,
+        selectedFirmware: null,
+        connection: null,
+        uploading: false
+    };
+
+    // ===== DOM Elements =====
+    const $ = id => document.getElementById(id);
+    const connectBtn = $('connectBtn');
+    const statusBar = $('statusBar');
+    const statusText = $('statusText');
+    const firmwareGrid = $('firmwareGrid');
+    const uploadBtn = $('uploadBtn');
+    const saveBtn = $('saveBtn');
+    const uploadCustomBtn = $('uploadCustomBtn');
+    const resetBtn = $('resetBtn');
+    const customCode = $('customCode');
+    const consoleOutput = $('consoleOutput');
+    const consoleInput = $('consoleInput');
+    const sendCmd = $('sendCmd');
+    const progressContainer = $('progressContainer');
+    const progressFill = $('progressFill');
+    const progressText = $('progressText');
+    const deviceInfo = $('deviceInfo');
+
+    // ===== Console Logging =====
+    function log(msg, type = 'info') {
+        const line = document.createElement('div');
+        line.className = type;
+        line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        consoleOutput.appendChild(line);
+        consoleOutput.scrollTop = consoleOutput.scrollHeight;
+    }
+
+    // ===== UI Updates =====
+    function updateUI() {
+        // Status bar
+        statusBar.className = 'status-bar ' +
+            (state.uploading ? 'uploading' : (state.connected ? 'connected' : 'disconnected'));
+        statusText.textContent = state.uploading ? 'Uploading...' :
+            (state.connected ? 'Connected' : 'Not connected');
+        connectBtn.textContent = state.connected ? 'Disconnect' : 'Connect';
+
+        // Buttons
+        const canUpload = state.connected && !state.uploading;
+        uploadBtn.disabled = !canUpload || !state.selectedFirmware;
+        saveBtn.disabled = !canUpload;
+        uploadCustomBtn.disabled = !canUpload;
+        resetBtn.disabled = !canUpload;
+        sendCmd.disabled = !canUpload;
+
+        // Device info
+        deviceInfo.style.display = state.connected ? 'block' : 'none';
+    }
+
+    // ===== Tabs =====
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+            tab.classList.add('active');
+            $('tab-' + tab.dataset.tab).style.display = 'block';
+        });
+    });
+
+    // ===== Firmware Grid =====
+    function renderFirmwareGrid() {
+        firmwareGrid.innerHTML = Object.entries(FIRMWARE).map(([id, fw]) => `
+            <div class="firmware-card ${state.selectedFirmware === id ? 'selected' : ''}"
+                 data-firmware="${id}">
+                <h3>${fw.name}</h3>
+                <p>${fw.description}</p>
+                <div class="size">${fw.size}</div>
+            </div>
+        `).join('');
+
+        firmwareGrid.querySelectorAll('.firmware-card').forEach(card => {
+            card.addEventListener('click', () => {
+                state.selectedFirmware = card.dataset.firmware;
+                renderFirmwareGrid();
+                updateUI();
+                log(`Selected: ${FIRMWARE[state.selectedFirmware].name}`);
+            });
+        });
+    }
+
+    // ===== Connection =====
+    connectBtn.addEventListener('click', async () => {
+        if (state.connected) {
+            Puck.close();
+            state.connected = false;
+            state.connection = null;
+            log('Disconnected', 'warn');
+            updateUI();
+            return;
+        }
+
+        log('Connecting...');
+        Puck.connect(conn => {
+            if (!conn) {
+                log('Connection failed', 'error');
+                return;
+            }
+
+            state.connection = conn;
+            state.connected = true;
+            log('Connected!', 'success');
+
+            // Set up data listener
+            conn.on('data', data => {
+                // Add to console output
+                const line = document.createElement('span');
+                line.textContent = data;
+                consoleOutput.appendChild(line);
+                consoleOutput.scrollTop = consoleOutput.scrollHeight;
+            });
+
+            conn.on('close', () => {
+                state.connected = false;
+                state.connection = null;
+                log('Connection closed', 'warn');
+                updateUI();
+            });
+
+            // Get device info
+            setTimeout(() => {
+                Puck.eval('Puck.getBatteryPercentage()', val => {
+                    $('batteryLevel').textContent = val || '--';
+                });
+                Puck.eval('E.getTemperature()', val => {
+                    $('tempLevel').textContent = val ? val.toFixed(1) : '--';
+                });
+            }, 500);
+
+            updateUI();
+        });
+    });
+
+    // ===== Upload Firmware =====
+    async function uploadCode(code, name = 'code') {
+        if (!state.connected || state.uploading) return;
+
+        state.uploading = true;
+        updateUI();
+        progressContainer.style.display = 'block';
+        progressFill.style.width = '0%';
+        progressText.textContent = 'Starting upload...';
+
+        log(`Uploading ${name}...`);
+
+        // Clear device first
+        progressText.textContent = 'Resetting device...';
+        progressFill.style.width = '10%';
+
+        await new Promise(resolve => {
+            Puck.write('reset();\n', resolve);
+        });
+
+        await new Promise(r => setTimeout(r, 500));
+
+        // Upload in chunks
+        const chunkSize = 500;
+        const chunks = [];
+        for (let i = 0; i < code.length; i += chunkSize) {
+            chunks.push(code.slice(i, i + chunkSize));
+        }
+
+        progressText.textContent = `Uploading... (0/${chunks.length})`;
+
+        for (let i = 0; i < chunks.length; i++) {
+            await new Promise((resolve, reject) => {
+                Puck.write(chunks[i], (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                });
+            });
+
+            const progress = 10 + ((i + 1) / chunks.length) * 80;
+            progressFill.style.width = progress + '%';
+            progressText.textContent = `Uploading... (${i + 1}/${chunks.length})`;
+        }
+
+        // Ensure newline at end
+        await new Promise(resolve => {
+            Puck.write('\n', resolve);
+        });
+
+        progressFill.style.width = '100%';
+        progressText.textContent = 'Upload complete!';
+        log(`${name} uploaded successfully!`, 'success');
+
+        state.uploading = false;
+        updateUI();
+
+        setTimeout(() => {
+            progressContainer.style.display = 'none';
+        }, 2000);
+    }
+
+    // ===== Upload Preset =====
+    uploadBtn.addEventListener('click', async () => {
+        if (!state.selectedFirmware) return;
+
+        const fw = FIRMWARE[state.selectedFirmware];
+        log(`Fetching ${fw.name}...`);
+
+        try {
+            const response = await fetch(fw.path);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const code = await response.text();
+            await uploadCode(code, fw.name);
+        } catch (err) {
+            log(`Failed to fetch firmware: ${err.message}`, 'error');
+            state.uploading = false;
+            updateUI();
+        }
+    });
+
+    // ===== Save to Flash =====
+    saveBtn.addEventListener('click', () => {
+        if (!state.connected) return;
+        log('Saving to flash...');
+        Puck.write('save();\n', () => {
+            log('Saved to flash!', 'success');
+        });
+    });
+
+    // ===== Upload Custom =====
+    uploadCustomBtn.addEventListener('click', async () => {
+        const code = customCode.value.trim();
+        if (!code) {
+            log('No code to upload', 'warn');
+            return;
+        }
+        await uploadCode(code, 'Custom Code');
+    });
+
+    // ===== Reset Device =====
+    resetBtn.addEventListener('click', () => {
+        if (!state.connected) return;
+        log('Resetting device...');
+        Puck.write('reset();\n', () => {
+            log('Device reset!', 'success');
+        });
+    });
+
+    // ===== Console Input =====
+    sendCmd.addEventListener('click', () => {
+        const cmd = consoleInput.value.trim();
+        if (!cmd || !state.connected) return;
+        log(`> ${cmd}`, 'info');
+        Puck.write(cmd + '\n');
+        consoleInput.value = '';
+    });
+
+    consoleInput.addEventListener('keypress', e => {
+        if (e.key === 'Enter') sendCmd.click();
+    });
+
+    // ===== Initialize =====
+    renderFirmwareGrid();
+    updateUI();
+    log('Ready. Connect to a device to begin.');
+    </script>
+</body>
+</html>

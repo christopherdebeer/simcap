@@ -11,31 +11,27 @@
 ```mermaid
 graph LR
     subgraph Device
-        GAMBIT[GAMBIT Firmware]
-        IMU[9-DoF IMU]
+        GAMBIT[GAMBIT]
+        MOUSE[MOUSE HID]
+        KEYBOARD[KEYBOARD HID]
     end
 
     subgraph Web
-        UI[Web UI]
-        COLLECTOR[Collector]
+        LOADER[Firmware Loader]
+        COLLECTOR[Data Collector]
     end
 
     subgraph ML
-        LOADER[Data Loader]
+        TRAIN[Training Pipeline]
         MODEL[CNN Model]
     end
 
-    subgraph Storage
-        DATA[(Labeled Data)]
-    end
-
-    IMU --> GAMBIT
-    GAMBIT --> |BLE| UI
+    LOADER --> |Upload| GAMBIT
+    LOADER --> |Upload| MOUSE
+    LOADER --> |Upload| KEYBOARD
     GAMBIT --> |BLE| COLLECTOR
-    COLLECTOR --> |Export| DATA
-    UI --> |Upload| DATA
-    DATA --> LOADER
-    LOADER --> MODEL
+    COLLECTOR --> |Export| TRAIN
+    TRAIN --> MODEL
 ```
 
 ## Components
@@ -53,10 +49,24 @@ Python pipeline for training gesture classifiers: data loading, preprocessing, 1
 
 ### Device Firmware
 
-#### [GAMBIT Device](src/device/GAMBIT/)
+#### [GAMBIT](src/device/GAMBIT/)
 **Gyroscope Accelerometer Magnetometer Baseline Inference Telemetry**
 
 Espruino Puck.js firmware for 9-DoF IMU data collection at 50Hz with BLE streaming.
+
+`Status: Active`
+
+#### [MOUSE](src/device/MOUSE/)
+**BLE HID Mouse**
+
+Tilt-to-cursor mouse firmware. Pairs as Bluetooth HID mouse with any device.
+
+`Status: Active`
+
+#### [KEYBOARD](src/device/KEYBOARD/)
+**BLE HID Keyboard**
+
+Gesture-based keyboard with macro, arrow key, and media control modes.
 
 `Status: Active`
 
@@ -70,6 +80,13 @@ Reference implementation for BLE advertising with EspruinoHub/MQTT integration.
 ---
 
 ### Web Interfaces
+
+#### [Firmware Loader](src/web/loader/)
+**Upload Firmware via WebBLE**
+
+Web-based tool to upload GAMBIT, MOUSE, KEYBOARD, or custom firmware to Puck.js devices.
+
+`Status: Active`
 
 #### [GAMBIT Web](src/web/GAMBIT/)
 **Baseline Data Collection UI**
@@ -132,21 +149,20 @@ $1 family algorithms for gesture inference from low-dimensional observation.
 
 ## Quick Start
 
+### Upload Firmware
+1. Open [Firmware Loader](https://christopherdebeer.github.io/simcap/src/web/loader/)
+2. Click "Connect" and select your Puck.js
+3. Choose firmware (GAMBIT, MOUSE, or KEYBOARD)
+4. Click "Upload Selected" then "Save to Flash"
+
 ### Data Collection
-1. Flash [GAMBIT firmware](src/device/GAMBIT/) to Puck.js
-2. Open [Collector UI](src/web/GAMBIT/collector.html) locally or [Web UI](https://christopherdebeer.github.io/simcap/src/web/GAMBIT/)
-3. Connect device and configure session metadata
-4. Select gesture, record, and export labeled data
+1. Open [Collector UI](https://christopherdebeer.github.io/simcap/src/web/GAMBIT/collector.html)
+2. Connect device and configure session metadata
+3. Select gesture, record, and export labeled data
 
 ### ML Training
 ```bash
-# Install dependencies
 pip install -r ml/requirements.txt
-
-# Label existing data (CLI)
-python -m ml.label data/GAMBIT/
-
-# Train model
 python -m ml.train --data-dir data/GAMBIT --epochs 50
 ```
 
@@ -157,5 +173,6 @@ Baseline sensor data is stored in [`data/GAMBIT/`](data/GAMBIT/) with optional `
 ## Links
 
 - [GitHub Repository](https://github.com/christopherdebeer/simcap)
-- [Hosted Web UI](https://christopherdebeer.github.io/simcap/src/web/GAMBIT/)
+- [Firmware Loader](https://christopherdebeer.github.io/simcap/src/web/loader/)
+- [Data Collector](https://christopherdebeer.github.io/simcap/src/web/GAMBIT/collector.html)
 - [Espruino Puck.js](https://www.puck-js.com/)

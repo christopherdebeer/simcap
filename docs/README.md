@@ -15,6 +15,8 @@ For documentation on what's actually implemented, see the README files in each c
 | Component | Status | Description |
 |-----------|--------|-------------|
 | [GAMBIT](../src/device/GAMBIT/) | Active | 9-DoF IMU telemetry firmware for Puck.js |
+| [MOUSE](../src/device/MOUSE/) | Active | BLE HID Mouse - tilt to move cursor |
+| [KEYBOARD](../src/device/KEYBOARD/) | Active | BLE HID Keyboard - macros & gestures |
 | [BAE](../src/device/BAE/) | Reference | BLE advertising reference implementation |
 | [P0](../src/device/P0/) | Prototype | WebSocket-based serial interface |
 
@@ -22,6 +24,7 @@ For documentation on what's actually implemented, see the README files in each c
 
 | Component | Status | Description |
 |-----------|--------|-------------|
+| [Firmware Loader](../src/web/loader/) | Active | Upload firmware to Puck.js via WebBLE |
 | [GAMBIT Web](../src/web/GAMBIT/) | Active | Real-time sensor visualization and data collection |
 | [GAMBIT Collector](../src/web/GAMBIT/collector.html) | Active | Labeled data collection for ML training |
 | [P0 Web](../src/web/P0/) | Prototype | D3.js visualization interface |
@@ -52,43 +55,38 @@ Contains future vision documents and research directions:
 
 ```mermaid
 graph TB
-    subgraph "Hardware Layer"
-        PUCK[Puck.js Device]
+    subgraph "Hardware"
+        PUCK[Puck.js]
         IMU[9-DoF IMU]
-        BLE[BLE Radio]
     end
 
-    subgraph "Firmware Layer"
-        GAMBIT[GAMBIT Firmware]
+    subgraph "Firmware"
+        GAMBIT[GAMBIT]
+        MOUSE[MOUSE HID]
+        KEYBOARD[KEYBOARD HID]
     end
 
-    subgraph "Communication"
-        NORDIC[Nordic UART Service]
-        WEBBLE[WebBLE API]
-    end
-
-    subgraph "Application Layer"
-        WEBUI[GAMBIT Web UI]
-        COLLECTOR[Collector UI]
+    subgraph "Web Tools"
+        FWLOADER[Firmware Loader]
+        COLLECTOR[Data Collector]
     end
 
     subgraph "ML Pipeline"
         DATA[(Labeled Data)]
-        LOADER[Data Loader]
+        TRAIN[Training]
         MODEL[CNN Model]
-        TFLITE[TFLite Export]
     end
 
     IMU --> GAMBIT
-    GAMBIT --> BLE
-    BLE --> NORDIC
-    NORDIC --> WEBBLE
-    WEBBLE --> WEBUI
-    WEBBLE --> COLLECTOR
+    IMU --> MOUSE
+    IMU --> KEYBOARD
+    FWLOADER --> |Upload| GAMBIT
+    FWLOADER --> |Upload| MOUSE
+    FWLOADER --> |Upload| KEYBOARD
+    GAMBIT --> |BLE| COLLECTOR
     COLLECTOR --> DATA
-    DATA --> LOADER
-    LOADER --> MODEL
-    MODEL --> TFLITE
+    DATA --> TRAIN
+    TRAIN --> MODEL
 ```
 
 ## Component Status Legend
