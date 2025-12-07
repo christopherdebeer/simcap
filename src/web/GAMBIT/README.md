@@ -265,6 +265,8 @@ data/GAMBIT/{ISO-timestamp}.json
 ## Related Components
 
 - **Device Firmware:** [src/device/GAMBIT/](../../device/GAMBIT/) - Puck.js firmware
+- **Data Collector:** [collector.html](./collector.html) - Labeled data collection for ML training
+- **Sensor Synthesizer:** [synth.html](./synth.html) - Real-time sensor-reactive audio synthesis ([README](./SYNTH_README.md))
 - **Baseline Data:** [data/GAMBIT/](../../../data/GAMBIT/) - Collected sensor data
 - **Design Docs:** [docs/design/](../../../docs/design/) - Future vision and ML pipeline proposals
 
