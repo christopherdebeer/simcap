@@ -81,11 +81,16 @@ var interval;
 var streamTimeout;
 
 function getData() {
-    // If already streaming, just emit current data
-    if (interval) return emit();
+    // Reset sample counter if starting new stream
+    if (!interval) {
+        sampleCount = 0;
+    }
 
-    // Reset sample counter
-    sampleCount = 0;
+    // CRITICAL: Always refresh the 30-second timeout when getData() is called
+    // This enables keepalive mechanism (web app calls getData() every 25s to prevent timeout)
+    if (streamTimeout) {
+        clearTimeout(streamTimeout);
+    }
 
     // BATTERY OPTIMIZATION: Auto-stop after 30 seconds to prevent accidental battery drain
     streamTimeout = setTimeout(function(){
@@ -94,9 +99,12 @@ function getData() {
         streamTimeout = null;
     }, 30000);
 
-    // Start streaming at 20Hz (50ms interval)
-    interval = setInterval(emit, 50);
-    return(emit());
+    // Start streaming at 20Hz (50ms interval) if not already running
+    if (!interval) {
+        interval = setInterval(emit, 50);
+    }
+
+    return emit();
 }
 
 // Optional: Stop streaming manually

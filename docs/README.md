@@ -27,6 +27,7 @@ For documentation on what's actually implemented, see the README files in each c
 | [Firmware Loader](../src/web/loader/) | Active | Upload firmware to Puck.js via WebBLE |
 | [GAMBIT Web](../src/web/GAMBIT/) | Active | Real-time sensor visualization and data collection |
 | [GAMBIT Collector](../src/web/GAMBIT/collector.html) | Active | Labeled data collection for ML training |
+| [GAMBIT Synth](../src/web/GAMBIT/synth.html) | Active | Sensor-reactive audio synthesizer |
 | [P0 Web](../src/web/P0/) | Prototype | D3.js visualization interface |
 | [JOYPAD](../src/web/JOYPAD/) | Concept | Dual-hand game controller concept |
 | [FFO$$](../src/web/FFO$$/) | Research | $1 gesture algorithm research direction |
