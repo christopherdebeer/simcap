@@ -17,42 +17,82 @@ var telemetry = {
     s: state,
     b: null,
 }
+
+// Battery optimization: Track sample count to reduce expensive sensor polling
+var sampleCount = 0;
+
 function emit() {
-    var mag = Puck.mag()
-    var accel = Puck.accel()
+    sampleCount++;
 
-    telemetry.ax = accel.acc.x
-    telemetry.ay = accel.acc.y
-    telemetry.az = accel.acc.z
+    // Read accelerometer + gyroscope (efficient - single I2C read)
+    var accel = Puck.accel();
+    telemetry.ax = accel.acc.x;
+    telemetry.ay = accel.acc.y;
+    telemetry.az = accel.acc.z;
+    telemetry.gx = accel.gyro.x;
+    telemetry.gy = accel.gyro.y;
+    telemetry.gz = accel.gyro.z;
 
-    telemetry.gx = accel.gyro.x
-    telemetry.gy = accel.gyro.y
-    telemetry.gz = accel.gyro.z
+    // BATTERY OPTIMIZATION: Read expensive sensors less frequently
+    // Magnetometer is power-hungry (requires sensor wake-up) - read every 5th sample (10Hz instead of 20Hz)
+    if (sampleCount % 5 === 0) {
+        var mag = Puck.mag();
+        telemetry.mx = mag.x;
+        telemetry.my = mag.y;
+        telemetry.mz = mag.z;
+        telemetry.t = Puck.magTemp(); // Temperature from magnetometer - read together
+    }
 
-    telemetry.mx = mag.x
-    telemetry.my = mag.y
-    telemetry.mz = mag.z
+    // BATTERY OPTIMIZATION: Read ambient sensors every 10th sample (2Hz instead of 20Hz)
+    if (sampleCount % 10 === 0) {
+        telemetry.l = Puck.light();
+        telemetry.c = Puck.capSense();
+    }
 
-    telemetry.l = Puck.light()
-    telemetry.t = Puck.magTemp()
-    telemetry.c = Puck.capSense()
-    telemetry.s = state
-    telemetry.n = pressCount
-    telemetry.b = Puck.getBatteryPercentage()
-    console.log("\nGAMBIT" + JSON.stringify(telemetry))
+    // BATTERY OPTIMIZATION: Read battery only every 100th sample (0.2Hz - every 5 seconds)
+    if (sampleCount % 100 === 0) {
+        telemetry.b = Puck.getBatteryPercentage();
+    }
+
+    telemetry.s = state;
+    telemetry.n = pressCount;
+
+    console.log("\nGAMBIT" + JSON.stringify(telemetry));
     return telemetry;
 }
 
 var interval;
+var streamTimeout;
+
 function getData() {
+    // If already streaming, just emit current data
     if (interval) return emit();
 
-    setTimeout(function(){
-        clearInterval(interval)
-        interval = null
-    }, 30000)
-    interval = setInterval(emit, 50)
-    return(emit())
+    // Reset sample counter
+    sampleCount = 0;
+
+    // BATTERY OPTIMIZATION: Auto-stop after 30 seconds to prevent accidental battery drain
+    streamTimeout = setTimeout(function(){
+        clearInterval(interval);
+        interval = null;
+        streamTimeout = null;
+    }, 30000);
+
+    // Start streaming at 20Hz (50ms interval)
+    interval = setInterval(emit, 50);
+    return(emit());
+}
+
+// Optional: Stop streaming manually
+function stopData() {
+    if (interval) {
+        clearInterval(interval);
+        interval = null;
+    }
+    if (streamTimeout) {
+        clearTimeout(streamTimeout);
+        streamTimeout = null;
+    }
 }
 
 

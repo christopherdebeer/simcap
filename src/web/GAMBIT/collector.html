@@ -6,6 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
     <meta name="apple-mobile-web-app-capable" content="yes"/>
     <meta name="mobile-web-app-capable" content="yes"/>
+    <!-- Eruda Dev Console for Mobile Debugging -->
+    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+    <script>eruda.init();</script>
     <script src="puck.js"></script>
     <style>
         * { box-sizing: border-box; }
@@ -495,7 +498,10 @@
     // ===== Connection =====
     connectBtn.addEventListener('click', async () => {
         if (state.connected) {
-            Puck.close();
+            console.log('[DEBUG] Disconnecting...');
+            if (state.connection) {
+                state.connection.close();
+            }
             state.connected = false;
             state.connection = null;
             log('Disconnected');
@@ -503,31 +509,57 @@
             return;
         }
 
+        console.log('[DEBUG] ========== COLLECTOR CONNECTION STARTED ==========');
+        console.log('[DEBUG] Browser:', navigator.userAgent);
+        console.log('[DEBUG] BLE support:', navigator.bluetooth ? 'YES' : 'NO');
+
         log('Connecting...');
+        const connectStartTime = Date.now();
+
         Puck.connect(conn => {
+            const connectDuration = Date.now() - connectStartTime;
+            console.log(`[DEBUG] Connection callback fired (${connectDuration}ms)`);
+
             if (!conn) {
+                console.error('[DEBUG] Connection failed - null connection');
                 log('Connection failed');
                 return;
             }
+
+            console.log('[DEBUG] Connection successful!');
+            console.log('[DEBUG] Device:', conn.device ? conn.device.name : 'N/A');
 
             state.connection = conn;
             state.connected = true;
             log('Connected!');
 
             let buffer = '';
+            let dataPacketCount = 0;
             conn.on('data', d => {
+                console.log(`[DEBUG] Raw data chunk received: ${d.length} bytes`);
                 buffer += d;
                 let idx;
                 while ((idx = buffer.indexOf('\n')) >= 0) {
                     const line = buffer.substring(0, idx);
                     buffer = buffer.substring(idx + 1);
+
+                    if (line.startsWith('GAMBIT')) {
+                        dataPacketCount++;
+                        if (dataPacketCount % 50 === 1) {
+                            console.log(`[DEBUG] GAMBIT packets received: ${dataPacketCount}`);
+                        }
+                    }
+
                     if (state.recording) {
                         onData(line);
+                    } else if (line.trim().length > 0) {
+                        console.log('[DEBUG] Device output (not recording):', line);
                     }
                 }
             });
 
             conn.on('close', () => {
+                console.log('[DEBUG] Connection closed event');
                 state.connected = false;
                 state.recording = false;
                 log('Connection closed');
@@ -540,12 +572,30 @@
 
     // ===== Recording Controls =====
     startBtn.addEventListener('click', () => {
+        if (!state.connection) {
+            console.error('[DEBUG] Cannot start recording - not connected');
+            log('Error: Not connected to device');
+            return;
+        }
+
         state.recording = true;
         state.currentLabelStart = state.sessionData.length;
         log('Recording started');
 
-        // Trigger device to start sending data
-        Puck.write('getData()\n');
+        // CRITICAL FIX: Trigger device to start sending data using connection.write()
+        console.log('[DEBUG] Starting data collection...');
+        console.log('[DEBUG] Sending: getData()');
+        state.connection.write('getData()\n', (err) => {
+            if (err) {
+                console.error('[DEBUG] getData() command failed:', err);
+                log('Error: Failed to start data collection');
+                state.recording = false;
+                updateUI();
+            } else {
+                console.log('[DEBUG] getData() command sent successfully');
+                log('Data collection active');
+            }
+        });
 
         updateUI();
     });

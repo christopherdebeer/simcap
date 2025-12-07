@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GAMBIT Sensor Synthesizer</title>
+    <!-- Eruda Dev Console for Mobile Debugging -->
+    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+    <script>eruda.init();</script>
     <style>
         * {
             margin: 0;
@@ -768,11 +771,25 @@
             }
         }
 
+        // Data packet counter for debugging
+        let dataPacketCount = 0;
+        let lastDataTime = null;
+
         // Handle incoming data from device
         function onData(data) {
             const lines = data.split('\n');
             for (let line of lines) {
                 if (line.startsWith('GAMBIT')) {
+                    dataPacketCount++;
+                    const now = Date.now();
+                    const timeSinceLast = lastDataTime ? (now - lastDataTime) : 0;
+                    lastDataTime = now;
+
+                    // Log every 50th packet (once per second at 20Hz)
+                    if (dataPacketCount % 50 === 1) {
+                        console.log(`[DEBUG] Data packets received: ${dataPacketCount} (interval: ${timeSinceLast}ms)`);
+                    }
+
                     try {
                         const jsonStr = line.substring(6); // Remove "GAMBIT" prefix
                         const telemetry = JSON.parse(jsonStr);
@@ -806,16 +823,28 @@
                         }
 
                     } catch (e) {
-                        console.error('Error parsing telemetry:', e);
+                        console.error('[DEBUG] Error parsing telemetry:', e);
+                        console.error('[DEBUG] Raw data:', line);
                     }
+                } else if (line.trim().length > 0) {
+                    // Log non-GAMBIT output for debugging
+                    console.log('[DEBUG] Device output:', line);
                 }
             }
         }
+
+        // Data refresh interval to keep stream alive
+        let dataRefreshInterval = null;
 
         // Connect to device
         connectBtn.addEventListener('click', async () => {
             if (isConnected) {
                 // Disconnect
+                console.log('[DEBUG] Disconnecting from device...');
+                if (dataRefreshInterval) {
+                    clearInterval(dataRefreshInterval);
+                    dataRefreshInterval = null;
+                }
                 if (device) {
                     device.close();
                     device = null;
@@ -833,26 +862,83 @@
                 }
             } else {
                 // Connect
+                console.log('[DEBUG] ========== SYNTH CONNECTION STARTED ==========');
+                console.log('[DEBUG] Browser:', navigator.userAgent);
+                console.log('[DEBUG] BLE support:', navigator.bluetooth ? 'YES' : 'NO');
+
                 try {
+                    const connectStartTime = Date.now();
+
                     Puck.connect(function(connection) {
+                        const connectDuration = Date.now() - connectStartTime;
+                        console.log(`[DEBUG] Connection callback fired (${connectDuration}ms)`);
+
                         if (!connection) {
+                            console.error('[DEBUG] Connection failed - null connection');
                             statusDiv.textContent = 'Connection failed - Please try again';
                             return;
                         }
+
+                        console.log('[DEBUG] Connection successful!');
+                        console.log('[DEBUG] Device:', connection.device ? connection.device.name : 'N/A');
 
                         device = connection;
                         isConnected = true;
                         connectBtn.textContent = 'Disconnect';
                         connectBtn.classList.add('connected');
-                        statusDiv.textContent = 'Connected - Press device button to start data capture';
+                        statusDiv.textContent = 'Connected - Requesting sensor data...';
                         statusDiv.classList.add('connected');
                         toggleSynthBtn.disabled = false;
 
                         // Set up data handler
                         device.on('data', onData);
+
+                        // Set up close handler
+                        device.on('close', () => {
+                            console.log('[DEBUG] Device connection closed');
+                            if (dataRefreshInterval) {
+                                clearInterval(dataRefreshInterval);
+                                dataRefreshInterval = null;
+                            }
+                            isConnected = false;
+                            connectBtn.textContent = 'Connect Device';
+                            connectBtn.classList.remove('connected');
+                            statusDiv.classList.remove('connected', 'playing');
+                            toggleSynthBtn.disabled = true;
+                            if (isPlaying) {
+                                stopAudio();
+                            }
+                        });
+
+                        // CRITICAL FIX: Start data streaming from device using connection.write()
+                        console.log('[DEBUG] Starting data stream from device...');
+                        console.log('[DEBUG] Sending: getData()');
+                        device.write('getData()\n', (err) => {
+                            if (err) {
+                                console.error('[DEBUG] getData() command failed:', err);
+                                statusDiv.textContent = 'Error starting data stream';
+                            } else {
+                                console.log('[DEBUG] getData() command sent successfully');
+                                statusDiv.textContent = 'Connected - Receiving sensor data';
+
+                                // CRITICAL FIX: Re-trigger getData() every 25 seconds
+                                // (firmware auto-stops after 30s, so refresh before that)
+                                dataRefreshInterval = setInterval(() => {
+                                    console.log('[DEBUG] Refreshing data stream (25s keepalive)...');
+                                    device.write('getData()\n', (err) => {
+                                        if (err) {
+                                            console.error('[DEBUG] getData() refresh failed:', err);
+                                        } else {
+                                            console.log('[DEBUG] Data stream refreshed');
+                                        }
+                                    });
+                                }, 25000); // Every 25 seconds
+                            }
+                        });
                     });
                 } catch (e) {
-                    console.error('Connection error:', e);
+                    console.error('[DEBUG] Connection exception:', e);
+                    console.error('[DEBUG] Stack:', e.stack);
                     statusDiv.textContent = 'Error: ' + e.message;
                 }
             }
