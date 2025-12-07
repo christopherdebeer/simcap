@@ -1,3 +1,19 @@
+// ===== GAMBIT Firmware Configuration =====
+var FIRMWARE_INFO = {
+    id: "GAMBIT",
+    name: "GAMBIT IMU Telemetry",
+    version: "1.0.0",
+    features: ["imu", "magnetometer", "environmental", "streaming"],
+    author: "SIMCAP"
+};
+
+// Return firmware information for compatibility checking
+function getFirmware() {
+    console.log("\nFIRMWARE" + JSON.stringify(FIRMWARE_INFO));
+    return FIRMWARE_INFO;
+}
+
+// ===== State and Telemetry =====
 var state = 1;
 var pressCount = 0;
 
