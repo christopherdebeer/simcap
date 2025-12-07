@@ -147,6 +147,20 @@
             font-size: 0.75em;
             color: var(--text-muted);
         }
+        .firmware-card .copy-btn {
+            margin-top: 10px;
+            padding: 6px 12px;
+            font-size: 0.8em;
+            background: var(--primary);
+            color: #000;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .firmware-card .copy-btn:hover {
+            opacity: 0.8;
+        }
 
         /* Progress */
         .progress-container {
@@ -426,15 +440,40 @@ setTimeout(function() { LED1.reset(); }, 1000);
                 <h3>${fw.name}</h3>
                 <p>${fw.description}</p>
                 <div class="size">${fw.size}</div>
+                <button class="copy-btn" data-firmware="${id}" onclick="event.stopPropagation()">Copy to Custom</button>
             </div>
         `).join('');
 
         firmwareGrid.querySelectorAll('.firmware-card').forEach(card => {
-            card.addEventListener('click', () => {
+            card.addEventListener('click', (e) => {
+                if (e.target.classList.contains('copy-btn')) return;
                 state.selectedFirmware = card.dataset.firmware;
                 renderFirmwareGrid();
                 updateUI();
                 log(`Selected: ${FIRMWARE[state.selectedFirmware].name}`);
+            });
+        });
+
+        // Add copy button handlers
+        firmwareGrid.querySelectorAll('.copy-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const fwId = btn.dataset.firmware;
+                const fw = FIRMWARE[fwId];
+                log(`[DEBUG] Copying ${fw.name} to custom tab...`, 'info');
+
+                try {
+                    const response = await fetch(fw.path);
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    const code = await response.text();
+
+                    customCode.value = code;
+                    log(`${fw.name} copied to custom tab (${code.length} bytes)`, 'success');
+
+                    // Switch to custom tab
+                    document.querySelector('.tab[data-tab="custom"]').click();
+                } catch (err) {
+                    log(`Failed to copy firmware: ${err.message}`, 'error');
+                }
             });
         });
     }
@@ -442,6 +481,7 @@ setTimeout(function() { LED1.reset(); }, 1000);
     // ===== Connection =====
     connectBtn.addEventListener('click', async () => {
         if (state.connected) {
+            log('[DEBUG] Initiating disconnect...', 'warn');
             Puck.close();
             state.connected = false;
             state.connection = null;
@@ -450,19 +490,30 @@ setTimeout(function() { LED1.reset(); }, 1000);
             return;
         }
 
+        log('[DEBUG] Connection attempt started', 'info');
+        log('[DEBUG] Browser BLE support: ' + (navigator.bluetooth ? 'YES' : 'NO'), 'info');
+
+        const connectStartTime = Date.now();
         log('Connecting...');
+
         Puck.connect(conn => {
+            const connectDuration = Date.now() - connectStartTime;
+            log(`[DEBUG] Connect callback fired (${connectDuration}ms elapsed)`, 'info');
+
             if (!conn) {
+                log('[DEBUG] Connection object is null/undefined', 'error');
                 log('Connection failed', 'error');
                 return;
             }
 
+            log('[DEBUG] Connection object received', 'success');
             state.connection = conn;
             state.connected = true;
             log('Connected!', 'success');
 
             // Set up data listener
             conn.on('data', data => {
+                log(`[DEBUG] Data received: ${data.length} bytes`, 'info');
                 // Add to console output
                 const line = document.createElement('span');
                 line.textContent = data;
@@ -471,6 +522,7 @@ setTimeout(function() { LED1.reset(); }, 1000);
             });
 
             conn.on('close', () => {
+                log('[DEBUG] Connection close event triggered', 'warn');
                 state.connected = false;
                 state.connection = null;
                 log('Connection closed', 'warn');
@@ -478,11 +530,16 @@ setTimeout(function() { LED1.reset(); }, 1000);
             });
 
             // Get device info
+            log('[DEBUG] Requesting device info...', 'info');
             setTimeout(() => {
+                log('[DEBUG] Querying battery level...', 'info');
                 Puck.eval('Puck.getBatteryPercentage()', val => {
+                    log(`[DEBUG] Battery level: ${val}%`, 'success');
                     $('batteryLevel').textContent = val || '--';
                 });
+                log('[DEBUG] Querying temperature...', 'info');
                 Puck.eval('E.getTemperature()', val => {
+                    log(`[DEBUG] Temperature: ${val}°C`, 'success');
                     $('tempLevel').textContent = val ? val.toFixed(1) : '--';
                 });
             }, 500);
@@ -493,7 +550,17 @@ setTimeout(function() { LED1.reset(); }, 1000);
 
     // ===== Upload Firmware =====
     async function uploadCode(code, name = 'code') {
-        if (!state.connected || state.uploading) return;
+        if (!state.connected) {
+            log('[DEBUG] Upload aborted: Not connected', 'error');
+            return;
+        }
+        if (state.uploading) {
+            log('[DEBUG] Upload aborted: Already uploading', 'warn');
+            return;
+        }
+
+        const uploadStartTime = Date.now();
+        log(`[DEBUG] Starting upload: ${name} (${code.length} bytes)`, 'info');
 
         state.uploading = true;
         updateUI();
@@ -503,68 +570,151 @@ setTimeout(function() { LED1.reset(); }, 1000);
 
         log(`Uploading ${name}...`);
 
-        // Clear device first
-        progressText.textContent = 'Resetting device...';
-        progressFill.style.width = '10%';
+        try {
+            // Clear device first
+            log('[DEBUG] Phase 1: Resetting device...', 'info');
+            progressText.textContent = 'Resetting device...';
+            progressFill.style.width = '10%';
 
-        await new Promise(resolve => {
-            Puck.write('reset();\n', resolve);
-        });
-
-        await new Promise(r => setTimeout(r, 500));
-
-        // Upload in chunks
-        const chunkSize = 500;
-        const chunks = [];
-        for (let i = 0; i < code.length; i += chunkSize) {
-            chunks.push(code.slice(i, i + chunkSize));
-        }
-
-        progressText.textContent = `Uploading... (0/${chunks.length})`;
-
-        for (let i = 0; i < chunks.length; i++) {
+            const resetStartTime = Date.now();
             await new Promise((resolve, reject) => {
-                Puck.write(chunks[i], (err) => {
-                    if (err) reject(err);
-                    else resolve();
+                const timeout = setTimeout(() => {
+                    reject(new Error('Reset timeout after 5s'));
+                }, 5000);
+
+                Puck.write('reset();\n', (err) => {
+                    clearTimeout(timeout);
+                    if (err) {
+                        log(`[DEBUG] Reset write error: ${err}`, 'error');
+                        reject(err);
+                    } else {
+                        log(`[DEBUG] Reset command sent successfully`, 'success');
+                        resolve();
+                    }
                 });
             });
 
-            const progress = 10 + ((i + 1) / chunks.length) * 80;
-            progressFill.style.width = progress + '%';
-            progressText.textContent = `Uploading... (${i + 1}/${chunks.length})`;
+            const resetDuration = Date.now() - resetStartTime;
+            log(`[DEBUG] Reset completed (${resetDuration}ms)`, 'success');
+
+            log('[DEBUG] Waiting 500ms for device to stabilize...', 'info');
+            await new Promise(r => setTimeout(r, 500));
+
+            // Upload in chunks
+            const chunkSize = 500;
+            const chunks = [];
+            for (let i = 0; i < code.length; i += chunkSize) {
+                chunks.push(code.slice(i, i + chunkSize));
+            }
+
+            log(`[DEBUG] Phase 2: Uploading ${chunks.length} chunks (${chunkSize} bytes each)`, 'info');
+            progressText.textContent = `Uploading... (0/${chunks.length})`;
+
+            const chunkStartTime = Date.now();
+            let totalBytesWritten = 0;
+
+            for (let i = 0; i < chunks.length; i++) {
+                const chunkWriteStart = Date.now();
+
+                await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        reject(new Error(`Chunk ${i + 1}/${chunks.length} timeout after 5s`));
+                    }, 5000);
+
+                    Puck.write(chunks[i], (err) => {
+                        clearTimeout(timeout);
+                        if (err) {
+                            log(`[DEBUG] Chunk ${i + 1}/${chunks.length} write error: ${err}`, 'error');
+                            reject(err);
+                        } else {
+                            resolve();
+                        }
+                    });
+                });
+
+                totalBytesWritten += chunks[i].length;
+                const chunkWriteDuration = Date.now() - chunkWriteStart;
+                const bytesPerSecond = Math.round((totalBytesWritten / (Date.now() - chunkStartTime)) * 1000);
+
+                // Log every 10th chunk or last chunk
+                if (i % 10 === 0 || i === chunks.length - 1) {
+                    log(`[DEBUG] Chunk ${i + 1}/${chunks.length} written (${chunkWriteDuration}ms, ${bytesPerSecond} B/s avg)`, 'success');
+                }
+
+                const progress = 10 + ((i + 1) / chunks.length) * 80;
+                progressFill.style.width = progress + '%';
+                progressText.textContent = `Uploading... (${i + 1}/${chunks.length}) - ${bytesPerSecond} B/s`;
+            }
+
+            const chunkDuration = Date.now() - chunkStartTime;
+            log(`[DEBUG] All chunks uploaded (${chunkDuration}ms, ${totalBytesWritten} bytes)`, 'success');
+
+            // Ensure newline at end
+            log('[DEBUG] Phase 3: Finalizing upload...', 'info');
+            await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    reject(new Error('Finalize timeout after 3s'));
+                }, 3000);
+
+                Puck.write('\n', (err) => {
+                    clearTimeout(timeout);
+                    if (err) {
+                        log(`[DEBUG] Finalize error: ${err}`, 'error');
+                        reject(err);
+                    } else {
+                        log(`[DEBUG] Finalize completed`, 'success');
+                        resolve();
+                    }
+                });
+            });
+
+            progressFill.style.width = '100%';
+            progressText.textContent = 'Upload complete!';
+
+            const totalDuration = Date.now() - uploadStartTime;
+            log(`${name} uploaded successfully! (${totalDuration}ms total)`, 'success');
+
+        } catch (err) {
+            log(`[DEBUG] Upload failed: ${err.message}`, 'error');
+            log(`Upload failed: ${err.message}`, 'error');
+            progressText.textContent = `Error: ${err.message}`;
+            progressFill.style.width = '0%';
+        } finally {
+            state.uploading = false;
+            updateUI();
+
+            setTimeout(() => {
+                progressContainer.style.display = 'none';
+            }, 2000);
         }
-
-        // Ensure newline at end
-        await new Promise(resolve => {
-            Puck.write('\n', resolve);
-        });
-
-        progressFill.style.width = '100%';
-        progressText.textContent = 'Upload complete!';
-        log(`${name} uploaded successfully!`, 'success');
-
-        state.uploading = false;
-        updateUI();
-
-        setTimeout(() => {
-            progressContainer.style.display = 'none';
-        }, 2000);
     }
 
     // ===== Upload Preset =====
     uploadBtn.addEventListener('click', async () => {
-        if (!state.selectedFirmware) return;
+        if (!state.selectedFirmware) {
+            log('[DEBUG] No firmware selected', 'warn');
+            return;
+        }
 
         const fw = FIRMWARE[state.selectedFirmware];
+        log(`[DEBUG] Fetching ${fw.name} from ${fw.path}...`, 'info');
         log(`Fetching ${fw.name}...`);
 
         try {
+            const fetchStartTime = Date.now();
             const response = await fetch(fw.path);
+            const fetchDuration = Date.now() - fetchStartTime;
+
+            log(`[DEBUG] Fetch response: ${response.status} (${fetchDuration}ms)`, 'info');
+
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
             const code = await response.text();
+            log(`[DEBUG] Firmware loaded: ${code.length} bytes`, 'success');
+
             await uploadCode(code, fw.name);
         } catch (err) {
+            log(`[DEBUG] Fetch error: ${err.message}`, 'error');
             log(`Failed to fetch firmware: ${err.message}`, 'error');
             state.uploading = false;
             updateUI();
@@ -573,10 +723,20 @@ setTimeout(function() { LED1.reset(); }, 1000);
 
     // ===== Save to Flash =====
     saveBtn.addEventListener('click', () => {
-        if (!state.connected) return;
+        if (!state.connected) {
+            log('[DEBUG] Save aborted: Not connected', 'warn');
+            return;
+        }
+        log('[DEBUG] Executing save() command...', 'info');
         log('Saving to flash...');
-        Puck.write('save();\n', () => {
-            log('Saved to flash!', 'success');
+        Puck.write('save();\n', (err) => {
+            if (err) {
+                log(`[DEBUG] Save error: ${err}`, 'error');
+                log('Failed to save to flash!', 'error');
+            } else {
+                log('[DEBUG] Save command sent successfully', 'success');
+                log('Saved to flash!', 'success');
+            }
         });
     });
 
@@ -584,27 +744,47 @@ setTimeout(function() { LED1.reset(); }, 1000);
     uploadCustomBtn.addEventListener('click', async () => {
         const code = customCode.value.trim();
         if (!code) {
+            log('[DEBUG] No custom code entered', 'warn');
             log('No code to upload', 'warn');
             return;
         }
+        log(`[DEBUG] Custom code length: ${code.length} bytes`, 'info');
         await uploadCode(code, 'Custom Code');
     });
 
     // ===== Reset Device =====
     resetBtn.addEventListener('click', () => {
-        if (!state.connected) return;
+        if (!state.connected) {
+            log('[DEBUG] Reset aborted: Not connected', 'warn');
+            return;
+        }
+        log('[DEBUG] Executing reset() command...', 'info');
         log('Resetting device...');
-        Puck.write('reset();\n', () => {
-            log('Device reset!', 'success');
+        Puck.write('reset();\n', (err) => {
+            if (err) {
+                log(`[DEBUG] Reset error: ${err}`, 'error');
+                log('Failed to reset device!', 'error');
+            } else {
+                log('[DEBUG] Reset command sent successfully', 'success');
+                log('Device reset!', 'success');
+            }
         });
     });
 
     // ===== Console Input =====
     sendCmd.addEventListener('click', () => {
         const cmd = consoleInput.value.trim();
-        if (!cmd || !state.connected) return;
+        if (!cmd || !state.connected) {
+            log('[DEBUG] Send aborted: No command or not connected', 'warn');
+            return;
+        }
+        log(`[DEBUG] Sending command: ${cmd}`, 'info');
         log(`> ${cmd}`, 'info');
-        Puck.write(cmd + '\n');
+        Puck.write(cmd + '\n', (err) => {
+            if (err) {
+                log(`[DEBUG] Command send error: ${err}`, 'error');
+            }
+        });
         consoleInput.value = '';
     });
 
