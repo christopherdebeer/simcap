@@ -10,6 +10,7 @@
     <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
     <script>eruda.init();</script>
     <script src="puck.js"></script>
+    <script src="gambit-client.js"></script>
     <style>
         * { box-sizing: border-box; }
         body, html {
@@ -360,7 +361,7 @@
         sessionData: [],
         labels: [],
         currentLabelStart: null,
-        connection: null
+        gambitClient: null
     };
 
     // ===== DOM Elements =====
@@ -468,143 +469,141 @@
     };
 
     // ===== Data Handling =====
-    function onData(data) {
-        if (!data.startsWith('GAMBIT')) return;
+    function onTelemetry(telemetry) {
+        if (!state.recording) return;
 
-        try {
-            const telemetry = JSON.parse(data.slice(6, -1));
-            state.sessionData.push(telemetry);
+        state.sessionData.push(telemetry);
 
-            // Update live display
-            $('ax').textContent = telemetry.ax;
-            $('ay').textContent = telemetry.ay;
-            $('az').textContent = telemetry.az;
-            $('gx').textContent = telemetry.gx;
-            $('gy').textContent = telemetry.gy;
-            $('gz').textContent = telemetry.gz;
-            $('mx').textContent = telemetry.mx;
-            $('my').textContent = telemetry.my;
-            $('mz').textContent = telemetry.mz;
+        // Update live display
+        $('ax').textContent = telemetry.ax;
+        $('ay').textContent = telemetry.ay;
+        $('az').textContent = telemetry.az;
+        $('gx').textContent = telemetry.gx;
+        $('gy').textContent = telemetry.gy;
+        $('gz').textContent = telemetry.gz;
+        $('mx').textContent = telemetry.mx;
+        $('my').textContent = telemetry.my;
+        $('mz').textContent = telemetry.mz;
 
-            // Update sample count (throttled)
-            if (state.sessionData.length % 10 === 0) {
-                updateUI();
-            }
-        } catch (e) {
-            log(`Parse error: ${e.message}`);
+        // Update sample count (throttled)
+        if (state.sessionData.length % 10 === 0) {
+            updateUI();
         }
     }
 
     // ===== Connection =====
     connectBtn.addEventListener('click', async () => {
         if (state.connected) {
-            console.log('[DEBUG] Disconnecting...');
-            if (state.connection) {
-                state.connection.close();
+            console.log('[GAMBIT] Disconnecting...');
+            if (state.gambitClient) {
+                state.gambitClient.disconnect();
+                state.gambitClient = null;
             }
             state.connected = false;
-            state.connection = null;
             log('Disconnected');
             updateUI();
             return;
         }
 
-        console.log('[DEBUG] ========== COLLECTOR CONNECTION STARTED ==========');
-        console.log('[DEBUG] Browser:', navigator.userAgent);
-        console.log('[DEBUG] BLE support:', navigator.bluetooth ? 'YES' : 'NO');
-
         log('Connecting...');
-        const connectStartTime = Date.now();
 
-        Puck.connect(conn => {
-            const connectDuration = Date.now() - connectStartTime;
-            console.log(`[DEBUG] Connection callback fired (${connectDuration}ms)`);
-
-            if (!conn) {
-                console.error('[DEBUG] Connection failed - null connection');
-                log('Connection failed');
-                return;
-            }
-
-            console.log('[DEBUG] Connection successful!');
-            console.log('[DEBUG] Device:', conn.device ? conn.device.name : 'N/A');
-
-            state.connection = conn;
-            state.connected = true;
-            log('Connected!');
-
-            let buffer = '';
-            let dataPacketCount = 0;
-            conn.on('data', d => {
-                console.log(`[DEBUG] Raw data chunk received: ${d.length} bytes`);
-                buffer += d;
-                let idx;
-                while ((idx = buffer.indexOf('\n')) >= 0) {
-                    const line = buffer.substring(0, idx);
-                    buffer = buffer.substring(idx + 1);
-
-                    if (line.startsWith('GAMBIT')) {
-                        dataPacketCount++;
-                        if (dataPacketCount % 50 === 1) {
-                            console.log(`[DEBUG] GAMBIT packets received: ${dataPacketCount}`);
-                        }
-                    }
-
-                    if (state.recording) {
-                        onData(line);
-                    } else if (line.trim().length > 0) {
-                        console.log('[DEBUG] Device output (not recording):', line);
-                    }
-                }
+        try {
+            // Create new GAMBIT client (NO auto-keepalive for collector - we control it)
+            state.gambitClient = new GambitClient({
+                debug: true,
+                autoKeepalive: false  // Collector controls streaming manually
             });
 
-            conn.on('close', () => {
-                console.log('[DEBUG] Connection closed event');
+            // Set up event handlers
+            state.gambitClient.on('data', onTelemetry);
+
+            state.gambitClient.on('firmware', (info) => {
+                console.log('[GAMBIT] Firmware info:', info);
+
+                // Check compatibility
+                const compat = state.gambitClient.checkCompatibility('1.0.0');
+                if (!compat.compatible) {
+                    log(`Incompatible firmware: ${compat.reason}`);
+                    setTimeout(() => state.gambitClient.disconnect(), 3000);
+                    return;
+                }
+
+                log(`Firmware: ${info.name} v${info.version}`);
+            });
+
+            state.gambitClient.on('disconnect', () => {
+                console.log('[GAMBIT] Device disconnected');
                 state.connected = false;
                 state.recording = false;
                 log('Connection closed');
                 updateUI();
             });
 
+            state.gambitClient.on('error', (err) => {
+                console.error('[GAMBIT] Error:', err);
+                log(`Error: ${err.message}`);
+            });
+
+            // Connect to device
+            await state.gambitClient.connect();
+
+            state.connected = true;
+            log('Connected!');
             updateUI();
-        });
+
+        } catch (e) {
+            console.error('[GAMBIT] Connection error:', e);
+            log(`Connection failed: ${e.message}`);
+            if (state.gambitClient) {
+                state.gambitClient.disconnect();
+                state.gambitClient = null;
+            }
+        }
     });
 
     // ===== Recording Controls =====
-    startBtn.addEventListener('click', () => {
-        if (!state.connection) {
-            console.error('[DEBUG] Cannot start recording - not connected');
+    startBtn.addEventListener('click', async () => {
+        if (!state.gambitClient || !state.connected) {
+            console.error('[GAMBIT] Cannot start recording - not connected');
             log('Error: Not connected to device');
             return;
         }
 
-        state.recording = true;
-        state.currentLabelStart = state.sessionData.length;
-        log('Recording started');
+        try {
+            state.recording = true;
+            state.currentLabelStart = state.sessionData.length;
+            log('Recording started');
 
-        // CRITICAL FIX: Trigger device to start sending data using connection.write()
-        console.log('[DEBUG] Starting data collection...');
-        console.log('[DEBUG] Sending: getData()');
-        state.connection.write('getData()\n', (err) => {
-            if (err) {
-                console.error('[DEBUG] getData() command failed:', err);
-                log('Error: Failed to start data collection');
-                state.recording = false;
-                updateUI();
-            } else {
-                console.log('[DEBUG] getData() command sent successfully');
-                log('Data collection active');
-            }
-        });
+            // Start streaming sensor data
+            console.log('[GAMBIT] Starting data collection...');
+            await state.gambitClient.startStreaming();
+            log('Data collection active');
 
-        updateUI();
+            updateUI();
+        } catch (e) {
+            console.error('[GAMBIT] Failed to start recording:', e);
+            log('Error: Failed to start data collection');
+            state.recording = false;
+            updateUI();
+        }
     });
 
-    stopBtn.addEventListener('click', () => {
+    stopBtn.addEventListener('click', async () => {
         closeCurrentLabel();
         state.recording = false;
         state.currentLabelStart = null;
         log('Recording stopped');
+
+        // Stop streaming to save battery
+        if (state.gambitClient && state.connected) {
+            try {
+                await state.gambitClient.stopStreaming();
+                log('Data streaming stopped');
+            } catch (e) {
+                console.error('[GAMBIT] Failed to stop streaming:', e);
+            }
+        }
+
         updateUI();
     });
 

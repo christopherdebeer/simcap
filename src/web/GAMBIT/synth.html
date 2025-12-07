@@ -7,6 +7,8 @@
     <!-- Eruda Dev Console for Mobile Debugging -->
     <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
     <script>eruda.init();</script>
+    <script src="puck.js"></script>
+    <script src="gambit-client.js"></script>
     <style>
         * {
             margin: 0;
@@ -480,8 +482,8 @@
         let wetGain;
         let isPlaying = false;
 
-        // Device connection
-        let device = null;
+        // GAMBIT Client - centralized BLE handling
+        let gambitClient = null;
         let isConnected = false;
 
         // Sensor data normalization ranges
@@ -771,83 +773,45 @@
             }
         }
 
-        // Data packet counter for debugging
-        let dataPacketCount = 0;
-        let lastDataTime = null;
+        // Handle incoming telemetry data from GAMBIT client
+        function onTelemetry(telemetry) {
+            // Update sensor data
+            sensorData = {
+                ax: telemetry.ax || 0,
+                ay: telemetry.ay || 0,
+                az: telemetry.az || 0,
+                gx: telemetry.gx || 0,
+                gy: telemetry.gy || 0,
+                gz: telemetry.gz || 0,
+                mx: telemetry.mx || 0,
+                my: telemetry.my || 0,
+                mz: telemetry.mz || 0,
+                l: telemetry.l || 0,
+                t: telemetry.t || 0,
+                c: telemetry.c || 0,
+                b: telemetry.b || 0,
+                s: telemetry.s || 0,
+                n: telemetry.n || 0
+            };
 
-        // Handle incoming data from device
-        function onData(data) {
-            const lines = data.split('\n');
-            for (let line of lines) {
-                if (line.startsWith('GAMBIT')) {
-                    dataPacketCount++;
-                    const now = Date.now();
-                    const timeSinceLast = lastDataTime ? (now - lastDataTime) : 0;
-                    lastDataTime = now;
+            // Update displays
+            updateSensorDisplay();
+            updateBattery(sensorData.b);
 
-                    // Log every 50th packet (once per second at 20Hz)
-                    if (dataPacketCount % 50 === 1) {
-                        console.log(`[DEBUG] Data packets received: ${dataPacketCount} (interval: ${timeSinceLast}ms)`);
-                    }
-
-                    try {
-                        const jsonStr = line.substring(6); // Remove "GAMBIT" prefix
-                        const telemetry = JSON.parse(jsonStr);
-
-                        // Update sensor data
-                        sensorData = {
-                            ax: telemetry.ax || 0,
-                            ay: telemetry.ay || 0,
-                            az: telemetry.az || 0,
-                            gx: telemetry.gx || 0,
-                            gy: telemetry.gy || 0,
-                            gz: telemetry.gz || 0,
-                            mx: telemetry.mx || 0,
-                            my: telemetry.my || 0,
-                            mz: telemetry.mz || 0,
-                            l: telemetry.l || 0,
-                            t: telemetry.t || 0,
-                            c: telemetry.c || 0,
-                            b: telemetry.b || 0,
-                            s: telemetry.s || 0,
-                            n: telemetry.n || 0
-                        };
-
-                        // Update displays
-                        updateSensorDisplay();
-                        updateBattery(sensorData.b);
-
-                        // Update synthesis if playing
-                        if (isPlaying) {
-                            updateSynthesis();
-                        }
-
-                    } catch (e) {
-                        console.error('[DEBUG] Error parsing telemetry:', e);
-                        console.error('[DEBUG] Raw data:', line);
-                    }
-                } else if (line.trim().length > 0) {
-                    // Log non-GAMBIT output for debugging
-                    console.log('[DEBUG] Device output:', line);
-                }
+            // Update synthesis if playing
+            if (isPlaying) {
+                updateSynthesis();
             }
         }
 
-        // Data refresh interval to keep stream alive
-        let dataRefreshInterval = null;
-
-        // Connect to device
+        // Connect to device using centralized GAMBIT client
         connectBtn.addEventListener('click', async () => {
             if (isConnected) {
                 // Disconnect
-                console.log('[DEBUG] Disconnecting from device...');
-                if (dataRefreshInterval) {
-                    clearInterval(dataRefreshInterval);
-                    dataRefreshInterval = null;
-                }
-                if (device) {
-                    device.close();
-                    device = null;
+                console.log('[GAMBIT] Disconnecting from device...');
+                if (gambitClient) {
+                    gambitClient.disconnect();
+                    gambitClient = null;
                 }
                 isConnected = false;
                 connectBtn.textContent = 'Connect Device';
@@ -862,84 +826,71 @@
                 }
             } else {
                 // Connect
-                console.log('[DEBUG] ========== SYNTH CONNECTION STARTED ==========');
-                console.log('[DEBUG] Browser:', navigator.userAgent);
-                console.log('[DEBUG] BLE support:', navigator.bluetooth ? 'YES' : 'NO');
-
                 try {
-                    const connectStartTime = Date.now();
+                    statusDiv.textContent = 'Connecting...';
 
-                    Puck.connect(function(connection) {
-                        const connectDuration = Date.now() - connectStartTime;
-                        console.log(`[DEBUG] Connection callback fired (${connectDuration}ms)`);
+                    // Create new GAMBIT client
+                    gambitClient = new GambitClient({
+                        debug: true,
+                        autoKeepalive: true,
+                        keepaliveInterval: 25000
+                    });
 
-                        if (!connection) {
-                            console.error('[DEBUG] Connection failed - null connection');
-                            statusDiv.textContent = 'Connection failed - Please try again';
+                    // Set up event handlers
+                    gambitClient.on('data', onTelemetry);
+
+                    gambitClient.on('firmware', (info) => {
+                        console.log('[GAMBIT] Firmware info:', info);
+
+                        // Check compatibility
+                        const compat = gambitClient.checkCompatibility('1.0.0');
+                        if (!compat.compatible) {
+                            statusDiv.textContent = `Incompatible firmware: ${compat.reason}`;
+                            statusDiv.classList.add('error');
+                            setTimeout(() => gambitClient.disconnect(), 3000);
                             return;
                         }
 
-                        console.log('[DEBUG] Connection successful!');
-                        console.log('[DEBUG] Device:', connection.device ? connection.device.name : 'N/A');
-
-                        device = connection;
-                        isConnected = true;
-                        connectBtn.textContent = 'Disconnect';
-                        connectBtn.classList.add('connected');
-                        statusDiv.textContent = 'Connected - Requesting sensor data...';
-                        statusDiv.classList.add('connected');
-                        toggleSynthBtn.disabled = false;
-
-                        // Set up data handler
-                        device.on('data', onData);
-
-                        // Set up close handler
-                        device.on('close', () => {
-                            console.log('[DEBUG] Device connection closed');
-                            if (dataRefreshInterval) {
-                                clearInterval(dataRefreshInterval);
-                                dataRefreshInterval = null;
-                            }
-                            isConnected = false;
-                            connectBtn.textContent = 'Connect Device';
-                            connectBtn.classList.remove('connected');
-                            statusDiv.classList.remove('connected', 'playing');
-                            toggleSynthBtn.disabled = true;
-                            if (isPlaying) {
-                                stopAudio();
-                            }
-                        });
-
-                        // CRITICAL FIX: Start data streaming from device using connection.write()
-                        console.log('[DEBUG] Starting data stream from device...');
-                        console.log('[DEBUG] Sending: getData()');
-                        device.write('getData()\n', (err) => {
-                            if (err) {
-                                console.error('[DEBUG] getData() command failed:', err);
-                                statusDiv.textContent = 'Error starting data stream';
-                            } else {
-                                console.log('[DEBUG] getData() command sent successfully');
-                                statusDiv.textContent = 'Connected - Receiving sensor data';
-
-                                // CRITICAL FIX: Re-trigger getData() every 25 seconds
-                                // (firmware auto-stops after 30s, so refresh before that)
-                                dataRefreshInterval = setInterval(() => {
-                                    console.log('[DEBUG] Refreshing data stream (25s keepalive)...');
-                                    device.write('getData()\n', (err) => {
-                                        if (err) {
-                                            console.error('[DEBUG] getData() refresh failed:', err);
-                                        } else {
-                                            console.log('[DEBUG] Data stream refreshed');
-                                        }
-                                    });
-                                }, 25000); // Every 25 seconds
-                            }
-                        });
+                        statusDiv.textContent = `Connected - ${info.name} v${info.version}`;
                     });
+
+                    gambitClient.on('disconnect', () => {
+                        console.log('[GAMBIT] Device disconnected');
+                        isConnected = false;
+                        connectBtn.textContent = 'Connect Device';
+                        connectBtn.classList.remove('connected');
+                        statusDiv.classList.remove('connected', 'playing');
+                        toggleSynthBtn.disabled = true;
+                        if (isPlaying) {
+                            stopAudio();
+                        }
+                    });
+
+                    gambitClient.on('error', (err) => {
+                        console.error('[GAMBIT] Error:', err);
+                        statusDiv.textContent = 'Error: ' + err.message;
+                    });
+
+                    // Connect to device
+                    const firmwareInfo = await gambitClient.connect();
+
+                    isConnected = true;
+                    connectBtn.textContent = 'Disconnect';
+                    connectBtn.classList.add('connected');
+                    statusDiv.classList.add('connected');
+                    toggleSynthBtn.disabled = false;
+
+                    // Start streaming sensor data
+                    await gambitClient.startStreaming();
+                    statusDiv.textContent = 'Connected - Receiving sensor data';
+
                 } catch (e) {
-                    console.error('[DEBUG] Connection exception:', e);
-                    console.error('[DEBUG] Stack:', e.stack);
-                    statusDiv.textContent = 'Error: ' + e.message;
+                    console.error('[GAMBIT] Connection error:', e);
+                    statusDiv.textContent = 'Connection failed: ' + e.message;
+                    if (gambitClient) {
+                        gambitClient.disconnect();
+                        gambitClient = null;
+                    }
                 }
             }
         });
