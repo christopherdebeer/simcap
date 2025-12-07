@@ -6,6 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
     <meta name="apple-mobile-web-app-capable" content="yes"/>
     <meta name="mobile-web-app-capable" content="yes"/>
+    <!-- Eruda Dev Console for Mobile Debugging -->
+    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+    <script>eruda.init();</script>
     <script src="../GAMBIT/puck.js"></script>
     <style>
         * { box-sizing: border-box; }
@@ -482,6 +485,7 @@ setTimeout(function() { LED1.reset(); }, 1000);
     connectBtn.addEventListener('click', async () => {
         if (state.connected) {
             log('[DEBUG] Initiating disconnect...', 'warn');
+            log('[DEBUG] Calling Puck.close()...', 'warn');
             Puck.close();
             state.connected = false;
             state.connection = null;
@@ -490,62 +494,155 @@ setTimeout(function() { LED1.reset(); }, 1000);
             return;
         }
 
-        log('[DEBUG] Connection attempt started', 'info');
-        log('[DEBUG] Browser BLE support: ' + (navigator.bluetooth ? 'YES' : 'NO'), 'info');
+        log('[DEBUG] ========== CONNECTION ATTEMPT STARTED ==========', 'info');
+        log('[DEBUG] Browser info:', 'info');
+        log('[DEBUG]   - User Agent: ' + navigator.userAgent, 'info');
+        log('[DEBUG]   - Platform: ' + navigator.platform, 'info');
+        log('[DEBUG]   - BLE support: ' + (navigator.bluetooth ? 'YES' : 'NO'), 'info');
+        log('[DEBUG]   - Timestamp: ' + new Date().toISOString(), 'info');
 
         const connectStartTime = Date.now();
         log('Connecting...');
 
-        Puck.connect(conn => {
-            const connectDuration = Date.now() - connectStartTime;
-            log(`[DEBUG] Connect callback fired (${connectDuration}ms elapsed)`, 'info');
+        try {
+            log('[DEBUG] Calling Puck.connect()...', 'info');
 
-            if (!conn) {
-                log('[DEBUG] Connection object is null/undefined', 'error');
-                log('Connection failed', 'error');
-                return;
-            }
+            Puck.connect(conn => {
+                const connectDuration = Date.now() - connectStartTime;
+                log(`[DEBUG] ===== Connect callback fired (${connectDuration}ms elapsed) =====`, 'info');
 
-            log('[DEBUG] Connection object received', 'success');
-            state.connection = conn;
-            state.connected = true;
-            log('Connected!', 'success');
+                if (!conn) {
+                    log('[DEBUG] Connection object is null/undefined', 'error');
+                    log('[DEBUG] This usually means user cancelled or connection failed', 'error');
+                    log('Connection failed', 'error');
+                    return;
+                }
 
-            // Set up data listener
-            conn.on('data', data => {
-                log(`[DEBUG] Data received: ${data.length} bytes`, 'info');
-                // Add to console output
-                const line = document.createElement('span');
-                line.textContent = data;
-                consoleOutput.appendChild(line);
-                consoleOutput.scrollTop = consoleOutput.scrollHeight;
-            });
+                log('[DEBUG] Connection object received successfully', 'success');
+                log('[DEBUG] Connection properties:', 'info');
+                log('[DEBUG]   - isOpen: ' + conn.isOpen, 'info');
+                log('[DEBUG]   - isOpening: ' + conn.isOpening, 'info');
+                log('[DEBUG]   - device.name: ' + (conn.device ? conn.device.name : 'N/A'), 'info');
+                log('[DEBUG]   - device.id: ' + (conn.device ? conn.device.id : 'N/A'), 'info');
 
-            conn.on('close', () => {
-                log('[DEBUG] Connection close event triggered', 'warn');
-                state.connected = false;
-                state.connection = null;
-                log('Connection closed', 'warn');
+                state.connection = conn;
+                state.connected = true;
+                log('Connected!', 'success');
+
+                // Set up data listener
+                log('[DEBUG] Setting up data listener...', 'info');
+                conn.on('data', data => {
+                    log(`[DEBUG] <data> event: ${data.length} bytes`, 'info');
+                    log(`[DEBUG] <data> content: ${JSON.stringify(data.substring(0, 100))}${data.length > 100 ? '...' : ''}`, 'info');
+                    // Add to console output
+                    const line = document.createElement('span');
+                    line.textContent = data;
+                    consoleOutput.appendChild(line);
+                    consoleOutput.scrollTop = consoleOutput.scrollHeight;
+                });
+
+                log('[DEBUG] Setting up close listener...', 'info');
+                conn.on('close', () => {
+                    log('[DEBUG] <close> event triggered', 'warn');
+                    state.connected = false;
+                    state.connection = null;
+                    log('Connection closed', 'warn');
+                    updateUI();
+                });
+
+                log('[DEBUG] Listeners configured successfully', 'success');
+
+                // Get device info using connection.write() to avoid triggering new device selection
+                log('[DEBUG] ========== QUERYING DEVICE INFO ==========', 'info');
+                log('[DEBUG] NOTE: Using conn.write() instead of Puck.eval() to avoid triggering secondary device selection', 'info');
+
+                setTimeout(() => {
+                    log('[DEBUG] Starting battery query...', 'info');
+                    log('[DEBUG] Sending: \\x10Bluetooth.println(JSON.stringify(Puck.getBatteryPercentage()))', 'info');
+
+                    // Set up temporary data collector for battery
+                    let batteryData = '';
+                    const originalDataHandler = conn.ondata;
+
+                    const batteryHandler = (data) => {
+                        log('[DEBUG] Battery query data received: ' + JSON.stringify(data), 'info');
+                        batteryData += data;
+
+                        // Look for JSON response
+                        const match = batteryData.match(/(\d+)/);
+                        if (match) {
+                            const batteryLevel = parseInt(match[1]);
+                            log(`[DEBUG] Battery level parsed: ${batteryLevel}%`, 'success');
+                            $('batteryLevel').textContent = batteryLevel;
+
+                            // Restore original handler and query temperature
+                            conn.ondata = originalDataHandler;
+                            queryTemperature();
+                        }
+                    };
+
+                    conn.ondata = (data) => {
+                        originalDataHandler(data);
+                        batteryHandler(data);
+                    };
+
+                    conn.write('\x10Bluetooth.println(JSON.stringify(Puck.getBatteryPercentage()))\n', (err) => {
+                        if (err) {
+                            log('[DEBUG] Battery query write error: ' + err, 'error');
+                            conn.ondata = originalDataHandler;
+                            queryTemperature();
+                        } else {
+                            log('[DEBUG] Battery query command sent successfully', 'success');
+                        }
+                    });
+
+                    function queryTemperature() {
+                        log('[DEBUG] Starting temperature query...', 'info');
+                        log('[DEBUG] Sending: \\x10Bluetooth.println(JSON.stringify(E.getTemperature()))', 'info');
+
+                        let tempData = '';
+                        const tempOriginalHandler = conn.ondata;
+
+                        const tempHandler = (data) => {
+                            log('[DEBUG] Temperature query data received: ' + JSON.stringify(data), 'info');
+                            tempData += data;
+
+                            // Look for JSON response (number with possible decimal)
+                            const match = tempData.match(/(\d+\.?\d*)/);
+                            if (match) {
+                                const temp = parseFloat(match[1]);
+                                log(`[DEBUG] Temperature parsed: ${temp}°C`, 'success');
+                                $('tempLevel').textContent = temp.toFixed(1);
+
+                                // Restore original handler
+                                conn.ondata = tempOriginalHandler;
+                                log('[DEBUG] ========== DEVICE INFO QUERY COMPLETE ==========', 'success');
+                            }
+                        };
+
+                        conn.ondata = (data) => {
+                            tempOriginalHandler(data);
+                            tempHandler(data);
+                        };
+
+                        conn.write('\x10Bluetooth.println(JSON.stringify(E.getTemperature()))\n', (err) => {
+                            if (err) {
+                                log('[DEBUG] Temperature query write error: ' + err, 'error');
+                                conn.ondata = tempOriginalHandler;
+                            } else {
+                                log('[DEBUG] Temperature query command sent successfully', 'success');
+                            }
+                        });
+                    }
+                }, 500);
+
                 updateUI();
             });
-
-            // Get device info
-            log('[DEBUG] Requesting device info...', 'info');
-            setTimeout(() => {
-                log('[DEBUG] Querying battery level...', 'info');
-                Puck.eval('Puck.getBatteryPercentage()', val => {
-                    log(`[DEBUG] Battery level: ${val}%`, 'success');
-                    $('batteryLevel').textContent = val || '--';
-                });
-                log('[DEBUG] Querying temperature...', 'info');
-                Puck.eval('E.getTemperature()', val => {
-                    log(`[DEBUG] Temperature: ${val}°C`, 'success');
-                    $('tempLevel').textContent = val ? val.toFixed(1) : '--';
-                });
-            }, 500);
-
-            updateUI();
-        });
+        } catch (error) {
+            log('[DEBUG] Exception during connection: ' + error.message, 'error');
+            log('[DEBUG] Stack trace: ' + error.stack, 'error');
+            log('Connection error: ' + error.message, 'error');
+        }
     });
 
     // ===== Upload Firmware =====
@@ -560,7 +657,9 @@ setTimeout(function() { LED1.reset(); }, 1000);
         }
 
         const uploadStartTime = Date.now();
-        log(`[DEBUG] Starting upload: ${name} (${code.length} bytes)`, 'info');
+        log(`[DEBUG] ========== UPLOAD STARTED: ${name} ==========`, 'info');
+        log(`[DEBUG] Code size: ${code.length} bytes`, 'info');
+        log(`[DEBUG] Connection state: ${state.connection ? 'valid' : 'null'}`, 'info');
 
         state.uploading = true;
         updateUI();
@@ -573,16 +672,19 @@ setTimeout(function() { LED1.reset(); }, 1000);
         try {
             // Clear device first
             log('[DEBUG] Phase 1: Resetting device...', 'info');
+            log('[DEBUG] Using connection.write() to avoid triggering device selection', 'info');
             progressText.textContent = 'Resetting device...';
             progressFill.style.width = '10%';
 
             const resetStartTime = Date.now();
             await new Promise((resolve, reject) => {
                 const timeout = setTimeout(() => {
+                    log('[DEBUG] Reset timeout triggered after 5s', 'error');
                     reject(new Error('Reset timeout after 5s'));
                 }, 5000);
 
-                Puck.write('reset();\n', (err) => {
+                log('[DEBUG] Sending reset() command via connection.write()...', 'info');
+                state.connection.write('reset();\n', (err) => {
                     clearTimeout(timeout);
                     if (err) {
                         log(`[DEBUG] Reset write error: ${err}`, 'error');
@@ -618,10 +720,11 @@ setTimeout(function() { LED1.reset(); }, 1000);
 
                 await new Promise((resolve, reject) => {
                     const timeout = setTimeout(() => {
+                        log(`[DEBUG] Chunk ${i + 1}/${chunks.length} timeout after 5s`, 'error');
                         reject(new Error(`Chunk ${i + 1}/${chunks.length} timeout after 5s`));
                     }, 5000);
 
-                    Puck.write(chunks[i], (err) => {
+                    state.connection.write(chunks[i], (err) => {
                         clearTimeout(timeout);
                         if (err) {
                             log(`[DEBUG] Chunk ${i + 1}/${chunks.length} write error: ${err}`, 'error');
@@ -653,10 +756,11 @@ setTimeout(function() { LED1.reset(); }, 1000);
             log('[DEBUG] Phase 3: Finalizing upload...', 'info');
             await new Promise((resolve, reject) => {
                 const timeout = setTimeout(() => {
+                    log('[DEBUG] Finalize timeout after 3s', 'error');
                     reject(new Error('Finalize timeout after 3s'));
                 }, 3000);
 
-                Puck.write('\n', (err) => {
+                state.connection.write('\n', (err) => {
                     clearTimeout(timeout);
                     if (err) {
                         log(`[DEBUG] Finalize error: ${err}`, 'error');
@@ -727,9 +831,10 @@ setTimeout(function() { LED1.reset(); }, 1000);
             log('[DEBUG] Save aborted: Not connected', 'warn');
             return;
         }
-        log('[DEBUG] Executing save() command...', 'info');
+        log('[DEBUG] ========== SAVE TO FLASH ==========', 'info');
+        log('[DEBUG] Executing save() command via connection.write()...', 'info');
         log('Saving to flash...');
-        Puck.write('save();\n', (err) => {
+        state.connection.write('save();\n', (err) => {
             if (err) {
                 log(`[DEBUG] Save error: ${err}`, 'error');
                 log('Failed to save to flash!', 'error');
@@ -758,9 +863,10 @@ setTimeout(function() { LED1.reset(); }, 1000);
             log('[DEBUG] Reset aborted: Not connected', 'warn');
             return;
         }
-        log('[DEBUG] Executing reset() command...', 'info');
+        log('[DEBUG] ========== RESET DEVICE ==========', 'info');
+        log('[DEBUG] Executing reset() command via connection.write()...', 'info');
         log('Resetting device...');
-        Puck.write('reset();\n', (err) => {
+        state.connection.write('reset();\n', (err) => {
             if (err) {
                 log(`[DEBUG] Reset error: ${err}`, 'error');
                 log('Failed to reset device!', 'error');
@@ -778,11 +884,15 @@ setTimeout(function() { LED1.reset(); }, 1000);
             log('[DEBUG] Send aborted: No command or not connected', 'warn');
             return;
         }
-        log(`[DEBUG] Sending command: ${cmd}`, 'info');
+        log('[DEBUG] ========== SENDING CONSOLE COMMAND ==========', 'info');
+        log(`[DEBUG] Command: ${JSON.stringify(cmd)}`, 'info');
+        log(`[DEBUG] Using connection.write() to send command`, 'info');
         log(`> ${cmd}`, 'info');
-        Puck.write(cmd + '\n', (err) => {
+        state.connection.write(cmd + '\n', (err) => {
             if (err) {
                 log(`[DEBUG] Command send error: ${err}`, 'error');
+            } else {
+                log(`[DEBUG] Command sent successfully`, 'success');
             }
         });
         consoleInput.value = '';
@@ -792,10 +902,33 @@ setTimeout(function() { LED1.reset(); }, 1000);
         if (e.key === 'Enter') sendCmd.click();
     });
 
+    // ===== Enhanced Puck.js Logging =====
+    // Override Puck.js log function to capture all BLE debug output
+    if (typeof Puck !== 'undefined') {
+        log('[DEBUG] Setting up enhanced Puck.js logging', 'info');
+        Puck.debug = 3; // Maximum debug level
+        const originalPuckLog = Puck.log;
+        Puck.log = function(level, message) {
+            // Call original logger (goes to browser console)
+            if (originalPuckLog) {
+                originalPuckLog.call(Puck, level, message);
+            }
+            // Also log to our UI console
+            const logType = level === 1 ? 'error' : (level === 2 ? 'warn' : 'info');
+            console.log(`<BLE> ${message}`);
+            log(`<BLE> ${message}`, logType);
+        };
+        log('[DEBUG] Puck.js logging configured (debug level: 3)', 'success');
+    } else {
+        log('[DEBUG] WARNING: Puck.js library not loaded!', 'error');
+    }
+
     // ===== Initialize =====
     renderFirmwareGrid();
     updateUI();
     log('Ready. Connect to a device to begin.');
+    log('[DEBUG] Firmware loader initialized', 'success');
+    log('[DEBUG] Eruda dev console available - click icon in bottom-right to open', 'info');
     </script>
 </body>
 </html>
