@@ -2,15 +2,20 @@
 var FIRMWARE_INFO = {
     id: "GAMBIT",
     name: "GAMBIT IMU Telemetry",
-    version: "1.0.0",
+    version: "0.1.1",
     features: ["imu", "magnetometer", "environmental", "streaming"],
     author: "SIMCAP"
 };
 
+// Track boot time for uptime calculation
+var bootTime = Date.now();
+
 // Return firmware information for compatibility checking
 function getFirmware() {
-    console.log("\nFIRMWARE" + JSON.stringify(FIRMWARE_INFO));
-    return FIRMWARE_INFO;
+    var uptimeMs = Date.now() - bootTime;
+    var info = Object.assign({}, FIRMWARE_INFO, { uptime: uptimeMs });
+    console.log("\nFIRMWARE" + JSON.stringify(info));
+    return info;
 }
 
 // ===== State and Telemetry =====
@@ -121,7 +126,7 @@ function stopData() {
 
 
 //NFC Detection
-NRF.nfcURL("webble://christopherdebeer.github.io/simcap/src/web/GAMBIT/");
+NRF.nfcURL("https://simcap.parc.land");
 NRF.on('NFCon', function() {
     digitalPulse(LED2, 1, 500);//flash on green light
     console.log('nfc_field : [1]');
