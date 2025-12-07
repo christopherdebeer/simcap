@@ -17,20 +17,39 @@ graph LR
 
     subgraph Web
         UI[Web UI]
-        VIZ[Visualization]
+        COLLECTOR[Collector]
+    end
+
+    subgraph ML
+        LOADER[Data Loader]
+        MODEL[CNN Model]
     end
 
     subgraph Storage
-        GH[(GitHub)]
+        DATA[(Labeled Data)]
     end
 
     IMU --> GAMBIT
     GAMBIT --> |BLE| UI
-    UI --> VIZ
-    UI --> |Upload| GH
+    GAMBIT --> |BLE| COLLECTOR
+    COLLECTOR --> |Export| DATA
+    UI --> |Upload| DATA
+    DATA --> LOADER
+    LOADER --> MODEL
 ```
 
 ## Components
+
+### ML Pipeline
+
+#### [ML Training Pipeline](ml/)
+**Gesture Classification from IMU Data**
+
+Python pipeline for training gesture classifiers: data loading, preprocessing, 1D CNN models, and TFLite deployment.
+
+`Status: Active`
+
+---
 
 ### Device Firmware
 
@@ -56,6 +75,13 @@ Reference implementation for BLE advertising with EspruinoHub/MQTT integration.
 **Baseline Data Collection UI**
 
 Web UI for real-time sensor visualization and GitHub data upload via WebBLE.
+
+`Status: Active`
+
+#### [GAMBIT Collector](src/web/GAMBIT/collector.html)
+**Labeled Data Collection for ML Training**
+
+Enhanced UI with gesture labeling, session metadata, and export for training pipeline.
 
 `Status: Active`
 
@@ -106,14 +132,27 @@ $1 family algorithms for gesture inference from low-dimensional observation.
 
 ## Quick Start
 
+### Data Collection
 1. Flash [GAMBIT firmware](src/device/GAMBIT/) to Puck.js
-2. Tap phone to device (NFC) or open [Web UI](https://christopherdebeer.github.io/simcap/src/web/GAMBIT/)
-3. Press "Connect" and select device
-4. Press "Get data" to start capture
+2. Open [Collector UI](src/web/GAMBIT/collector.html) locally or [Web UI](https://christopherdebeer.github.io/simcap/src/web/GAMBIT/)
+3. Connect device and configure session metadata
+4. Select gesture, record, and export labeled data
+
+### ML Training
+```bash
+# Install dependencies
+pip install -r ml/requirements.txt
+
+# Label existing data (CLI)
+python -m ml.label data/GAMBIT/
+
+# Train model
+python -m ml.train --data-dir data/GAMBIT --epochs 50
+```
 
 ## Data
 
-Baseline sensor data is stored in [`data/GAMBIT/`](data/GAMBIT/) (40+ JSON files from Nov 2023 - Jan 2024).
+Baseline sensor data is stored in [`data/GAMBIT/`](data/GAMBIT/) with optional `.meta.json` label files.
 
 ## Links
 

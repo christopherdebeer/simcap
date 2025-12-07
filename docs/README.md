@@ -4,6 +4,12 @@
 
 For documentation on what's actually implemented, see the README files in each component:
 
+### ML Pipeline
+
+| Component | Status | Description |
+|-----------|--------|-------------|
+| [ML Pipeline](../ml/) | Active | Gesture classification training pipeline |
+
 ### Device Firmware
 
 | Component | Status | Description |
@@ -17,6 +23,7 @@ For documentation on what's actually implemented, see the README files in each c
 | Component | Status | Description |
 |-----------|--------|-------------|
 | [GAMBIT Web](../src/web/GAMBIT/) | Active | Real-time sensor visualization and data collection |
+| [GAMBIT Collector](../src/web/GAMBIT/collector.html) | Active | Labeled data collection for ML training |
 | [P0 Web](../src/web/P0/) | Prototype | D3.js visualization interface |
 | [JOYPAD](../src/web/JOYPAD/) | Concept | Dual-hand game controller concept |
 | [FFO$$](../src/web/FFO$$/) | Research | $1 gesture algorithm research direction |
@@ -53,7 +60,6 @@ graph TB
 
     subgraph "Firmware Layer"
         GAMBIT[GAMBIT Firmware]
-        BAE[BAE Reference]
     end
 
     subgraph "Communication"
@@ -63,8 +69,14 @@ graph TB
 
     subgraph "Application Layer"
         WEBUI[GAMBIT Web UI]
-        VIZ[Visualization]
-        STORAGE[GitHub Storage]
+        COLLECTOR[Collector UI]
+    end
+
+    subgraph "ML Pipeline"
+        DATA[(Labeled Data)]
+        LOADER[Data Loader]
+        MODEL[CNN Model]
+        TFLITE[TFLite Export]
     end
 
     IMU --> GAMBIT
@@ -72,8 +84,11 @@ graph TB
     BLE --> NORDIC
     NORDIC --> WEBBLE
     WEBBLE --> WEBUI
-    WEBUI --> VIZ
-    WEBUI --> STORAGE
+    WEBBLE --> COLLECTOR
+    COLLECTOR --> DATA
+    DATA --> LOADER
+    LOADER --> MODEL
+    MODEL --> TFLITE
 ```
 
 ## Component Status Legend
