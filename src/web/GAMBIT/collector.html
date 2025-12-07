@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SIMCAP | GAMBIT Collector</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes"/>
+    <meta name="mobile-web-app-capable" content="yes"/>
+    <script src="puck.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body, html {
+            padding: 0;
+            margin: 0;
+            background-color: #1a1a2e;
+            color: #eee;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-size: 14px;
+        }
+        body {
+            padding: 10px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-size: 1.5em;
+            margin: 0 0 5px 0;
+            color: #00d4ff;
+        }
+        .subtitle {
+            color: #888;
+            font-size: 0.85em;
+            margin-bottom: 15px;
+        }
+        section {
+            background: #16213e;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+        section h2 {
+            margin: 0 0 10px 0;
+            font-size: 1em;
+            color: #00d4ff;
+            border-bottom: 1px solid #333;
+            padding-bottom: 5px;
+        }
+        .row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+        }
+        .row > * {
+            flex: 1;
+            min-width: 100px;
+        }
+        label {
+            display: block;
+            font-size: 0.75em;
+            color: #888;
+            margin-bottom: 3px;
+        }
+        input, select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #333;
+            border-radius: 4px;
+            background: #0f0f23;
+            color: #fff;
+            font-size: 14px;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: #00d4ff;
+        }
+        button {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        button:hover { opacity: 0.9; }
+        button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .btn-primary {
+            background: #00d4ff;
+            color: #000;
+        }
+        .btn-secondary {
+            background: #333;
+            color: #fff;
+        }
+        .btn-success {
+            background: #00ff88;
+            color: #000;
+        }
+        .btn-danger {
+            background: #ff4757;
+            color: #fff;
+        }
+        .btn-small {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+        .status {
+            padding: 8px;
+            border-radius: 4px;
+            text-align: center;
+            font-weight: 500;
+        }
+        .status.disconnected { background: #ff4757; }
+        .status.connected { background: #00ff88; color: #000; }
+        .status.recording { background: #ffa502; color: #000; animation: pulse 1s infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        .gestures {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+            gap: 6px;
+        }
+        .gesture-btn {
+            padding: 8px;
+            font-size: 11px;
+            text-align: center;
+        }
+        .gesture-btn.active {
+            background: #00ff88;
+            color: #000;
+        }
+        .data-view {
+            font-family: monospace;
+            font-size: 11px;
+            background: #0f0f23;
+            padding: 8px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        .data-view .row {
+            margin: 0;
+            padding: 2px 0;
+            border-bottom: 1px solid #222;
+        }
+        .data-view .label {
+            color: #888;
+            width: 40px;
+            flex: none;
+        }
+        .data-view .values {
+            display: flex;
+            gap: 8px;
+        }
+        .data-view .value {
+            width: 60px;
+            text-align: right;
+        }
+        .labels-list {
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .label-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 8px;
+            background: #0f0f23;
+            margin-bottom: 4px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .label-item .gesture {
+            color: #00ff88;
+            font-weight: 500;
+        }
+        .sample-counter {
+            font-size: 2em;
+            font-weight: bold;
+            color: #00d4ff;
+            text-align: center;
+            padding: 10px;
+        }
+        .progress-bar {
+            height: 6px;
+            background: #333;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+        .progress-bar .fill {
+            height: 100%;
+            background: #00d4ff;
+            transition: width 0.1s;
+        }
+        #log {
+            font-family: monospace;
+            font-size: 10px;
+            max-height: 100px;
+            overflow-y: auto;
+            background: #0a0a15;
+            padding: 5px;
+            border-radius: 4px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <h1>SIMCAP GAMBIT Collector</h1>
+    <p class="subtitle">Labeled Data Collection for ML Training</p>
+
+    <!-- Connection -->
+    <section>
+        <h2>Connection</h2>
+        <div class="row">
+            <button id="connectBtn" class="btn-primary">Connect Device</button>
+            <div id="statusIndicator" class="status disconnected">Disconnected</div>
+        </div>
+    </section>
+
+    <!-- Session Metadata -->
+    <section>
+        <h2>Session Metadata</h2>
+        <div class="row">
+            <div>
+                <label>Subject ID</label>
+                <input type="text" id="subjectId" value="user_001" />
+            </div>
+            <div>
+                <label>Environment</label>
+                <select id="environment">
+                    <option value="home">Home</option>
+                    <option value="office">Office</option>
+                    <option value="outdoor">Outdoor</option>
+                    <option value="lab">Lab</option>
+                </select>
+            </div>
+        </div>
+        <div class="row">
+            <div>
+                <label>Hand</label>
+                <select id="hand">
+                    <option value="right">Right</option>
+                    <option value="left">Left</option>
+                </select>
+            </div>
+            <div>
+                <label>Data Split</label>
+                <select id="split">
+                    <option value="train">Train (80%)</option>
+                    <option value="validation">Validation (10%)</option>
+                    <option value="test">Test (10%)</option>
+                </select>
+            </div>
+        </div>
+        <div class="row">
+            <div style="flex: 2">
+                <label>Session Notes</label>
+                <input type="text" id="sessionNotes" placeholder="Optional notes about this session..." />
+            </div>
+        </div>
+    </section>
+
+    <!-- Gesture Selection -->
+    <section>
+        <h2>Active Gesture (during recording)</h2>
+        <div class="gestures" id="gestureButtons">
+            <button class="btn-secondary gesture-btn active" data-gesture="rest">REST</button>
+            <button class="btn-secondary gesture-btn" data-gesture="fist">FIST</button>
+            <button class="btn-secondary gesture-btn" data-gesture="open_palm">OPEN PALM</button>
+            <button class="btn-secondary gesture-btn" data-gesture="index_up">INDEX UP</button>
+            <button class="btn-secondary gesture-btn" data-gesture="peace">PEACE</button>
+            <button class="btn-secondary gesture-btn" data-gesture="thumbs_up">THUMBS UP</button>
+            <button class="btn-secondary gesture-btn" data-gesture="ok_sign">OK SIGN</button>
+            <button class="btn-secondary gesture-btn" data-gesture="pinch">PINCH</button>
+            <button class="btn-secondary gesture-btn" data-gesture="grab">GRAB</button>
+        </div>
+    </section>
+
+    <!-- Recording Controls -->
+    <section>
+        <h2>Recording</h2>
+        <div class="sample-counter">
+            <span id="sampleCount">0</span> samples
+        </div>
+        <div class="progress-bar">
+            <div class="fill" id="progressFill" style="width: 0%"></div>
+        </div>
+        <div class="row" style="margin-top: 10px">
+            <button id="startBtn" class="btn-success" disabled>Start Recording</button>
+            <button id="stopBtn" class="btn-danger" disabled>Stop Recording</button>
+        </div>
+        <div class="row">
+            <button id="clearBtn" class="btn-secondary" disabled>Clear Session</button>
+            <button id="exportBtn" class="btn-primary" disabled>Export Data</button>
+        </div>
+    </section>
+
+    <!-- Labels Created -->
+    <section>
+        <h2>Labels (<span id="labelCount">0</span>)</h2>
+        <div class="labels-list" id="labelsList">
+            <div style="color: #666; text-align: center; padding: 10px;">
+                No labels yet. Start recording and switch gestures to create labels.
+            </div>
+        </div>
+    </section>
+
+    <!-- Live Data View -->
+    <section>
+        <h2>Live Sensor Data</h2>
+        <div class="data-view">
+            <div class="row">
+                <span class="label">Acc:</span>
+                <div class="values">
+                    <span class="value" id="ax">-</span>
+                    <span class="value" id="ay">-</span>
+                    <span class="value" id="az">-</span>
+                </div>
+            </div>
+            <div class="row">
+                <span class="label">Gyro:</span>
+                <div class="values">
+                    <span class="value" id="gx">-</span>
+                    <span class="value" id="gy">-</span>
+                    <span class="value" id="gz">-</span>
+                </div>
+            </div>
+            <div class="row">
+                <span class="label">Mag:</span>
+                <div class="values">
+                    <span class="value" id="mx">-</span>
+                    <span class="value" id="my">-</span>
+                    <span class="value" id="mz">-</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Log -->
+    <section>
+        <h2>Log</h2>
+        <div id="log"></div>
+    </section>
+
+    <script>
+    // ===== State =====
+    const state = {
+        connected: false,
+        recording: false,
+        currentGesture: 'rest',
+        sessionData: [],
+        labels: [],
+        currentLabelStart: null,
+        connection: null
+    };
+
+    // ===== DOM Elements =====
+    const $ = id => document.getElementById(id);
+    const connectBtn = $('connectBtn');
+    const startBtn = $('startBtn');
+    const stopBtn = $('stopBtn');
+    const clearBtn = $('clearBtn');
+    const exportBtn = $('exportBtn');
+    const statusIndicator = $('statusIndicator');
+    const sampleCount = $('sampleCount');
+    const progressFill = $('progressFill');
+    const labelsList = $('labelsList');
+    const labelCount = $('labelCount');
+    const logDiv = $('log');
+
+    // ===== Logging =====
+    function log(msg) {
+        const time = new Date().toLocaleTimeString();
+        logDiv.innerHTML = `[${time}] ${msg}<br>` + logDiv.innerHTML;
+        if (logDiv.children.length > 50) {
+            logDiv.removeChild(logDiv.lastChild);
+        }
+    }
+
+    // ===== UI Updates =====
+    function updateUI() {
+        // Status indicator
+        if (state.recording) {
+            statusIndicator.className = 'status recording';
+            statusIndicator.textContent = 'Recording...';
+        } else if (state.connected) {
+            statusIndicator.className = 'status connected';
+            statusIndicator.textContent = 'Connected';
+        } else {
+            statusIndicator.className = 'status disconnected';
+            statusIndicator.textContent = 'Disconnected';
+        }
+
+        // Buttons
+        connectBtn.textContent = state.connected ? 'Disconnect' : 'Connect Device';
+        startBtn.disabled = !state.connected || state.recording;
+        stopBtn.disabled = !state.recording;
+        clearBtn.disabled = state.sessionData.length === 0 || state.recording;
+        exportBtn.disabled = state.sessionData.length === 0 || state.recording;
+
+        // Sample count
+        sampleCount.textContent = state.sessionData.length;
+        progressFill.style.width = Math.min(100, state.sessionData.length / 15) + '%';
+
+        // Labels
+        labelCount.textContent = state.labels.length;
+        if (state.labels.length === 0) {
+            labelsList.innerHTML = '<div style="color: #666; text-align: center; padding: 10px;">No labels yet.</div>';
+        } else {
+            labelsList.innerHTML = state.labels.map((l, i) => `
+                <div class="label-item">
+                    <span>${l.start_sample}-${l.end_sample}</span>
+                    <span class="gesture">${l.gesture.toUpperCase()}</span>
+                    <span>${((l.end_sample - l.start_sample) / 50).toFixed(1)}s</span>
+                    <button class="btn-danger btn-small" onclick="deleteLabel(${i})">×</button>
+                </div>
+            `).join('');
+        }
+    }
+
+    // ===== Gesture Selection =====
+    document.querySelectorAll('.gesture-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const gesture = btn.dataset.gesture;
+
+            // If recording and gesture changed, close current segment
+            if (state.recording && gesture !== state.currentGesture) {
+                closeCurrentLabel();
+                state.currentLabelStart = state.sessionData.length;
+            }
+
+            state.currentGesture = gesture;
+
+            // Update UI
+            document.querySelectorAll('.gesture-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            log(`Gesture: ${gesture}`);
+        });
+    });
+
+    // ===== Label Management =====
+    function closeCurrentLabel() {
+        if (state.currentLabelStart !== null && state.sessionData.length > state.currentLabelStart) {
+            state.labels.push({
+                start_sample: state.currentLabelStart,
+                end_sample: state.sessionData.length,
+                gesture: state.currentGesture,
+                confidence: 'high',
+                notes: ''
+            });
+            log(`Label: ${state.currentGesture} (${state.currentLabelStart}-${state.sessionData.length})`);
+        }
+    }
+
+    window.deleteLabel = function(index) {
+        state.labels.splice(index, 1);
+        updateUI();
+    };
+
+    // ===== Data Handling =====
+    function onData(data) {
+        if (!data.startsWith('GAMBIT')) return;
+
+        try {
+            const telemetry = JSON.parse(data.slice(6, -1));
+            state.sessionData.push(telemetry);
+
+            // Update live display
+            $('ax').textContent = telemetry.ax;
+            $('ay').textContent = telemetry.ay;
+            $('az').textContent = telemetry.az;
+            $('gx').textContent = telemetry.gx;
+            $('gy').textContent = telemetry.gy;
+            $('gz').textContent = telemetry.gz;
+            $('mx').textContent = telemetry.mx;
+            $('my').textContent = telemetry.my;
+            $('mz').textContent = telemetry.mz;
+
+            // Update sample count (throttled)
+            if (state.sessionData.length % 10 === 0) {
+                updateUI();
+            }
+        } catch (e) {
+            log(`Parse error: ${e.message}`);
+        }
+    }
+
+    // ===== Connection =====
+    connectBtn.addEventListener('click', async () => {
+        if (state.connected) {
+            Puck.close();
+            state.connected = false;
+            state.connection = null;
+            log('Disconnected');
+            updateUI();
+            return;
+        }
+
+        log('Connecting...');
+        Puck.connect(conn => {
+            if (!conn) {
+                log('Connection failed');
+                return;
+            }
+
+            state.connection = conn;
+            state.connected = true;
+            log('Connected!');
+
+            let buffer = '';
+            conn.on('data', d => {
+                buffer += d;
+                let idx;
+                while ((idx = buffer.indexOf('\n')) >= 0) {
+                    const line = buffer.substring(0, idx);
+                    buffer = buffer.substring(idx + 1);
+                    if (state.recording) {
+                        onData(line);
+                    }
+                }
+            });
+
+            conn.on('close', () => {
+                state.connected = false;
+                state.recording = false;
+                log('Connection closed');
+                updateUI();
+            });
+
+            updateUI();
+        });
+    });
+
+    // ===== Recording Controls =====
+    startBtn.addEventListener('click', () => {
+        state.recording = true;
+        state.currentLabelStart = state.sessionData.length;
+        log('Recording started');
+
+        // Trigger device to start sending data
+        Puck.write('getData()\n');
+
+        updateUI();
+    });
+
+    stopBtn.addEventListener('click', () => {
+        closeCurrentLabel();
+        state.recording = false;
+        state.currentLabelStart = null;
+        log('Recording stopped');
+        updateUI();
+    });
+
+    clearBtn.addEventListener('click', () => {
+        if (confirm('Clear all session data?')) {
+            state.sessionData = [];
+            state.labels = [];
+            state.currentLabelStart = null;
+            log('Session cleared');
+            updateUI();
+        }
+    });
+
+    // ===== Export =====
+    exportBtn.addEventListener('click', () => {
+        const timestamp = new Date().toISOString();
+
+        // Create data file
+        const dataBlob = new Blob([JSON.stringify(state.sessionData)], { type: 'application/json' });
+        const dataUrl = URL.createObjectURL(dataBlob);
+
+        // Create metadata file
+        const metadata = {
+            timestamp: timestamp,
+            subject_id: $('subjectId').value,
+            environment: $('environment').value,
+            hand: $('hand').value,
+            split: $('split').value,
+            device_id: 'puck_default',
+            labels: state.labels,
+            session_notes: $('sessionNotes').value,
+            sample_rate_hz: 50
+        };
+        const metaBlob = new Blob([JSON.stringify(metadata, null, 2)], { type: 'application/json' });
+        const metaUrl = URL.createObjectURL(metaBlob);
+
+        // Download data file
+        const dataLink = document.createElement('a');
+        dataLink.href = dataUrl;
+        dataLink.download = `${timestamp}.json`;
+        dataLink.click();
+
+        // Download metadata file
+        setTimeout(() => {
+            const metaLink = document.createElement('a');
+            metaLink.href = metaUrl;
+            metaLink.download = `${timestamp}.meta.json`;
+            metaLink.click();
+            log(`Exported: ${timestamp}`);
+        }, 100);
+    });
+
+    // ===== Initialize =====
+    updateUI();
+    log('Ready. Connect device to start.');
+    </script>
+</body>
+</html>
