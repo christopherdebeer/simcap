@@ -24,6 +24,7 @@ graph LR
     subgraph ML
         TRAIN[Training Pipeline]
         MODEL[CNN Model]
+        VIZ[Visualization]
     end
 
     LOADER --> |Upload| GAMBIT
@@ -31,6 +32,7 @@ graph LR
     LOADER --> |Upload| KEYBOARD
     GAMBIT --> |BLE| COLLECTOR
     COLLECTOR --> |Export| TRAIN
+    COLLECTOR --> |Export| VIZ
     TRAIN --> MODEL
 ```
 
@@ -42,6 +44,13 @@ graph LR
 **Gesture Classification from IMU Data**
 
 Python pipeline for training gesture classifiers: data loading, preprocessing, 1D CNN models, and TFLite deployment.
+
+`Status: Active`
+
+#### [📊 Data Visualization](visualizations/index.html)
+**Interactive Sensor Data Explorer**
+
+Comprehensive visualization system with composite session images, per-second windows, 3D trajectories, and interactive HTML explorer for exploring 24 sessions and 67 time windows.
 
 `Status: Active`
 

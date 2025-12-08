@@ -9,6 +9,3 @@ __pycache__/
 *.pyc
 *.pyo
 
-# Generated visualizations (can be regenerated from data)
-visualizations/
-
