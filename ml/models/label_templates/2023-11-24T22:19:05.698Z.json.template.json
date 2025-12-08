@@ -1,0 +1,57 @@
+{
+  "timestamp": "2023-11-24T22:19:05.698Z",
+  "subject_id": "UNKNOWN",
+  "environment": "UNKNOWN",
+  "hand": "UNKNOWN",
+  "split": "train",
+  "labels": [
+    {
+      "start_sample": 25,
+      "end_sample": 75,
+      "gesture": "CLUSTER_5",
+      "confidence": "medium",
+      "cluster_id": 5
+    },
+    {
+      "start_sample": 50,
+      "end_sample": 100,
+      "gesture": "CLUSTER_5",
+      "confidence": "medium",
+      "cluster_id": 5
+    },
+    {
+      "start_sample": 0,
+      "end_sample": 50,
+      "gesture": "CLUSTER_8",
+      "confidence": "medium",
+      "cluster_id": 8
+    },
+    {
+      "start_sample": 75,
+      "end_sample": 125,
+      "gesture": "CLUSTER_8",
+      "confidence": "medium",
+      "cluster_id": 8
+    },
+    {
+      "start_sample": 100,
+      "end_sample": 150,
+      "gesture": "CLUSTER_8",
+      "confidence": "medium",
+      "cluster_id": 8
+    },
+    {
+      "start_sample": 125,
+      "end_sample": 175,
+      "gesture": "CLUSTER_8",
+      "confidence": "medium",
+      "cluster_id": 8
+    }
+  ],
+  "session_notes": "Auto-generated from clustering. Review and assign gesture names.",
+  "sample_rate_hz": 50,
+  "clustering_info": {
+    "method": "kmeans",
+    "n_clusters": 10
+  }
+}

@@ -95,66 +95,67 @@ def create_cnn_model_keras(
     return model
 
 
-class GestureCNN(nn.Module):
-    """
-    1D CNN for gesture classification using PyTorch.
+if HAS_TORCH:
+    class GestureCNN(nn.Module):
+        """
+        1D CNN for gesture classification using PyTorch.
 
-    Same architecture as the Keras version.
-    """
+        Same architecture as the Keras version.
+        """
 
-    def __init__(
-        self,
-        window_size: int = 50,
-        num_features: int = NUM_FEATURES,
-        num_classes: int = len(Gesture),
-        filters: Tuple[int, ...] = (32, 64, 64),
-        kernel_size: int = 5,
-        dropout: float = 0.3
-    ):
-        if not HAS_TORCH:
-            raise ImportError("PyTorch not installed. Run: pip install torch")
+        def __init__(
+            self,
+            window_size: int = 50,
+            num_features: int = NUM_FEATURES,
+            num_classes: int = len(Gesture),
+            filters: Tuple[int, ...] = (32, 64, 64),
+            kernel_size: int = 5,
+            dropout: float = 0.3
+        ):
+            super().__init__()
 
-        super().__init__()
+            self.conv1 = nn.Conv1d(num_features, filters[0], kernel_size, padding='same')
+            self.bn1 = nn.BatchNorm1d(filters[0])
+            self.pool1 = nn.MaxPool1d(2)
 
-        self.conv1 = nn.Conv1d(num_features, filters[0], kernel_size, padding='same')
-        self.bn1 = nn.BatchNorm1d(filters[0])
-        self.pool1 = nn.MaxPool1d(2)
+            self.conv2 = nn.Conv1d(filters[0], filters[1], kernel_size, padding='same')
+            self.bn2 = nn.BatchNorm1d(filters[1])
+            self.pool2 = nn.MaxPool1d(2)
 
-        self.conv2 = nn.Conv1d(filters[0], filters[1], kernel_size, padding='same')
-        self.bn2 = nn.BatchNorm1d(filters[1])
-        self.pool2 = nn.MaxPool1d(2)
+            self.conv3 = nn.Conv1d(filters[1], filters[2], kernel_size, padding='same')
+            self.bn3 = nn.BatchNorm1d(filters[2])
 
-        self.conv3 = nn.Conv1d(filters[1], filters[2], kernel_size, padding='same')
-        self.bn3 = nn.BatchNorm1d(filters[2])
+            self.dropout = nn.Dropout(dropout)
+            self.fc1 = nn.Linear(filters[2], 64)
+            self.fc2 = nn.Linear(64, num_classes)
 
-        self.dropout = nn.Dropout(dropout)
-        self.fc1 = nn.Linear(filters[2], 64)
-        self.fc2 = nn.Linear(64, num_classes)
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            # Input: (batch, seq_len, features)
+            # Conv1d expects: (batch, features, seq_len)
+            x = x.transpose(1, 2)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Input: (batch, seq_len, features)
-        # Conv1d expects: (batch, features, seq_len)
-        x = x.transpose(1, 2)
+            # Conv block 1
+            x = self.pool1(F.relu(self.bn1(self.conv1(x))))
+            x = self.dropout(x)
 
-        # Conv block 1
-        x = self.pool1(F.relu(self.bn1(self.conv1(x))))
-        x = self.dropout(x)
+            # Conv block 2
+            x = self.pool2(F.relu(self.bn2(self.conv2(x))))
+            x = self.dropout(x)
 
-        # Conv block 2
-        x = self.pool2(F.relu(self.bn2(self.conv2(x))))
-        x = self.dropout(x)
+            # Conv block 3
+            x = F.relu(self.bn3(self.conv3(x)))
 
-        # Conv block 3
-        x = F.relu(self.bn3(self.conv3(x)))
+            # Global average pooling
+            x = x.mean(dim=2)
 
-        # Global average pooling
-        x = x.mean(dim=2)
+            # Classification
+            x = self.dropout(F.relu(self.fc1(x)))
+            x = self.fc2(x)
 
-        # Classification
-        x = self.dropout(F.relu(self.fc1(x)))
-        x = self.fc2(x)
-
-        return x
+            return x
+else:
+    # Placeholder when PyTorch is not installed
+    GestureCNN = None
 
 
 def train_model_keras(

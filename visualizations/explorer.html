@@ -1,0 +1,3368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SIMCAP Unified Explorer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+        }
+        
+        .container { max-width: 1800px; margin: 0 auto; padding: 20px; }
+        
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 25px 30px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        
+        h1 { font-size: 2em; margin-bottom: 8px; }
+        .subtitle { opacity: 0.9; font-size: 1.1em; }
+        
+        .stats {
+            display: flex;
+            gap: 15px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .stat-box {
+            background: rgba(255,255,255,0.15);
+            padding: 12px 20px;
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .stat-box .number { font-size: 1.8em; font-weight: bold; display: block; }
+        .stat-box .label { font-size: 0.85em; opacity: 0.8; }
+        
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 20px;
+            background: #16213e;
+            padding: 8px;
+            border-radius: 10px;
+        }
+        
+        .tab {
+            padding: 12px 24px;
+            border: none;
+            background: transparent;
+            color: #aaa;
+            cursor: pointer;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: all 0.2s;
+        }
+        
+        .tab:hover { background: rgba(255,255,255,0.1); color: #fff; }
+        .tab.active { background: #667eea; color: #fff; }
+        
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        .main-layout {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 20px;
+        }
+        
+        .sidebar {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 20px;
+            height: fit-content;
+            position: sticky;
+            top: 20px;
+        }
+        
+        .cluster-canvas-container {
+            background: #0f0f23;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        #clusterCanvas {
+            width: 100%;
+            height: 280px;
+            border-radius: 8px;
+            cursor: crosshair;
+        }
+        
+        .cluster-legend {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            margin-top: 15px;
+        }
+        
+        .cluster-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.9em;
+        }
+        
+        .cluster-item:hover { background: rgba(255,255,255,0.1); }
+        .cluster-item.selected { background: rgba(102, 126, 234, 0.3); border: 1px solid #667eea; }
+        
+        .cluster-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        
+        .cluster-count { margin-left: auto; opacity: 0.6; font-size: 0.85em; }
+        
+        .content-area {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 20px;
+        }
+        
+        .filter-bar {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        .filter-bar input, .filter-bar select {
+            padding: 10px 15px;
+            border: 2px solid #2a2a4a;
+            border-radius: 8px;
+            background: #0f0f23;
+            color: #eee;
+            font-size: 1em;
+        }
+        
+        .filter-bar input:focus, .filter-bar select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .session-grid {
+            display: grid;
+            gap: 15px;
+        }
+        
+        .session-card {
+            background: #0f0f23;
+            border-radius: 10px;
+            overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .session-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+        }
+        
+        .session-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 15px 20px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .session-title { font-weight: bold; font-size: 1.1em; }
+        .session-info { font-size: 0.85em; opacity: 0.9; margin-top: 4px; }
+        
+        .session-badges {
+            display: flex;
+            gap: 6px;
+        }
+        
+        .badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            font-weight: bold;
+        }
+        
+        .badge.labeled { background: #4daf4a; }
+        .badge.unlabeled { background: #ff7f00; }
+        
+        .expand-icon {
+            font-size: 1.3em;
+            transition: transform 0.3s;
+        }
+        
+        .session-card.expanded .expand-icon { transform: rotate(180deg); }
+        
+        .session-content {
+            display: none;
+            padding: 20px;
+        }
+        
+        .session-card.expanded .session-content { display: block; }
+        
+        .section-title {
+            font-size: 1.2em;
+            color: #667eea;
+            margin: 20px 0 15px 0;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #667eea;
+        }
+        
+        .section-title:first-child { margin-top: 0; }
+        
+        .composite-image {
+            width: 100%;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        
+        .windows-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 12px;
+        }
+        
+        .window-card {
+            background: #1a1a2e;
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: transform 0.2s;
+            border: 2px solid transparent;
+        }
+        
+        .window-card:hover {
+            transform: scale(1.03);
+        }
+        
+        .window-card.highlighted {
+            border-color: #667eea;
+            box-shadow: 0 0 15px rgba(102, 126, 234, 0.5);
+        }
+        
+        .window-cluster-bar {
+            height: 6px;
+        }
+        
+        .window-preview {
+            width: 100%;
+            height: 100px;
+            object-fit: cover;
+        }
+        
+        .window-info {
+            padding: 10px;
+        }
+        
+        .window-title { font-weight: bold; font-size: 0.9em; }
+        .window-time { font-size: 0.8em; opacity: 0.7; margin-top: 3px; }
+        .window-cluster { font-size: 0.75em; margin-top: 5px; }
+        
+        .raw-images {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+        }
+        
+        .raw-image {
+            width: 100%;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        
+        /* Labeling Panel */
+        .labeling-panel {
+            background: #0f0f23;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        
+        .labeling-title {
+            font-size: 1.1em;
+            margin-bottom: 15px;
+            color: #667eea;
+        }
+        
+        .gesture-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+        
+        .gesture-btn {
+            padding: 10px;
+            border: 2px solid #2a2a4a;
+            border-radius: 8px;
+            background: transparent;
+            color: #eee;
+            cursor: pointer;
+            font-size: 0.85em;
+            transition: all 0.2s;
+        }
+        
+        .gesture-btn:hover { border-color: #667eea; background: rgba(102, 126, 234, 0.1); }
+        .gesture-btn.selected { border-color: #667eea; background: #667eea; }
+        
+        .export-btn {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 1em;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .export-btn:hover { transform: scale(1.02); }
+        .export-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.95);
+            padding: 20px;
+        }
+        
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-content {
+            max-width: 95%;
+            max-height: 95%;
+            object-fit: contain;
+        }
+        
+        .modal-close {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            color: #fff;
+            font-size: 40px;
+            cursor: pointer;
+        }
+        
+        .modal-close:hover { color: #667eea; }
+        
+        /* Metrics display */
+        .metrics-box {
+            background: #0f0f23;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #2a2a4a;
+        }
+        
+        .metric-row:last-child { border-bottom: none; }
+        .metric-label { opacity: 0.7; }
+        .metric-value { font-weight: bold; }
+        
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .main-layout { grid-template-columns: 1fr; }
+            .sidebar { position: static; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎯 SIMCAP Unified Explorer</h1>
+            <p class="subtitle">Interactive viewer for sensor data, clustering, and gesture labeling</p>
+            <div class="stats">
+                <div class="stat-box">
+                    <span class="number" id="stat-sessions">24</span>
+                    <span class="label">Sessions</span>
+                </div>
+                <div class="stat-box">
+                    <span class="number" id="stat-windows">67</span>
+                    <span class="label">Windows</span>
+                </div>
+                <div class="stat-box">
+                    <span class="number" id="stat-clusters">10</span>
+                    <span class="label">Clusters</span>
+                </div>
+                <div class="stat-box">
+                    <span class="number" id="stat-labeled">0</span>
+                    <span class="label">Labeled</span>
+                </div>
+            </div>
+        </header>
+        
+        <div class="tabs">
+            <button class="tab active" data-tab="explore">📊 Explore</button>
+            <button class="tab" data-tab="clusters">🎨 Clusters</button>
+            <button class="tab" data-tab="label">🏷️ Label</button>
+        </div>
+        
+        <div class="tab-content active" id="tab-explore">
+            <div class="main-layout">
+                <div class="sidebar">
+                    <div class="cluster-canvas-container">
+                        <canvas id="clusterCanvas"></canvas>
+                    </div>
+                    
+                    <div class="metrics-box">
+                        <div class="metric-row">
+                            <span class="metric-label">Silhouette Score</span>
+                            <span class="metric-value">0.388</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">Davies-Bouldin</span>
+                            <span class="metric-value">0.987</span>
+                        </div>
+                    </div>
+                    
+                    <h3 style="margin-bottom: 10px; font-size: 1em;">Clusters</h3>
+                    <div class="cluster-legend" id="clusterLegend"></div>
+                </div>
+                
+                <div class="content-area">
+                    <div class="filter-bar">
+                        <input type="text" id="searchBox" placeholder="Search sessions..." style="flex: 1; min-width: 200px;">
+                        <select id="clusterFilter">
+                            <option value="all">All Clusters</option>
+                        </select>
+                        <select id="sortSelect">
+                            <option value="timestamp-desc">Newest First</option>
+                            <option value="timestamp-asc">Oldest First</option>
+                            <option value="duration-desc">Longest First</option>
+                            <option value="windows-desc">Most Windows</option>
+                        </select>
+                    </div>
+                    
+                    <div class="session-grid" id="sessionGrid"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="tab-content" id="tab-clusters">
+            <div class="content-area">
+                <h2 style="margin-bottom: 20px;">Cluster Analysis</h2>
+                <p style="margin-bottom: 20px; opacity: 0.8;">
+                    Click on a cluster in the visualization or legend to filter sessions.
+                    Each cluster represents a group of similar sensor patterns.
+                </p>
+                <div id="clusterDetails"></div>
+            </div>
+        </div>
+        
+        <div class="tab-content" id="tab-label">
+            <div class="content-area">
+                <h2 style="margin-bottom: 20px;">Labeling Workflow</h2>
+                <p style="margin-bottom: 20px; opacity: 0.8;">
+                    Assign gesture names to clusters, then export label files.
+                </p>
+                
+                <div class="labeling-panel">
+                    <h3 class="labeling-title">Assign Gestures to Clusters</h3>
+                    <div id="clusterLabeling"></div>
+                    
+                    <button class="export-btn" id="exportBtn" style="margin-top: 20px;">
+                        📥 Export Label Templates
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal" id="imageModal">
+        <span class="modal-close" onclick="closeModal()">&times;</span>
+        <img class="modal-content" id="modalImage">
+    </div>
+    
+    <script>
+        // Embedded data
+        const explorerData = {
+  "generated_at": "2025-12-08T11:05:56.925056",
+  "summary": {
+    "total_sessions": 24,
+    "labeled_sessions": 0,
+    "unlabeled_sessions": 24,
+    "total_samples": 4188,
+    "gesture_counts": {
+      "REST": 0,
+      "FIST": 0,
+      "OPEN_PALM": 0,
+      "INDEX_UP": 0,
+      "PEACE": 0,
+      "THUMBS_UP": 0,
+      "OK_SIGN": 0,
+      "PINCH": 0,
+      "GRAB": 0,
+      "WAVE": 0
+    },
+    "stats": {
+      "mean": [
+        -1106.3082275390625,
+        -3629.05224609375,
+        -2285.70947265625,
+        2740.3388671875,
+        -14231.48046875,
+        -19574.751953125,
+        509.62225341796875,
+        909.9419555664062,
+        -558.85986328125
+      ],
+      "std": [
+        3468.305908203125,
+        5655.28173828125,
+        4552.765625,
+        1781.2843017578125,
+        3627.3515625,
+        1845.6162109375,
+        380.1094055175781,
+        318.76898193359375,
+        409.5137634277344
+      ]
+    }
+  },
+  "sessions": [
+    {
+      "filename": "2023-11-24T17:14:18.479Z.json",
+      "timestamp": "2023-11-24T17:14:18.479Z",
+      "duration": 2.86,
+      "composite_image": "composite_2023-11-24T17:14:18.479Z.png",
+      "raw_images": [
+        "raw_axes_2023-11-24T17:14:18.479Z.png",
+        "orientation_3d_2023-11-24T17:14:18.479Z.png"
+      ],
+      "windows": [
+        {
+          "window_num": 1,
+          "time_start": 0.0,
+          "time_end": 1.0,
+          "filename": "window_001.png",
+          "filepath": "windows_2023-11-24T17:14:18.479Z/window_001.png",
+          "color": "#666962",
+          "accel_mag_mean": 8283.09820819986,
+          "gyro_mag_mean": 24894.621532672747,
+          "cluster_id": 1
+        },
+        {
+          "window_num": 2,
+          "time_start": 1.0,
+          "time_end": 2.0,
+          "filename": "window_002.png",
+          "filepath": "windows_2023-11-24T17:14:18.479Z/window_002.png",
+          "color": "#656961",
+          "accel_mag_mean": 8284.693033182684,
+          "gyro_mag_mean": 25359.903990686125,
+          "cluster_id": 1
+        }
+      ],
+      "labeled": false,
+      "split": null,
+      "labels": []
+    },
+    {
+      "filename": "2023-11-24T17:24:38.129Z.json",
+      "timestamp": "2023-11-24T17:24:38.129Z",
+      "duration": 3.7,
+      "composite_image": "composite_2023-11-24T17:24:38.129Z.png",
+      "raw_images": [
+        "raw_axes_2023-11-24T17:24:38.129Z.png",
+        "orientation_3d_2023-11-24T17:24:38.129Z.png"
+      ],
+      "windows": [
+        {
+          "window_num": 1,
+          "time_start": 0.0,
+          "time_end": 1.0,
+          "filename": "window_001.png",
+          "filepath": "windows_2023-11-24T17:24:38.129Z/window_001.png",
+          "color": "#676964",
+          "accel_mag_mean": 8283.278417756432,
+          "gyro_mag_mean": 23877.83174037251,
+          "cluster_id": 1
+        },
+        {
+          "window_num": 2,
+          "time_start": 1.0,
+          "time_end": 2.0,
+          "filename": "window_002.png",
+          "filepath": "windows_2023-11-24T17:24:38.129Z/window_002.png",
+          "color": "#666963",
+          "accel_mag_mean": 8282.883516048323,
+          "gyro_mag_mean": 24767.043976842415,
+          "cluster_id": 1
+        },
+        {
+          "window_num": 3,
+          "time_start": 2.0,
+          "time_end": 3.0,
+          "filename": "window_003.png",
+          "filepath": "windows_2023-11-24T17:24:38.129Z/window_003.png",
+          "color": "#666963",
+          "accel_mag_mean": 8283.37256270002,
+          "gyro_mag_mean": 24281.779610786605,
+          "cluster_id": 1
+        }
+      ],
+      "labeled": false,
+      "split": null,
+      "labels": []
+    },
+    {
+      "filename": "2023-11-24T17:27:20.364Z.json",
+      "timestamp": "2023-11-24T17:27:20.364Z",
+      "duration": 3.8,
+      "composite_image": "composite_2023-11-24T17:27:20.364Z.png",
+      "raw_images": [
+        "raw_axes_2023-11-24T17:27:20.364Z.png",
+        "orientation_3d_2023-11-24T17:27:20.364Z.png"
+      ],
+      "windows": [
+        {
+          "window_num": 1,
+          "time_start": 0.0,
+          "time_end": 1.0,
+          "filename": "window_001.png",
+          "filepath": "windows_2023-11-24T17:27:20.364Z/window_001.png",
+          "color": "#6a6c66",
+          "accel_mag_mean": 8530.252539317766,
+          "gyro_mag_mean": 24290.290218788094,
+          "cluster_id": 9
+        },
+        {
+          "window_num": 2,
+          "time_start": 1.0,
+          "time_end": 2.0,
+          "filename": "window_002.png",
+          "filepath": "windows_2023-11-24T17:27:20.364Z/window_002.png",
+          "color": "#676963",
+          "accel_mag_mean": 8304.658385599907,
+          "gyro_mag_mean": 24347.798056354237,
+          "cluster_id": 1
+        },
+        {
+          "window_num": 3,
+          "time_start": 2.0,
+          "time_end": 3.0,
+          "filename": "window_003.png",
+          "filepath": "windows_2023-11-24T17:27:20.364Z/window_003.png",
+          "color": "#666864",
+          "accel_mag_mean": 8166.915962533954,
+          "gyro_mag_mean": 24105.34440844865,
+          "cluster_id": 1
+        }
+      ],
+      "labeled": false,
+      "split": null,
+      "labels": []
+    },
+    {
+      "filename": "2023-11-24T17:27:53.662Z.json",
+      "timestamp": "2023-11-24T17:27:53.662Z",
+      "duration": 3.76,
+      "composite_image": "composite_2023-11-24T17:27:53.662Z.png",
+      "raw_images": [
+        "raw_axes_2023-11-24T17:27:53.662Z.png",
+        "orientation_3d_2023-11-24T17:27:53.662Z.png"
+      ],
+      "windows": [
+        {
+          "window_num": 1,
+          "time_start": 0.0,
+          "time_end": 1.0,
+          "filename": "window_001.png",
+          "filepath": "windows_2023-11-24T17:27:53.662Z/window_001.png",
+          "color": "#696b64",
+          "accel_mag_mean": 8446.519026183974,
+          "gyro_mag_mean": 24612.61976584827,
+          "cluster_id": 3
+        },
+        {
+          "window_num": 2,
+          "time_start": 1.0,
+          "time_end": 2.0,
+          "filename": "window_002.png",
+          "filepath": "windows_2023-11-24T17:27:53.662Z/window_002.png",
+          "color": "#6a6d65",
+          "accel_mag_mean": 8558.753498775714,
+          "gyro_mag_mean": 24331.066564299446,
+          "cluster_id": 3
+        },
+        {
+          "window_num": 3,
+          "time_start": 2.0,
+          "time_end": 3.0,
+          "filename": "window_003.png",
+          "filepath": "windows_2023-11-24T17:27:53.662Z/window_003.png",
+          "color": "#6b6e66",
+          "accel_mag_mean": 8628.69384112648,
+          "gyro_mag_mean": 24481.74188839633,
+          "cluster_id": 3
+        }
+      ],
+      "labeled": false,
+      "split": null,
+      "labels": []
+    },
+    {
+      "filename": "2023-11-24T17:28:29.121Z.json",
+      "timestamp": "2023-11-24T17:28:29.121Z",
+      "duration": 3.74,
+      "composite_image": "composite_2023-11-24T17:28:29.121Z.png",
+      "raw_images": [
+        "raw_axes_2023-11-24T17:28:29.121Z.png",
+        "orientation_3d_2023-11-24T17:28:29.121Z.png"
+      ],
+      "windows": [
+        {
+          "window_num": 1,
+          "time_start": 0.0,
+          "time_end": 1.0,
+          "filename": "window_001.png",
+          "filepath": "windows_2023-11-24T17:28:29.121Z/window_001.png",
+          "color": "#6d7067",
+          "accel_mag_mean": 8801.882367107628,
+          "gyro_mag_mean": 24513.688627421838,
+          "cluster_id": 3
+        },
+        {
+          "window_num": 2,
+          "time_start": 1.0,
+          "time_end": 2.0,
+          "filename": "window_002.png",
+          "filepath": "windows_2023-11-24T17:28:29.121Z/window_002.png",
+          "color": "#6c7069",
+          "accel_mag_mean": 8801.645752545131,
+          "gyro_mag_mean": 24723.88996737638,
+          "cluster_id": 9
+        },
+        {
+          "window_num": 3,
+          "time_start": 2.0,
+          "time_end": 3.0,
+          "filename": "window_003.png",
+          "filepath": "windows_2023-11-24T17:28:29.121Z/window_003.png",
+          "color": "#6e7169",
+          "accel_mag_mean": 8889.422812317887,
+          "gyro_mag_mean": 24866.94911129745,
+          "cluster_id": 3
+        }
+      ],
+      "labeled": false,
+      "split": null,
+      "labels": []
+    },
+    {
+      "filename": "2023-11-24T17:29:02.123Z.json",
+      "timestamp": "2023-11-24T17:29:02.123Z",
+      "duration": 3.74,
+      "composite_image": "composite_2023-11-24T17:29:02.123Z.png",
+      "raw_images": [
+        "raw_axes_2023-11-24T17:29:02.123Z.png",
+        "orientation_3d_2023-11-24T17:29:02.123Z.png"
+      ],
+      "windows": [
+        {
+          "window_num": 1,
+          "time_start": 0.0,
+          "time_end": 1.0,
+          "filename": "window_001.png",
+          "filepath": "windows_2023-11-24T17:29:02.123Z/window_001.png",
+          "color": "#6c6e67",
+          "accel_mag_mean": 8674.721457804566,
+          "gyro_mag_mean": 24243.74137649122,
+          "cluster_id": 9
+        },
+        {
+          "window_num": 2,
+          "time_start": 1.0,
+          "time_end": 2.0,
+          "filename": "window_002.png",
+          "filepath": "windows_2023-11-24T17:29:02.123Z/window_002.png",
+          "color": "#6b6d65",
+          "accel_mag_mean": 8607.385200692543,
+          "gyro_mag_mean": 24765.78238643548,
+          "cluster_id": 3
+        },
+        {
+          "window_num": 3,
+          "time_start": 2.0,
+          "time_end": 3.0,
+          "filename": "window_003.png",
+          "filepath": "windows_2023-11-24T17:29:02.123Z/window_003.png",
+          "color": "#6b6c67",
+          "accel_mag_mean": 8519.893024198971,
+          "gyro_mag_mean": 24464.962440951298,
+          "cluster_id": 3
+        }
+      ],
+      "labeled": false,
+      "split": null,
+      "labels": []
+    },
+    {
+      "filename": "2023-11-24T17:34:43.947Z.json",
+      "timestamp": "2023-11-24T17:34:43.947Z",
+      "duration": 3.74,
+      "composite_image": "composite_2023-11-24T17:34:43.947Z.png",
+      "raw_images": [
+        "raw_axes_2023-11-24T17:34:43.947Z.png",
+        "orientation_3d_2023-11-24T17:34:43.947Z.png"
+      ],
+      "windows": [
+        {
+          "window_num": 1,
+          "time_start": 0.0,
+          "time_end": 1.0,
+          "filename": "window_001.png",
+          "filepath": "windows_2023-11-24T17:34:43.947Z/window_001.png",
+          "color": "#6b6d66",
+          "accel_mag_mean": 8586.338403769438,
+          "gyro_mag_mean": 24610.75780255299,
+          "cluster_id": 3
+        },
+        {
+          "window_num": 2,
+          "time_start": 1.0,
+          "time_end": 2.0,
+          "filename": "window_002.png",
+          "filepath": "windows_2023-11-24T17:34:43.947Z/window_002.png",
+          "color": "#6f716a",
+          "accel_mag_mean": 8912.256427145685,
+          "gyro_mag_mean": 24931.648911493536,
+          "cluster_id": 3
+        },
+        {
+          "window_num": 3,
+          "time_start": 2.0,
+          "time_end": 3.0,
+          "filename": "window_003.png",
+          "filepath": "windows_2023-11-24T17:34:43.947Z/window_003.png",
+          "color": "#6b6d65",
+          "accel_mag_mean": 8616.089940252254,
+          "gyro_mag_mean": 25269.11442385003,
+          "cluster_id": 3
+        }
+      ],
+      "labeled": false,
+      "split": null,
+      "labels": []
+    },
+    {
+      "filename": "2023-11-24T17:35:21.240Z.json",
+      "timestamp": "2023-11-24T17:35:21.240Z",
+      "duration": 3.74,
+      "composite_image": "composite_2023-11-24T17:35:21.240Z.png",
+      "raw_images": [
+        "raw_axes_2023-11-24T17:35:21.240Z.png",
+        "orientation_3d_2023-11-24T17:35:21.240Z.png"
+      ],
+      "windows": [
+        {
+          "window_num": 1,
+          "time_start": 0.0,
+          "time_end": 1.0,
+          "filename": "window_001.png",
+          "filepath": "windows_2023-11-24T17:35:21.240Z/window_001.png",
+          "color": "#6d6e68",
+          "accel_mag_mean": 8687.717711460627,
+          "gyro_mag_mean": 24543.453375610192,
+          "cluster_id": 3
+        },
+        {
+          "window_num": 2,
+          "time_start": 1.0,
+          "time_end": 2.0,
+          "filename": "window_002.png",
+          "filepath": "windows_2023-11-24T17:35:21.240Z/window_002.png",
+          "color": "#6e706a",
+          "accel_mag_mean": 8833.907832356726,
+          "gyro_mag_mean": 24606.095439650748,
+          "cluster_id": 3
+        },
+        {
+          "window_num": 3,
+          "time_start": 2.0,
+          "time_end": 3.0,
+          "filename": "window_003.png",
+          "filepath": "windows_2023-11-24T17:35:21.240Z/window_003.png",
+          "color": "#74756e",
+          "accel_mag_mean": 9232.089073646293,
+          "gyro_mag_mean": 24643.80311289601,
+          "cluster_id": 9
+        }
+      ],
+      "labeled": false,
+      "split": null,
+      "labels": []
+    },
+    {
+      "filename": "2023-11-24T17:36:05.668Z.json",
+      "timestamp": "2023-11-24T17:36:05.668Z",
+      "duration": 3.76,
+      "composite_image": "composite_2023-11-24T17:36:05.668Z.png",
+      "raw_images": [
+        "raw_axes_2023-11-24T17:36:05.668Z.png",
+        "orientation_3d_2023-11-24T17:36:05.668Z.png"
+      ],
+      "windows": [
+        {
+          "window_num": 1,
+          "time_start": 0.0,
+          "time_end": 1.0,
+          "filename": "window_001.png",
+          "filepath": "windows_2023-11-24T17:36:05.668Z/window_001.png",
+          "color": "#6c6d68",
+          "accel_mag_mean": 8583.094287859332,
+          "gyro_mag_mean": 24353.508045105093,
+          "cluster_id": 3
+        },
+        {
+          "window_num": 2,
+          "time_start": 1.0,
+          "time_end": 2.0,
+          "filename": "window_002.png",
+          "filepath": "windows_2023-11-24T17:36:05.668Z/window_002.png",
+          "color": "#6e6f68",
+          "accel_mag_mean": 8782.160148190997,
+          "gyro_mag_mean": 25441.247690033622,
+          "cluster_id": 9
+        },
+        {
+          "window_num": 3,
+          "time_start": 2.0,
+          "time_end": 3.0,
+          "filename": "window_003.png",
+          "filepath": "windows_2023-11-24T17:36:05.668Z/window_003.png",
+          "color": "#6c6e68",
+          "accel_mag_mean": 8636.631481244944,
+          "gyro_mag_mean": 24692.53046498003,
+          "cluster_id": 9
+        }
+      ],
+      "labeled": false,
+      "split": null,
+      "labels": []
+    },
+    {
+      "filename": "2023-11-24T17:36:42.659Z.json",
+      "timestamp": "2023-11-24T17:36:42.659Z",
+      "duration": 3.72,
+      "composite_image": "composite_2023-11-24T17:36:42.659Z.png",
+      "raw_images": [
+        "raw_axes_2023-11-24T17:36:42.659Z.png",
+        "orientation_3d_2023-11-24T17:36:42.659Z.png"
+      ],
+      "windows": [
+        {
+          "window_num": 1,
+          "time_start": 0.0,
+          "time_end": 1.0,
+          "filename": "window_001.png",
+          "filepath": "windows_2023-11-24T17:36:42.659Z/window_001.png",
+          "color": "#696a64",
+          "accel_mag_mean": 8369.042786490327,
+          "gyro_mag_mean": 24538.783228612527,
+          "cluster_id": 3
+        },
+        {
+          "window_num": 2,
+          "time_start": 1.0,
+          "time_end": 2.0,
+          "filename": "window_002.png",
+          "filepath": "windows_2023-11-24T17:36:42.659Z/window_002.png",
+          "color": "#6b6c66",
+          "accel_mag_mean": 8521.331361062039,
+          "gyro_mag_mean": 24543.432291961642,
+          "cluster_id": 3
+        },
+        {
+          "window_num": 3,
+          "time_start": 2.0,
+          "time_end": 3.0,
+          "filename": "window_003.png",
+          "filepath": "windows_2023-11-24T17:36:42.659Z/window_003.png",
+          "color": "#6a6b66",
+          "accel_mag_mean": 8467.71240717011,
+          "gyro_mag_mean": 24415.361171547225,
+          "cluster_id": 3
+        }
+      ],
+      "labeled": false,
+      "split": null,
+      "labels": []
+    },
+    {
+      "filename": "2023-11-24T17:37:23.790Z.json",
+      "timestamp": "2023-11-24T17:37:23.790Z",
+      "duration": 3.76,
+      "composite_image": "composite_2023-11-24T17:37:23.790Z.png",
+      "raw_images": [
+        "raw_axes_2023-11-24T17:37:23.790Z.png",
+        "orientation_3d_2023-11-24T17:37:23.790Z.png"
+      ],
+      "windows": [
+        {
+          "window_num": 1,
+          "time_start": 0.0,
+          "time_end": 1.0,
+          "filename": "window_001.png",
+          "filepath": "windows_2023-11-24T17:37:23.790Z/window_001.png",
+          "color": "#6c6e67",
+          "accel_mag_mean": 8632.970852722787,
+          "gyro_mag_mean": 24093.68772732629,
+          "cluster_id": 3
+        },
+        {
+          "window_num": 2,
+          "time_start": 1.0,
+          "time_end": 2.0,
+          "filename": "window_002.png",
+          "filepath": "windows_2023-11-24T17:37:23.790Z/window_002.png",
+          "color": "#6c6e66",
+          "accel_mag_mean": 8670.50603888938,
+          "gyro_mag_mean": 24716.12139490601,
+          "cluster_id": 3
+        },
+        {
+          "window_num": 3,
+          "time_start": 2.0,
+          "time_end": 3.0,
+          "filename": "window_003.png",
+          "filepath": "windows_2023-11-24T17:37:23.790Z/window_003.png",
+          "color": "#686a64",
+          "accel_mag_mean": 8350.271405063286,
+          "gyro_mag_mean": 24628.114110604063,
+          "cluster_id": 9
+        }
+      ],
+      "labeled": false,
+      "split": null,
+      "labels": []
+    },
+    {
+      "filename": "2023-11-24T17:44:59.523Z.json",
+      "timestamp": "2023-11-24T17:44:59.523Z",
+      "duration": 3.68,
+      "composite_image": "composite_2023-11-24T17:44:59.523Z.png",
+      "raw_images": [
+        "raw_axes_2023-11-24T17:44:59.523Z.png",
+        "orientation_3d_2023-11-24T17:44:59.523Z.png"
+      ],
+      "windows": [
+        {
+          "window_num": 1,
+          "time_start": 0.0,
+          "time_end": 1.0,
+          "filename": "window_001.png",
+          "filepath": "windows_2023-11-24T17:44:59.523Z/window_001.png",
+          "color": "#6c6e68",
+          "accel_mag_mean": 8676.489246632129,
+          "gyro_mag_mean": 24104.53704866541,
+          "cluster_id": 5
+        },
+        {
+          "window_num": 2,
+          "time_start": 1.0,
+          "time_end": 2.0,
+          "filename": "window_002.png",
+          "filepath": "windows_2023-11-24T17:44:59.523Z/window_002.png",
+          "color": "#696761",
+          "accel_mag_mean": 8269.964274951846,
+          "gyro_mag_mean": 24387.513667532985,
+          "cluster_id": 8
+        },
+        {
+          "window_num": 3,
+          "time_start": 2.0,
+          "time_end": 3.0,
+          "filename": "window_003.png",
+          "filepath": "windows_2023-11-24T17:44:59.523Z/window_003.png",
+          "color": "#71716c",
+          "accel_mag_mean": 8925.77766336191,
+          "gyro_mag_mean": 23952.284264831673,
+          "cluster_id": 9
+        }
+      ],
+      "labeled": false,
+      "split": null,
+      "labels": []
+    },
+    {
+      "filename": "2023-11-24T22:05:54.664Z.json",
+      "timestamp": "2023-11-24T22:05:54.664Z",
+      "duration": 3.66,
+      "composite_image": "composite_2023-11-24T22:05:54.664Z.png",
+      "raw_images": [
+        "raw_axes_2023-11-24T22:05:54.664Z.png",
+        "orientation_3d_2023-11-24T22:05:54.664Z.png"
+      ],
+      "windows": [
+        {
+          "window_num": 1,
+          "time_start": 0.0,
+          "time_end": 1.0,
+          "filename": "window_001.png",
+          "filepath": "windows_2023-11-24T22:05:54.664Z/window_001.png",
+          "color": "#656d65",
+          "accel_mag_mean": 8562.31383678232,
+          "gyro_mag_mean": 24385.053190244398,
+          "cluster_id": 9
+        },
+        {
+          "window_num": 2,
+          "time_start": 1.0,
+          "time_end": 2.0,
+          "filename": "window_002.png",
+          "filepath": "windows_2023-11-24T22:05:54.664Z/window_002.png",
+          "color": "#666c66",
+          "accel_mag_mean": 8494.570890244036,
+          "gyro_mag_mean": 24277.142655203763,
+          "cluster_id": 3
+        },
+        {
+          "window_num": 3,
+          "time_start": 2.0,
+          "time_end": 3.0,
+          "filename": "window_003.png",
+          "filepath": "windows_2023-11-24T22:05:54.664Z/window_003.png",
+          "color": "#666e66",
+          "accel_mag_mean": 8646.372810541932,
+          "gyro_mag_mean": 25084.441759400383,
+          "cluster_id": 9
+        }
+      ],
+      "labeled": false,
+      "split": null,
+      "labels": []
+    },
+    {
+      "filename": "2023-11-24T22:18:26.063Z.json",
+      "timestamp": "2023-11-24T22:18:26.063Z",
+      "duration": 0.66,
+      "composite_image": "composite_2023-11-24T22:18:26.063Z.png",
+      "raw_images": [
+        "raw_axes_2023-11-24T22:18:26.063Z.png",
+        "orientation_3d_2023-11-24T22:18:26.063Z.png"
+      ],
+      "windows": [],
+      "labeled": false,
+      "split": null,
+      "labels": []
+    },
+    {
+      "filename": "2023-11-24T22:19:05.698Z.json",
+      "timestamp": "2023-11-24T22:19:05.698Z",
+      "duration": 3.7,
+      "composite_image": "composite_2023-11-24T22:19:05.698Z.png",
+      "raw_images": [
+        "raw_axes_2023-11-24T22:19:05.698Z.png",
+        "orientation_3d_2023-11-24T22:19:05.698Z.png"
+      ],
+      "windows": [
+        {
+          "window_num": 1,
+          "time_start": 0.0,
+          "time_end": 1.0,
+          "filename": "window_001.png",
+          "filepath": "windows_2023-11-24T22:19:05.698Z/window_001.png",
+          "color": "#686760",
+          "accel_mag_mean": 8168.991955540093,
+          "gyro_mag_mean": 25052.028306081098,
+          "cluster_id": 8
+        },
+        {
+          "window_num": 2,
+          "time_start": 1.0,
+          "time_end": 2.0,
+          "filename": "window_002.png",
+          "filepath": "windows_2023-11-24T22:19:05.698Z/window_002.png",
+          "color": "#686861",
+          "accel_mag_mean": 8197.03825283563,
+          "gyro_mag_mean": 24984.31043864689,
+          "cluster_id": 5
+        },
+        {
+          "window_num": 3,
+          "time_start": 2.0,
+          "time_end": 3.0,
+          "filename": "window_003.png",
+          "filepath": "windows_2023-11-24T22:19:05.698Z/window_003.png",
+          "color": "#696861",
+          "accel_mag_mean": 8254.970282524644,
+          "gyro_mag_mean": 25461.5246838465,
+          "cluster_id": 8
+        }
+      ],
+      "labeled": false,
+      "split": null,
+      "labels": []
+    },
+    {
+      "filename": "2023-11-24T22:19:47.909Z.json",
+      "timestamp": "2023-11-24T22:19:47.909Z",
+      "duration": 3.64,
+      "composite_image": "composite_2023-11-24T22:19:47.909Z.png",
+      "raw_images": [
+        "raw_axes_2023-11-24T22:19:47.909Z.png",
+        "orientation_3d_2023-11-24T22:19:47.909Z.png"
+      ],
+      "windows": [
+        {
+          "window_num": 1,
+          "time_start": 0.0,
+          "time_end": 1.0,
+          "filename": "window_001.png",
+          "filepath": "windows_2023-11-24T22:19:47.909Z/window_001.png",
+          "color": "#686763",
+          "accel_mag_mean": 8206.059909376863,
+          "gyro_mag_mean": 24670.09295452548,
+          "cluster_id": 5
+        },
+        {
+          "window_num": 2,
+          "time_start": 1.0,
+          "time_end": 2.0,
+          "filename": "window_002.png",
+          "filepath": "windows_2023-11-24T22:19:47.909Z/window_002.png",
+          "color": "#666063",
+          "accel_mag_mean": 8072.887434422974,
+          "gyro_mag_mean": 24918.896812167615,
+          "cluster_id": 0
+        },
+        {
+          "window_num": 3,
+          "time_start": 2.0,
+          "time_end": 3.0,
+          "filename": "window_003.png",
+          "filepath": "windows_2023-11-24T22:19:47.909Z/window_003.png",
+          "color": "#676164",
+          "accel_mag_mean": 8124.922272300956,
+          "gyro_mag_mean": 25326.220835432447,
+          "cluster_id": 8
+        }
+      ],
+      "labeled": false,
+      "split": null,
+      "labels": []
+    },
+    {
+      "filename": "2023-11-24T22:20:26.429Z.json",
+      "timestamp": "2023-11-24T22:20:26.429Z",
+      "duration": 3.78,
+      "composite_image": "composite_2023-11-24T22:20:26.429Z.png",
+      "raw_images": [
+        "raw_axes_2023-11-24T22:20:26.429Z.png",
+        "orientation_3d_2023-11-24T22:20:26.429Z.png"
+      ],
+      "windows": [
+        {
+          "window_num": 1,
+          "time_start": 0.0,
+          "time_end": 1.0,
+          "filename": "window_001.png",
+          "filepath": "windows_2023-11-24T22:20:26.429Z/window_001.png",
+          "color": "#a3989f",
+          "accel_mag_mean": 12861.122230679031,
+          "gyro_mag_mean": 24910.124935448795,
+          "cluster_id": 6
+        },
+        {
+          "window_num": 2,
+          "time_start": 1.0,
+          "time_end": 2.0,
+          "filename": "window_002.png",
+          "filepath": "windows_2023-11-24T22:20:26.429Z/window_002.png",
+          "color": "#867e85",
+          "accel_mag_mean": 10581.618419641918,
+          "gyro_mag_mean": 25192.84952954803,
+          "cluster_id": 4
+        },
+        {
+          "window_num": 3,
+          "time_start": 2.0,
+          "time_end": 3.0,
+          "filename": "window_003.png",
+          "filepath": "windows_2023-11-24T22:20:26.429Z/window_003.png",
+          "color": "#9a9099",
+          "accel_mag_mean": 12152.872277210341,
+          "gyro_mag_mean": 24957.53561500772,
+          "cluster_id": 2
+        }
+      ],
+      "labeled": false,
+      "split": null,
+      "labels": []
+    },
+    {
+      "filename": "2023-11-24T22:21:08.191Z.json",
+      "timestamp": "2023-11-24T22:21:08.191Z",
+      "duration": 3.66,
+      "composite_image": "composite_2023-11-24T22:21:08.191Z.png",
+      "raw_images": [
+        "raw_axes_2023-11-24T22:21:08.191Z.png",
+        "orientation_3d_2023-11-24T22:21:08.191Z.png"
+      ],
+      "windows": [
+        {
+          "window_num": 1,
+          "time_start": 0.0,
+          "time_end": 1.0,
+          "filename": "window_001.png",
+          "filepath": "windows_2023-11-24T22:21:08.191Z/window_001.png",
+          "color": "#70696a",
+          "accel_mag_mean": 8808.603727063055,
+          "gyro_mag_mean": 25138.40384439813,
+          "cluster_id": 2
+        },
+        {
+          "window_num": 2,
+          "time_start": 1.0,
+          "time_end": 2.0,
+          "filename": "window_002.png",
+          "filepath": "windows_2023-11-24T22:21:08.191Z/window_002.png",
+          "color": "#666168",
+          "accel_mag_mean": 8158.865008327213,
+          "gyro_mag_mean": 25001.985675824457,
+          "cluster_id": 0
+        },
+        {
+          "window_num": 3,
+          "time_start": 2.0,
+          "time_end": 3.0,
+          "filename": "window_003.png",
+          "filepath": "windows_2023-11-24T22:21:08.191Z/window_003.png",
+          "color": "#6a6469",
+          "accel_mag_mean": 8348.208275697765,
+          "gyro_mag_mean": 24859.859068364043,
+          "cluster_id": 4
+        }
+      ],
+      "labeled": false,
+      "split": null,
+      "labels": []
+    },
+    {
+      "filename": "2023-11-24T22:25:19.216Z.json",
+      "timestamp": "2023-11-24T22:25:19.216Z",
+      "duration": 3.66,
+      "composite_image": "composite_2023-11-24T22:25:19.216Z.png",
+      "raw_images": [
+        "raw_axes_2023-11-24T22:25:19.216Z.png",
+        "orientation_3d_2023-11-24T22:25:19.216Z.png"
+      ],
+      "windows": [
+        {
+          "window_num": 1,
+          "time_start": 0.0,
+          "time_end": 1.0,
+          "filename": "window_001.png",
+          "filepath": "windows_2023-11-24T22:25:19.216Z/window_001.png",
+          "color": "#787078",
+          "accel_mag_mean": 9419.9775513661,
+          "gyro_mag_mean": 24864.103358799493,
+          "cluster_id": 4
+        },
+        {
+          "window_num": 2,
+          "time_start": 1.0,
+          "time_end": 2.0,
+          "filename": "window_002.png",
+          "filepath": "windows_2023-11-24T22:25:19.216Z/window_002.png",
+          "color": "#ada2ab",
+          "accel_mag_mean": 13609.699725655673,
+          "gyro_mag_mean": 24965.582151297567,
+          "cluster_id": 6
+        },
+        {
+          "window_num": 3,
+          "time_start": 2.0,
+          "time_end": 3.0,
+          "filename": "window_003.png",
+          "filepath": "windows_2023-11-24T22:25:19.216Z/window_003.png",
+          "color": "#746c6f",
+          "accel_mag_mean": 9160.62324082688,
+          "gyro_mag_mean": 25322.124632588155,
+          "cluster_id": 4
+        }
+      ],
+      "labeled": false,
+      "split": null,
+      "labels": []
+    },
+    {
+      "filename": "2023-11-24T22:25:51.821Z.json",
+      "timestamp": "2023-11-24T22:25:51.821Z",
+      "duration": 3.72,
+      "composite_image": "composite_2023-11-24T22:25:51.821Z.png",
+      "raw_images": [
+        "raw_axes_2023-11-24T22:25:51.821Z.png",
+        "orientation_3d_2023-11-24T22:25:51.821Z.png"
+      ],
+      "windows": [
+        {
+          "window_num": 1,
+          "time_start": 0.0,
+          "time_end": 1.0,
+          "filename": "window_001.png",
+          "filepath": "windows_2023-11-24T22:25:51.821Z/window_001.png",
+          "color": "#686863",
+          "accel_mag_mean": 8202.104565832153,
+          "gyro_mag_mean": 24810.02095006045,
+          "cluster_id": 5
+        },
+        {
+          "window_num": 2,
+          "time_start": 1.0,
+          "time_end": 2.0,
+          "filename": "window_002.png",
+          "filepath": "windows_2023-11-24T22:25:51.821Z/window_002.png",
+          "color": "#65655f",
+          "accel_mag_mean": 7986.747602226254,
+          "gyro_mag_mean": 25623.157023928597,
+          "cluster_id": 8
+        },
+        {
+          "window_num": 3,
+          "time_start": 2.0,
+          "time_end": 3.0,
+          "filename": "window_003.png",
+          "filepath": "windows_2023-11-24T22:25:51.821Z/window_003.png",
+          "color": "#6d6668",
+          "accel_mag_mean": 8588.485781661426,
+          "gyro_mag_mean": 25153.344842197635,
+          "cluster_id": 2
+        }
+      ],
+      "labeled": false,
+      "split": null,
+      "labels": []
+    },
+    {
+      "filename": "2023-11-24T22:27:35.295Z.json",
+      "timestamp": "2023-11-24T22:27:35.295Z",
+      "duration": 3.62,
+      "composite_image": "composite_2023-11-24T22:27:35.295Z.png",
+      "raw_images": [
+        "raw_axes_2023-11-24T22:27:35.295Z.png",
+        "orientation_3d_2023-11-24T22:27:35.295Z.png"
+      ],
+      "windows": [
+        {
+          "window_num": 1,
+          "time_start": 0.0,
+          "time_end": 1.0,
+          "filename": "window_001.png",
+          "filepath": "windows_2023-11-24T22:27:35.295Z/window_001.png",
+          "color": "#63636a",
+          "accel_mag_mean": 8316.86480842023,
+          "gyro_mag_mean": 24869.26431385586,
+          "cluster_id": 5
+        },
+        {
+          "window_num": 2,
+          "time_start": 1.0,
+          "time_end": 2.0,
+          "filename": "window_002.png",
+          "filepath": "windows_2023-11-24T22:27:35.295Z/window_002.png",
+          "color": "#68686d",
+          "accel_mag_mean": 8618.626150241515,
+          "gyro_mag_mean": 25097.12827622967,
+          "cluster_id": 5
+        },
+        {
+          "window_num": 3,
+          "time_start": 2.0,
+          "time_end": 3.0,
+          "filename": "window_003.png",
+          "filepath": "windows_2023-11-24T22:27:35.295Z/window_003.png",
+          "color": "#626369",
+          "accel_mag_mean": 8246.036158714483,
+          "gyro_mag_mean": 25288.11582016711,
+          "cluster_id": 5
+        }
+      ],
+      "labeled": false,
+      "split": null,
+      "labels": []
+    },
+    {
+      "filename": "2023-11-24T22:33:46.427Z.json",
+      "timestamp": "2023-11-24T22:33:46.427Z",
+      "duration": 3.7,
+      "composite_image": "composite_2023-11-24T22:33:46.427Z.png",
+      "raw_images": [
+        "raw_axes_2023-11-24T22:33:46.427Z.png",
+        "orientation_3d_2023-11-24T22:33:46.427Z.png"
+      ],
+      "windows": [
+        {
+          "window_num": 1,
+          "time_start": 0.0,
+          "time_end": 1.0,
+          "filename": "window_001.png",
+          "filepath": "windows_2023-11-24T22:33:46.427Z/window_001.png",
+          "color": "#64656b",
+          "accel_mag_mean": 8455.386672923265,
+          "gyro_mag_mean": 24986.177948986962,
+          "cluster_id": 5
+        },
+        {
+          "window_num": 2,
+          "time_start": 1.0,
+          "time_end": 2.0,
+          "filename": "window_002.png",
+          "filepath": "windows_2023-11-24T22:33:46.427Z/window_002.png",
+          "color": "#63646a",
+          "accel_mag_mean": 8341.074128294482,
+          "gyro_mag_mean": 25224.30888265323,
+          "cluster_id": 5
+        },
+        {
+          "window_num": 3,
+          "time_start": 2.0,
+          "time_end": 3.0,
+          "filename": "window_003.png",
+          "filepath": "windows_2023-11-24T22:33:46.427Z/window_003.png",
+          "color": "#626268",
+          "accel_mag_mean": 8208.772934370081,
+          "gyro_mag_mean": 25137.37612429634,
+          "cluster_id": 8
+        }
+      ],
+      "labeled": false,
+      "split": null,
+      "labels": []
+    },
+    {
+      "filename": "2024-01-05T16:40:02.821Z.json",
+      "timestamp": "2024-01-05T16:40:02.821Z",
+      "duration": 2.24,
+      "composite_image": "composite_2024-01-05T16:40:02.821Z.png",
+      "raw_images": [
+        "raw_axes_2024-01-05T16:40:02.821Z.png",
+        "orientation_3d_2024-01-05T16:40:02.821Z.png"
+      ],
+      "windows": [
+        {
+          "window_num": 1,
+          "time_start": 0.0,
+          "time_end": 1.0,
+          "filename": "window_001.png",
+          "filepath": "windows_2024-01-05T16:40:02.821Z/window_001.png",
+          "color": "#696765",
+          "accel_mag_mean": 8294.755850165697,
+          "gyro_mag_mean": 22714.80001682548,
+          "cluster_id": 7
+        },
+        {
+          "window_num": 2,
+          "time_start": 1.0,
+          "time_end": 2.0,
+          "filename": "window_002.png",
+          "filepath": "windows_2024-01-05T16:40:02.821Z/window_002.png",
+          "color": "#686366",
+          "accel_mag_mean": 8183.928441507165,
+          "gyro_mag_mean": 22786.569029937637,
+          "cluster_id": 7
+        }
+      ],
+      "labeled": false,
+      "split": null,
+      "labels": []
+    },
+    {
+      "filename": "2024-01-05T16:41:20.581Z.json",
+      "timestamp": "2024-01-05T16:41:20.581Z",
+      "duration": 3.72,
+      "composite_image": "composite_2024-01-05T16:41:20.581Z.png",
+      "raw_images": [
+        "raw_axes_2024-01-05T16:41:20.581Z.png",
+        "orientation_3d_2024-01-05T16:41:20.581Z.png"
+      ],
+      "windows": [
+        {
+          "window_num": 1,
+          "time_start": 0.0,
+          "time_end": 1.0,
+          "filename": "window_001.png",
+          "filepath": "windows_2024-01-05T16:41:20.581Z/window_001.png",
+          "color": "#646a66",
+          "accel_mag_mean": 8324.644525404472,
+          "gyro_mag_mean": 23625.672191865488,
+          "cluster_id": 7
+        },
+        {
+          "window_num": 2,
+          "time_start": 1.0,
+          "time_end": 2.0,
+          "filename": "window_002.png",
+          "filepath": "windows_2024-01-05T16:41:20.581Z/window_002.png",
+          "color": "#717773",
+          "accel_mag_mean": 9349.181928798114,
+          "gyro_mag_mean": 23907.918322820904,
+          "cluster_id": 7
+        },
+        {
+          "window_num": 3,
+          "time_start": 2.0,
+          "time_end": 3.0,
+          "filename": "window_003.png",
+          "filepath": "windows_2024-01-05T16:41:20.581Z/window_003.png",
+          "color": "#636866",
+          "accel_mag_mean": 8234.509430469838,
+          "gyro_mag_mean": 23699.134552791278,
+          "cluster_id": 7
+        }
+      ],
+      "labeled": false,
+      "split": null,
+      "labels": []
+    }
+  ],
+  "clustering": {
+    "enabled": true,
+    "n_clusters": 10,
+    "metrics": {
+      "silhouette_score": 0.3882037401199341,
+      "davies_bouldin_score": 0.987405445193253
+    },
+    "clusters": [
+      {
+        "id": 0,
+        "size": 6,
+        "percentage": 4.511278195488721,
+        "sessions": [
+          "2023-11-24T22:19:47.909Z.json",
+          "2023-11-24T22:21:08.191Z.json"
+        ],
+        "gesture_name": null
+      },
+      {
+        "id": 1,
+        "size": 13,
+        "percentage": 9.774436090225564,
+        "sessions": [
+          "2023-11-24T17:24:38.129Z.json",
+          "2023-11-24T17:14:18.479Z.json",
+          "2023-11-24T17:27:20.364Z.json"
+        ],
+        "gesture_name": null
+      },
+      {
+        "id": 2,
+        "size": 8,
+        "percentage": 6.015037593984962,
+        "sessions": [
+          "2023-11-24T22:25:51.821Z.json",
+          "2023-11-24T22:21:08.191Z.json",
+          "2023-11-24T22:20:26.429Z.json"
+        ],
+        "gesture_name": null
+      },
+      {
+        "id": 3,
+        "size": 36,
+        "percentage": 27.06766917293233,
+        "sessions": [
+          "2023-11-24T17:28:29.121Z.json",
+          "2023-11-24T17:34:43.947Z.json",
+          "2023-11-24T17:36:05.668Z.json",
+          "2023-11-24T17:36:42.659Z.json",
+          "2023-11-24T22:05:54.664Z.json",
+          "2023-11-24T17:27:53.662Z.json",
+          "2023-11-24T17:35:21.240Z.json",
+          "2023-11-24T17:37:23.790Z.json",
+          "2023-11-24T17:29:02.123Z.json"
+        ],
+        "gesture_name": null
+      },
+      {
+        "id": 4,
+        "size": 5,
+        "percentage": 3.7593984962406015,
+        "sessions": [
+          "2023-11-24T22:25:19.216Z.json",
+          "2023-11-24T22:21:08.191Z.json",
+          "2023-11-24T22:20:26.429Z.json"
+        ],
+        "gesture_name": null
+      },
+      {
+        "id": 5,
+        "size": 14,
+        "percentage": 10.526315789473683,
+        "sessions": [
+          "2023-11-24T22:33:46.427Z.json",
+          "2023-11-24T22:19:47.909Z.json",
+          "2023-11-24T22:27:35.295Z.json",
+          "2023-11-24T22:25:51.821Z.json",
+          "2023-11-24T22:19:05.698Z.json",
+          "2023-11-24T17:44:59.523Z.json"
+        ],
+        "gesture_name": null
+      },
+      {
+        "id": 6,
+        "size": 5,
+        "percentage": 3.7593984962406015,
+        "sessions": [
+          "2023-11-24T22:25:19.216Z.json",
+          "2023-11-24T22:20:26.429Z.json"
+        ],
+        "gesture_name": null
+      },
+      {
+        "id": 7,
+        "size": 9,
+        "percentage": 6.7669172932330826,
+        "sessions": [
+          "2024-01-05T16:41:20.581Z.json",
+          "2024-01-05T16:40:02.821Z.json"
+        ],
+        "gesture_name": null
+      },
+      {
+        "id": 8,
+        "size": 14,
+        "percentage": 10.526315789473683,
+        "sessions": [
+          "2023-11-24T22:33:46.427Z.json",
+          "2023-11-24T22:19:47.909Z.json",
+          "2023-11-24T22:25:51.821Z.json",
+          "2023-11-24T22:21:08.191Z.json",
+          "2023-11-24T22:19:05.698Z.json",
+          "2023-11-24T17:44:59.523Z.json"
+        ],
+        "gesture_name": null
+      },
+      {
+        "id": 9,
+        "size": 23,
+        "percentage": 17.293233082706767,
+        "sessions": [
+          "2023-11-24T17:28:29.121Z.json",
+          "2023-11-24T17:36:05.668Z.json",
+          "2023-11-24T22:05:54.664Z.json",
+          "2023-11-24T17:27:20.364Z.json",
+          "2023-11-24T17:35:21.240Z.json",
+          "2023-11-24T17:37:23.790Z.json",
+          "2023-11-24T17:44:59.523Z.json",
+          "2023-11-24T17:29:02.123Z.json"
+        ],
+        "gesture_name": null
+      }
+    ],
+    "points": [
+      {
+        "session": "2023-11-24T17:14:18.479Z.json",
+        "window_index": 0,
+        "start_sample": 0,
+        "end_sample": 50,
+        "cluster": 1,
+        "x": -5.810656547546387,
+        "y": -2.4994518756866455
+      },
+      {
+        "session": "2023-11-24T17:14:18.479Z.json",
+        "window_index": 1,
+        "start_sample": 25,
+        "end_sample": 75,
+        "cluster": 1,
+        "x": -5.859550476074219,
+        "y": -2.594343423843384
+      },
+      {
+        "session": "2023-11-24T17:14:18.479Z.json",
+        "window_index": 2,
+        "start_sample": 50,
+        "end_sample": 100,
+        "cluster": 1,
+        "x": -5.836754322052002,
+        "y": -2.595301628112793
+      },
+      {
+        "session": "2023-11-24T17:14:18.479Z.json",
+        "window_index": 3,
+        "start_sample": 75,
+        "end_sample": 125,
+        "cluster": 1,
+        "x": -5.871435165405273,
+        "y": -3.0027925968170166
+      },
+      {
+        "session": "2023-11-24T17:24:38.129Z.json",
+        "window_index": 0,
+        "start_sample": 0,
+        "end_sample": 50,
+        "cluster": 1,
+        "x": -5.552252292633057,
+        "y": -0.4296054542064667
+      },
+      {
+        "session": "2023-11-24T17:24:38.129Z.json",
+        "window_index": 1,
+        "start_sample": 25,
+        "end_sample": 75,
+        "cluster": 1,
+        "x": -5.577162742614746,
+        "y": -0.44621697068214417
+      },
+      {
+        "session": "2023-11-24T17:24:38.129Z.json",
+        "window_index": 2,
+        "start_sample": 50,
+        "end_sample": 100,
+        "cluster": 1,
+        "x": -5.766943454742432,
+        "y": -1.2244880199432373
+      },
+      {
+        "session": "2023-11-24T17:24:38.129Z.json",
+        "window_index": 3,
+        "start_sample": 75,
+        "end_sample": 125,
+        "cluster": 1,
+        "x": -5.73382568359375,
+        "y": -1.343735694885254
+      },
+      {
+        "session": "2023-11-24T17:24:38.129Z.json",
+        "window_index": 4,
+        "start_sample": 100,
+        "end_sample": 150,
+        "cluster": 1,
+        "x": -5.797868251800537,
+        "y": -1.4103726148605347
+      },
+      {
+        "session": "2023-11-24T17:24:38.129Z.json",
+        "window_index": 5,
+        "start_sample": 125,
+        "end_sample": 175,
+        "cluster": 1,
+        "x": -5.7780442237854,
+        "y": -1.6379001140594482
+      },
+      {
+        "session": "2023-11-24T17:27:20.364Z.json",
+        "window_index": 0,
+        "start_sample": 0,
+        "end_sample": 50,
+        "cluster": 9,
+        "x": -1.3090918064117432,
+        "y": 3.9343087673187256
+      },
+      {
+        "session": "2023-11-24T17:27:20.364Z.json",
+        "window_index": 1,
+        "start_sample": 25,
+        "end_sample": 75,
+        "cluster": 9,
+        "x": -1.5513092279434204,
+        "y": 3.9180002212524414
+      },
+      {
+        "session": "2023-11-24T17:27:20.364Z.json",
+        "window_index": 2,
+        "start_sample": 50,
+        "end_sample": 100,
+        "cluster": 1,
+        "x": -5.486525535583496,
+        "y": -1.4190393686294556
+      },
+      {
+        "session": "2023-11-24T17:27:20.364Z.json",
+        "window_index": 3,
+        "start_sample": 75,
+        "end_sample": 125,
+        "cluster": 1,
+        "x": -5.261273384094238,
+        "y": -1.5171918869018555
+      },
+      {
+        "session": "2023-11-24T17:27:20.364Z.json",
+        "window_index": 4,
+        "start_sample": 100,
+        "end_sample": 150,
+        "cluster": 1,
+        "x": -4.9936394691467285,
+        "y": -2.112356185913086
+      },
+      {
+        "session": "2023-11-24T17:27:20.364Z.json",
+        "window_index": 5,
+        "start_sample": 125,
+        "end_sample": 175,
+        "cluster": 9,
+        "x": -3.9106647968292236,
+        "y": 4.475733757019043
+      },
+      {
+        "session": "2023-11-24T17:27:53.662Z.json",
+        "window_index": 0,
+        "start_sample": 0,
+        "end_sample": 50,
+        "cluster": 3,
+        "x": -2.1192219257354736,
+        "y": -2.1981797218322754
+      },
+      {
+        "session": "2023-11-24T17:27:53.662Z.json",
+        "window_index": 1,
+        "start_sample": 25,
+        "end_sample": 75,
+        "cluster": 3,
+        "x": -1.8852301836013794,
+        "y": -3.4081292152404785
+      },
+      {
+        "session": "2023-11-24T17:27:53.662Z.json",
+        "window_index": 2,
+        "start_sample": 50,
+        "end_sample": 100,
+        "cluster": 3,
+        "x": -1.831555962562561,
+        "y": -2.5746500492095947
+      },
+      {
+        "session": "2023-11-24T17:27:53.662Z.json",
+        "window_index": 3,
+        "start_sample": 75,
+        "end_sample": 125,
+        "cluster": 3,
+        "x": -1.415629506111145,
+        "y": -2.5920705795288086
+      },
+      {
+        "session": "2023-11-24T17:27:53.662Z.json",
+        "window_index": 4,
+        "start_sample": 100,
+        "end_sample": 150,
+        "cluster": 3,
+        "x": -1.3491621017456055,
+        "y": -3.0858712196350098
+      },
+      {
+        "session": "2023-11-24T17:27:53.662Z.json",
+        "window_index": 5,
+        "start_sample": 125,
+        "end_sample": 175,
+        "cluster": 3,
+        "x": -1.8264920711517334,
+        "y": -4.318100929260254
+      },
+      {
+        "session": "2023-11-24T17:28:29.121Z.json",
+        "window_index": 0,
+        "start_sample": 0,
+        "end_sample": 50,
+        "cluster": 3,
+        "x": -1.1288942098617554,
+        "y": -2.3014955520629883
+      },
+      {
+        "session": "2023-11-24T17:28:29.121Z.json",
+        "window_index": 1,
+        "start_sample": 25,
+        "end_sample": 75,
+        "cluster": 9,
+        "x": 4.34317684173584,
+        "y": 2.485504388809204
+      },
+      {
+        "session": "2023-11-24T17:28:29.121Z.json",
+        "window_index": 2,
+        "start_sample": 50,
+        "end_sample": 100,
+        "cluster": 9,
+        "x": 4.01477575302124,
+        "y": 2.6796317100524902
+      },
+      {
+        "session": "2023-11-24T17:28:29.121Z.json",
+        "window_index": 3,
+        "start_sample": 75,
+        "end_sample": 125,
+        "cluster": 3,
+        "x": 0.4597894847393036,
+        "y": -3.138448476791382
+      },
+      {
+        "session": "2023-11-24T17:28:29.121Z.json",
+        "window_index": 4,
+        "start_sample": 100,
+        "end_sample": 150,
+        "cluster": 3,
+        "x": 0.5437192916870117,
+        "y": -2.9816927909851074
+      },
+      {
+        "session": "2023-11-24T17:28:29.121Z.json",
+        "window_index": 5,
+        "start_sample": 125,
+        "end_sample": 175,
+        "cluster": 3,
+        "x": -1.2305729389190674,
+        "y": -3.3435826301574707
+      },
+      {
+        "session": "2023-11-24T17:29:02.123Z.json",
+        "window_index": 0,
+        "start_sample": 0,
+        "end_sample": 50,
+        "cluster": 9,
+        "x": 0.18738998472690582,
+        "y": 3.227231979370117
+      },
+      {
+        "session": "2023-11-24T17:29:02.123Z.json",
+        "window_index": 1,
+        "start_sample": 25,
+        "end_sample": 75,
+        "cluster": 9,
+        "x": -1.004350185394287,
+        "y": 3.4322621822357178
+      },
+      {
+        "session": "2023-11-24T17:29:02.123Z.json",
+        "window_index": 2,
+        "start_sample": 50,
+        "end_sample": 100,
+        "cluster": 3,
+        "x": -3.1263554096221924,
+        "y": -3.1986570358276367
+      },
+      {
+        "session": "2023-11-24T17:29:02.123Z.json",
+        "window_index": 3,
+        "start_sample": 75,
+        "end_sample": 125,
+        "cluster": 3,
+        "x": -2.2843499183654785,
+        "y": -2.535155773162842
+      },
+      {
+        "session": "2023-11-24T17:29:02.123Z.json",
+        "window_index": 4,
+        "start_sample": 100,
+        "end_sample": 150,
+        "cluster": 3,
+        "x": -2.0553901195526123,
+        "y": -2.424079656600952
+      },
+      {
+        "session": "2023-11-24T17:29:02.123Z.json",
+        "window_index": 5,
+        "start_sample": 125,
+        "end_sample": 175,
+        "cluster": 3,
+        "x": -2.2997775077819824,
+        "y": -2.3674440383911133
+      },
+      {
+        "session": "2023-11-24T17:34:43.947Z.json",
+        "window_index": 0,
+        "start_sample": 0,
+        "end_sample": 50,
+        "cluster": 3,
+        "x": -2.560741901397705,
+        "y": -2.265221357345581
+      },
+      {
+        "session": "2023-11-24T17:34:43.947Z.json",
+        "window_index": 1,
+        "start_sample": 25,
+        "end_sample": 75,
+        "cluster": 3,
+        "x": -2.5645699501037598,
+        "y": -3.378321409225464
+      },
+      {
+        "session": "2023-11-24T17:34:43.947Z.json",
+        "window_index": 2,
+        "start_sample": 50,
+        "end_sample": 100,
+        "cluster": 3,
+        "x": -2.4371798038482666,
+        "y": -5.340719223022461
+      },
+      {
+        "session": "2023-11-24T17:34:43.947Z.json",
+        "window_index": 3,
+        "start_sample": 75,
+        "end_sample": 125,
+        "cluster": 3,
+        "x": -2.224876880645752,
+        "y": -2.914978504180908
+      },
+      {
+        "session": "2023-11-24T17:34:43.947Z.json",
+        "window_index": 4,
+        "start_sample": 100,
+        "end_sample": 150,
+        "cluster": 3,
+        "x": -2.4072601795196533,
+        "y": -2.9543137550354004
+      },
+      {
+        "session": "2023-11-24T17:34:43.947Z.json",
+        "window_index": 5,
+        "start_sample": 125,
+        "end_sample": 175,
+        "cluster": 3,
+        "x": -2.45032000541687,
+        "y": -3.1166634559631348
+      },
+      {
+        "session": "2023-11-24T17:35:21.240Z.json",
+        "window_index": 0,
+        "start_sample": 0,
+        "end_sample": 50,
+        "cluster": 3,
+        "x": -2.902651309967041,
+        "y": -3.09009051322937
+      },
+      {
+        "session": "2023-11-24T17:35:21.240Z.json",
+        "window_index": 1,
+        "start_sample": 25,
+        "end_sample": 75,
+        "cluster": 3,
+        "x": -2.8314919471740723,
+        "y": -3.022202491760254
+      },
+      {
+        "session": "2023-11-24T17:35:21.240Z.json",
+        "window_index": 2,
+        "start_sample": 50,
+        "end_sample": 100,
+        "cluster": 3,
+        "x": -2.8099524974823,
+        "y": -3.1921255588531494
+      },
+      {
+        "session": "2023-11-24T17:35:21.240Z.json",
+        "window_index": 3,
+        "start_sample": 75,
+        "end_sample": 125,
+        "cluster": 9,
+        "x": -0.766099750995636,
+        "y": 3.187213182449341
+      },
+      {
+        "session": "2023-11-24T17:35:21.240Z.json",
+        "window_index": 4,
+        "start_sample": 100,
+        "end_sample": 150,
+        "cluster": 9,
+        "x": -0.7350611686706543,
+        "y": 3.030099630355835
+      },
+      {
+        "session": "2023-11-24T17:35:21.240Z.json",
+        "window_index": 5,
+        "start_sample": 125,
+        "end_sample": 175,
+        "cluster": 9,
+        "x": -1.5190140008926392,
+        "y": 3.4818508625030518
+      },
+      {
+        "session": "2023-11-24T17:36:05.668Z.json",
+        "window_index": 0,
+        "start_sample": 0,
+        "end_sample": 50,
+        "cluster": 3,
+        "x": -0.19929571449756622,
+        "y": -2.5797605514526367
+      },
+      {
+        "session": "2023-11-24T17:36:05.668Z.json",
+        "window_index": 1,
+        "start_sample": 25,
+        "end_sample": 75,
+        "cluster": 9,
+        "x": -1.6324297189712524,
+        "y": 3.8528759479522705
+      },
+      {
+        "session": "2023-11-24T17:36:05.668Z.json",
+        "window_index": 2,
+        "start_sample": 50,
+        "end_sample": 100,
+        "cluster": 9,
+        "x": -1.6852679252624512,
+        "y": 3.8821122646331787
+      },
+      {
+        "session": "2023-11-24T17:36:05.668Z.json",
+        "window_index": 3,
+        "start_sample": 75,
+        "end_sample": 125,
+        "cluster": 9,
+        "x": -1.6515401601791382,
+        "y": 3.4468605518341064
+      },
+      {
+        "session": "2023-11-24T17:36:05.668Z.json",
+        "window_index": 4,
+        "start_sample": 100,
+        "end_sample": 150,
+        "cluster": 9,
+        "x": -1.5566637516021729,
+        "y": 3.4328107833862305
+      },
+      {
+        "session": "2023-11-24T17:36:05.668Z.json",
+        "window_index": 5,
+        "start_sample": 125,
+        "end_sample": 175,
+        "cluster": 9,
+        "x": -0.6380704641342163,
+        "y": 3.5153543949127197
+      },
+      {
+        "session": "2023-11-24T17:36:42.659Z.json",
+        "window_index": 0,
+        "start_sample": 0,
+        "end_sample": 50,
+        "cluster": 3,
+        "x": -2.0695078372955322,
+        "y": -1.360693335533142
+      },
+      {
+        "session": "2023-11-24T17:36:42.659Z.json",
+        "window_index": 1,
+        "start_sample": 25,
+        "end_sample": 75,
+        "cluster": 3,
+        "x": -2.1851818561553955,
+        "y": -2.5692172050476074
+      },
+      {
+        "session": "2023-11-24T17:36:42.659Z.json",
+        "window_index": 2,
+        "start_sample": 50,
+        "end_sample": 100,
+        "cluster": 3,
+        "x": -2.7872769832611084,
+        "y": -1.732283353805542
+      },
+      {
+        "session": "2023-11-24T17:36:42.659Z.json",
+        "window_index": 3,
+        "start_sample": 75,
+        "end_sample": 125,
+        "cluster": 3,
+        "x": -2.9177935123443604,
+        "y": -1.665545105934143
+      },
+      {
+        "session": "2023-11-24T17:36:42.659Z.json",
+        "window_index": 4,
+        "start_sample": 100,
+        "end_sample": 150,
+        "cluster": 3,
+        "x": -2.318688154220581,
+        "y": -2.8451201915740967
+      },
+      {
+        "session": "2023-11-24T17:36:42.659Z.json",
+        "window_index": 5,
+        "start_sample": 125,
+        "end_sample": 175,
+        "cluster": 3,
+        "x": -2.128190279006958,
+        "y": -3.010685920715332
+      },
+      {
+        "session": "2023-11-24T17:37:23.790Z.json",
+        "window_index": 0,
+        "start_sample": 0,
+        "end_sample": 50,
+        "cluster": 3,
+        "x": -1.9694913625717163,
+        "y": -3.3801000118255615
+      },
+      {
+        "session": "2023-11-24T17:37:23.790Z.json",
+        "window_index": 1,
+        "start_sample": 25,
+        "end_sample": 75,
+        "cluster": 3,
+        "x": -2.2880520820617676,
+        "y": -3.424802303314209
+      },
+      {
+        "session": "2023-11-24T17:37:23.790Z.json",
+        "window_index": 2,
+        "start_sample": 50,
+        "end_sample": 100,
+        "cluster": 3,
+        "x": -1.8124001026153564,
+        "y": -2.488792896270752
+      },
+      {
+        "session": "2023-11-24T17:37:23.790Z.json",
+        "window_index": 3,
+        "start_sample": 75,
+        "end_sample": 125,
+        "cluster": 9,
+        "x": -1.0068409442901611,
+        "y": 3.6837592124938965
+      },
+      {
+        "session": "2023-11-24T17:37:23.790Z.json",
+        "window_index": 4,
+        "start_sample": 100,
+        "end_sample": 150,
+        "cluster": 9,
+        "x": -0.7167460918426514,
+        "y": 3.632413387298584
+      },
+      {
+        "session": "2023-11-24T17:37:23.790Z.json",
+        "window_index": 5,
+        "start_sample": 125,
+        "end_sample": 175,
+        "cluster": 3,
+        "x": -1.9762879610061646,
+        "y": -1.9684221744537354
+      },
+      {
+        "session": "2023-11-24T17:44:59.523Z.json",
+        "window_index": 0,
+        "start_sample": 0,
+        "end_sample": 50,
+        "cluster": 5,
+        "x": 0.4078056812286377,
+        "y": 5.405614376068115
+      },
+      {
+        "session": "2023-11-24T17:44:59.523Z.json",
+        "window_index": 1,
+        "start_sample": 25,
+        "end_sample": 75,
+        "cluster": 8,
+        "x": -0.4085047245025635,
+        "y": -2.1795434951782227
+      },
+      {
+        "session": "2023-11-24T17:44:59.523Z.json",
+        "window_index": 2,
+        "start_sample": 50,
+        "end_sample": 100,
+        "cluster": 8,
+        "x": 0.5155400037765503,
+        "y": 0.3387366831302643
+      },
+      {
+        "session": "2023-11-24T17:44:59.523Z.json",
+        "window_index": 3,
+        "start_sample": 75,
+        "end_sample": 125,
+        "cluster": 8,
+        "x": 1.6819888353347778,
+        "y": -0.0696796402335167
+      },
+      {
+        "session": "2023-11-24T17:44:59.523Z.json",
+        "window_index": 4,
+        "start_sample": 100,
+        "end_sample": 150,
+        "cluster": 9,
+        "x": 1.2316895723342896,
+        "y": 4.185033798217773
+      },
+      {
+        "session": "2023-11-24T17:44:59.523Z.json",
+        "window_index": 5,
+        "start_sample": 125,
+        "end_sample": 175,
+        "cluster": 9,
+        "x": -0.04416399821639061,
+        "y": 4.4322099685668945
+      },
+      {
+        "session": "2023-11-24T22:05:54.664Z.json",
+        "window_index": 0,
+        "start_sample": 0,
+        "end_sample": 50,
+        "cluster": 9,
+        "x": -1.4161709547042847,
+        "y": 4.550771713256836
+      },
+      {
+        "session": "2023-11-24T22:05:54.664Z.json",
+        "window_index": 1,
+        "start_sample": 25,
+        "end_sample": 75,
+        "cluster": 9,
+        "x": -1.3231446743011475,
+        "y": 4.415542125701904
+      },
+      {
+        "session": "2023-11-24T22:05:54.664Z.json",
+        "window_index": 2,
+        "start_sample": 50,
+        "end_sample": 100,
+        "cluster": 3,
+        "x": -2.029945135116577,
+        "y": -0.04841367527842522
+      },
+      {
+        "session": "2023-11-24T22:05:54.664Z.json",
+        "window_index": 3,
+        "start_sample": 75,
+        "end_sample": 125,
+        "cluster": 3,
+        "x": -2.0677402019500732,
+        "y": -1.6709307432174683
+      },
+      {
+        "session": "2023-11-24T22:05:54.664Z.json",
+        "window_index": 4,
+        "start_sample": 100,
+        "end_sample": 150,
+        "cluster": 9,
+        "x": -1.1974607706069946,
+        "y": 4.548580169677734
+      },
+      {
+        "session": "2023-11-24T22:05:54.664Z.json",
+        "window_index": 5,
+        "start_sample": 125,
+        "end_sample": 175,
+        "cluster": 9,
+        "x": -0.9943320751190186,
+        "y": 4.760250568389893
+      },
+      {
+        "session": "2023-11-24T22:19:05.698Z.json",
+        "window_index": 0,
+        "start_sample": 0,
+        "end_sample": 50,
+        "cluster": 8,
+        "x": -3.108938455581665,
+        "y": 1.9488182067871094
+      },
+      {
+        "session": "2023-11-24T22:19:05.698Z.json",
+        "window_index": 1,
+        "start_sample": 25,
+        "end_sample": 75,
+        "cluster": 5,
+        "x": -2.624563694000244,
+        "y": 6.331325531005859
+      },
+      {
+        "session": "2023-11-24T22:19:05.698Z.json",
+        "window_index": 2,
+        "start_sample": 50,
+        "end_sample": 100,
+        "cluster": 5,
+        "x": -2.338322162628174,
+        "y": 6.209933280944824
+      },
+      {
+        "session": "2023-11-24T22:19:05.698Z.json",
+        "window_index": 3,
+        "start_sample": 75,
+        "end_sample": 125,
+        "cluster": 8,
+        "x": -1.5411772727966309,
+        "y": -2.5270469188690186
+      },
+      {
+        "session": "2023-11-24T22:19:05.698Z.json",
+        "window_index": 4,
+        "start_sample": 100,
+        "end_sample": 150,
+        "cluster": 8,
+        "x": -0.47166359424591064,
+        "y": -2.570385217666626
+      },
+      {
+        "session": "2023-11-24T22:19:05.698Z.json",
+        "window_index": 5,
+        "start_sample": 125,
+        "end_sample": 175,
+        "cluster": 8,
+        "x": -0.2158696949481964,
+        "y": -2.485090970993042
+      },
+      {
+        "session": "2023-11-24T22:19:47.909Z.json",
+        "window_index": 0,
+        "start_sample": 0,
+        "end_sample": 50,
+        "cluster": 5,
+        "x": -1.987033486366272,
+        "y": 6.617783069610596
+      },
+      {
+        "session": "2023-11-24T22:19:47.909Z.json",
+        "window_index": 1,
+        "start_sample": 25,
+        "end_sample": 75,
+        "cluster": 0,
+        "x": 0.827085018157959,
+        "y": 5.728567600250244
+      },
+      {
+        "session": "2023-11-24T22:19:47.909Z.json",
+        "window_index": 2,
+        "start_sample": 50,
+        "end_sample": 100,
+        "cluster": 0,
+        "x": 0.7120826244354248,
+        "y": 5.761371612548828
+      },
+      {
+        "session": "2023-11-24T22:19:47.909Z.json",
+        "window_index": 3,
+        "start_sample": 75,
+        "end_sample": 125,
+        "cluster": 0,
+        "x": -1.6266875267028809,
+        "y": 6.630711078643799
+      },
+      {
+        "session": "2023-11-24T22:19:47.909Z.json",
+        "window_index": 4,
+        "start_sample": 100,
+        "end_sample": 150,
+        "cluster": 8,
+        "x": -3.1663386821746826,
+        "y": -2.2620320320129395
+      },
+      {
+        "session": "2023-11-24T22:19:47.909Z.json",
+        "window_index": 5,
+        "start_sample": 125,
+        "end_sample": 175,
+        "cluster": 0,
+        "x": 1.973272442817688,
+        "y": 5.279346942901611
+      },
+      {
+        "session": "2023-11-24T22:20:26.429Z.json",
+        "window_index": 0,
+        "start_sample": 0,
+        "end_sample": 50,
+        "cluster": 6,
+        "x": 13.694015502929688,
+        "y": -5.973826885223389
+      },
+      {
+        "session": "2023-11-24T22:20:26.429Z.json",
+        "window_index": 1,
+        "start_sample": 25,
+        "end_sample": 75,
+        "cluster": 6,
+        "x": 15.05319595336914,
+        "y": 1.7898011207580566
+      },
+      {
+        "session": "2023-11-24T22:20:26.429Z.json",
+        "window_index": 2,
+        "start_sample": 50,
+        "end_sample": 100,
+        "cluster": 4,
+        "x": 8.704730987548828,
+        "y": 3.4697799682617188
+      },
+      {
+        "session": "2023-11-24T22:20:26.429Z.json",
+        "window_index": 3,
+        "start_sample": 75,
+        "end_sample": 125,
+        "cluster": 2,
+        "x": 7.963082790374756,
+        "y": -4.216421604156494
+      },
+      {
+        "session": "2023-11-24T22:20:26.429Z.json",
+        "window_index": 4,
+        "start_sample": 100,
+        "end_sample": 150,
+        "cluster": 2,
+        "x": 8.654572486877441,
+        "y": -5.356758117675781
+      },
+      {
+        "session": "2023-11-24T22:20:26.429Z.json",
+        "window_index": 5,
+        "start_sample": 125,
+        "end_sample": 175,
+        "cluster": 2,
+        "x": 8.077682495117188,
+        "y": -5.2954816818237305
+      },
+      {
+        "session": "2023-11-24T22:21:08.191Z.json",
+        "window_index": 0,
+        "start_sample": 0,
+        "end_sample": 50,
+        "cluster": 2,
+        "x": 5.286921501159668,
+        "y": -4.2247161865234375
+      },
+      {
+        "session": "2023-11-24T22:21:08.191Z.json",
+        "window_index": 1,
+        "start_sample": 25,
+        "end_sample": 75,
+        "cluster": 8,
+        "x": 1.5484906435012817,
+        "y": 0.24760445952415466
+      },
+      {
+        "session": "2023-11-24T22:21:08.191Z.json",
+        "window_index": 2,
+        "start_sample": 50,
+        "end_sample": 100,
+        "cluster": 0,
+        "x": -3.165864944458008,
+        "y": 5.204107284545898
+      },
+      {
+        "session": "2023-11-24T22:21:08.191Z.json",
+        "window_index": 3,
+        "start_sample": 75,
+        "end_sample": 125,
+        "cluster": 0,
+        "x": 1.9536278247833252,
+        "y": 4.515368461608887
+      },
+      {
+        "session": "2023-11-24T22:21:08.191Z.json",
+        "window_index": 4,
+        "start_sample": 100,
+        "end_sample": 150,
+        "cluster": 4,
+        "x": 3.9006545543670654,
+        "y": 3.9383509159088135
+      },
+      {
+        "session": "2023-11-24T22:21:08.191Z.json",
+        "window_index": 5,
+        "start_sample": 125,
+        "end_sample": 175,
+        "cluster": 2,
+        "x": 3.6278293132781982,
+        "y": 0.0823669359087944
+      },
+      {
+        "session": "2023-11-24T22:25:19.216Z.json",
+        "window_index": 0,
+        "start_sample": 0,
+        "end_sample": 50,
+        "cluster": 4,
+        "x": 9.1419038772583,
+        "y": 3.752926826477051
+      },
+      {
+        "session": "2023-11-24T22:25:19.216Z.json",
+        "window_index": 1,
+        "start_sample": 25,
+        "end_sample": 75,
+        "cluster": 6,
+        "x": 16.006406784057617,
+        "y": -1.9744459390640259
+      },
+      {
+        "session": "2023-11-24T22:25:19.216Z.json",
+        "window_index": 2,
+        "start_sample": 50,
+        "end_sample": 100,
+        "cluster": 6,
+        "x": 17.266881942749023,
+        "y": 2.6086463928222656
+      },
+      {
+        "session": "2023-11-24T22:25:19.216Z.json",
+        "window_index": 3,
+        "start_sample": 75,
+        "end_sample": 125,
+        "cluster": 6,
+        "x": 14.601590156555176,
+        "y": 3.469806432723999
+      },
+      {
+        "session": "2023-11-24T22:25:19.216Z.json",
+        "window_index": 4,
+        "start_sample": 100,
+        "end_sample": 150,
+        "cluster": 4,
+        "x": 8.196615219116211,
+        "y": 3.9392201900482178
+      },
+      {
+        "session": "2023-11-24T22:25:19.216Z.json",
+        "window_index": 5,
+        "start_sample": 125,
+        "end_sample": 175,
+        "cluster": 4,
+        "x": 5.031006813049316,
+        "y": 4.429172515869141
+      },
+      {
+        "session": "2023-11-24T22:25:51.821Z.json",
+        "window_index": 0,
+        "start_sample": 0,
+        "end_sample": 50,
+        "cluster": 5,
+        "x": -1.1051194667816162,
+        "y": 6.393889427185059
+      },
+      {
+        "session": "2023-11-24T22:25:51.821Z.json",
+        "window_index": 1,
+        "start_sample": 25,
+        "end_sample": 75,
+        "cluster": 8,
+        "x": -2.162785768508911,
+        "y": 2.0518441200256348
+      },
+      {
+        "session": "2023-11-24T22:25:51.821Z.json",
+        "window_index": 2,
+        "start_sample": 50,
+        "end_sample": 100,
+        "cluster": 8,
+        "x": -0.8245456218719482,
+        "y": 1.5959545373916626
+      },
+      {
+        "session": "2023-11-24T22:25:51.821Z.json",
+        "window_index": 3,
+        "start_sample": 75,
+        "end_sample": 125,
+        "cluster": 2,
+        "x": 2.7297089099884033,
+        "y": -3.88739013671875
+      },
+      {
+        "session": "2023-11-24T22:25:51.821Z.json",
+        "window_index": 4,
+        "start_sample": 100,
+        "end_sample": 150,
+        "cluster": 2,
+        "x": 3.085564613342285,
+        "y": -3.985809803009033
+      },
+      {
+        "session": "2023-11-24T22:25:51.821Z.json",
+        "window_index": 5,
+        "start_sample": 125,
+        "end_sample": 175,
+        "cluster": 2,
+        "x": 2.2122914791107178,
+        "y": -3.7681899070739746
+      },
+      {
+        "session": "2023-11-24T22:27:35.295Z.json",
+        "window_index": 0,
+        "start_sample": 0,
+        "end_sample": 50,
+        "cluster": 5,
+        "x": 0.30080246925354004,
+        "y": 5.203863143920898
+      },
+      {
+        "session": "2023-11-24T22:27:35.295Z.json",
+        "window_index": 1,
+        "start_sample": 25,
+        "end_sample": 75,
+        "cluster": 5,
+        "x": 0.44649553298950195,
+        "y": 5.163247585296631
+      },
+      {
+        "session": "2023-11-24T22:27:35.295Z.json",
+        "window_index": 2,
+        "start_sample": 50,
+        "end_sample": 100,
+        "cluster": 5,
+        "x": 0.6632599234580994,
+        "y": 5.739665508270264
+      },
+      {
+        "session": "2023-11-24T22:27:35.295Z.json",
+        "window_index": 3,
+        "start_sample": 75,
+        "end_sample": 125,
+        "cluster": 5,
+        "x": 0.3588493764400482,
+        "y": 5.8292694091796875
+      },
+      {
+        "session": "2023-11-24T22:27:35.295Z.json",
+        "window_index": 4,
+        "start_sample": 100,
+        "end_sample": 150,
+        "cluster": 5,
+        "x": 0.49756884574890137,
+        "y": 5.6861395835876465
+      },
+      {
+        "session": "2023-11-24T22:27:35.295Z.json",
+        "window_index": 5,
+        "start_sample": 125,
+        "end_sample": 175,
+        "cluster": 5,
+        "x": 0.4617639183998108,
+        "y": 6.128696918487549
+      },
+      {
+        "session": "2023-11-24T22:33:46.427Z.json",
+        "window_index": 0,
+        "start_sample": 0,
+        "end_sample": 50,
+        "cluster": 5,
+        "x": -0.3292175829410553,
+        "y": 6.010688304901123
+      },
+      {
+        "session": "2023-11-24T22:33:46.427Z.json",
+        "window_index": 1,
+        "start_sample": 25,
+        "end_sample": 75,
+        "cluster": 8,
+        "x": -1.1278611421585083,
+        "y": 1.4917083978652954
+      },
+      {
+        "session": "2023-11-24T22:33:46.427Z.json",
+        "window_index": 2,
+        "start_sample": 50,
+        "end_sample": 100,
+        "cluster": 5,
+        "x": 0.5216063857078552,
+        "y": 5.974645614624023
+      },
+      {
+        "session": "2023-11-24T22:33:46.427Z.json",
+        "window_index": 3,
+        "start_sample": 75,
+        "end_sample": 125,
+        "cluster": 5,
+        "x": 0.36846277117729187,
+        "y": 6.050394535064697
+      },
+      {
+        "session": "2023-11-24T22:33:46.427Z.json",
+        "window_index": 4,
+        "start_sample": 100,
+        "end_sample": 150,
+        "cluster": 8,
+        "x": -3.0734939575195312,
+        "y": -0.6270329356193542
+      },
+      {
+        "session": "2023-11-24T22:33:46.427Z.json",
+        "window_index": 5,
+        "start_sample": 125,
+        "end_sample": 175,
+        "cluster": 8,
+        "x": -2.073056936264038,
+        "y": -1.7176051139831543
+      },
+      {
+        "session": "2024-01-05T16:40:02.821Z.json",
+        "window_index": 0,
+        "start_sample": 0,
+        "end_sample": 50,
+        "cluster": 7,
+        "x": 2.4570164680480957,
+        "y": -7.136424541473389
+      },
+      {
+        "session": "2024-01-05T16:40:02.821Z.json",
+        "window_index": 1,
+        "start_sample": 25,
+        "end_sample": 75,
+        "cluster": 7,
+        "x": 2.558271646499634,
+        "y": -7.1143293380737305
+      },
+      {
+        "session": "2024-01-05T16:40:02.821Z.json",
+        "window_index": 2,
+        "start_sample": 50,
+        "end_sample": 100,
+        "cluster": 7,
+        "x": 2.5494613647460938,
+        "y": -6.765252113342285
+      },
+      {
+        "session": "2024-01-05T16:41:20.581Z.json",
+        "window_index": 0,
+        "start_sample": 0,
+        "end_sample": 50,
+        "cluster": 7,
+        "x": 1.2203221321105957,
+        "y": -7.018932819366455
+      },
+      {
+        "session": "2024-01-05T16:41:20.581Z.json",
+        "window_index": 1,
+        "start_sample": 25,
+        "end_sample": 75,
+        "cluster": 7,
+        "x": 8.091577529907227,
+        "y": -8.381004333496094
+      },
+      {
+        "session": "2024-01-05T16:41:20.581Z.json",
+        "window_index": 2,
+        "start_sample": 50,
+        "end_sample": 100,
+        "cluster": 7,
+        "x": 8.073186874389648,
+        "y": -8.434232711791992
+      },
+      {
+        "session": "2024-01-05T16:41:20.581Z.json",
+        "window_index": 3,
+        "start_sample": 75,
+        "end_sample": 125,
+        "cluster": 7,
+        "x": 0.18975459039211273,
+        "y": -6.170447826385498
+      },
+      {
+        "session": "2024-01-05T16:41:20.581Z.json",
+        "window_index": 4,
+        "start_sample": 100,
+        "end_sample": 150,
+        "cluster": 7,
+        "x": 0.043145906180143356,
+        "y": -6.221652984619141
+      },
+      {
+        "session": "2024-01-05T16:41:20.581Z.json",
+        "window_index": 5,
+        "start_sample": 125,
+        "end_sample": 175,
+        "cluster": 7,
+        "x": -0.6097431778907776,
+        "y": -6.126227855682373
+      }
+    ]
+  },
+  "gestures": [
+    "rest",
+    "fist",
+    "open_palm",
+    "index_up",
+    "peace",
+    "thumbs_up",
+    "ok_sign",
+    "pinch",
+    "grab",
+    "wave"
+  ],
+  "config": {
+    "window_size": 50,
+    "stride": 25,
+    "sample_rate": 50
+  }
+};
+        
+        // Cluster colors
+        const clusterColors = ["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00", "#ffff33", "#a65628", "#f781bf", "#999999", "#66c2a5"];
+        
+        // State
+        let selectedCluster = null;
+        let clusterGestureAssignments = {};
+        let filteredSessions = [...explorerData.sessions];
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initTabs();
+            initClusterCanvas();
+            initClusterLegend();
+            initFilters();
+            renderSessions();
+            initLabelingPanel();
+        });
+        
+        // Tab switching
+        function initTabs() {
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                    tab.classList.add('active');
+                    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+                });
+            });
+        }
+        
+        // Canvas cluster visualization
+        function initClusterCanvas() {
+            const canvas = document.getElementById('clusterCanvas');
+            const ctx = canvas.getContext('2d');
+            const points = explorerData.clustering.points || [];
+            
+            if (points.length === 0) {
+                ctx.fillStyle = '#666';
+                ctx.font = '14px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('No clustering data available', canvas.width / 2, canvas.height / 2);
+                return;
+            }
+            
+            // Set canvas size
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * window.devicePixelRatio;
+            canvas.height = rect.height * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+            
+            // Find bounds
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            points.forEach(p => {
+                minX = Math.min(minX, p.x);
+                maxX = Math.max(maxX, p.x);
+                minY = Math.min(minY, p.y);
+                maxY = Math.max(maxY, p.y);
+            });
+            
+            const padding = 20;
+            const width = rect.width - padding * 2;
+            const height = rect.height - padding * 2;
+            
+            function toCanvas(x, y) {
+                return {
+                    x: padding + ((x - minX) / (maxX - minX)) * width,
+                    y: padding + ((y - minY) / (maxY - minY)) * height
+                };
+            }
+            
+            function draw() {
+                ctx.clearRect(0, 0, rect.width, rect.height);
+                
+                // Draw points
+                points.forEach(p => {
+                    const pos = toCanvas(p.x, p.y);
+                    const color = clusterColors[p.cluster % clusterColors.length];
+                    const isSelected = selectedCluster === null || selectedCluster === p.cluster;
+                    
+                    ctx.beginPath();
+                    ctx.arc(pos.x, pos.y, isSelected ? 5 : 3, 0, Math.PI * 2);
+                    ctx.fillStyle = isSelected ? color : color + '40';
+                    ctx.fill();
+                });
+            }
+            
+            draw();
+            
+            // Click handler
+            canvas.addEventListener('click', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                // Find closest point
+                let closest = null;
+                let minDist = Infinity;
+                
+                points.forEach(p => {
+                    const pos = toCanvas(p.x, p.y);
+                    const dist = Math.sqrt((pos.x - x) ** 2 + (pos.y - y) ** 2);
+                    if (dist < minDist && dist < 15) {
+                        minDist = dist;
+                        closest = p;
+                    }
+                });
+                
+                if (closest) {
+                    selectCluster(closest.cluster);
+                } else {
+                    selectCluster(null);
+                }
+                draw();
+            });
+            
+            window.redrawCanvas = draw;
+        }
+        
+        // Cluster legend
+        function initClusterLegend() {
+            const legend = document.getElementById('clusterLegend');
+            const clusters = explorerData.clustering.clusters || [];
+            
+            legend.innerHTML = clusters.map(c => `
+                <div class="cluster-item" data-cluster="${c.id}" onclick="selectCluster(${c.id})">
+                    <div class="cluster-dot" style="background: ${clusterColors[c.id % clusterColors.length]}"></div>
+                    <span>Cluster ${c.id}</span>
+                    <span class="cluster-count">${c.size}</span>
+                </div>
+            `).join('');
+            
+            // Populate filter dropdown
+            const filter = document.getElementById('clusterFilter');
+            clusters.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c.id;
+                opt.textContent = `Cluster ${c.id} (${c.size})`;
+                filter.appendChild(opt);
+            });
+        }
+        
+        function selectCluster(clusterId) {
+            selectedCluster = clusterId === selectedCluster ? null : clusterId;
+            
+            // Update legend
+            document.querySelectorAll('.cluster-item').forEach(item => {
+                item.classList.toggle('selected', parseInt(item.dataset.cluster) === selectedCluster);
+            });
+            
+            // Update filter dropdown
+            document.getElementById('clusterFilter').value = selectedCluster !== null ? selectedCluster : 'all';
+            
+            // Filter sessions
+            applyFilters();
+            
+            // Redraw canvas
+            if (window.redrawCanvas) window.redrawCanvas();
+        }
+        
+        // Filters
+        function initFilters() {
+            document.getElementById('searchBox').addEventListener('input', applyFilters);
+            document.getElementById('clusterFilter').addEventListener('change', (e) => {
+                selectedCluster = e.target.value === 'all' ? null : parseInt(e.target.value);
+                applyFilters();
+                if (window.redrawCanvas) window.redrawCanvas();
+            });
+            document.getElementById('sortSelect').addEventListener('change', applyFilters);
+        }
+        
+        function applyFilters() {
+            const search = document.getElementById('searchBox').value.toLowerCase();
+            const sort = document.getElementById('sortSelect').value;
+            
+            filteredSessions = explorerData.sessions.filter(s => {
+                // Search filter
+                if (search && !s.filename.toLowerCase().includes(search)) return false;
+                
+                // Cluster filter
+                if (selectedCluster !== null) {
+                    const hasCluster = s.windows.some(w => w.cluster_id === selectedCluster);
+                    if (!hasCluster) return false;
+                }
+                
+                return true;
+            });
+            
+            // Sort
+            filteredSessions.sort((a, b) => {
+                switch(sort) {
+                    case 'timestamp-desc': return b.timestamp.localeCompare(a.timestamp);
+                    case 'timestamp-asc': return a.timestamp.localeCompare(b.timestamp);
+                    case 'duration-desc': return b.duration - a.duration;
+                    case 'windows-desc': return b.windows.length - a.windows.length;
+                    default: return 0;
+                }
+            });
+            
+            renderSessions();
+        }
+        
+        // Render sessions
+        function renderSessions() {
+            const grid = document.getElementById('sessionGrid');
+            
+            if (filteredSessions.length === 0) {
+                grid.innerHTML = '<div style="text-align: center; padding: 40px; opacity: 0.6;">No sessions match your filters</div>';
+                return;
+            }
+            
+            grid.innerHTML = filteredSessions.map((s, idx) => `
+                <div class="session-card" id="session-${idx}">
+                    <div class="session-header" onclick="toggleSession(${idx})">
+                        <div>
+                            <div class="session-title">${s.filename}</div>
+                            <div class="session-info">${formatTimestamp(s.timestamp)} | ${s.duration.toFixed(1)}s | ${s.windows.length} windows</div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div class="session-badges">
+                                <span class="badge ${s.labeled ? 'labeled' : 'unlabeled'}">${s.labeled ? 'Labeled' : 'Unlabeled'}</span>
+                            </div>
+                            <span class="expand-icon">▼</span>
+                        </div>
+                    </div>
+                    <div class="session-content">
+                        ${s.composite_image ? `
+                            <h3 class="section-title">📊 Composite View</h3>
+                            <img src="${s.composite_image}" class="composite-image" onclick="openModal(this.src)">
+                        ` : ''}
+                        
+                        <h3 class="section-title">🔍 Windows (${s.windows.length})</h3>
+                        <div class="windows-grid">
+                            ${s.windows.map(w => `
+                                <div class="window-card ${selectedCluster !== null && w.cluster_id === selectedCluster ? 'highlighted' : ''}">
+                                    <div class="window-cluster-bar" style="background: ${w.cluster_id >= 0 ? clusterColors[w.cluster_id % clusterColors.length] : '#444'}"></div>
+                                    ${w.filepath ? `<img src="${w.filepath}" class="window-preview" onclick="openModal(this.src)">` : '<div class="window-preview" style="background: #333; display: flex; align-items: center; justify-content: center; color: #666;">No image</div>'}
+                                    <div class="window-info">
+                                        <div class="window-title">Window ${w.window_num || '?'}</div>
+                                        <div class="window-time">${(w.time_start || 0).toFixed(2)}s - ${(w.time_end || 0).toFixed(2)}s</div>
+                                        <div class="window-cluster" style="color: ${w.cluster_id >= 0 ? clusterColors[w.cluster_id % clusterColors.length] : '#666'}">
+                                            ${w.cluster_id >= 0 ? `Cluster ${w.cluster_id}` : 'No cluster'}
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                        
+                        ${s.raw_images && s.raw_images.length > 0 ? `
+                            <h3 class="section-title">📐 Raw Views</h3>
+                            <div class="raw-images">
+                                ${s.raw_images.map(img => `<img src="${img}" class="raw-image" onclick="openModal(this.src)">`).join('')}
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function toggleSession(idx) {
+            document.getElementById(`session-${idx}`).classList.toggle('expanded');
+        }
+        
+        function formatTimestamp(ts) {
+            try { return new Date(ts).toLocaleString(); }
+            catch { return ts; }
+        }
+        
+        // Modal
+        function openModal(src) {
+            document.getElementById('imageModal').classList.add('active');
+            document.getElementById('modalImage').src = src;
+        }
+        
+        function closeModal() {
+            document.getElementById('imageModal').classList.remove('active');
+        }
+        
+        document.getElementById('imageModal').addEventListener('click', (e) => {
+            if (e.target.id === 'imageModal') closeModal();
+        });
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeModal();
+        });
+        
+        // Labeling panel
+        function initLabelingPanel() {
+            const panel = document.getElementById('clusterLabeling');
+            const clusters = explorerData.clustering.clusters || [];
+            const gestures = explorerData.gestures || [];
+            
+            panel.innerHTML = clusters.map(c => `
+                <div style="display: flex; align-items: center; gap: 15px; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 8px; margin-bottom: 10px;">
+                    <div class="cluster-dot" style="background: ${clusterColors[c.id % clusterColors.length]}; width: 16px; height: 16px;"></div>
+                    <span style="min-width: 80px;">Cluster ${c.id}</span>
+                    <span style="opacity: 0.6; min-width: 60px;">(${c.size} windows)</span>
+                    <select class="gesture-select" data-cluster="${c.id}" style="flex: 1; padding: 8px; background: #0f0f23; border: 2px solid #2a2a4a; border-radius: 6px; color: #eee;">
+                        <option value="">-- Select Gesture --</option>
+                        ${gestures.map(g => `<option value="${g}">${g}</option>`).join('')}
+                    </select>
+                </div>
+            `).join('');
+            
+            // Track changes
+            panel.querySelectorAll('.gesture-select').forEach(select => {
+                select.addEventListener('change', (e) => {
+                    const clusterId = parseInt(e.target.dataset.cluster);
+                    clusterGestureAssignments[clusterId] = e.target.value || null;
+                });
+            });
+            
+            // Export button
+            document.getElementById('exportBtn').addEventListener('click', exportLabels);
+        }
+        
+        function exportLabels() {
+            const assignments = clusterGestureAssignments;
+            const hasAssignments = Object.values(assignments).some(v => v);
+            
+            if (!hasAssignments) {
+                alert('Please assign at least one gesture to a cluster before exporting.');
+                return;
+            }
+            
+            // Build label templates for each session
+            const templates = {};
+            
+            explorerData.sessions.forEach(session => {
+                const labels = [];
+                
+                session.windows.forEach(w => {
+                    const gesture = assignments[w.cluster_id];
+                    if (gesture) {
+                        labels.push({
+                            start_sample: Math.round((w.time_start || 0) * 50),
+                            end_sample: Math.round((w.time_end || 1) * 50),
+                            gesture: gesture,
+                            confidence: 'medium',
+                            cluster_id: w.cluster_id
+                        });
+                    }
+                });
+                
+                if (labels.length > 0) {
+                    templates[session.filename] = {
+                        timestamp: session.timestamp,
+                        labels: labels
+                    };
+                }
+            });
+            
+            // Download as JSON
+            const blob = new Blob([JSON.stringify(templates, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'label_templates.json';
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            alert(`Exported labels for ${Object.keys(templates).length} sessions.\n\nTo use:\n1. Split the JSON into individual .meta.json files\n2. Move to your data directory`);
+        }
+    </script>
+</body>
+</html>
