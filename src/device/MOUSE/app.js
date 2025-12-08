@@ -13,6 +13,26 @@
  * Hardware: Espruino Puck.js v2
  */
 
+// ===== Firmware Configuration =====
+var FIRMWARE_INFO = {
+    id: "MOUSE",
+    name: "SIMCAP Mouse",
+    version: "0.1.0",
+    features: ["hid", "mouse", "scroll", "tilt-control"],
+    author: "SIMCAP"
+};
+
+// Track boot time for uptime calculation
+var bootTime = Date.now();
+
+// Return firmware information for compatibility checking
+function getFirmware() {
+    var uptimeMs = Date.now() - bootTime;
+    var info = Object.assign({}, FIRMWARE_INFO, { uptime: uptimeMs });
+    console.log("\nFIRMWARE" + JSON.stringify(info));
+    return info;
+}
+
 var mouse = require("ble_hid_mouse");
 
 // Configuration

@@ -1,3 +1,23 @@
+// ===== Firmware Configuration =====
+var FIRMWARE_INFO = {
+    id: "BAE",
+    name: "Bluetooth Advertise Everything",
+    version: "0.1.0",
+    features: ["advertising", "sensors", "nfc", "movement", "magnetic"],
+    author: "SIMCAP"
+};
+
+// Track boot time for uptime calculation
+var bootTime = Date.now();
+
+// Return firmware information for compatibility checking
+function getFirmware() {
+    var uptimeMs = Date.now() - bootTime;
+    var info = Object.assign({}, FIRMWARE_INFO, { uptime: uptimeMs });
+    console.log("\nFIRMWARE" + JSON.stringify(info));
+    return info;
+}
+
 var state =1;
 NRF.setTxPower(4); // Full Power advertising
 

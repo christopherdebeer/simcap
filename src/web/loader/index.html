@@ -255,6 +255,86 @@
         .info-box strong {
             color: var(--primary);
         }
+
+        /* Firmware status display */
+        .firmware-status {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        .firmware-status.unknown {
+            background: rgba(136,136,136,0.2);
+            border: 1px solid var(--text-muted);
+        }
+        .firmware-status.detected {
+            background: rgba(0,255,136,0.15);
+            border: 1px solid var(--success);
+        }
+        .firmware-status.not-detected {
+            background: rgba(255,165,2,0.15);
+            border: 1px solid var(--warning);
+        }
+        .firmware-icon {
+            font-size: 1.5em;
+        }
+        .firmware-name {
+            font-weight: 600;
+            color: var(--primary);
+            font-size: 1.1em;
+        }
+        .firmware-version {
+            color: var(--text-muted);
+            font-size: 0.9em;
+        }
+        .firmware-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 10px;
+            font-size: 0.85em;
+        }
+        .firmware-meta-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .firmware-meta-item .label {
+            color: var(--text-muted);
+        }
+        .firmware-meta-item .value {
+            color: var(--text);
+            font-weight: 500;
+        }
+        .firmware-features {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 10px;
+        }
+        .firmware-feature-tag {
+            background: var(--surface-alt);
+            color: var(--primary);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.75em;
+            font-weight: 500;
+        }
+        .refresh-btn {
+            padding: 6px 12px;
+            font-size: 0.8em;
+            background: var(--surface-alt);
+            color: var(--text);
+            border: 1px solid #444;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .refresh-btn:hover {
+            background: #333;
+        }
     </style>
 </head>
 <body>
@@ -336,6 +416,17 @@ setTimeout(function() { LED1.reset(); }, 1000);
         <div class="row">
             <div><strong>Battery:</strong> <span id="batteryLevel">--</span>%</div>
             <div><strong>Temperature:</strong> <span id="tempLevel">--</span>°C</div>
+        </div>
+    </div>
+
+    <!-- Firmware Info -->
+    <div class="card" id="firmwareInfo" style="display: none;">
+        <h2>Loaded Firmware</h2>
+        <div id="firmwareDetails">
+            <div class="firmware-status unknown">
+                <span class="firmware-icon">❓</span>
+                <span>Querying firmware...</span>
+            </div>
         </div>
     </div>
 
@@ -636,6 +727,11 @@ setTimeout(function() { LED1.reset(); }, 1000);
                     }
                 }, 500);
 
+                // Query firmware info after device info
+                setTimeout(() => {
+                    queryFirmwareInfo();
+                }, 1500);
+
                 updateUI();
             });
         } catch (error) {
@@ -901,6 +997,149 @@ setTimeout(function() { LED1.reset(); }, 1000);
     consoleInput.addEventListener('keypress', e => {
         if (e.key === 'Enter') sendCmd.click();
     });
+
+    // ===== Firmware Info Query =====
+    function queryFirmwareInfo() {
+        if (!state.connected || !state.connection) {
+            log('[DEBUG] Firmware query aborted: Not connected', 'warn');
+            return;
+        }
+
+        log('[DEBUG] ========== QUERYING FIRMWARE INFO ==========', 'info');
+        
+        // Show firmware info card with loading state
+        const firmwareInfo = $('firmwareInfo');
+        const firmwareDetails = $('firmwareDetails');
+        firmwareInfo.style.display = 'block';
+        firmwareDetails.innerHTML = `
+            <div class="firmware-status unknown">
+                <span class="firmware-icon">⏳</span>
+                <span>Querying firmware...</span>
+            </div>
+        `;
+
+        let fwData = '';
+        let timeout;
+        const originalDataHandler = state.connection.ondata;
+
+        const fwHandler = (data) => {
+            log('[DEBUG] Firmware query data received: ' + JSON.stringify(data), 'info');
+            fwData += data;
+
+            // Look for FIRMWARE marker followed by JSON
+            const match = fwData.match(/FIRMWARE(\{[^}]+\})/);
+            if (match) {
+                clearTimeout(timeout);
+                try {
+                    const info = JSON.parse(match[1]);
+                    log(`[DEBUG] Firmware info parsed: ${JSON.stringify(info)}`, 'success');
+                    state.connection.ondata = originalDataHandler;
+                    updateFirmwareDisplay(info);
+                } catch (e) {
+                    log(`[DEBUG] Firmware JSON parse error: ${e.message}`, 'error');
+                    state.connection.ondata = originalDataHandler;
+                    updateFirmwareDisplay(null);
+                }
+            }
+        };
+
+        state.connection.ondata = (data) => {
+            if (originalDataHandler) originalDataHandler(data);
+            fwHandler(data);
+        };
+
+        // Set timeout for firmware query
+        timeout = setTimeout(() => {
+            log('[DEBUG] Firmware query timeout - getFirmware() may not exist', 'warn');
+            state.connection.ondata = originalDataHandler;
+            updateFirmwareDisplay(null);
+        }, 3000);
+
+        // Query getFirmware() function
+        log('[DEBUG] Sending: getFirmware()', 'info');
+        state.connection.write('\x10if(typeof getFirmware==="function")getFirmware();\n', (err) => {
+            if (err) {
+                log('[DEBUG] Firmware query write error: ' + err, 'error');
+                clearTimeout(timeout);
+                state.connection.ondata = originalDataHandler;
+                updateFirmwareDisplay(null);
+            } else {
+                log('[DEBUG] Firmware query command sent successfully', 'success');
+            }
+        });
+    }
+
+    function updateFirmwareDisplay(info) {
+        const firmwareDetails = $('firmwareDetails');
+        
+        if (!info) {
+            firmwareDetails.innerHTML = `
+                <div class="firmware-status not-detected">
+                    <span class="firmware-icon">⚠️</span>
+                    <div>
+                        <div>No SIMCAP firmware detected</div>
+                        <div class="firmware-version">Device may have custom code or no firmware loaded</div>
+                    </div>
+                </div>
+                <button class="refresh-btn" onclick="queryFirmwareInfo()">🔄 Refresh</button>
+            `;
+            return;
+        }
+
+        // Format uptime
+        let uptimeStr = '--';
+        if (info.uptime !== undefined) {
+            const uptimeMs = info.uptime;
+            const seconds = Math.floor(uptimeMs / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+            const days = Math.floor(hours / 24);
+
+            if (days > 0) {
+                uptimeStr = `${days}d ${hours % 24}h ${minutes % 60}m`;
+            } else if (hours > 0) {
+                uptimeStr = `${hours}h ${minutes % 60}m ${seconds % 60}s`;
+            } else if (minutes > 0) {
+                uptimeStr = `${minutes}m ${seconds % 60}s`;
+            } else {
+                uptimeStr = `${seconds}s`;
+            }
+        }
+
+        // Build features tags
+        let featuresHtml = '';
+        if (info.features && Array.isArray(info.features)) {
+            featuresHtml = `
+                <div class="firmware-features">
+                    ${info.features.map(f => `<span class="firmware-feature-tag">${f}</span>`).join('')}
+                </div>
+            `;
+        }
+
+        firmwareDetails.innerHTML = `
+            <div class="firmware-status detected">
+                <span class="firmware-icon">✅</span>
+                <div>
+                    <div class="firmware-name">${info.name || info.id || 'Unknown'}</div>
+                    <div class="firmware-version">v${info.version || '?'} ${info.author ? `by ${info.author}` : ''}</div>
+                </div>
+            </div>
+            <div class="firmware-meta">
+                <div class="firmware-meta-item">
+                    <span class="label">ID:</span>
+                    <span class="value">${info.id || '--'}</span>
+                </div>
+                <div class="firmware-meta-item">
+                    <span class="label">Uptime:</span>
+                    <span class="value">${uptimeStr}</span>
+                </div>
+            </div>
+            ${featuresHtml}
+            <button class="refresh-btn" onclick="queryFirmwareInfo()">🔄 Refresh</button>
+        `;
+
+        log(`Firmware detected: ${info.name || info.id} v${info.version || '?'} (uptime: ${uptimeStr})`, 'success');
+    }
 
     // ===== Enhanced Puck.js Logging =====
     // Override Puck.js log function to capture all BLE debug output
