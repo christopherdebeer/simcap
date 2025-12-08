@@ -98,6 +98,7 @@
             margin-bottom: 15px;
         }
         .status-bar.disconnected { background: rgba(255,71,87,0.2); border: 1px solid var(--danger); }
+        .status-bar.connecting { background: rgba(0,212,255,0.2); border: 1px solid var(--primary); }
         .status-bar.connected { background: rgba(0,255,136,0.2); border: 1px solid var(--success); }
         .status-bar.uploading { background: rgba(255,165,2,0.2); border: 1px solid var(--warning); }
         .status-dot {
@@ -106,6 +107,7 @@
             border-radius: 50%;
         }
         .disconnected .status-dot { background: var(--danger); }
+        .connecting .status-dot { background: var(--primary); animation: pulse 1s infinite; }
         .connected .status-dot { background: var(--success); }
         .uploading .status-dot { background: var(--warning); animation: pulse 1s infinite; }
         @keyframes pulse {
@@ -462,6 +464,8 @@ setTimeout(function() { LED1.reset(); }, 1000);
     // ===== State =====
     let state = {
         connected: false,
+        connecting: false,
+        connectingStatus: '',
         selectedFirmware: null,
         connection: null,
         uploading: false
@@ -493,16 +497,30 @@ setTimeout(function() { LED1.reset(); }, 1000);
         line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
         consoleOutput.appendChild(line);
         consoleOutput.scrollTop = consoleOutput.scrollHeight;
+        console.log({type,msg})
     }
 
     // ===== UI Updates =====
     function updateUI() {
         // Status bar
-        statusBar.className = 'status-bar ' +
-            (state.uploading ? 'uploading' : (state.connected ? 'connected' : 'disconnected'));
-        statusText.textContent = state.uploading ? 'Uploading...' :
-            (state.connected ? 'Connected' : 'Not connected');
-        connectBtn.textContent = state.connected ? 'Disconnect' : 'Connect';
+        let statusClass = 'disconnected';
+        let statusLabel = 'Not connected';
+        
+        if (state.uploading) {
+            statusClass = 'uploading';
+            statusLabel = 'Uploading...';
+        } else if (state.connected) {
+            statusClass = 'connected';
+            statusLabel = 'Connected';
+        } else if (state.connecting) {
+            statusClass = 'connecting';
+            statusLabel = state.connectingStatus || 'Connecting...';
+        }
+        
+        statusBar.className = 'status-bar ' + statusClass;
+        statusText.textContent = statusLabel;
+        connectBtn.textContent = state.connected ? 'Disconnect' : (state.connecting ? 'Cancel' : 'Connect');
+        connectBtn.disabled = state.uploading;
 
         // Buttons
         const canUpload = state.connected && !state.uploading;
@@ -579,8 +597,20 @@ setTimeout(function() { LED1.reset(); }, 1000);
             log('[DEBUG] Calling Puck.close()...', 'warn');
             Puck.close();
             state.connected = false;
+            state.connecting = false;
             state.connection = null;
             log('Disconnected', 'warn');
+            updateUI();
+            return;
+        }
+
+        // Cancel if already connecting
+        if (state.connecting) {
+            log('[DEBUG] Cancelling connection attempt...', 'warn');
+            Puck.close();
+            state.connecting = false;
+            state.connectingStatus = '';
+            log('Connection cancelled', 'warn');
             updateUI();
             return;
         }
@@ -593,19 +623,43 @@ setTimeout(function() { LED1.reset(); }, 1000);
         log('[DEBUG]   - Timestamp: ' + new Date().toISOString(), 'info');
 
         const connectStartTime = Date.now();
+        
+        // Set connecting state
+        state.connecting = true;
+        state.connectingStatus = 'Scanning for devices...';
+        updateUI();
         log('Connecting...');
+
+        // Set a connection timeout - if callback doesn't fire within 60s, reset state
+        // Note: BLE service discovery can take 30-50s on some devices
+        const connectionTimeout = setTimeout(() => {
+            if (state.connecting) {
+                log('[DEBUG] Connection timeout after 60s - callback never fired', 'error');
+                state.connecting = false;
+                state.connectingStatus = '';
+                log('Connection timeout - please try again', 'error');
+                Puck.close();
+                updateUI();
+            }
+        }, 60000);
 
         try {
             log('[DEBUG] Calling Puck.connect()...', 'info');
 
             Puck.connect(conn => {
+                // Clear the connection timeout
+                clearTimeout(connectionTimeout);
+                // Clear connecting state immediately
+                state.connecting = false;
+                state.connectingStatus = '';
                 const connectDuration = Date.now() - connectStartTime;
                 log(`[DEBUG] ===== Connect callback fired (${connectDuration}ms elapsed) =====`, 'info');
 
                 if (!conn) {
                     log('[DEBUG] Connection object is null/undefined', 'error');
                     log('[DEBUG] This usually means user cancelled or connection failed', 'error');
-                    log('Connection failed', 'error');
+                    log('Connection failed or cancelled', 'error');
+                    updateUI();
                     return;
                 }
 
@@ -735,9 +789,12 @@ setTimeout(function() { LED1.reset(); }, 1000);
                 updateUI();
             });
         } catch (error) {
+            state.connecting = false;
+            state.connectingStatus = '';
             log('[DEBUG] Exception during connection: ' + error.message, 'error');
             log('[DEBUG] Stack trace: ' + error.stack, 'error');
             log('Connection error: ' + error.message, 'error');
+            updateUI();
         }
     });
 
@@ -1146,17 +1203,91 @@ setTimeout(function() { LED1.reset(); }, 1000);
     if (typeof Puck !== 'undefined') {
         log('[DEBUG] Setting up enhanced Puck.js logging', 'info');
         Puck.debug = 3; // Maximum debug level
+        
+        // Log all Puck object properties for debugging
+        log('[DEBUG] Puck object keys: ' + Object.keys(Puck).join(', '), 'info');
+        
         const originalPuckLog = Puck.log;
         Puck.log = function(level, message) {
             // Call original logger (goes to browser console)
             if (originalPuckLog) {
                 originalPuckLog.call(Puck, level, message);
             }
-            // Also log to our UI console
+            // Also log to our UI console with level info
             const logType = level === 1 ? 'error' : (level === 2 ? 'warn' : 'info');
-            console.log(`<BLE> ${message}`);
-            log(`<BLE> ${message}`, logType);
+            const levelName = level === 1 ? 'ERR' : (level === 2 ? 'WARN' : 'INFO');
+            log(`<BLE:${levelName}> ${message}`, logType);
+            
+            // Update connecting status with BLE details
+            if (state.connecting) {
+                log(`[DEBUG] BLE msg while connecting: "${message}" (state.connecting=${state.connecting})`, 'info');
+                
+                // Parse BLE messages to show meaningful status
+                if (message.includes('Device Name:')) {
+                    const deviceName = message.split('Device Name:')[1].trim();
+                    state.connectingStatus = `Found: ${deviceName}`;
+                    log(`[DEBUG] Updated status: Found device "${deviceName}"`, 'info');
+                    updateUI();
+                } else if (message.includes('Getting Services')) {
+                    state.connectingStatus = 'Getting services...';
+                    log('[DEBUG] Updated status: Getting services', 'info');
+                    updateUI();
+                } else if (message.includes('Found service')) {
+                    state.connectingStatus = 'Found UART service...';
+                    log('[DEBUG] Updated status: Found UART service', 'info');
+                    updateUI();
+                } else if (message.includes('characteristic')) {
+                    state.connectingStatus = 'Setting up communication...';
+                    log('[DEBUG] Updated status: Setting up communication', 'info');
+                    updateUI();
+                } else if (message === 'Connected') {
+                    // Only update if it's exactly "Connected" (not "Disconnected")
+                    state.connectingStatus = 'Establishing connection...';
+                    log('[DEBUG] Updated status: Establishing connection (waiting for callback)', 'info');
+                    log('[DEBUG] NOTE: Callback should fire soon with connection object', 'warn');
+                    updateUI();
+                } else if (message.includes('Disconnected')) {
+                    // Connection failed during setup
+                    log('[DEBUG] DISCONNECT detected during connection setup!', 'error');
+                    log('[DEBUG] Previous status was: ' + state.connectingStatus, 'error');
+                    state.connecting = false;
+                    state.connectingStatus = '';
+                    log('Connection failed: ' + message, 'error');
+                    updateUI();
+                } else if (message.includes('TIMEOUT')) {
+                    // Service discovery timeout
+                    log('[DEBUG] BLE operation timeout detected', 'error');
+                    state.connectingStatus = 'Service discovery failed...';
+                    updateUI();
+                } else if (message.includes('ERROR')) {
+                    // Error during connection
+                    log('[DEBUG] BLE error detected: ' + message, 'error');
+                    state.connecting = false;
+                    state.connectingStatus = '';
+                    
+                    // Show helpful error message
+                    if (message.includes('getPrimaryService')) {
+                        log('⚠️ Service discovery failed. Try:', 'warn');
+                        log('  1. Reset Puck.js (hold button 10+ sec)', 'warn');
+                        log('  2. Turn Bluetooth off/on', 'warn');
+                        log('  3. Close other BLE apps', 'warn');
+                    }
+                    updateUI();
+                }
+            } else {
+                log(`[DEBUG] BLE msg (not connecting): "${message}"`, 'info');
+            }
         };
+        
+        // Also hook into Puck.write if it exists
+        if (Puck.write) {
+            const originalWrite = Puck.write;
+            Puck.write = function(data, callback) {
+                log(`[DEBUG] Puck.write() called with ${data.length} bytes`, 'info');
+                return originalWrite.apply(this, arguments);
+            };
+        }
+        
         log('[DEBUG] Puck.js logging configured (debug level: 3)', 'success');
     } else {
         log('[DEBUG] WARNING: Puck.js library not loaded!', 'error');

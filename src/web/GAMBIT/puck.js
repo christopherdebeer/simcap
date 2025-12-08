@@ -236,14 +236,35 @@ ChangeLog:
     });
 
     connection.reconnect = function(callback) {
+      log(1, "Attempting GATT connect...");
+      
+      // Helper to add timeout to promises
+      function withTimeout(promise, ms, name) {
+        return new Promise(function(resolve, reject) {
+          var timeoutId = setTimeout(function() {
+            log(1, "TIMEOUT: " + name + " took longer than " + ms + "ms");
+            reject(new Error("Timeout: " + name));
+          }, ms);
+          promise.then(function(result) {
+            clearTimeout(timeoutId);
+            resolve(result);
+          }).catch(function(err) {
+            clearTimeout(timeoutId);
+            reject(err);
+          });
+        });
+      }
+      
       connection.device.gatt.connect().then(function(server) {
         log(1, "Connected");
+        log(1, "Getting primary service...");
         btServer = server;
-        return server.getPrimaryService(NORDIC_SERVICE);
+        return withTimeout(server.getPrimaryService(NORDIC_SERVICE), 10000, "getPrimaryService");
       }).then(function(service) {
-        log(2, "Got service");
+        log(1, "Got service");
         btService = service;
-        return btService.getCharacteristic(NORDIC_RX);
+        log(1, "Getting RX characteristic...");
+        return withTimeout(btService.getCharacteristic(NORDIC_RX), 10000, "getCharacteristic(RX)");
       }).then(function (characteristic) {
         rxCharacteristic = characteristic;
         log(2, "RX characteristic:"+JSON.stringify(rxCharacteristic));
@@ -277,10 +298,11 @@ ChangeLog:
         });
         return rxCharacteristic.startNotifications();
       }).then(function() {
-        return btService.getCharacteristic(NORDIC_TX);
+        log(1, "RX notifications started, getting TX characteristic...");
+        return withTimeout(btService.getCharacteristic(NORDIC_TX), 10000, "getCharacteristic(TX)");
       }).then(function (characteristic) {
         txCharacteristic = characteristic;
-        log(2, "TX characteristic:"+JSON.stringify(txCharacteristic));
+        log(1, "TX characteristic ready");
       }).then(function() {
         connection.txInProgress = false;
         connection.isOpen = true;
@@ -399,7 +421,7 @@ ChangeLog:
 
   var puck = {
     /// Are we writing debug information? 0 is no, 1 is some, 2 is more, 3 is all.
-    debug : 1,
+    debug : 3,
     /** When we receive more than 20 bytes, should we increase the chunk size we use
     for writing to match it? Normally this is fine but it seems some phones have
     a broken bluetooth implementation that doesn't allow it. */
