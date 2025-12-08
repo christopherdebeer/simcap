@@ -4,3 +4,8 @@ logs/*
 .DS_Store
 .AppleDouble
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+

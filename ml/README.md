@@ -31,10 +31,18 @@ graph TB
         ONNX[.onnx]
     end
 
+    subgraph "Visualization"
+        VIZ[visualize.py]
+        COMPOSITE[Composite Images]
+        WINDOWS[Window Images]
+        HTML[HTML Explorer]
+    end
+
     DEVICE --> COLLECTOR
     COLLECTOR --> RAW
     COLLECTOR --> META
     RAW --> LOADER
+    RAW --> VIZ
     META --> LOADER
     LOADER --> NORM
     NORM --> WINDOW
@@ -44,6 +52,9 @@ graph TB
     EVAL --> KERAS
     KERAS --> TFLITE
     KERAS --> ONNX
+    VIZ --> COMPOSITE
+    VIZ --> WINDOWS
+    VIZ --> HTML
 ```
 
 ## Quick Start
@@ -167,6 +178,70 @@ python -m ml.train \
     --window-size 50 \
     --stride 25
 ```
+
+### Visualization Pipeline (`visualize.py`)
+
+Generate comprehensive visualizations from sensor data:
+
+```bash
+# Visualize all sessions
+python visualize.py --data-dir ../data/GAMBIT --output-dir ../visualizations
+
+# Visualize limited sessions for testing
+python visualize.py --limit 5
+```
+
+**What it creates:**
+
+1. **Composite Session Images** - Complete overview of each session showing:
+   - All 9 sensor axes (accelerometer, gyroscope, magnetometer)
+   - Magnitude comparisons across sensors
+   - Auxiliary sensors (light, capacitive touch)
+   - Visual signature/fingerprint based on sensor patterns
+
+2. **Per-Second Window Images** - Individual 1-second windows showing:
+   - Detailed 3-axis plots for each sensor type
+   - 3D trajectory visualization
+   - Statistical summaries
+   - Unique visual signatures that differ based on motion patterns
+
+3. **Raw Axis/Orientation Images** - Detailed visualizations showing:
+   - Individual axis plots for all 9 axes
+   - 3D spatial representations color-coded by time
+   - Orientation spaces for each sensor type
+
+4. **Interactive HTML Explorer** - Web-based interface to:
+   - Browse all sessions and visualizations
+   - Filter and sort by timestamp or duration
+   - Zoom into individual windows
+   - View full-resolution images in modal view
+
+**Visual Distinction Mechanism:**
+
+The pipeline creates visually distinct images based on observed data using:
+- **Color mapping**: HSV color space derived from sensor statistics
+  - Hue: Accelerometer X/Y angular position
+  - Saturation: Gyroscope magnitude variance (motion intensity)
+  - Value/Brightness: Accelerometer magnitude mean (static orientation)
+- **Spectral signatures**: Radial patterns mapping sensor data to 2D space
+  - Radial dimension: Accelerometer data progression
+  - Angular dimension: Gyroscope data distribution
+  - RGB channels: Different sensor axes
+
+**Example output:**
+```
+visualizations/
+├── index.html                           # Interactive explorer
+├── composite_2023-11-24T17:14:18.479Z.png
+├── raw_axes_2023-11-24T17:14:18.479Z.png
+├── orientation_3d_2023-11-24T17:14:18.479Z.png
+└── windows_2023-11-24T17:14:18.479Z/
+    ├── window_001.png
+    ├── window_002.png
+    └── window_003.png
+```
+
+Open `visualizations/index.html` in a browser to explore the results.
 
 ## Data Format
 

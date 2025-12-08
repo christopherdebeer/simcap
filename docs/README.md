@@ -36,7 +36,15 @@ For documentation on what's actually implemented, see the README files in each c
 
 | Location | Description |
 |----------|-------------|
-| [data/GAMBIT/](../data/GAMBIT/) | Baseline sensor data (40+ JSON files, Nov 2023 - Jan 2024) |
+| [data/GAMBIT/](../data/GAMBIT/) | Baseline sensor data (24 JSON files, Nov 2023 - Jan 2024) |
+| [📊 Visualization Explorer](../visualizations/index.html) | Interactive web interface to explore sensor data visualizations |
+
+### Visualizations
+
+| Component | Status | Description |
+|-----------|--------|-------------|
+| [Visualization Pipeline](../ml/visualize.py) | Active | Comprehensive data visualization generator |
+| [📊 Interactive Explorer](../visualizations/index.html) | Active | Web-based visualization browser (67 windows, 24 sessions) |
 
 ---
 
