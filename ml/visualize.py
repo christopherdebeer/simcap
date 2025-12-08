@@ -805,8 +805,9 @@ class HTMLGenerator:
 
         .window-preview {
             width: 100%;
-            height: 150px;
-            object-fit: cover;
+            aspect-ratio: 4/3;
+            object-fit: contain;
+            background: #f0f0f0;
         }
 
         .window-info {

@@ -535,11 +535,12 @@ def generate_html(data: Dict[str, Any], output_path: Path):
         }}
         
         .session-header {{
-            padding: 0.5em;
+            padding: 15px 20px;
             cursor: pointer;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
         }}
         
         .session-title {{ font-weight: bold; font-size: 1.1em; }}
@@ -575,25 +576,28 @@ def generate_html(data: Dict[str, Any], output_path: Path):
         .session-card.expanded .session-content {{ display: block; }}
         
         .section-title {{
-            font-size: 1em;
-            /* color: #667eea; */
-            margin: 0;
-            /* padding-bottom: 8px; */
-            /* border-bottom: 2px solid #667eea;
+            font-size: 1.1em;
+            color: #667eea;
+            margin: 20px 0 15px 0;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #667eea;
         }}
         
         .section-title:first-child {{ margin-top: 0; }}
         
         .composite-image {{
             width: 100%;
+            max-height: 800px;
+            object-fit: contain;
+            background: #0a0a1a;
             border-radius: 8px;
             cursor: pointer;
         }}
         
         .windows-grid {{
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-            gap: 12px;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 15px;
         }}
         
         .window-card {{
@@ -621,7 +625,8 @@ def generate_html(data: Dict[str, Any], output_path: Path):
         .window-preview {{
             width: 100%;
             object-fit: contain;
-            aspect-ratio: 1.2;
+            aspect-ratio: 4/3;
+            background: #0a0a1a;
         }}
         
         .window-info {{
@@ -634,12 +639,15 @@ def generate_html(data: Dict[str, Any], output_path: Path):
         
         .raw-images {{
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
             gap: 15px;
         }}
-        
+
         .raw-image {{
             width: 100%;
+            max-height: 500px;
+            object-fit: contain;
+            background: #0a0a1a;
             border-radius: 8px;
             cursor: pointer;
         }}
@@ -931,23 +939,26 @@ def generate_html(data: Dict[str, Any], output_path: Path):
         
         .cluster-windows-preview {{
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-            gap: 8px;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 10px;
             margin-top: 15px;
         }}
         
         .cluster-window-thumb {{
-            aspect-ratio: 1;
+            aspect-ratio: 4/3;
             background: #1a1a2e;
             border-radius: 6px;
             overflow: hidden;
             cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }}
-        
+
         .cluster-window-thumb img {{
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
         }}
         
         /* Responsive */
