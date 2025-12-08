@@ -47,10 +47,24 @@ Python pipeline for training gesture classifiers: data loading, preprocessing, 1
 
 `Status: Active`
 
-#### [📊 Data Visualization](visualizations/index.html)
-**Interactive Sensor Data Explorer**
+#### [Unsupervised Clustering](ml/CLUSTERING.md)
+**Gesture Pattern Discovery**
 
-Comprehensive visualization system with composite session images, per-second windows, 3D trajectories, and interactive HTML explorer for exploring 24 sessions and 67 time windows.
+K-means and DBSCAN clustering for discovering gesture patterns in unlabeled data, with semi-automated labeling workflow.
+
+`Status: Active`
+
+#### [📊 Session Visualizations](visualizations/index.html)
+**Basic Sensor Data Explorer**
+
+Composite session images, per-second windows, 3D trajectories for exploring 24 sessions and 67 time windows.
+
+`Status: Active`
+
+#### [🎯 Unified Explorer](visualizations/explorer.html)
+**Advanced Interactive Explorer**
+
+Unified interface combining session visualizations, cluster analysis, and labeling workflow with interactive canvas visualization.
 
 `Status: Active`
 
@@ -173,6 +187,18 @@ $1 family algorithms for gesture inference from low-dimensional observation.
 ```bash
 pip install -r ml/requirements.txt
 python -m ml.train --data-dir data/GAMBIT --epochs 50
+```
+
+### Generate Visualizations
+```bash
+# Generate session visualizations and index.html
+python -m ml.visualize --data-dir data/GAMBIT --output-dir visualizations
+
+# Generate unified explorer with clustering
+python -m ml.generate_explorer --data-dir data/GAMBIT --output visualizations/explorer.html
+
+# Run clustering analysis
+python -m ml.train --data-dir data/GAMBIT --cluster-only --visualize-clusters
 ```
 
 ## Data

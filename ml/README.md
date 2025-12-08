@@ -184,11 +184,14 @@ python -m ml.train \
 Generate comprehensive visualizations from sensor data:
 
 ```bash
-# Visualize all sessions
+# Visualize all sessions (run from ml/ directory)
 python visualize.py --data-dir ../data/GAMBIT --output-dir ../visualizations
 
+# Or run as module from project root
+python -m ml.visualize --data-dir data/GAMBIT --output-dir visualizations
+
 # Visualize limited sessions for testing
-python visualize.py --limit 5
+python -m ml.visualize --data-dir data/GAMBIT --output-dir visualizations --limit 5
 ```
 
 **What it creates:**
@@ -242,6 +245,67 @@ visualizations/
 ```
 
 Open `visualizations/index.html` in a browser to explore the results.
+
+### Unified Explorer Generator (`generate_explorer.py`)
+
+Generate the unified explorer HTML that combines session visualizations, clustering results, and labeling workflow:
+
+```bash
+# Generate explorer.html (run from project root)
+python -m ml.generate_explorer --data-dir data/GAMBIT --output visualizations/explorer.html
+
+# With custom options
+python -m ml.generate_explorer \
+    --data-dir data/GAMBIT \
+    --viz-dir visualizations \
+    --cluster-dir ml/models \
+    --output visualizations/explorer.html \
+    --n-clusters 10 \
+    --window-size 50 \
+    --stride 25
+```
+
+**Options:**
+- `--data-dir` - Path to data directory (default: `data/GAMBIT`)
+- `--viz-dir` - Path to visualizations directory (default: `visualizations`)
+- `--cluster-dir` - Path to clustering results directory (default: `ml/models`)
+- `--output` - Output HTML file path (default: `visualizations/explorer.html`)
+- `--n-clusters` - Number of clusters for K-means (default: 10)
+- `--window-size` - Window size in samples (default: 50)
+- `--stride` - Window stride (default: 25)
+
+**What it creates:**
+
+The unified explorer (`explorer.html`) provides:
+- **Explore Tab** - Browse sessions with cluster visualization canvas, filter by cluster
+- **Clusters Tab** - Detailed cluster analysis with statistics and sample windows
+- **Label Tab** - Assign gesture names to clusters and export label templates
+
+Open `visualizations/explorer.html` in a browser to explore the unified interface.
+
+### Clustering (`cluster.py`)
+
+Unsupervised clustering for discovering gesture patterns in unlabeled data:
+
+```bash
+# Run clustering via train.py
+python -m ml.train \
+    --data-dir data/GAMBIT \
+    --cluster-only \
+    --n-clusters 10 \
+    --create-templates \
+    --visualize-clusters
+```
+
+**Output files:**
+- `ml/models/clustering_results.json` - Raw clustering data
+- `ml/models/cluster_analysis.json` - Detailed statistics
+- `ml/models/clusters_2d_pca.png` - 2D PCA visualization
+- `ml/models/clusters_3d_pca.png` - 3D PCA visualization
+- `ml/models/clusters_2d_tsne.png` - 2D t-SNE visualization
+- `ml/models/label_templates/` - Template metadata files for labeling
+
+For detailed clustering documentation, see [CLUSTERING.md](CLUSTERING.md).
 
 ## Data Format
 

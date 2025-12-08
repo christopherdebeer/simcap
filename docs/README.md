@@ -9,6 +9,7 @@ For documentation on what's actually implemented, see the README files in each c
 | Component | Status | Description |
 |-----------|--------|-------------|
 | [ML Pipeline](../ml/) | Active | Gesture classification training pipeline |
+| [Clustering Guide](../ml/CLUSTERING.md) | Active | Unsupervised clustering for gesture discovery |
 
 ### Device Firmware
 
@@ -43,8 +44,10 @@ For documentation on what's actually implemented, see the README files in each c
 
 | Component | Status | Description |
 |-----------|--------|-------------|
-| [Visualization Pipeline](../ml/visualize.py) | Active | Comprehensive data visualization generator |
-| [📊 Interactive Explorer](../visualizations/index.html) | Active | Web-based visualization browser (67 windows, 24 sessions) |
+| [Visualization Pipeline](../ml/visualize.py) | Active | Generates composite images, window images, and index.html |
+| [Explorer Generator](../ml/generate_explorer.py) | Active | Generates unified explorer.html with clustering integration |
+| [📊 Session Explorer](../visualizations/index.html) | Active | Basic web-based visualization browser |
+| [🎯 Unified Explorer](../visualizations/explorer.html) | Active | Advanced explorer with clustering, labeling workflow |
 
 ---
 
