@@ -798,6 +798,84 @@ setTimeout(function() { LED1.reset(); }, 1000);
         }
     });
 
+    // ===== Module Bundler =====
+    // Fetches Espruino modules from the official repository and bundles them
+    const ESPRUINO_MODULE_URL = 'https://www.espruino.com/modules/';
+    const moduleCache = {};
+
+    async function fetchModule(moduleName) {
+        if (moduleCache[moduleName]) {
+            log(`[DEBUG] Module ${moduleName} found in cache`, 'info');
+            return moduleCache[moduleName];
+        }
+
+        log(`[DEBUG] Fetching module: ${moduleName}`, 'info');
+        
+        // Try .min.js first, then .js
+        const urls = [
+            ESPRUINO_MODULE_URL + moduleName + '.min.js',
+            ESPRUINO_MODULE_URL + moduleName + '.js'
+        ];
+
+        for (const url of urls) {
+            try {
+                log(`[DEBUG] Trying: ${url}`, 'info');
+                const response = await fetch(url);
+                if (response.ok) {
+                    const code = await response.text();
+                    log(`[DEBUG] Module ${moduleName} fetched (${code.length} bytes)`, 'success');
+                    moduleCache[moduleName] = code;
+                    return code;
+                }
+            } catch (e) {
+                log(`[DEBUG] Failed to fetch from ${url}: ${e.message}`, 'warn');
+            }
+        }
+
+        throw new Error(`Module ${moduleName} not found`);
+    }
+
+    async function bundleModules(code) {
+        log('[DEBUG] ========== MODULE BUNDLING ==========', 'info');
+        
+        // Find all require() statements
+        const requireRegex = /require\s*\(\s*["']([^"']+)["']\s*\)/g;
+        const modules = new Set();
+        let match;
+        
+        while ((match = requireRegex.exec(code)) !== null) {
+            modules.add(match[1]);
+        }
+
+        if (modules.size === 0) {
+            log('[DEBUG] No modules to bundle', 'info');
+            return code;
+        }
+
+        log(`[DEBUG] Found ${modules.size} module(s) to bundle: ${Array.from(modules).join(', ')}`, 'info');
+
+        // Fetch all modules
+        const moduleCode = [];
+        for (const moduleName of modules) {
+            try {
+                const modCode = await fetchModule(moduleName);
+                // Wrap module in Modules.addCached format
+                const wrappedModule = `Modules.addCached("${moduleName}", function() {\n${modCode}\n});`;
+                moduleCode.push(wrappedModule);
+                log(`[DEBUG] Module ${moduleName} bundled`, 'success');
+            } catch (e) {
+                log(`[DEBUG] Failed to bundle module ${moduleName}: ${e.message}`, 'error');
+                throw e;
+            }
+        }
+
+        // Prepend module code to main code
+        const bundledCode = moduleCode.join('\n\n') + '\n\n' + code;
+        log(`[DEBUG] Bundled code size: ${bundledCode.length} bytes (original: ${code.length} bytes)`, 'info');
+        
+        return bundledCode;
+    }
+
     // ===== Upload Firmware =====
     async function uploadCode(code, name = 'code') {
         if (!state.connected) {
@@ -811,19 +889,27 @@ setTimeout(function() { LED1.reset(); }, 1000);
 
         const uploadStartTime = Date.now();
         log(`[DEBUG] ========== UPLOAD STARTED: ${name} ==========`, 'info');
-        log(`[DEBUG] Code size: ${code.length} bytes`, 'info');
+        log(`[DEBUG] Original code size: ${code.length} bytes`, 'info');
         log(`[DEBUG] Connection state: ${state.connection ? 'valid' : 'null'}`, 'info');
 
         state.uploading = true;
         updateUI();
         progressContainer.style.display = 'block';
         progressFill.style.width = '0%';
-        progressText.textContent = 'Starting upload...';
+        progressText.textContent = 'Bundling modules...';
 
         log(`Uploading ${name}...`);
 
         try {
-            // Clear device first
+            // Phase 0: Bundle modules
+            log('[DEBUG] Phase 0: Bundling modules...', 'info');
+            progressText.textContent = 'Bundling modules...';
+            progressFill.style.width = '5%';
+            
+            code = await bundleModules(code);
+            log(`[DEBUG] Final code size after bundling: ${code.length} bytes`, 'info');
+
+            // Phase 1: Reset device
             log('[DEBUG] Phase 1: Resetting device...', 'info');
             log('[DEBUG] Using connection.write() to avoid triggering device selection', 'info');
             progressText.textContent = 'Resetting device...';
@@ -855,15 +941,27 @@ setTimeout(function() { LED1.reset(); }, 1000);
             log('[DEBUG] Waiting 500ms for device to stabilize...', 'info');
             await new Promise(r => setTimeout(r, 500));
 
+            // Phase 2: Upload code with proper Espruino protocol
+            // Use \x10 to enter "echo off" mode - this prevents line-by-line execution
+            // and allows multi-line code to be uploaded as a single block
+            log('[DEBUG] Phase 2: Uploading with Espruino protocol (\\x10 prefix)...', 'info');
+            progressText.textContent = 'Uploading code...';
+            progressFill.style.width = '15%';
+
+            // Prepare code with echo-off prefix
+            // \x10 = echo off (don't echo back characters)
+            // Code is sent as-is
+            // \n at end to execute
+            const uploadData = '\x10' + code + '\n';
+            
             // Upload in chunks
             const chunkSize = 500;
             const chunks = [];
-            for (let i = 0; i < code.length; i += chunkSize) {
-                chunks.push(code.slice(i, i + chunkSize));
+            for (let i = 0; i < uploadData.length; i += chunkSize) {
+                chunks.push(uploadData.slice(i, i + chunkSize));
             }
 
-            log(`[DEBUG] Phase 2: Uploading ${chunks.length} chunks (${chunkSize} bytes each)`, 'info');
-            progressText.textContent = `Uploading... (0/${chunks.length})`;
+            log(`[DEBUG] Uploading ${chunks.length} chunks (${chunkSize} bytes each, total: ${uploadData.length} bytes)`, 'info');
 
             const chunkStartTime = Date.now();
             let totalBytesWritten = 0;
@@ -873,9 +971,9 @@ setTimeout(function() { LED1.reset(); }, 1000);
 
                 await new Promise((resolve, reject) => {
                     const timeout = setTimeout(() => {
-                        log(`[DEBUG] Chunk ${i + 1}/${chunks.length} timeout after 5s`, 'error');
-                        reject(new Error(`Chunk ${i + 1}/${chunks.length} timeout after 5s`));
-                    }, 5000);
+                        log(`[DEBUG] Chunk ${i + 1}/${chunks.length} timeout after 10s`, 'error');
+                        reject(new Error(`Chunk ${i + 1}/${chunks.length} timeout after 10s`));
+                    }, 10000);
 
                     state.connection.write(chunks[i], (err) => {
                         clearTimeout(timeout);
@@ -897,33 +995,26 @@ setTimeout(function() { LED1.reset(); }, 1000);
                     log(`[DEBUG] Chunk ${i + 1}/${chunks.length} written (${chunkWriteDuration}ms, ${bytesPerSecond} B/s avg)`, 'success');
                 }
 
-                const progress = 10 + ((i + 1) / chunks.length) * 80;
+                const progress = 15 + ((i + 1) / chunks.length) * 80;
                 progressFill.style.width = progress + '%';
                 progressText.textContent = `Uploading... (${i + 1}/${chunks.length}) - ${bytesPerSecond} B/s`;
+
+                // Small delay between chunks to prevent buffer overflow
+                if (i < chunks.length - 1) {
+                    await new Promise(r => setTimeout(r, 20));
+                }
             }
 
             const chunkDuration = Date.now() - chunkStartTime;
             log(`[DEBUG] All chunks uploaded (${chunkDuration}ms, ${totalBytesWritten} bytes)`, 'success');
 
-            // Ensure newline at end
-            log('[DEBUG] Phase 3: Finalizing upload...', 'info');
-            await new Promise((resolve, reject) => {
-                const timeout = setTimeout(() => {
-                    log('[DEBUG] Finalize timeout after 3s', 'error');
-                    reject(new Error('Finalize timeout after 3s'));
-                }, 3000);
-
-                state.connection.write('\n', (err) => {
-                    clearTimeout(timeout);
-                    if (err) {
-                        log(`[DEBUG] Finalize error: ${err}`, 'error');
-                        reject(err);
-                    } else {
-                        log(`[DEBUG] Finalize completed`, 'success');
-                        resolve();
-                    }
-                });
-            });
+            // Phase 3: Wait for execution
+            log('[DEBUG] Phase 3: Waiting for code execution...', 'info');
+            progressText.textContent = 'Executing code...';
+            progressFill.style.width = '95%';
+            
+            // Give device time to process the code
+            await new Promise(r => setTimeout(r, 1000));
 
             progressFill.style.width = '100%';
             progressText.textContent = 'Upload complete!';
