@@ -127,6 +127,10 @@
             margin-bottom: 30px;
         }
 
+        .image-section.hidden {
+            display: none;
+        }
+
         .section-title {
             font-size: 1.4em;
             color: #667eea;
@@ -283,6 +287,68 @@
             color: #999;
             font-size: 1.2em;
         }
+
+        .filter-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .checkbox-group {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+            font-size: 0.95em;
+            color: #555;
+        }
+
+        .checkbox-label input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: #667eea;
+        }
+
+        .toggle-btn {
+            padding: 8px 16px;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            background: white;
+            color: #667eea;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .toggle-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .toggle-btn.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .divider {
+            width: 1px;
+            height: 30px;
+            background: #e0e0e0;
+            margin: 0 5px;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+        }
     </style>
 </head>
 <body>
@@ -307,14 +373,52 @@
         </header>
 
         <div class="filter-bar">
-            <span class="filter-label">Filter:</span>
-            <input type="text" id="search-box" placeholder="Search sessions..." style="flex: 1; min-width: 250px;">
-            <select id="sort-select">
-                <option value="timestamp-desc">Newest First</option>
-                <option value="timestamp-asc">Oldest First</option>
-                <option value="duration-desc">Longest First</option>
-                <option value="duration-asc">Shortest First</option>
-            </select>
+            <div class="filter-group">
+                <span class="filter-label">Search:</span>
+                <input type="text" id="search-box" placeholder="Search sessions..." style="min-width: 200px;">
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="filter-group">
+                <span class="filter-label">Sort:</span>
+                <select id="sort-select">
+                    <option value="timestamp-desc">Newest First</option>
+                    <option value="timestamp-asc">Oldest First</option>
+                    <option value="duration-desc">Longest First</option>
+                    <option value="duration-asc">Shortest First</option>
+                </select>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="filter-group">
+                <span class="filter-label">Show:</span>
+                <div class="checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-composite" checked>
+                        📊 Composite
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-windows" checked>
+                        🔍 Windows
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-raw" checked>
+                        📐 Raw Axis
+                    </label>
+                </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="filter-group">
+                <span class="filter-label">Sessions:</span>
+                <div class="action-buttons">
+                    <button class="toggle-btn" id="expand-all-btn" onclick="expandAll()">Expand All</button>
+                    <button class="toggle-btn" id="collapse-all-btn" onclick="collapseAll()">Collapse All</button>
+                </div>
+            </div>
         </div>
 
         <div class="session-list" id="session-list"></div>
@@ -1287,6 +1391,14 @@
 ];
 
         let filteredSessions = [...sessionsData];
+        let defaultExpanded = false;
+
+        // View settings
+        let viewSettings = {
+            showComposite: true,
+            showWindows: true,
+            showRaw: true
+        };
 
         function initializePage() {
             updateStats();
@@ -1313,7 +1425,7 @@
             }
 
             container.innerHTML = filteredSessions.map((session, idx) => `
-                <div class="session-card" id="session-${idx}">
+                <div class="session-card ${defaultExpanded ? 'expanded' : ''}" id="session-${idx}">
                     <div class="session-header" onclick="toggleSession(${idx})">
                         <div>
                             <div class="session-title">${session.filename}</div>
@@ -1322,12 +1434,12 @@
                         <div class="expand-icon">▼</div>
                     </div>
                     <div class="session-content">
-                        <div class="image-section">
+                        <div class="image-section composite-section ${viewSettings.showComposite ? '' : 'hidden'}">
                             <h3 class="section-title">📊 Composite Session View</h3>
                             <img src="${session.composite_image}" class="composite-image" onclick="openModal(this.src)" alt="Composite view">
                         </div>
 
-                        <div class="image-section">
+                        <div class="image-section windows-section ${viewSettings.showWindows ? '' : 'hidden'}">
                             <h3 class="section-title">🔍 Per-Second Windows (${session.windows.length})</h3>
                             <div class="windows-grid">
                                 ${session.windows.map(w => `
@@ -1346,7 +1458,7 @@
                             </div>
                         </div>
 
-                        <div class="image-section">
+                        <div class="image-section raw-section ${viewSettings.showRaw ? '' : 'hidden'}">
                             <h3 class="section-title">📐 Raw Axis & Orientation Views</h3>
                             <div class="raw-images">
                                 ${session.raw_images.map(img => `
@@ -1362,6 +1474,37 @@
         function toggleSession(idx) {
             const card = document.getElementById(`session-${idx}`);
             card.classList.toggle('expanded');
+        }
+
+        function expandAll() {
+            document.querySelectorAll('.session-card').forEach(card => {
+                card.classList.add('expanded');
+            });
+            defaultExpanded = true;
+        }
+
+        function collapseAll() {
+            document.querySelectorAll('.session-card').forEach(card => {
+                card.classList.remove('expanded');
+            });
+            defaultExpanded = false;
+        }
+
+        function updateViewSettings() {
+            viewSettings.showComposite = document.getElementById('show-composite').checked;
+            viewSettings.showWindows = document.getElementById('show-windows').checked;
+            viewSettings.showRaw = document.getElementById('show-raw').checked;
+
+            // Update visibility of sections
+            document.querySelectorAll('.composite-section').forEach(el => {
+                el.classList.toggle('hidden', !viewSettings.showComposite);
+            });
+            document.querySelectorAll('.windows-section').forEach(el => {
+                el.classList.toggle('hidden', !viewSettings.showWindows);
+            });
+            document.querySelectorAll('.raw-section').forEach(el => {
+                el.classList.toggle('hidden', !viewSettings.showRaw);
+            });
         }
 
         function openModal(imageSrc) {
@@ -1417,6 +1560,11 @@
 
                 renderSessions();
             });
+
+            // View filter checkboxes
+            document.getElementById('show-composite').addEventListener('change', updateViewSettings);
+            document.getElementById('show-windows').addEventListener('change', updateViewSettings);
+            document.getElementById('show-raw').addEventListener('change', updateViewSettings);
 
             // Close modal on click outside
             document.getElementById('image-modal').addEventListener('click', (e) => {

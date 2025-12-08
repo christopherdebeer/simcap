@@ -316,9 +316,9 @@ class SessionVisualizer:
             if end_idx > n_samples:
                 break
 
-            # Create figure
-            fig = plt.figure(figsize=(12, 8))
-            gs = GridSpec(3, 2, figure=fig, hspace=0.4, wspace=0.3)
+            # Create figure with expanded layout for 3 3D plots
+            fig = plt.figure(figsize=(16, 12))
+            gs = GridSpec(3, 3, figure=fig, hspace=0.35, wspace=0.3)
 
             window_time_start = start_idx / 50.0
             window_time_end = end_idx / 50.0
@@ -329,7 +329,7 @@ class SessionVisualizer:
             # Extract window data
             time_window = sensors['time'][start_idx:end_idx]
 
-            # 1. Accelerometer
+            # 1. Accelerometer time series
             ax1 = fig.add_subplot(gs[0, 0])
             ax1.plot(time_window, sensors['ax'][start_idx:end_idx], label='X', linewidth=2)
             ax1.plot(time_window, sensors['ay'][start_idx:end_idx], label='Y', linewidth=2)
@@ -337,10 +337,10 @@ class SessionVisualizer:
             ax1.set_title('Accelerometer', fontweight='bold')
             ax1.set_xlabel('Time (s)')
             ax1.set_ylabel('Value')
-            ax1.legend()
+            ax1.legend(loc='upper right', fontsize=8)
             ax1.grid(True, alpha=0.3)
 
-            # 2. Gyroscope
+            # 2. Gyroscope time series
             ax2 = fig.add_subplot(gs[1, 0])
             ax2.plot(time_window, sensors['gx'][start_idx:end_idx], label='X', linewidth=2)
             ax2.plot(time_window, sensors['gy'][start_idx:end_idx], label='Y', linewidth=2)
@@ -348,10 +348,10 @@ class SessionVisualizer:
             ax2.set_title('Gyroscope', fontweight='bold')
             ax2.set_xlabel('Time (s)')
             ax2.set_ylabel('Value')
-            ax2.legend()
+            ax2.legend(loc='upper right', fontsize=8)
             ax2.grid(True, alpha=0.3)
 
-            # 3. Magnetometer
+            # 3. Magnetometer time series
             ax3 = fig.add_subplot(gs[2, 0])
             ax3.plot(time_window, sensors['mx'][start_idx:end_idx], label='X', linewidth=2)
             ax3.plot(time_window, sensors['my'][start_idx:end_idx], label='Y', linewidth=2)
@@ -359,35 +359,116 @@ class SessionVisualizer:
             ax3.set_title('Magnetometer', fontweight='bold')
             ax3.set_xlabel('Time (s)')
             ax3.set_ylabel('Value')
-            ax3.legend()
+            ax3.legend(loc='upper right', fontsize=8)
             ax3.grid(True, alpha=0.3)
 
-            # 4. 3D Trajectory (Accelerometer)
+            # 4. 3D Trajectory - Accelerometer
             ax4 = fig.add_subplot(gs[0, 1], projection='3d')
             ax4.plot(sensors['ax'][start_idx:end_idx],
                     sensors['ay'][start_idx:end_idx],
                     sensors['az'][start_idx:end_idx],
-                    linewidth=2, alpha=0.7)
+                    linewidth=2, alpha=0.7, color='tab:blue')
             ax4.scatter(sensors['ax'][start_idx], sensors['ay'][start_idx], sensors['az'][start_idx],
-                       c='green', s=50, label='Start')
+                       c='green', s=50, label='Start', zorder=5)
             ax4.scatter(sensors['ax'][end_idx-1], sensors['ay'][end_idx-1], sensors['az'][end_idx-1],
-                       c='red', s=50, label='End')
+                       c='red', s=50, label='End', zorder=5)
             ax4.set_title('Accel 3D Trajectory', fontweight='bold')
-            ax4.set_xlabel('X')
-            ax4.set_ylabel('Y')
-            ax4.set_zlabel('Z')
-            ax4.legend()
+            ax4.set_xlabel('X', fontsize=8)
+            ax4.set_ylabel('Y', fontsize=8)
+            ax4.set_zlabel('Z', fontsize=8)
+            ax4.legend(fontsize=7)
 
-            # 5. Spectral Signature
-            ax5 = fig.add_subplot(gs[1, 1])
+            # 5. 3D Trajectory - Gyroscope
+            ax5 = fig.add_subplot(gs[1, 1], projection='3d')
+            ax5.plot(sensors['gx'][start_idx:end_idx],
+                    sensors['gy'][start_idx:end_idx],
+                    sensors['gz'][start_idx:end_idx],
+                    linewidth=2, alpha=0.7, color='tab:orange')
+            ax5.scatter(sensors['gx'][start_idx], sensors['gy'][start_idx], sensors['gz'][start_idx],
+                       c='green', s=50, label='Start', zorder=5)
+            ax5.scatter(sensors['gx'][end_idx-1], sensors['gy'][end_idx-1], sensors['gz'][end_idx-1],
+                       c='red', s=50, label='End', zorder=5)
+            ax5.set_title('Gyro 3D Trajectory', fontweight='bold')
+            ax5.set_xlabel('X', fontsize=8)
+            ax5.set_ylabel('Y', fontsize=8)
+            ax5.set_zlabel('Z', fontsize=8)
+            ax5.legend(fontsize=7)
+
+            # 6. 3D Trajectory - Magnetometer
+            ax6 = fig.add_subplot(gs[2, 1], projection='3d')
+            ax6.plot(sensors['mx'][start_idx:end_idx],
+                    sensors['my'][start_idx:end_idx],
+                    sensors['mz'][start_idx:end_idx],
+                    linewidth=2, alpha=0.7, color='tab:green')
+            ax6.scatter(sensors['mx'][start_idx], sensors['my'][start_idx], sensors['mz'][start_idx],
+                       c='green', s=50, label='Start', zorder=5)
+            ax6.scatter(sensors['mx'][end_idx-1], sensors['my'][end_idx-1], sensors['mz'][end_idx-1],
+                       c='red', s=50, label='End', zorder=5)
+            ax6.set_title('Mag 3D Trajectory', fontweight='bold')
+            ax6.set_xlabel('X', fontsize=8)
+            ax6.set_ylabel('Y', fontsize=8)
+            ax6.set_zlabel('Z', fontsize=8)
+            ax6.legend(fontsize=7)
+
+            # 7. Spectral Signature
+            ax7 = fig.add_subplot(gs[0, 2])
             signature = self.distinction_engine.create_signature_pattern(sensors, start_idx, end_idx, size=128)
-            ax5.imshow(signature)
-            ax5.set_title('Visual Signature', fontweight='bold')
-            ax5.axis('off')
+            ax7.imshow(signature)
+            ax7.set_title('Visual Signature', fontweight='bold')
+            ax7.axis('off')
 
-            # 6. Statistics
-            ax6 = fig.add_subplot(gs[2, 1])
-            ax6.axis('off')
+            # 8. Combined 3D Trajectory - All sensors intertwined over time
+            ax8 = fig.add_subplot(gs[1, 2], projection='3d')
+            
+            # Normalize each sensor to similar scale for combined visualization
+            ax_norm = (sensors['ax'][start_idx:end_idx] - sensors['ax'][start_idx:end_idx].mean()) / (sensors['ax'][start_idx:end_idx].std() + 1e-6)
+            ay_norm = (sensors['ay'][start_idx:end_idx] - sensors['ay'][start_idx:end_idx].mean()) / (sensors['ay'][start_idx:end_idx].std() + 1e-6)
+            az_norm = (sensors['az'][start_idx:end_idx] - sensors['az'][start_idx:end_idx].mean()) / (sensors['az'][start_idx:end_idx].std() + 1e-6)
+            
+            gx_norm = (sensors['gx'][start_idx:end_idx] - sensors['gx'][start_idx:end_idx].mean()) / (sensors['gx'][start_idx:end_idx].std() + 1e-6)
+            gy_norm = (sensors['gy'][start_idx:end_idx] - sensors['gy'][start_idx:end_idx].mean()) / (sensors['gy'][start_idx:end_idx].std() + 1e-6)
+            gz_norm = (sensors['gz'][start_idx:end_idx] - sensors['gz'][start_idx:end_idx].mean()) / (sensors['gz'][start_idx:end_idx].std() + 1e-6)
+            
+            mx_norm = (sensors['mx'][start_idx:end_idx] - sensors['mx'][start_idx:end_idx].mean()) / (sensors['mx'][start_idx:end_idx].std() + 1e-6)
+            my_norm = (sensors['my'][start_idx:end_idx] - sensors['my'][start_idx:end_idx].mean()) / (sensors['my'][start_idx:end_idx].std() + 1e-6)
+            mz_norm = (sensors['mz'][start_idx:end_idx] - sensors['mz'][start_idx:end_idx].mean()) / (sensors['mz'][start_idx:end_idx].std() + 1e-6)
+            
+            n_points = len(ax_norm)
+            time_colors = np.linspace(0, 1, n_points)
+            
+            # Plot all three trajectories with time-based coloring
+            for j in range(n_points - 1):
+                # Accelerometer - solid line
+                ax8.plot([ax_norm[j], ax_norm[j+1]], 
+                        [ay_norm[j], ay_norm[j+1]], 
+                        [az_norm[j], az_norm[j+1]], 
+                        color=plt.cm.Blues(0.3 + time_colors[j] * 0.7), linewidth=1.5, alpha=0.8)
+                # Gyroscope - solid line
+                ax8.plot([gx_norm[j], gx_norm[j+1]], 
+                        [gy_norm[j], gy_norm[j+1]], 
+                        [gz_norm[j], gz_norm[j+1]], 
+                        color=plt.cm.Oranges(0.3 + time_colors[j] * 0.7), linewidth=1.5, alpha=0.8)
+                # Magnetometer - solid line
+                ax8.plot([mx_norm[j], mx_norm[j+1]], 
+                        [my_norm[j], my_norm[j+1]], 
+                        [mz_norm[j], mz_norm[j+1]], 
+                        color=plt.cm.Greens(0.3 + time_colors[j] * 0.7), linewidth=1.5, alpha=0.8)
+            
+            # Add start/end markers for each trajectory
+            ax8.scatter([ax_norm[0]], [ay_norm[0]], [az_norm[0]], c='blue', s=30, marker='o', label='Accel', zorder=5)
+            ax8.scatter([gx_norm[0]], [gy_norm[0]], [gz_norm[0]], c='orange', s=30, marker='s', label='Gyro', zorder=5)
+            ax8.scatter([mx_norm[0]], [my_norm[0]], [mz_norm[0]], c='green', s=30, marker='^', label='Mag', zorder=5)
+            
+            ax8.set_title('Combined 3D Trajectory', fontweight='bold')
+            ax8.set_xlabel('X (norm)', fontsize=7)
+            ax8.set_ylabel('Y (norm)', fontsize=7)
+            ax8.set_zlabel('Z (norm)', fontsize=7)
+            ax8.legend(fontsize=6, loc='upper left')
+            ax8.tick_params(axis='both', which='major', labelsize=6)
+
+            # 9. Statistics
+            ax9 = fig.add_subplot(gs[2, 2])
+            ax9.axis('off')
 
             stats_text = f"""
 Window Statistics:
@@ -408,7 +489,7 @@ Magnetometer:
   Mag:  {sensors['mag_mag'][start_idx:end_idx].mean():.0f} ± {sensors['mag_mag'][start_idx:end_idx].std():.0f}
             """.strip()
 
-            ax6.text(0.05, 0.95, stats_text, transform=ax6.transAxes,
+            ax9.text(0.05, 0.95, stats_text, transform=ax9.transAxes,
                     fontsize=9, verticalalignment='top', fontfamily='monospace',
                     bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.3))
 
@@ -678,6 +759,10 @@ class HTMLGenerator:
             margin-bottom: 30px;
         }
 
+        .image-section.hidden {
+            display: none;
+        }
+
         .section-title {
             font-size: 1.4em;
             color: #667eea;
@@ -834,6 +919,68 @@ class HTMLGenerator:
             color: #999;
             font-size: 1.2em;
         }
+
+        .filter-group {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .checkbox-group {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+            font-size: 0.95em;
+            color: #555;
+        }
+
+        .checkbox-label input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: #667eea;
+        }
+
+        .toggle-btn {
+            padding: 8px 16px;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            background: white;
+            color: #667eea;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .toggle-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .toggle-btn.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .divider {
+            width: 1px;
+            height: 30px;
+            background: #e0e0e0;
+            margin: 0 5px;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+        }
     </style>
 </head>
 <body>
@@ -858,14 +1005,52 @@ class HTMLGenerator:
         </header>
 
         <div class="filter-bar">
-            <span class="filter-label">Filter:</span>
-            <input type="text" id="search-box" placeholder="Search sessions..." style="flex: 1; min-width: 250px;">
-            <select id="sort-select">
-                <option value="timestamp-desc">Newest First</option>
-                <option value="timestamp-asc">Oldest First</option>
-                <option value="duration-desc">Longest First</option>
-                <option value="duration-asc">Shortest First</option>
-            </select>
+            <div class="filter-group">
+                <span class="filter-label">Search:</span>
+                <input type="text" id="search-box" placeholder="Search sessions..." style="min-width: 200px;">
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="filter-group">
+                <span class="filter-label">Sort:</span>
+                <select id="sort-select">
+                    <option value="timestamp-desc">Newest First</option>
+                    <option value="timestamp-asc">Oldest First</option>
+                    <option value="duration-desc">Longest First</option>
+                    <option value="duration-asc">Shortest First</option>
+                </select>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="filter-group">
+                <span class="filter-label">Show:</span>
+                <div class="checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-composite" checked>
+                        📊 Composite
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-windows" checked>
+                        🔍 Windows
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-raw" checked>
+                        📐 Raw Axis
+                    </label>
+                </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="filter-group">
+                <span class="filter-label">Sessions:</span>
+                <div class="action-buttons">
+                    <button class="toggle-btn" id="expand-all-btn" onclick="expandAll()">Expand All</button>
+                    <button class="toggle-btn" id="collapse-all-btn" onclick="collapseAll()">Collapse All</button>
+                </div>
+            </div>
         </div>
 
         <div class="session-list" id="session-list"></div>
@@ -880,6 +1065,14 @@ class HTMLGenerator:
         const sessionsData = """ + json.dumps(sessions_data, indent=2) + """;
 
         let filteredSessions = [...sessionsData];
+        let defaultExpanded = false;
+
+        // View settings
+        let viewSettings = {
+            showComposite: true,
+            showWindows: true,
+            showRaw: true
+        };
 
         function initializePage() {
             updateStats();
@@ -906,7 +1099,7 @@ class HTMLGenerator:
             }
 
             container.innerHTML = filteredSessions.map((session, idx) => `
-                <div class="session-card" id="session-${idx}">
+                <div class="session-card ${defaultExpanded ? 'expanded' : ''}" id="session-${idx}">
                     <div class="session-header" onclick="toggleSession(${idx})">
                         <div>
                             <div class="session-title">${session.filename}</div>
@@ -915,12 +1108,12 @@ class HTMLGenerator:
                         <div class="expand-icon">▼</div>
                     </div>
                     <div class="session-content">
-                        <div class="image-section">
+                        <div class="image-section composite-section ${viewSettings.showComposite ? '' : 'hidden'}">
                             <h3 class="section-title">📊 Composite Session View</h3>
                             <img src="${session.composite_image}" class="composite-image" onclick="openModal(this.src)" alt="Composite view">
                         </div>
 
-                        <div class="image-section">
+                        <div class="image-section windows-section ${viewSettings.showWindows ? '' : 'hidden'}">
                             <h3 class="section-title">🔍 Per-Second Windows (${session.windows.length})</h3>
                             <div class="windows-grid">
                                 ${session.windows.map(w => `
@@ -939,7 +1132,7 @@ class HTMLGenerator:
                             </div>
                         </div>
 
-                        <div class="image-section">
+                        <div class="image-section raw-section ${viewSettings.showRaw ? '' : 'hidden'}">
                             <h3 class="section-title">📐 Raw Axis & Orientation Views</h3>
                             <div class="raw-images">
                                 ${session.raw_images.map(img => `
@@ -955,6 +1148,37 @@ class HTMLGenerator:
         function toggleSession(idx) {
             const card = document.getElementById(`session-${idx}`);
             card.classList.toggle('expanded');
+        }
+
+        function expandAll() {
+            document.querySelectorAll('.session-card').forEach(card => {
+                card.classList.add('expanded');
+            });
+            defaultExpanded = true;
+        }
+
+        function collapseAll() {
+            document.querySelectorAll('.session-card').forEach(card => {
+                card.classList.remove('expanded');
+            });
+            defaultExpanded = false;
+        }
+
+        function updateViewSettings() {
+            viewSettings.showComposite = document.getElementById('show-composite').checked;
+            viewSettings.showWindows = document.getElementById('show-windows').checked;
+            viewSettings.showRaw = document.getElementById('show-raw').checked;
+
+            // Update visibility of sections
+            document.querySelectorAll('.composite-section').forEach(el => {
+                el.classList.toggle('hidden', !viewSettings.showComposite);
+            });
+            document.querySelectorAll('.windows-section').forEach(el => {
+                el.classList.toggle('hidden', !viewSettings.showWindows);
+            });
+            document.querySelectorAll('.raw-section').forEach(el => {
+                el.classList.toggle('hidden', !viewSettings.showRaw);
+            });
         }
 
         function openModal(imageSrc) {
@@ -1010,6 +1234,11 @@ class HTMLGenerator:
 
                 renderSessions();
             });
+
+            // View filter checkboxes
+            document.getElementById('show-composite').addEventListener('change', updateViewSettings);
+            document.getElementById('show-windows').addEventListener('change', updateViewSettings);
+            document.getElementById('show-raw').addEventListener('change', updateViewSettings);
 
             // Close modal on click outside
             document.getElementById('image-modal').addEventListener('click', (e) => {

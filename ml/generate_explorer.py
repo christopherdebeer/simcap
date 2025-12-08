@@ -377,7 +377,6 @@ def generate_html(data: Dict[str, Any], output_path: Path):
         .container {{ max-width: 1800px; margin: 0 auto; padding: 20px; }}
         
         header {{
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             padding: 25px 30px;
             border-radius: 12px;
             margin-bottom: 20px;
@@ -536,8 +535,7 @@ def generate_html(data: Dict[str, Any], output_path: Path):
         }}
         
         .session-header {{
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 15px 20px;
+            padding: 0.5em;
             cursor: pointer;
             display: flex;
             justify-content: space-between;
@@ -577,11 +575,11 @@ def generate_html(data: Dict[str, Any], output_path: Path):
         .session-card.expanded .session-content {{ display: block; }}
         
         .section-title {{
-            font-size: 1.2em;
-            color: #667eea;
-            margin: 20px 0 15px 0;
-            padding-bottom: 8px;
-            border-bottom: 2px solid #667eea;
+            font-size: 1em;
+            /* color: #667eea; */
+            margin: 0;
+            /* padding-bottom: 8px; */
+            /* border-bottom: 2px solid #667eea;
         }}
         
         .section-title:first-child {{ margin-top: 0; }}
@@ -622,8 +620,8 @@ def generate_html(data: Dict[str, Any], output_path: Path):
         
         .window-preview {{
             width: 100%;
-            height: 100px;
-            object-fit: cover;
+            object-fit: contain;
+            aspect-ratio: 1.2;
         }}
         
         .window-info {{
@@ -751,6 +749,207 @@ def generate_html(data: Dict[str, Any], output_path: Path):
         .metric-label {{ opacity: 0.7; }}
         .metric-value {{ font-weight: bold; }}
         
+        /* Filter bar extras */
+        .divider {{
+            width: 1px;
+            height: 30px;
+            background: #2a2a4a;
+            margin: 0 5px;
+        }}
+        
+        .checkbox-group {{
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }}
+        
+        .checkbox-label {{
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+            color: #aaa;
+        }}
+        
+        .checkbox-label input[type="checkbox"] {{
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            accent-color: #667eea;
+        }}
+        
+        .action-btn {{
+            padding: 8px 16px;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            background: transparent;
+            color: #667eea;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.9em;
+        }}
+        
+        .action-btn:hover {{
+            background: #667eea;
+            color: #fff;
+        }}
+        
+        .section-hidden {{ display: none !important; }}
+        
+        /* Cluster stats grid */
+        .cluster-stats-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }}
+        
+        .cluster-stat-card {{
+            background: #0f0f23;
+            border-radius: 10px;
+            padding: 15px;
+            border-left: 4px solid;
+            cursor: pointer;
+            transition: all 0.2s;
+        }}
+        
+        .cluster-stat-card:hover {{
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }}
+        
+        .cluster-stat-card.selected {{
+            box-shadow: 0 0 0 2px #667eea;
+        }}
+        
+        .cluster-stat-header {{
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }}
+        
+        .cluster-stat-title {{
+            font-weight: bold;
+            font-size: 1.1em;
+        }}
+        
+        .cluster-stat-size {{
+            margin-left: auto;
+            background: rgba(255,255,255,0.1);
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.85em;
+        }}
+        
+        .cluster-stat-bar {{
+            height: 8px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+            margin: 10px 0;
+            overflow: hidden;
+        }}
+        
+        .cluster-stat-bar-fill {{
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s;
+        }}
+        
+        .cluster-stat-sessions {{
+            font-size: 0.85em;
+            opacity: 0.7;
+            margin-top: 8px;
+        }}
+        
+        .cluster-detail-card {{
+            background: #0f0f23;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-left: 4px solid;
+        }}
+        
+        .cluster-detail-header {{
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+        }}
+        
+        .cluster-detail-title {{
+            font-size: 1.2em;
+            font-weight: bold;
+        }}
+        
+        .cluster-detail-stats {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-bottom: 15px;
+        }}
+        
+        .cluster-detail-stat {{
+            background: rgba(255,255,255,0.05);
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+        }}
+        
+        .cluster-detail-stat-value {{
+            font-size: 1.3em;
+            font-weight: bold;
+            display: block;
+        }}
+        
+        .cluster-detail-stat-label {{
+            font-size: 0.8em;
+            opacity: 0.7;
+        }}
+        
+        .cluster-sessions-list {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }}
+        
+        .cluster-session-tag {{
+            background: rgba(255,255,255,0.1);
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 0.8em;
+            cursor: pointer;
+            transition: all 0.2s;
+        }}
+        
+        .cluster-session-tag:hover {{
+            background: rgba(102, 126, 234, 0.3);
+        }}
+        
+        .cluster-windows-preview {{
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 8px;
+            margin-top: 15px;
+        }}
+        
+        .cluster-window-thumb {{
+            aspect-ratio: 1;
+            background: #1a1a2e;
+            border-radius: 6px;
+            overflow: hidden;
+            cursor: pointer;
+        }}
+        
+        .cluster-window-thumb img {{
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }}
+        
         /* Responsive */
         @media (max-width: 1200px) {{
             .main-layout {{ grid-template-columns: 1fr; }}
@@ -823,6 +1022,24 @@ def generate_html(data: Dict[str, Any], output_path: Path):
                             <option value="duration-desc">Longest First</option>
                             <option value="windows-desc">Most Windows</option>
                         </select>
+                        <div class="divider"></div>
+                        <div class="checkbox-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="showComposite" checked>
+                                📊 Composite
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="showWindows" checked>
+                                🔍 Windows
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="showRaw" checked>
+                                📐 Raw
+                            </label>
+                        </div>
+                        <div class="divider"></div>
+                        <button class="action-btn" onclick="expandAll()">Expand All</button>
+                        <button class="action-btn" onclick="collapseAll()">Collapse All</button>
                     </div>
                     
                     <div class="session-grid" id="sessionGrid"></div>
@@ -834,9 +1051,13 @@ def generate_html(data: Dict[str, Any], output_path: Path):
             <div class="content-area">
                 <h2 style="margin-bottom: 20px;">Cluster Analysis</h2>
                 <p style="margin-bottom: 20px; opacity: 0.8;">
-                    Click on a cluster in the visualization or legend to filter sessions.
-                    Each cluster represents a group of similar sensor patterns.
+                    Click on a cluster to filter sessions in the Explore tab.
+                    Each cluster represents a group of similar sensor patterns discovered by K-means clustering.
                 </p>
+                
+                <div class="cluster-stats-grid" id="clusterStatsGrid"></div>
+                
+                <h3 style="margin-top: 30px; margin-bottom: 15px; color: #667eea;">Cluster Details</h3>
                 <div id="clusterDetails"></div>
             </div>
         </div>
@@ -882,6 +1103,8 @@ def generate_html(data: Dict[str, Any], output_path: Path):
             initTabs();
             initClusterCanvas();
             initClusterLegend();
+            initClusterStats();
+            initClusterDetails();
             initFilters();
             renderSessions();
             initLabelingPanel();
@@ -1129,7 +1352,60 @@ def generate_html(data: Dict[str, Any], output_path: Path):
         
         function toggleSession(idx) {{
             document.getElementById(`session-${{idx}}`).classList.toggle('expanded');
+            updateSectionVisibility(idx);
         }}
+        
+        // Expand/Collapse all
+        function expandAll() {{
+            document.querySelectorAll('.session-card').forEach(card => {{
+                card.classList.add('expanded');
+            }});
+            updateAllSectionVisibility();
+        }}
+        
+        function collapseAll() {{
+            document.querySelectorAll('.session-card').forEach(card => {{
+                card.classList.remove('expanded');
+            }});
+        }}
+        
+        // View filtering
+        function updateSectionVisibility(idx) {{
+            const card = document.getElementById(`session-${{idx}}`);
+            if (!card) return;
+            
+            const showComposite = document.getElementById('showComposite').checked;
+            const showWindows = document.getElementById('showWindows').checked;
+            const showRaw = document.getElementById('showRaw').checked;
+            
+            const sections = card.querySelectorAll('.section-title');
+            sections.forEach(section => {{
+                const text = section.textContent;
+                const nextEl = section.nextElementSibling;
+                
+                if (text.includes('Composite')) {{
+                    section.classList.toggle('section-hidden', !showComposite);
+                    if (nextEl) nextEl.classList.toggle('section-hidden', !showComposite);
+                }} else if (text.includes('Windows')) {{
+                    section.classList.toggle('section-hidden', !showWindows);
+                    if (nextEl) nextEl.classList.toggle('section-hidden', !showWindows);
+                }} else if (text.includes('Raw')) {{
+                    section.classList.toggle('section-hidden', !showRaw);
+                    if (nextEl) nextEl.classList.toggle('section-hidden', !showRaw);
+                }}
+            }});
+        }}
+        
+        function updateAllSectionVisibility() {{
+            document.querySelectorAll('.session-card').forEach((card, idx) => {{
+                updateSectionVisibility(idx);
+            }});
+        }}
+        
+        // Initialize show checkboxes
+        document.getElementById('showComposite').addEventListener('change', updateAllSectionVisibility);
+        document.getElementById('showWindows').addEventListener('change', updateAllSectionVisibility);
+        document.getElementById('showRaw').addEventListener('change', updateAllSectionVisibility);
         
         function formatTimestamp(ts) {{
             try {{ return new Date(ts).toLocaleString(); }}
@@ -1153,6 +1429,144 @@ def generate_html(data: Dict[str, Any], output_path: Path):
         document.addEventListener('keydown', (e) => {{
             if (e.key === 'Escape') closeModal();
         }});
+        
+        // Cluster stats grid (for Clusters tab)
+        function initClusterStats() {{
+            const grid = document.getElementById('clusterStatsGrid');
+            const clusters = explorerData.clustering.clusters || [];
+            const totalWindows = clusters.reduce((sum, c) => sum + c.size, 0);
+            
+            if (clusters.length === 0) {{
+                grid.innerHTML = '<div style="text-align: center; padding: 20px; opacity: 0.6;">No clustering data available</div>';
+                return;
+            }}
+            
+            grid.innerHTML = clusters.map(c => {{
+                const color = clusterColors[c.id % clusterColors.length];
+                const pct = totalWindows > 0 ? (c.size / totalWindows * 100) : 0;
+                return `
+                    <div class="cluster-stat-card" style="border-left-color: ${{color}}" onclick="goToCluster(${{c.id}})">
+                        <div class="cluster-stat-header">
+                            <div class="cluster-dot" style="background: ${{color}}; width: 16px; height: 16px;"></div>
+                            <span class="cluster-stat-title">Cluster ${{c.id}}</span>
+                            <span class="cluster-stat-size">${{c.size}} windows</span>
+                        </div>
+                        <div class="cluster-stat-bar">
+                            <div class="cluster-stat-bar-fill" style="width: ${{pct}}%; background: ${{color}}"></div>
+                        </div>
+                        <div class="cluster-stat-sessions">
+                            ${{c.sessions.length}} session${{c.sessions.length !== 1 ? 's' : ''}} • ${{pct.toFixed(1)}}% of data
+                        </div>
+                    </div>
+                `;
+            }}).join('');
+        }}
+        
+        // Cluster details (for Clusters tab)
+        function initClusterDetails() {{
+            const container = document.getElementById('clusterDetails');
+            const clusters = explorerData.clustering.clusters || [];
+            const points = explorerData.clustering.points || [];
+            
+            if (clusters.length === 0) {{
+                container.innerHTML = '<div style="text-align: center; padding: 20px; opacity: 0.6;">No clustering data available</div>';
+                return;
+            }}
+            
+            container.innerHTML = clusters.map(c => {{
+                const color = clusterColors[c.id % clusterColors.length];
+                
+                // Get sample windows for this cluster
+                const clusterPoints = points.filter(p => p.cluster === c.id).slice(0, 6);
+                const sampleWindows = [];
+                
+                clusterPoints.forEach(p => {{
+                    const session = explorerData.sessions.find(s => s.filename === p.session);
+                    if (session) {{
+                        const window = session.windows.find(w => 
+                            Math.abs((w.time_start || 0) * 50 - p.start_sample) < 5
+                        );
+                        if (window && window.filepath) {{
+                            sampleWindows.push(window.filepath);
+                        }}
+                    }}
+                }});
+                
+                return `
+                    <div class="cluster-detail-card" style="border-left-color: ${{color}}">
+                        <div class="cluster-detail-header">
+                            <div class="cluster-dot" style="background: ${{color}}; width: 20px; height: 20px;"></div>
+                            <span class="cluster-detail-title">Cluster ${{c.id}}</span>
+                            <button class="action-btn" onclick="goToCluster(${{c.id}})" style="margin-left: auto;">
+                                View in Explore →
+                            </button>
+                        </div>
+                        
+                        <div class="cluster-detail-stats">
+                            <div class="cluster-detail-stat">
+                                <span class="cluster-detail-stat-value">${{c.size}}</span>
+                                <span class="cluster-detail-stat-label">Windows</span>
+                            </div>
+                            <div class="cluster-detail-stat">
+                                <span class="cluster-detail-stat-value">${{c.percentage.toFixed(1)}}%</span>
+                                <span class="cluster-detail-stat-label">of Total</span>
+                            </div>
+                            <div class="cluster-detail-stat">
+                                <span class="cluster-detail-stat-value">${{c.sessions.length}}</span>
+                                <span class="cluster-detail-stat-label">Sessions</span>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-top: 15px;">
+                            <strong style="font-size: 0.9em; opacity: 0.8;">Sessions containing this cluster:</strong>
+                            <div class="cluster-sessions-list">
+                                ${{c.sessions.map(s => `
+                                    <span class="cluster-session-tag" onclick="searchSession('${{s}}')">${{s.replace('.json', '').substring(0, 19)}}</span>
+                                `).join('')}}
+                            </div>
+                        </div>
+                        
+                        ${{sampleWindows.length > 0 ? `
+                            <div style="margin-top: 15px;">
+                                <strong style="font-size: 0.9em; opacity: 0.8;">Sample windows:</strong>
+                                <div class="cluster-windows-preview">
+                                    ${{sampleWindows.map(w => `
+                                        <div class="cluster-window-thumb" onclick="openModal('${{w}}')">
+                                            <img src="${{w}}" alt="Window preview">
+                                        </div>
+                                    `).join('')}}
+                                </div>
+                            </div>
+                        ` : ''}}
+                    </div>
+                `;
+            }}).join('');
+        }}
+        
+        // Navigate to cluster in Explore tab
+        function goToCluster(clusterId) {{
+            // Switch to Explore tab
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelector('[data-tab="explore"]').classList.add('active');
+            document.getElementById('tab-explore').classList.add('active');
+            
+            // Select the cluster
+            selectCluster(clusterId);
+        }}
+        
+        // Search for a session
+        function searchSession(filename) {{
+            // Switch to Explore tab
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelector('[data-tab="explore"]').classList.add('active');
+            document.getElementById('tab-explore').classList.add('active');
+            
+            // Set search box
+            document.getElementById('searchBox').value = filename.replace('.json', '');
+            applyFilters();
+        }}
         
         // Labeling panel
         function initLabelingPanel() {{

@@ -17,7 +17,6 @@
         .container { max-width: 1800px; margin: 0 auto; padding: 20px; }
         
         header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             padding: 25px 30px;
             border-radius: 12px;
             margin-bottom: 20px;
@@ -176,8 +175,7 @@
         }
         
         .session-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 15px 20px;
+            padding: 0.5em;
             cursor: pointer;
             display: flex;
             justify-content: space-between;
@@ -217,11 +215,11 @@
         .session-card.expanded .session-content { display: block; }
         
         .section-title {
-            font-size: 1.2em;
-            color: #667eea;
-            margin: 20px 0 15px 0;
-            padding-bottom: 8px;
-            border-bottom: 2px solid #667eea;
+            font-size: 1em;
+            /* color: #667eea; */
+            margin: 0;
+            /* padding-bottom: 8px; */
+            /* border-bottom: 2px solid #667eea;
         }
         
         .section-title:first-child { margin-top: 0; }
@@ -262,8 +260,8 @@
         
         .window-preview {
             width: 100%;
-            height: 100px;
-            object-fit: cover;
+            object-fit: contain;
+            aspect-ratio: 1.2;
         }
         
         .window-info {
@@ -391,6 +389,207 @@
         .metric-label { opacity: 0.7; }
         .metric-value { font-weight: bold; }
         
+        /* Filter bar extras */
+        .divider {
+            width: 1px;
+            height: 30px;
+            background: #2a2a4a;
+            margin: 0 5px;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+            color: #aaa;
+        }
+        
+        .checkbox-label input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            accent-color: #667eea;
+        }
+        
+        .action-btn {
+            padding: 8px 16px;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            background: transparent;
+            color: #667eea;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.9em;
+        }
+        
+        .action-btn:hover {
+            background: #667eea;
+            color: #fff;
+        }
+        
+        .section-hidden { display: none !important; }
+        
+        /* Cluster stats grid */
+        .cluster-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .cluster-stat-card {
+            background: #0f0f23;
+            border-radius: 10px;
+            padding: 15px;
+            border-left: 4px solid;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .cluster-stat-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+        
+        .cluster-stat-card.selected {
+            box-shadow: 0 0 0 2px #667eea;
+        }
+        
+        .cluster-stat-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .cluster-stat-title {
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+        
+        .cluster-stat-size {
+            margin-left: auto;
+            background: rgba(255,255,255,0.1);
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.85em;
+        }
+        
+        .cluster-stat-bar {
+            height: 8px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+            margin: 10px 0;
+            overflow: hidden;
+        }
+        
+        .cluster-stat-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s;
+        }
+        
+        .cluster-stat-sessions {
+            font-size: 0.85em;
+            opacity: 0.7;
+            margin-top: 8px;
+        }
+        
+        .cluster-detail-card {
+            background: #0f0f23;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-left: 4px solid;
+        }
+        
+        .cluster-detail-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .cluster-detail-title {
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+        
+        .cluster-detail-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .cluster-detail-stat {
+            background: rgba(255,255,255,0.05);
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+        }
+        
+        .cluster-detail-stat-value {
+            font-size: 1.3em;
+            font-weight: bold;
+            display: block;
+        }
+        
+        .cluster-detail-stat-label {
+            font-size: 0.8em;
+            opacity: 0.7;
+        }
+        
+        .cluster-sessions-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        
+        .cluster-session-tag {
+            background: rgba(255,255,255,0.1);
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 0.8em;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .cluster-session-tag:hover {
+            background: rgba(102, 126, 234, 0.3);
+        }
+        
+        .cluster-windows-preview {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 8px;
+            margin-top: 15px;
+        }
+        
+        .cluster-window-thumb {
+            aspect-ratio: 1;
+            background: #1a1a2e;
+            border-radius: 6px;
+            overflow: hidden;
+            cursor: pointer;
+        }
+        
+        .cluster-window-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
         /* Responsive */
         @media (max-width: 1200px) {
             .main-layout { grid-template-columns: 1fr; }
@@ -463,6 +662,24 @@
                             <option value="duration-desc">Longest First</option>
                             <option value="windows-desc">Most Windows</option>
                         </select>
+                        <div class="divider"></div>
+                        <div class="checkbox-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="showComposite" checked>
+                                📊 Composite
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="showWindows" checked>
+                                🔍 Windows
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="showRaw" checked>
+                                📐 Raw
+                            </label>
+                        </div>
+                        <div class="divider"></div>
+                        <button class="action-btn" onclick="expandAll()">Expand All</button>
+                        <button class="action-btn" onclick="collapseAll()">Collapse All</button>
                     </div>
                     
                     <div class="session-grid" id="sessionGrid"></div>
@@ -474,9 +691,13 @@
             <div class="content-area">
                 <h2 style="margin-bottom: 20px;">Cluster Analysis</h2>
                 <p style="margin-bottom: 20px; opacity: 0.8;">
-                    Click on a cluster in the visualization or legend to filter sessions.
-                    Each cluster represents a group of similar sensor patterns.
+                    Click on a cluster to filter sessions in the Explore tab.
+                    Each cluster represents a group of similar sensor patterns discovered by K-means clustering.
                 </p>
+                
+                <div class="cluster-stats-grid" id="clusterStatsGrid"></div>
+                
+                <h3 style="margin-top: 30px; margin-bottom: 15px; color: #667eea;">Cluster Details</h3>
                 <div id="clusterDetails"></div>
             </div>
         </div>
@@ -508,7 +729,7 @@
     <script>
         // Embedded data
         const explorerData = {
-  "generated_at": "2025-12-08T11:05:56.925056",
+  "generated_at": "2025-12-08T12:14:25.578232",
   "summary": {
     "total_sessions": 24,
     "labeled_sessions": 0,
@@ -566,22 +787,20 @@
           "window_num": 1,
           "time_start": 0.0,
           "time_end": 1.0,
-          "filename": "window_001.png",
           "filepath": "windows_2023-11-24T17:14:18.479Z/window_001.png",
-          "color": "#666962",
-          "accel_mag_mean": 8283.09820819986,
-          "gyro_mag_mean": 24894.621532672747,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 1
         },
         {
           "window_num": 2,
           "time_start": 1.0,
           "time_end": 2.0,
-          "filename": "window_002.png",
           "filepath": "windows_2023-11-24T17:14:18.479Z/window_002.png",
-          "color": "#656961",
-          "accel_mag_mean": 8284.693033182684,
-          "gyro_mag_mean": 25359.903990686125,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 1
         }
       ],
@@ -595,41 +814,38 @@
       "duration": 3.7,
       "composite_image": "composite_2023-11-24T17:24:38.129Z.png",
       "raw_images": [
-        "raw_axes_2023-11-24T17:24:38.129Z.png",
-        "orientation_3d_2023-11-24T17:24:38.129Z.png"
+        "orientation_3d_2023-11-24T17:24:38.129Z.png",
+        "raw_axes_2023-11-24T17:24:38.129Z.png"
       ],
       "windows": [
         {
           "window_num": 1,
           "time_start": 0.0,
           "time_end": 1.0,
-          "filename": "window_001.png",
           "filepath": "windows_2023-11-24T17:24:38.129Z/window_001.png",
-          "color": "#676964",
-          "accel_mag_mean": 8283.278417756432,
-          "gyro_mag_mean": 23877.83174037251,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 1
         },
         {
           "window_num": 2,
           "time_start": 1.0,
           "time_end": 2.0,
-          "filename": "window_002.png",
           "filepath": "windows_2023-11-24T17:24:38.129Z/window_002.png",
-          "color": "#666963",
-          "accel_mag_mean": 8282.883516048323,
-          "gyro_mag_mean": 24767.043976842415,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 1
         },
         {
           "window_num": 3,
           "time_start": 2.0,
           "time_end": 3.0,
-          "filename": "window_003.png",
           "filepath": "windows_2023-11-24T17:24:38.129Z/window_003.png",
-          "color": "#666963",
-          "accel_mag_mean": 8283.37256270002,
-          "gyro_mag_mean": 24281.779610786605,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 1
         }
       ],
@@ -651,33 +867,30 @@
           "window_num": 1,
           "time_start": 0.0,
           "time_end": 1.0,
-          "filename": "window_001.png",
           "filepath": "windows_2023-11-24T17:27:20.364Z/window_001.png",
-          "color": "#6a6c66",
-          "accel_mag_mean": 8530.252539317766,
-          "gyro_mag_mean": 24290.290218788094,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 9
         },
         {
           "window_num": 2,
           "time_start": 1.0,
           "time_end": 2.0,
-          "filename": "window_002.png",
           "filepath": "windows_2023-11-24T17:27:20.364Z/window_002.png",
-          "color": "#676963",
-          "accel_mag_mean": 8304.658385599907,
-          "gyro_mag_mean": 24347.798056354237,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 1
         },
         {
           "window_num": 3,
           "time_start": 2.0,
           "time_end": 3.0,
-          "filename": "window_003.png",
           "filepath": "windows_2023-11-24T17:27:20.364Z/window_003.png",
-          "color": "#666864",
-          "accel_mag_mean": 8166.915962533954,
-          "gyro_mag_mean": 24105.34440844865,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 1
         }
       ],
@@ -691,41 +904,38 @@
       "duration": 3.76,
       "composite_image": "composite_2023-11-24T17:27:53.662Z.png",
       "raw_images": [
-        "raw_axes_2023-11-24T17:27:53.662Z.png",
-        "orientation_3d_2023-11-24T17:27:53.662Z.png"
+        "orientation_3d_2023-11-24T17:27:53.662Z.png",
+        "raw_axes_2023-11-24T17:27:53.662Z.png"
       ],
       "windows": [
         {
           "window_num": 1,
           "time_start": 0.0,
           "time_end": 1.0,
-          "filename": "window_001.png",
           "filepath": "windows_2023-11-24T17:27:53.662Z/window_001.png",
-          "color": "#696b64",
-          "accel_mag_mean": 8446.519026183974,
-          "gyro_mag_mean": 24612.61976584827,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 3
         },
         {
           "window_num": 2,
           "time_start": 1.0,
           "time_end": 2.0,
-          "filename": "window_002.png",
           "filepath": "windows_2023-11-24T17:27:53.662Z/window_002.png",
-          "color": "#6a6d65",
-          "accel_mag_mean": 8558.753498775714,
-          "gyro_mag_mean": 24331.066564299446,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 3
         },
         {
           "window_num": 3,
           "time_start": 2.0,
           "time_end": 3.0,
-          "filename": "window_003.png",
           "filepath": "windows_2023-11-24T17:27:53.662Z/window_003.png",
-          "color": "#6b6e66",
-          "accel_mag_mean": 8628.69384112648,
-          "gyro_mag_mean": 24481.74188839633,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 3
         }
       ],
@@ -739,41 +949,38 @@
       "duration": 3.74,
       "composite_image": "composite_2023-11-24T17:28:29.121Z.png",
       "raw_images": [
-        "raw_axes_2023-11-24T17:28:29.121Z.png",
-        "orientation_3d_2023-11-24T17:28:29.121Z.png"
+        "orientation_3d_2023-11-24T17:28:29.121Z.png",
+        "raw_axes_2023-11-24T17:28:29.121Z.png"
       ],
       "windows": [
         {
           "window_num": 1,
           "time_start": 0.0,
           "time_end": 1.0,
-          "filename": "window_001.png",
           "filepath": "windows_2023-11-24T17:28:29.121Z/window_001.png",
-          "color": "#6d7067",
-          "accel_mag_mean": 8801.882367107628,
-          "gyro_mag_mean": 24513.688627421838,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 3
         },
         {
           "window_num": 2,
           "time_start": 1.0,
           "time_end": 2.0,
-          "filename": "window_002.png",
           "filepath": "windows_2023-11-24T17:28:29.121Z/window_002.png",
-          "color": "#6c7069",
-          "accel_mag_mean": 8801.645752545131,
-          "gyro_mag_mean": 24723.88996737638,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 9
         },
         {
           "window_num": 3,
           "time_start": 2.0,
           "time_end": 3.0,
-          "filename": "window_003.png",
           "filepath": "windows_2023-11-24T17:28:29.121Z/window_003.png",
-          "color": "#6e7169",
-          "accel_mag_mean": 8889.422812317887,
-          "gyro_mag_mean": 24866.94911129745,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 3
         }
       ],
@@ -787,41 +994,38 @@
       "duration": 3.74,
       "composite_image": "composite_2023-11-24T17:29:02.123Z.png",
       "raw_images": [
-        "raw_axes_2023-11-24T17:29:02.123Z.png",
-        "orientation_3d_2023-11-24T17:29:02.123Z.png"
+        "orientation_3d_2023-11-24T17:29:02.123Z.png",
+        "raw_axes_2023-11-24T17:29:02.123Z.png"
       ],
       "windows": [
         {
           "window_num": 1,
           "time_start": 0.0,
           "time_end": 1.0,
-          "filename": "window_001.png",
           "filepath": "windows_2023-11-24T17:29:02.123Z/window_001.png",
-          "color": "#6c6e67",
-          "accel_mag_mean": 8674.721457804566,
-          "gyro_mag_mean": 24243.74137649122,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 9
         },
         {
           "window_num": 2,
           "time_start": 1.0,
           "time_end": 2.0,
-          "filename": "window_002.png",
           "filepath": "windows_2023-11-24T17:29:02.123Z/window_002.png",
-          "color": "#6b6d65",
-          "accel_mag_mean": 8607.385200692543,
-          "gyro_mag_mean": 24765.78238643548,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 3
         },
         {
           "window_num": 3,
           "time_start": 2.0,
           "time_end": 3.0,
-          "filename": "window_003.png",
           "filepath": "windows_2023-11-24T17:29:02.123Z/window_003.png",
-          "color": "#6b6c67",
-          "accel_mag_mean": 8519.893024198971,
-          "gyro_mag_mean": 24464.962440951298,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 3
         }
       ],
@@ -835,41 +1039,38 @@
       "duration": 3.74,
       "composite_image": "composite_2023-11-24T17:34:43.947Z.png",
       "raw_images": [
-        "raw_axes_2023-11-24T17:34:43.947Z.png",
-        "orientation_3d_2023-11-24T17:34:43.947Z.png"
+        "orientation_3d_2023-11-24T17:34:43.947Z.png",
+        "raw_axes_2023-11-24T17:34:43.947Z.png"
       ],
       "windows": [
         {
           "window_num": 1,
           "time_start": 0.0,
           "time_end": 1.0,
-          "filename": "window_001.png",
           "filepath": "windows_2023-11-24T17:34:43.947Z/window_001.png",
-          "color": "#6b6d66",
-          "accel_mag_mean": 8586.338403769438,
-          "gyro_mag_mean": 24610.75780255299,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 3
         },
         {
           "window_num": 2,
           "time_start": 1.0,
           "time_end": 2.0,
-          "filename": "window_002.png",
           "filepath": "windows_2023-11-24T17:34:43.947Z/window_002.png",
-          "color": "#6f716a",
-          "accel_mag_mean": 8912.256427145685,
-          "gyro_mag_mean": 24931.648911493536,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 3
         },
         {
           "window_num": 3,
           "time_start": 2.0,
           "time_end": 3.0,
-          "filename": "window_003.png",
           "filepath": "windows_2023-11-24T17:34:43.947Z/window_003.png",
-          "color": "#6b6d65",
-          "accel_mag_mean": 8616.089940252254,
-          "gyro_mag_mean": 25269.11442385003,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 3
         }
       ],
@@ -883,41 +1084,38 @@
       "duration": 3.74,
       "composite_image": "composite_2023-11-24T17:35:21.240Z.png",
       "raw_images": [
-        "raw_axes_2023-11-24T17:35:21.240Z.png",
-        "orientation_3d_2023-11-24T17:35:21.240Z.png"
+        "orientation_3d_2023-11-24T17:35:21.240Z.png",
+        "raw_axes_2023-11-24T17:35:21.240Z.png"
       ],
       "windows": [
         {
           "window_num": 1,
           "time_start": 0.0,
           "time_end": 1.0,
-          "filename": "window_001.png",
           "filepath": "windows_2023-11-24T17:35:21.240Z/window_001.png",
-          "color": "#6d6e68",
-          "accel_mag_mean": 8687.717711460627,
-          "gyro_mag_mean": 24543.453375610192,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 3
         },
         {
           "window_num": 2,
           "time_start": 1.0,
           "time_end": 2.0,
-          "filename": "window_002.png",
           "filepath": "windows_2023-11-24T17:35:21.240Z/window_002.png",
-          "color": "#6e706a",
-          "accel_mag_mean": 8833.907832356726,
-          "gyro_mag_mean": 24606.095439650748,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 3
         },
         {
           "window_num": 3,
           "time_start": 2.0,
           "time_end": 3.0,
-          "filename": "window_003.png",
           "filepath": "windows_2023-11-24T17:35:21.240Z/window_003.png",
-          "color": "#74756e",
-          "accel_mag_mean": 9232.089073646293,
-          "gyro_mag_mean": 24643.80311289601,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 9
         }
       ],
@@ -939,33 +1137,30 @@
           "window_num": 1,
           "time_start": 0.0,
           "time_end": 1.0,
-          "filename": "window_001.png",
           "filepath": "windows_2023-11-24T17:36:05.668Z/window_001.png",
-          "color": "#6c6d68",
-          "accel_mag_mean": 8583.094287859332,
-          "gyro_mag_mean": 24353.508045105093,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 3
         },
         {
           "window_num": 2,
           "time_start": 1.0,
           "time_end": 2.0,
-          "filename": "window_002.png",
           "filepath": "windows_2023-11-24T17:36:05.668Z/window_002.png",
-          "color": "#6e6f68",
-          "accel_mag_mean": 8782.160148190997,
-          "gyro_mag_mean": 25441.247690033622,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 9
         },
         {
           "window_num": 3,
           "time_start": 2.0,
           "time_end": 3.0,
-          "filename": "window_003.png",
           "filepath": "windows_2023-11-24T17:36:05.668Z/window_003.png",
-          "color": "#6c6e68",
-          "accel_mag_mean": 8636.631481244944,
-          "gyro_mag_mean": 24692.53046498003,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 9
         }
       ],
@@ -979,41 +1174,38 @@
       "duration": 3.72,
       "composite_image": "composite_2023-11-24T17:36:42.659Z.png",
       "raw_images": [
-        "raw_axes_2023-11-24T17:36:42.659Z.png",
-        "orientation_3d_2023-11-24T17:36:42.659Z.png"
+        "orientation_3d_2023-11-24T17:36:42.659Z.png",
+        "raw_axes_2023-11-24T17:36:42.659Z.png"
       ],
       "windows": [
         {
           "window_num": 1,
           "time_start": 0.0,
           "time_end": 1.0,
-          "filename": "window_001.png",
           "filepath": "windows_2023-11-24T17:36:42.659Z/window_001.png",
-          "color": "#696a64",
-          "accel_mag_mean": 8369.042786490327,
-          "gyro_mag_mean": 24538.783228612527,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 3
         },
         {
           "window_num": 2,
           "time_start": 1.0,
           "time_end": 2.0,
-          "filename": "window_002.png",
           "filepath": "windows_2023-11-24T17:36:42.659Z/window_002.png",
-          "color": "#6b6c66",
-          "accel_mag_mean": 8521.331361062039,
-          "gyro_mag_mean": 24543.432291961642,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 3
         },
         {
           "window_num": 3,
           "time_start": 2.0,
           "time_end": 3.0,
-          "filename": "window_003.png",
           "filepath": "windows_2023-11-24T17:36:42.659Z/window_003.png",
-          "color": "#6a6b66",
-          "accel_mag_mean": 8467.71240717011,
-          "gyro_mag_mean": 24415.361171547225,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 3
         }
       ],
@@ -1027,41 +1219,38 @@
       "duration": 3.76,
       "composite_image": "composite_2023-11-24T17:37:23.790Z.png",
       "raw_images": [
-        "raw_axes_2023-11-24T17:37:23.790Z.png",
-        "orientation_3d_2023-11-24T17:37:23.790Z.png"
+        "orientation_3d_2023-11-24T17:37:23.790Z.png",
+        "raw_axes_2023-11-24T17:37:23.790Z.png"
       ],
       "windows": [
         {
           "window_num": 1,
           "time_start": 0.0,
           "time_end": 1.0,
-          "filename": "window_001.png",
           "filepath": "windows_2023-11-24T17:37:23.790Z/window_001.png",
-          "color": "#6c6e67",
-          "accel_mag_mean": 8632.970852722787,
-          "gyro_mag_mean": 24093.68772732629,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 3
         },
         {
           "window_num": 2,
           "time_start": 1.0,
           "time_end": 2.0,
-          "filename": "window_002.png",
           "filepath": "windows_2023-11-24T17:37:23.790Z/window_002.png",
-          "color": "#6c6e66",
-          "accel_mag_mean": 8670.50603888938,
-          "gyro_mag_mean": 24716.12139490601,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 3
         },
         {
           "window_num": 3,
           "time_start": 2.0,
           "time_end": 3.0,
-          "filename": "window_003.png",
           "filepath": "windows_2023-11-24T17:37:23.790Z/window_003.png",
-          "color": "#686a64",
-          "accel_mag_mean": 8350.271405063286,
-          "gyro_mag_mean": 24628.114110604063,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 9
         }
       ],
@@ -1075,41 +1264,38 @@
       "duration": 3.68,
       "composite_image": "composite_2023-11-24T17:44:59.523Z.png",
       "raw_images": [
-        "raw_axes_2023-11-24T17:44:59.523Z.png",
-        "orientation_3d_2023-11-24T17:44:59.523Z.png"
+        "orientation_3d_2023-11-24T17:44:59.523Z.png",
+        "raw_axes_2023-11-24T17:44:59.523Z.png"
       ],
       "windows": [
         {
           "window_num": 1,
           "time_start": 0.0,
           "time_end": 1.0,
-          "filename": "window_001.png",
           "filepath": "windows_2023-11-24T17:44:59.523Z/window_001.png",
-          "color": "#6c6e68",
-          "accel_mag_mean": 8676.489246632129,
-          "gyro_mag_mean": 24104.53704866541,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 5
         },
         {
           "window_num": 2,
           "time_start": 1.0,
           "time_end": 2.0,
-          "filename": "window_002.png",
           "filepath": "windows_2023-11-24T17:44:59.523Z/window_002.png",
-          "color": "#696761",
-          "accel_mag_mean": 8269.964274951846,
-          "gyro_mag_mean": 24387.513667532985,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 8
         },
         {
           "window_num": 3,
           "time_start": 2.0,
           "time_end": 3.0,
-          "filename": "window_003.png",
           "filepath": "windows_2023-11-24T17:44:59.523Z/window_003.png",
-          "color": "#71716c",
-          "accel_mag_mean": 8925.77766336191,
-          "gyro_mag_mean": 23952.284264831673,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 9
         }
       ],
@@ -1131,33 +1317,30 @@
           "window_num": 1,
           "time_start": 0.0,
           "time_end": 1.0,
-          "filename": "window_001.png",
           "filepath": "windows_2023-11-24T22:05:54.664Z/window_001.png",
-          "color": "#656d65",
-          "accel_mag_mean": 8562.31383678232,
-          "gyro_mag_mean": 24385.053190244398,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 9
         },
         {
           "window_num": 2,
           "time_start": 1.0,
           "time_end": 2.0,
-          "filename": "window_002.png",
           "filepath": "windows_2023-11-24T22:05:54.664Z/window_002.png",
-          "color": "#666c66",
-          "accel_mag_mean": 8494.570890244036,
-          "gyro_mag_mean": 24277.142655203763,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 3
         },
         {
           "window_num": 3,
           "time_start": 2.0,
           "time_end": 3.0,
-          "filename": "window_003.png",
           "filepath": "windows_2023-11-24T22:05:54.664Z/window_003.png",
-          "color": "#666e66",
-          "accel_mag_mean": 8646.372810541932,
-          "gyro_mag_mean": 25084.441759400383,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 9
         }
       ],
@@ -1171,8 +1354,8 @@
       "duration": 0.66,
       "composite_image": "composite_2023-11-24T22:18:26.063Z.png",
       "raw_images": [
-        "raw_axes_2023-11-24T22:18:26.063Z.png",
-        "orientation_3d_2023-11-24T22:18:26.063Z.png"
+        "orientation_3d_2023-11-24T22:18:26.063Z.png",
+        "raw_axes_2023-11-24T22:18:26.063Z.png"
       ],
       "windows": [],
       "labeled": false,
@@ -1193,33 +1376,30 @@
           "window_num": 1,
           "time_start": 0.0,
           "time_end": 1.0,
-          "filename": "window_001.png",
           "filepath": "windows_2023-11-24T22:19:05.698Z/window_001.png",
-          "color": "#686760",
-          "accel_mag_mean": 8168.991955540093,
-          "gyro_mag_mean": 25052.028306081098,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 8
         },
         {
           "window_num": 2,
           "time_start": 1.0,
           "time_end": 2.0,
-          "filename": "window_002.png",
           "filepath": "windows_2023-11-24T22:19:05.698Z/window_002.png",
-          "color": "#686861",
-          "accel_mag_mean": 8197.03825283563,
-          "gyro_mag_mean": 24984.31043864689,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 5
         },
         {
           "window_num": 3,
           "time_start": 2.0,
           "time_end": 3.0,
-          "filename": "window_003.png",
           "filepath": "windows_2023-11-24T22:19:05.698Z/window_003.png",
-          "color": "#696861",
-          "accel_mag_mean": 8254.970282524644,
-          "gyro_mag_mean": 25461.5246838465,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 8
         }
       ],
@@ -1233,41 +1413,38 @@
       "duration": 3.64,
       "composite_image": "composite_2023-11-24T22:19:47.909Z.png",
       "raw_images": [
-        "raw_axes_2023-11-24T22:19:47.909Z.png",
-        "orientation_3d_2023-11-24T22:19:47.909Z.png"
+        "orientation_3d_2023-11-24T22:19:47.909Z.png",
+        "raw_axes_2023-11-24T22:19:47.909Z.png"
       ],
       "windows": [
         {
           "window_num": 1,
           "time_start": 0.0,
           "time_end": 1.0,
-          "filename": "window_001.png",
           "filepath": "windows_2023-11-24T22:19:47.909Z/window_001.png",
-          "color": "#686763",
-          "accel_mag_mean": 8206.059909376863,
-          "gyro_mag_mean": 24670.09295452548,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 5
         },
         {
           "window_num": 2,
           "time_start": 1.0,
           "time_end": 2.0,
-          "filename": "window_002.png",
           "filepath": "windows_2023-11-24T22:19:47.909Z/window_002.png",
-          "color": "#666063",
-          "accel_mag_mean": 8072.887434422974,
-          "gyro_mag_mean": 24918.896812167615,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 0
         },
         {
           "window_num": 3,
           "time_start": 2.0,
           "time_end": 3.0,
-          "filename": "window_003.png",
           "filepath": "windows_2023-11-24T22:19:47.909Z/window_003.png",
-          "color": "#676164",
-          "accel_mag_mean": 8124.922272300956,
-          "gyro_mag_mean": 25326.220835432447,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 8
         }
       ],
@@ -1289,33 +1466,30 @@
           "window_num": 1,
           "time_start": 0.0,
           "time_end": 1.0,
-          "filename": "window_001.png",
           "filepath": "windows_2023-11-24T22:20:26.429Z/window_001.png",
-          "color": "#a3989f",
-          "accel_mag_mean": 12861.122230679031,
-          "gyro_mag_mean": 24910.124935448795,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 6
         },
         {
           "window_num": 2,
           "time_start": 1.0,
           "time_end": 2.0,
-          "filename": "window_002.png",
           "filepath": "windows_2023-11-24T22:20:26.429Z/window_002.png",
-          "color": "#867e85",
-          "accel_mag_mean": 10581.618419641918,
-          "gyro_mag_mean": 25192.84952954803,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 4
         },
         {
           "window_num": 3,
           "time_start": 2.0,
           "time_end": 3.0,
-          "filename": "window_003.png",
           "filepath": "windows_2023-11-24T22:20:26.429Z/window_003.png",
-          "color": "#9a9099",
-          "accel_mag_mean": 12152.872277210341,
-          "gyro_mag_mean": 24957.53561500772,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 2
         }
       ],
@@ -1337,33 +1511,30 @@
           "window_num": 1,
           "time_start": 0.0,
           "time_end": 1.0,
-          "filename": "window_001.png",
           "filepath": "windows_2023-11-24T22:21:08.191Z/window_001.png",
-          "color": "#70696a",
-          "accel_mag_mean": 8808.603727063055,
-          "gyro_mag_mean": 25138.40384439813,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 2
         },
         {
           "window_num": 2,
           "time_start": 1.0,
           "time_end": 2.0,
-          "filename": "window_002.png",
           "filepath": "windows_2023-11-24T22:21:08.191Z/window_002.png",
-          "color": "#666168",
-          "accel_mag_mean": 8158.865008327213,
-          "gyro_mag_mean": 25001.985675824457,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 0
         },
         {
           "window_num": 3,
           "time_start": 2.0,
           "time_end": 3.0,
-          "filename": "window_003.png",
           "filepath": "windows_2023-11-24T22:21:08.191Z/window_003.png",
-          "color": "#6a6469",
-          "accel_mag_mean": 8348.208275697765,
-          "gyro_mag_mean": 24859.859068364043,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 4
         }
       ],
@@ -1385,33 +1556,30 @@
           "window_num": 1,
           "time_start": 0.0,
           "time_end": 1.0,
-          "filename": "window_001.png",
           "filepath": "windows_2023-11-24T22:25:19.216Z/window_001.png",
-          "color": "#787078",
-          "accel_mag_mean": 9419.9775513661,
-          "gyro_mag_mean": 24864.103358799493,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 4
         },
         {
           "window_num": 2,
           "time_start": 1.0,
           "time_end": 2.0,
-          "filename": "window_002.png",
           "filepath": "windows_2023-11-24T22:25:19.216Z/window_002.png",
-          "color": "#ada2ab",
-          "accel_mag_mean": 13609.699725655673,
-          "gyro_mag_mean": 24965.582151297567,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 6
         },
         {
           "window_num": 3,
           "time_start": 2.0,
           "time_end": 3.0,
-          "filename": "window_003.png",
           "filepath": "windows_2023-11-24T22:25:19.216Z/window_003.png",
-          "color": "#746c6f",
-          "accel_mag_mean": 9160.62324082688,
-          "gyro_mag_mean": 25322.124632588155,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 4
         }
       ],
@@ -1425,41 +1593,38 @@
       "duration": 3.72,
       "composite_image": "composite_2023-11-24T22:25:51.821Z.png",
       "raw_images": [
-        "raw_axes_2023-11-24T22:25:51.821Z.png",
-        "orientation_3d_2023-11-24T22:25:51.821Z.png"
+        "orientation_3d_2023-11-24T22:25:51.821Z.png",
+        "raw_axes_2023-11-24T22:25:51.821Z.png"
       ],
       "windows": [
         {
           "window_num": 1,
           "time_start": 0.0,
           "time_end": 1.0,
-          "filename": "window_001.png",
           "filepath": "windows_2023-11-24T22:25:51.821Z/window_001.png",
-          "color": "#686863",
-          "accel_mag_mean": 8202.104565832153,
-          "gyro_mag_mean": 24810.02095006045,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 5
         },
         {
           "window_num": 2,
           "time_start": 1.0,
           "time_end": 2.0,
-          "filename": "window_002.png",
           "filepath": "windows_2023-11-24T22:25:51.821Z/window_002.png",
-          "color": "#65655f",
-          "accel_mag_mean": 7986.747602226254,
-          "gyro_mag_mean": 25623.157023928597,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 8
         },
         {
           "window_num": 3,
           "time_start": 2.0,
           "time_end": 3.0,
-          "filename": "window_003.png",
           "filepath": "windows_2023-11-24T22:25:51.821Z/window_003.png",
-          "color": "#6d6668",
-          "accel_mag_mean": 8588.485781661426,
-          "gyro_mag_mean": 25153.344842197635,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 2
         }
       ],
@@ -1481,33 +1646,30 @@
           "window_num": 1,
           "time_start": 0.0,
           "time_end": 1.0,
-          "filename": "window_001.png",
           "filepath": "windows_2023-11-24T22:27:35.295Z/window_001.png",
-          "color": "#63636a",
-          "accel_mag_mean": 8316.86480842023,
-          "gyro_mag_mean": 24869.26431385586,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 5
         },
         {
           "window_num": 2,
           "time_start": 1.0,
           "time_end": 2.0,
-          "filename": "window_002.png",
           "filepath": "windows_2023-11-24T22:27:35.295Z/window_002.png",
-          "color": "#68686d",
-          "accel_mag_mean": 8618.626150241515,
-          "gyro_mag_mean": 25097.12827622967,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 5
         },
         {
           "window_num": 3,
           "time_start": 2.0,
           "time_end": 3.0,
-          "filename": "window_003.png",
           "filepath": "windows_2023-11-24T22:27:35.295Z/window_003.png",
-          "color": "#626369",
-          "accel_mag_mean": 8246.036158714483,
-          "gyro_mag_mean": 25288.11582016711,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 5
         }
       ],
@@ -1529,33 +1691,30 @@
           "window_num": 1,
           "time_start": 0.0,
           "time_end": 1.0,
-          "filename": "window_001.png",
           "filepath": "windows_2023-11-24T22:33:46.427Z/window_001.png",
-          "color": "#64656b",
-          "accel_mag_mean": 8455.386672923265,
-          "gyro_mag_mean": 24986.177948986962,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 5
         },
         {
           "window_num": 2,
           "time_start": 1.0,
           "time_end": 2.0,
-          "filename": "window_002.png",
           "filepath": "windows_2023-11-24T22:33:46.427Z/window_002.png",
-          "color": "#63646a",
-          "accel_mag_mean": 8341.074128294482,
-          "gyro_mag_mean": 25224.30888265323,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 5
         },
         {
           "window_num": 3,
           "time_start": 2.0,
           "time_end": 3.0,
-          "filename": "window_003.png",
           "filepath": "windows_2023-11-24T22:33:46.427Z/window_003.png",
-          "color": "#626268",
-          "accel_mag_mean": 8208.772934370081,
-          "gyro_mag_mean": 25137.37612429634,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 8
         }
       ],
@@ -1569,30 +1728,28 @@
       "duration": 2.24,
       "composite_image": "composite_2024-01-05T16:40:02.821Z.png",
       "raw_images": [
-        "raw_axes_2024-01-05T16:40:02.821Z.png",
-        "orientation_3d_2024-01-05T16:40:02.821Z.png"
+        "orientation_3d_2024-01-05T16:40:02.821Z.png",
+        "raw_axes_2024-01-05T16:40:02.821Z.png"
       ],
       "windows": [
         {
           "window_num": 1,
           "time_start": 0.0,
           "time_end": 1.0,
-          "filename": "window_001.png",
           "filepath": "windows_2024-01-05T16:40:02.821Z/window_001.png",
-          "color": "#696765",
-          "accel_mag_mean": 8294.755850165697,
-          "gyro_mag_mean": 22714.80001682548,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 7
         },
         {
           "window_num": 2,
           "time_start": 1.0,
           "time_end": 2.0,
-          "filename": "window_002.png",
           "filepath": "windows_2024-01-05T16:40:02.821Z/window_002.png",
-          "color": "#686366",
-          "accel_mag_mean": 8183.928441507165,
-          "gyro_mag_mean": 22786.569029937637,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 7
         }
       ],
@@ -1606,41 +1763,38 @@
       "duration": 3.72,
       "composite_image": "composite_2024-01-05T16:41:20.581Z.png",
       "raw_images": [
-        "raw_axes_2024-01-05T16:41:20.581Z.png",
-        "orientation_3d_2024-01-05T16:41:20.581Z.png"
+        "orientation_3d_2024-01-05T16:41:20.581Z.png",
+        "raw_axes_2024-01-05T16:41:20.581Z.png"
       ],
       "windows": [
         {
           "window_num": 1,
           "time_start": 0.0,
           "time_end": 1.0,
-          "filename": "window_001.png",
           "filepath": "windows_2024-01-05T16:41:20.581Z/window_001.png",
-          "color": "#646a66",
-          "accel_mag_mean": 8324.644525404472,
-          "gyro_mag_mean": 23625.672191865488,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 7
         },
         {
           "window_num": 2,
           "time_start": 1.0,
           "time_end": 2.0,
-          "filename": "window_002.png",
           "filepath": "windows_2024-01-05T16:41:20.581Z/window_002.png",
-          "color": "#717773",
-          "accel_mag_mean": 9349.181928798114,
-          "gyro_mag_mean": 23907.918322820904,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 7
         },
         {
           "window_num": 3,
           "time_start": 2.0,
           "time_end": 3.0,
-          "filename": "window_003.png",
           "filepath": "windows_2024-01-05T16:41:20.581Z/window_003.png",
-          "color": "#636866",
-          "accel_mag_mean": 8234.509430469838,
-          "gyro_mag_mean": 23699.134552791278,
+          "color": "#667eea",
+          "accel_mag_mean": 10000,
+          "gyro_mag_mean": 5000,
           "cluster_id": 7
         }
       ],
@@ -3014,6 +3168,8 @@
             initTabs();
             initClusterCanvas();
             initClusterLegend();
+            initClusterStats();
+            initClusterDetails();
             initFilters();
             renderSessions();
             initLabelingPanel();
@@ -3261,7 +3417,60 @@
         
         function toggleSession(idx) {
             document.getElementById(`session-${idx}`).classList.toggle('expanded');
+            updateSectionVisibility(idx);
         }
+        
+        // Expand/Collapse all
+        function expandAll() {
+            document.querySelectorAll('.session-card').forEach(card => {
+                card.classList.add('expanded');
+            });
+            updateAllSectionVisibility();
+        }
+        
+        function collapseAll() {
+            document.querySelectorAll('.session-card').forEach(card => {
+                card.classList.remove('expanded');
+            });
+        }
+        
+        // View filtering
+        function updateSectionVisibility(idx) {
+            const card = document.getElementById(`session-${idx}`);
+            if (!card) return;
+            
+            const showComposite = document.getElementById('showComposite').checked;
+            const showWindows = document.getElementById('showWindows').checked;
+            const showRaw = document.getElementById('showRaw').checked;
+            
+            const sections = card.querySelectorAll('.section-title');
+            sections.forEach(section => {
+                const text = section.textContent;
+                const nextEl = section.nextElementSibling;
+                
+                if (text.includes('Composite')) {
+                    section.classList.toggle('section-hidden', !showComposite);
+                    if (nextEl) nextEl.classList.toggle('section-hidden', !showComposite);
+                } else if (text.includes('Windows')) {
+                    section.classList.toggle('section-hidden', !showWindows);
+                    if (nextEl) nextEl.classList.toggle('section-hidden', !showWindows);
+                } else if (text.includes('Raw')) {
+                    section.classList.toggle('section-hidden', !showRaw);
+                    if (nextEl) nextEl.classList.toggle('section-hidden', !showRaw);
+                }
+            });
+        }
+        
+        function updateAllSectionVisibility() {
+            document.querySelectorAll('.session-card').forEach((card, idx) => {
+                updateSectionVisibility(idx);
+            });
+        }
+        
+        // Initialize show checkboxes
+        document.getElementById('showComposite').addEventListener('change', updateAllSectionVisibility);
+        document.getElementById('showWindows').addEventListener('change', updateAllSectionVisibility);
+        document.getElementById('showRaw').addEventListener('change', updateAllSectionVisibility);
         
         function formatTimestamp(ts) {
             try { return new Date(ts).toLocaleString(); }
@@ -3285,6 +3494,144 @@
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') closeModal();
         });
+        
+        // Cluster stats grid (for Clusters tab)
+        function initClusterStats() {
+            const grid = document.getElementById('clusterStatsGrid');
+            const clusters = explorerData.clustering.clusters || [];
+            const totalWindows = clusters.reduce((sum, c) => sum + c.size, 0);
+            
+            if (clusters.length === 0) {
+                grid.innerHTML = '<div style="text-align: center; padding: 20px; opacity: 0.6;">No clustering data available</div>';
+                return;
+            }
+            
+            grid.innerHTML = clusters.map(c => {
+                const color = clusterColors[c.id % clusterColors.length];
+                const pct = totalWindows > 0 ? (c.size / totalWindows * 100) : 0;
+                return `
+                    <div class="cluster-stat-card" style="border-left-color: ${color}" onclick="goToCluster(${c.id})">
+                        <div class="cluster-stat-header">
+                            <div class="cluster-dot" style="background: ${color}; width: 16px; height: 16px;"></div>
+                            <span class="cluster-stat-title">Cluster ${c.id}</span>
+                            <span class="cluster-stat-size">${c.size} windows</span>
+                        </div>
+                        <div class="cluster-stat-bar">
+                            <div class="cluster-stat-bar-fill" style="width: ${pct}%; background: ${color}"></div>
+                        </div>
+                        <div class="cluster-stat-sessions">
+                            ${c.sessions.length} session${c.sessions.length !== 1 ? 's' : ''} • ${pct.toFixed(1)}% of data
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // Cluster details (for Clusters tab)
+        function initClusterDetails() {
+            const container = document.getElementById('clusterDetails');
+            const clusters = explorerData.clustering.clusters || [];
+            const points = explorerData.clustering.points || [];
+            
+            if (clusters.length === 0) {
+                container.innerHTML = '<div style="text-align: center; padding: 20px; opacity: 0.6;">No clustering data available</div>';
+                return;
+            }
+            
+            container.innerHTML = clusters.map(c => {
+                const color = clusterColors[c.id % clusterColors.length];
+                
+                // Get sample windows for this cluster
+                const clusterPoints = points.filter(p => p.cluster === c.id).slice(0, 6);
+                const sampleWindows = [];
+                
+                clusterPoints.forEach(p => {
+                    const session = explorerData.sessions.find(s => s.filename === p.session);
+                    if (session) {
+                        const window = session.windows.find(w => 
+                            Math.abs((w.time_start || 0) * 50 - p.start_sample) < 5
+                        );
+                        if (window && window.filepath) {
+                            sampleWindows.push(window.filepath);
+                        }
+                    }
+                });
+                
+                return `
+                    <div class="cluster-detail-card" style="border-left-color: ${color}">
+                        <div class="cluster-detail-header">
+                            <div class="cluster-dot" style="background: ${color}; width: 20px; height: 20px;"></div>
+                            <span class="cluster-detail-title">Cluster ${c.id}</span>
+                            <button class="action-btn" onclick="goToCluster(${c.id})" style="margin-left: auto;">
+                                View in Explore →
+                            </button>
+                        </div>
+                        
+                        <div class="cluster-detail-stats">
+                            <div class="cluster-detail-stat">
+                                <span class="cluster-detail-stat-value">${c.size}</span>
+                                <span class="cluster-detail-stat-label">Windows</span>
+                            </div>
+                            <div class="cluster-detail-stat">
+                                <span class="cluster-detail-stat-value">${c.percentage.toFixed(1)}%</span>
+                                <span class="cluster-detail-stat-label">of Total</span>
+                            </div>
+                            <div class="cluster-detail-stat">
+                                <span class="cluster-detail-stat-value">${c.sessions.length}</span>
+                                <span class="cluster-detail-stat-label">Sessions</span>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-top: 15px;">
+                            <strong style="font-size: 0.9em; opacity: 0.8;">Sessions containing this cluster:</strong>
+                            <div class="cluster-sessions-list">
+                                ${c.sessions.map(s => `
+                                    <span class="cluster-session-tag" onclick="searchSession('${s}')">${s.replace('.json', '').substring(0, 19)}</span>
+                                `).join('')}
+                            </div>
+                        </div>
+                        
+                        ${sampleWindows.length > 0 ? `
+                            <div style="margin-top: 15px;">
+                                <strong style="font-size: 0.9em; opacity: 0.8;">Sample windows:</strong>
+                                <div class="cluster-windows-preview">
+                                    ${sampleWindows.map(w => `
+                                        <div class="cluster-window-thumb" onclick="openModal('${w}')">
+                                            <img src="${w}" alt="Window preview">
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // Navigate to cluster in Explore tab
+        function goToCluster(clusterId) {
+            // Switch to Explore tab
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelector('[data-tab="explore"]').classList.add('active');
+            document.getElementById('tab-explore').classList.add('active');
+            
+            // Select the cluster
+            selectCluster(clusterId);
+        }
+        
+        // Search for a session
+        function searchSession(filename) {
+            // Switch to Explore tab
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelector('[data-tab="explore"]').classList.add('active');
+            document.getElementById('tab-explore').classList.add('active');
+            
+            // Set search box
+            document.getElementById('searchBox').value = filename.replace('.json', '');
+            applyFilters();
+        }
         
         // Labeling panel
         function initLabelingPanel() {
