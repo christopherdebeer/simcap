@@ -4,3 +4,11 @@ logs/*
 .DS_Store
 .AppleDouble
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Generated visualizations (can be regenerated from data)
+visualizations/
+
