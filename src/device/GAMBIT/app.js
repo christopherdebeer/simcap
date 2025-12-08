@@ -18,6 +18,21 @@ function getFirmware() {
     return info;
 }
 
+// Initialize Bluetooth advertising with proper device name and appearance
+function init() {
+    // Set Bluetooth appearance and flags for sensor device
+    NRF.setAdvertising([
+        {}, // include original advertising packet
+        [
+            2, 1, 6,           // Bluetooth flags (General Discoverable, BR/EDR Not Supported)
+            3, 0x19, 0x40, 0x05 // Appearance: Generic Sensor (0x0540)
+        ]
+    ], { name: "SIMCAP GAMBIT v" + FIRMWARE_INFO.version });
+
+    console.log("SIMCAP GAMBIT v" + FIRMWARE_INFO.version + " initialized");
+    digitalPulse(LED2, 1, 200); // Green flash to indicate ready
+}
+
 // ===== State and Telemetry =====
 var state = 1;
 var pressCount = 0;
@@ -132,15 +147,18 @@ NRF.on('NFCon', function() {
     console.log('nfc_field : [1]');
     NRF.setAdvertising({
         0x183e: [1],
-    });
+    }, { name: "SIMCAP GAMBIT v" + FIRMWARE_INFO.version });
 });
 NRF.on('NFCoff', function() {
     digitalPulse(LED2, 1, 200);//flash on green light
     console.log('nfc_field : [0]');
     NRF.setAdvertising({
         0x183e: [0],
-    });
+    }, { name: "SIMCAP GAMBIT v" + FIRMWARE_INFO.version });
 });
+
+// Initialize Bluetooth name and appearance
+init();
 
 // //Movement Sensor
 // require("puckjsv2-accel-movement").on();
