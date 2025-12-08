@@ -213,7 +213,7 @@ Baseline data collected with this firmware is stored in:
 data/GAMBIT/*.json
 ```
 
-See the [Web UI README](../../web/GAMBIT/) for data collection workflow.
+See the [Web UI README](../../web/GAMBIT/about) for data collection workflow.
 
 ## Related Components
 
