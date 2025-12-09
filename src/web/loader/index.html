@@ -10,6 +10,7 @@
     <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
     <script>eruda.init();</script>
     <script src="../GAMBIT/puck.js"></script>
+    <script src="../GAMBIT/gambit-client.js"></script>
     <style>
         * { box-sizing: border-box; }
         :root {
@@ -355,6 +356,7 @@
         <button class="tab active" data-tab="presets">Preset Firmware</button>
         <button class="tab" data-tab="custom">Custom Code</button>
         <button class="tab" data-tab="console">Console</button>
+        <button class="tab" data-tab="device-logs">Device Logs</button>
     </div>
 
     <!-- Presets Tab -->
@@ -409,6 +411,49 @@ setTimeout(function() { LED1.reset(); }, 1000);
             <input type="text" id="consoleInput" placeholder="Enter command..."
                    style="flex: 2; padding: 10px; background: #0a0a15; border: 1px solid #333; border-radius: 6px; color: #fff;">
             <button id="sendCmd" class="btn-primary" disabled>Send</button>
+        </div>
+    </div>
+
+    <!-- Device Logs Tab -->
+    <div id="tab-device-logs" class="card tab-content" style="display: none;">
+        <h2>Device Logs</h2>
+
+        <div class="info-box">
+            <strong>On-Device Logging:</strong> GAMBIT firmware stores the last 50 log entries in memory.
+            Logs include boot events, BLE connections, button presses, stream start/stop, and errors.
+        </div>
+
+        <div class="row">
+            <button id="fetchLogsBtn" class="btn-primary" disabled>📥 Fetch Logs</button>
+            <button id="clearLogsBtn" class="btn-danger" disabled>🗑️ Clear Logs</button>
+            <button id="exportLogsBtn" class="btn-secondary" disabled>💾 Export JSON</button>
+        </div>
+
+        <div id="logStats" style="margin: 15px 0; padding: 10px; background: var(--surface-alt); border-radius: 8px; display: none;">
+            <div class="row" style="margin: 0;">
+                <div><strong>Entries:</strong> <span id="logCount">--</span> / <span id="logMax">50</span></div>
+                <div><strong>Memory:</strong> <span id="logMemUsed">--</span> / <span id="logMemTotal">--</span></div>
+                <div><strong>Uptime:</strong> <span id="logUptime">--</span></div>
+            </div>
+        </div>
+
+        <div id="logFilterRow" class="row" style="margin-bottom: 10px; display: none;">
+            <label style="display: flex; align-items: center; gap: 5px; flex: 0;">
+                <input type="checkbox" id="filterError" checked> <span style="color: var(--danger);">Errors</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 5px; flex: 0;">
+                <input type="checkbox" id="filterWarn" checked> <span style="color: var(--warning);">Warnings</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 5px; flex: 0;">
+                <input type="checkbox" id="filterInfo" checked> <span style="color: var(--success);">Info</span>
+            </label>
+            <label style="display: flex; align-items: center; gap: 5px; flex: 0;">
+                <input type="checkbox" id="filterDebug" checked> <span style="color: var(--text-muted);">Debug</span>
+            </label>
+        </div>
+
+        <div class="console" id="deviceLogsOutput" style="max-height: 350px;">
+            <span class="info">Connect to device and click "Fetch Logs" to retrieve on-device logs...</span>
         </div>
     </div>
 
@@ -499,6 +544,165 @@ setTimeout(function() { LED1.reset(); }, 1000);
         consoleOutput.scrollTop = consoleOutput.scrollHeight;
         console.log({type,msg})
     }
+
+    // ===== Length-Prefixed Frame Parser =====
+    // Protocol: \x02TYPE:LENGTH\nPAYLOAD\x03
+    // STX (0x02) = Start of frame, ETX (0x03) = End of frame
+    class FrameParser {
+        constructor() {
+            this.buffer = '';
+            this.handlers = {};
+            this.debug = true;
+        }
+
+        onData(data) {
+            this.buffer += data;
+            this.processBuffer();
+        }
+
+        processBuffer() {
+            while (true) {
+                // Look for STX (start of frame)
+                const start = this.buffer.indexOf('\x02');
+                if (start === -1) {
+                    // No frame start found - keep buffer for potential partial data
+                    // But clear if it's getting too long (garbage data)
+                    if (this.buffer.length > 10000) {
+                        if (this.debug) log('[FRAME] Buffer overflow, clearing', 'warn');
+                        this.buffer = '';
+                    }
+                    return;
+                }
+
+                // Discard anything before STX
+                if (start > 0) {
+                    if (this.debug) log(`[FRAME] Discarding ${start} bytes before STX`, 'info');
+                    this.buffer = this.buffer.slice(start);
+                }
+
+                // Find header end (newline after TYPE:LENGTH)
+                const headerEnd = this.buffer.indexOf('\n');
+                if (headerEnd === -1) return; // Need more data for header
+
+                // Parse header: \x02TYPE:LENGTH\n
+                const header = this.buffer.slice(1, headerEnd); // Skip STX
+                const colonIdx = header.indexOf(':');
+                if (colonIdx === -1) {
+                    // Malformed header - skip this STX and try again
+                    if (this.debug) log('[FRAME] Malformed header (no colon), skipping', 'warn');
+                    this.buffer = this.buffer.slice(1);
+                    continue;
+                }
+
+                const type = header.slice(0, colonIdx);
+                const length = parseInt(header.slice(colonIdx + 1), 10);
+
+                if (isNaN(length) || length < 0) {
+                    if (this.debug) log(`[FRAME] Invalid length: ${header.slice(colonIdx + 1)}`, 'warn');
+                    this.buffer = this.buffer.slice(1);
+                    continue;
+                }
+
+                // Check if we have complete payload + ETX
+                const payloadStart = headerEnd + 1;
+                const payloadEnd = payloadStart + length;
+                const frameEnd = payloadEnd + 1; // +1 for ETX
+
+                if (this.buffer.length < frameEnd) {
+                    // Need more data - wait for next chunk
+                    if (this.debug) log(`[FRAME] Waiting for data: have ${this.buffer.length - payloadStart}, need ${length + 1}`, 'info');
+                    return;
+                }
+
+                // Extract payload and validate ETX
+                const payload = this.buffer.slice(payloadStart, payloadEnd);
+                const etx = this.buffer[payloadEnd];
+
+                if (etx !== '\x03') {
+                    // Missing ETX - frame may be corrupt
+                    if (this.debug) log(`[FRAME] Missing ETX (got ${etx ? etx.charCodeAt(0) : 'EOF'}), skipping frame`, 'warn');
+                    this.buffer = this.buffer.slice(1);
+                    continue;
+                }
+
+                // Valid frame! Parse and dispatch
+                if (this.debug) log(`[FRAME] Received: ${type} (${length} bytes)`, 'success');
+
+                try {
+                    const data = JSON.parse(payload);
+                    if (this.handlers[type]) {
+                        this.handlers[type](data);
+                    } else if (this.handlers['*']) {
+                        // Wildcard handler for unregistered types
+                        this.handlers['*'](type, data);
+                    } else {
+                        if (this.debug) log(`[FRAME] No handler for type: ${type}`, 'warn');
+                    }
+                } catch (e) {
+                    log(`[FRAME] JSON parse error for ${type}: ${e.message}`, 'error');
+                }
+
+                // Remove processed frame from buffer
+                this.buffer = this.buffer.slice(frameEnd);
+            }
+        }
+
+        on(type, handler) {
+            this.handlers[type] = handler;
+        }
+
+        off(type) {
+            delete this.handlers[type];
+        }
+
+        clear() {
+            this.buffer = '';
+        }
+    }
+
+    // Global frame parser instance
+    const frameParser = new FrameParser();
+
+    // ===== Frame Handlers =====
+    // Register handlers for each message type from the device
+    frameParser.on('FW', (data) => {
+        log('[FRAME] Firmware info received via framing protocol', 'success');
+        updateFirmwareDisplay(data);
+    });
+
+    frameParser.on('LOGS', (data) => {
+        log(`[FRAME] Device logs received: ${data.count} entries`, 'success');
+        deviceLogs = data.entries || [];
+        
+        // Update stats display
+        logStats.style.display = 'block';
+        logFilterRow.style.display = 'flex';
+        $('logCount').textContent = data.total || deviceLogs.length;
+        
+        // Render logs
+        renderDeviceLogs();
+        updateDeviceLogsUI();
+        
+        log(`Fetched ${deviceLogs.length} device log entries`, 'success');
+    });
+
+    frameParser.on('LOGS_CLEARED', (data) => {
+        log(`[FRAME] Logs cleared on device: ${data.cleared} entries removed`, 'success');
+        deviceLogs = [];
+        renderDeviceLogs();
+        updateDeviceLogsUI();
+        logStats.style.display = 'none';
+    });
+
+    frameParser.on('LOG_STATS', (data) => {
+        log(`[FRAME] Log stats: ${data.entries}/${data.maxEntries} entries, uptime: ${formatUptime(data.uptime)}`, 'info');
+    });
+
+    // Wildcard handler for unknown frame types
+    frameParser.on('*', (type, data) => {
+        log(`[FRAME] Unknown frame type: ${type}`, 'warn');
+        console.log('Unknown frame data:', data);
+    });
 
     // ===== UI Updates =====
     function updateUI() {
@@ -679,12 +883,19 @@ setTimeout(function() { LED1.reset(); }, 1000);
                 conn.on('data', data => {
                     log(`[DEBUG] <data> event: ${data.length} bytes`, 'info');
                     log(`[DEBUG] <data> content: ${JSON.stringify(data.substring(0, 100))}${data.length > 100 ? '...' : ''}`, 'info');
-                    // Add to console output
+                    
+                    // Feed data to frame parser for structured messages
+                    frameParser.onData(data);
+                    
+                    // Add to console output (for non-framed data)
                     const line = document.createElement('span');
                     line.textContent = data;
                     consoleOutput.appendChild(line);
                     consoleOutput.scrollTop = consoleOutput.scrollHeight;
                 });
+                
+                // Clear frame parser buffer on new connection
+                frameParser.clear();
 
                 log('[DEBUG] Setting up close listener...', 'info');
                 conn.on('close', () => {
@@ -1383,6 +1594,246 @@ setTimeout(function() { LED1.reset(); }, 1000);
     } else {
         log('[DEBUG] WARNING: Puck.js library not loaded!', 'error');
     }
+
+    // ===== Device Logs =====
+    let deviceLogs = [];  // Store fetched logs for export
+    
+    const fetchLogsBtn = $('fetchLogsBtn');
+    const clearLogsBtn = $('clearLogsBtn');
+    const exportLogsBtn = $('exportLogsBtn');
+    const deviceLogsOutput = $('deviceLogsOutput');
+    const logStats = $('logStats');
+    const logFilterRow = $('logFilterRow');
+
+    // Update device logs button states
+    function updateDeviceLogsUI() {
+        const canQuery = state.connected && !state.uploading;
+        fetchLogsBtn.disabled = !canQuery;
+        clearLogsBtn.disabled = !canQuery;
+        exportLogsBtn.disabled = deviceLogs.length === 0;
+    }
+
+    // Format uptime from milliseconds
+    function formatUptime(ms) {
+        const seconds = Math.floor(ms / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+        const days = Math.floor(hours / 24);
+
+        if (days > 0) return `${days}d ${hours % 24}h ${minutes % 60}m`;
+        if (hours > 0) return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
+        if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+        return `${seconds}s`;
+    }
+
+    // Format log timestamp (ms since boot)
+    function formatLogTime(ms) {
+        const seconds = Math.floor(ms / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+        
+        if (hours > 0) {
+            return `${hours}:${String(minutes % 60).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+        }
+        return `${minutes}:${String(seconds % 60).padStart(2, '0')}.${String(ms % 1000).padStart(3, '0').substring(0, 1)}`;
+    }
+
+    // Get log level display info
+    function getLogLevelInfo(level) {
+        switch (level) {
+            case 'E': return { name: 'ERROR', class: 'error', color: 'var(--danger)' };
+            case 'W': return { name: 'WARN', class: 'warn', color: 'var(--warning)' };
+            case 'I': return { name: 'INFO', class: 'success', color: 'var(--success)' };
+            case 'D': return { name: 'DEBUG', class: 'info', color: 'var(--text-muted)' };
+            default: return { name: level, class: 'info', color: 'var(--text)' };
+        }
+    }
+
+    // Render logs to the output div
+    function renderDeviceLogs() {
+        if (deviceLogs.length === 0) {
+            deviceLogsOutput.innerHTML = '<span class="info">No logs retrieved yet. Click "Fetch Logs" to get device logs.</span>';
+            return;
+        }
+
+        // Get filter states
+        const showError = $('filterError').checked;
+        const showWarn = $('filterWarn').checked;
+        const showInfo = $('filterInfo').checked;
+        const showDebug = $('filterDebug').checked;
+
+        // Filter logs
+        const filteredLogs = deviceLogs.filter(entry => {
+            if (entry.l === 'E' && !showError) return false;
+            if (entry.l === 'W' && !showWarn) return false;
+            if (entry.l === 'I' && !showInfo) return false;
+            if (entry.l === 'D' && !showDebug) return false;
+            return true;
+        });
+
+        if (filteredLogs.length === 0) {
+            deviceLogsOutput.innerHTML = '<span class="info">No logs match current filters.</span>';
+            return;
+        }
+
+        deviceLogsOutput.innerHTML = filteredLogs.map(entry => {
+            const levelInfo = getLogLevelInfo(entry.l);
+            const timeStr = formatLogTime(entry.t);
+            return `<div class="${levelInfo.class}" style="margin-bottom: 2px;">` +
+                `<span style="color: var(--text-muted);">[${timeStr}]</span> ` +
+                `<span style="color: ${levelInfo.color}; font-weight: 600;">[${levelInfo.name}]</span> ` +
+                `${entry.m}</div>`;
+        }).join('');
+
+        deviceLogsOutput.scrollTop = deviceLogsOutput.scrollHeight;
+    }
+
+    // Fetch logs from device
+    fetchLogsBtn.addEventListener('click', () => {
+        if (!state.connected || !state.connection) {
+            log('[DEBUG] Fetch logs aborted: Not connected', 'warn');
+            return;
+        }
+
+        log('[DEBUG] ========== FETCHING DEVICE LOGS ==========', 'info');
+        deviceLogsOutput.innerHTML = '<span class="info">Fetching logs from device...</span>';
+
+        let logsData = '';
+        let timeout;
+        const originalDataHandler = state.connection.ondata;
+
+        const logsHandler = (data) => {
+            log('[DEBUG] Device logs data received: ' + data.length + ' bytes', 'info');
+            logsData += data;
+
+            // Wait for the Espruino prompt ">" which indicates command completion
+            // The JSON ends with }]} so we look for that pattern followed by newline/prompt
+            if (logsData.includes('\r\n>') || logsData.includes('\n>')) {
+                clearTimeout(timeout);
+                
+                // Extract JSON: look for DEVICE_LOGS followed by JSON ending with }]}
+                const match = logsData.match(/DEVICE_LOGS(\{[\s\S]*?\}\]\})/);
+                if (match) {
+                    try {
+                        const response = JSON.parse(match[1]);
+                        log(`[DEBUG] Device logs parsed: ${response.count} entries`, 'success');
+                        
+                        // Store logs for export
+                        deviceLogs = response.entries || [];
+                        
+                        // Update stats display
+                        logStats.style.display = 'block';
+                        logFilterRow.style.display = 'flex';
+                        $('logCount').textContent = response.total || deviceLogs.length;
+                        
+                        // Render logs
+                        renderDeviceLogs();
+                        updateDeviceLogsUI();
+                        
+                        log(`Fetched ${deviceLogs.length} device log entries`, 'success');
+                    } catch (e) {
+                        log(`[DEBUG] Device logs JSON parse error: ${e.message}`, 'error');
+                        log(`[DEBUG] Raw data: ${logsData.substring(0, 200)}...`, 'error');
+                        deviceLogsOutput.innerHTML = `<span class="error">Failed to parse device logs: ${e.message}</span>`;
+                    }
+                } else {
+                    log('[DEBUG] DEVICE_LOGS marker not found in response', 'warn');
+                    deviceLogsOutput.innerHTML = '<span class="warn">No logs found - device may not have logging firmware (GAMBIT v0.1.2+)</span>';
+                }
+                state.connection.ondata = originalDataHandler;
+            }
+        };
+
+        state.connection.ondata = (data) => {
+            if (originalDataHandler) originalDataHandler(data);
+            logsHandler(data);
+        };
+
+        // Set timeout for logs query
+        timeout = setTimeout(() => {
+            log('[DEBUG] Device logs query timeout - getLogs() may not exist', 'warn');
+            state.connection.ondata = originalDataHandler;
+            deviceLogsOutput.innerHTML = '<span class="warn">Timeout: Device may not have logging firmware (GAMBIT v0.1.2+)</span>';
+        }, 5000);
+
+        // Query getLogs() function
+        log('[DEBUG] Sending: getLogs()', 'info');
+        state.connection.write('\x10if(typeof getLogs==="function")getLogs();\n', (err) => {
+            if (err) {
+                log('[DEBUG] Device logs query write error: ' + err, 'error');
+                clearTimeout(timeout);
+                state.connection.ondata = originalDataHandler;
+                deviceLogsOutput.innerHTML = `<span class="error">Failed to query device logs: ${err}</span>`;
+            } else {
+                log('[DEBUG] Device logs query command sent successfully', 'success');
+            }
+        });
+    });
+
+    // Clear logs on device
+    clearLogsBtn.addEventListener('click', () => {
+        if (!state.connected || !state.connection) {
+            log('[DEBUG] Clear logs aborted: Not connected', 'warn');
+            return;
+        }
+
+        log('[DEBUG] ========== CLEARING DEVICE LOGS ==========', 'info');
+        
+        state.connection.write('\x10if(typeof clearLogs==="function")clearLogs();\n', (err) => {
+            if (err) {
+                log('[DEBUG] Clear logs write error: ' + err, 'error');
+                log('Failed to clear device logs', 'error');
+            } else {
+                log('[DEBUG] Clear logs command sent successfully', 'success');
+                log('Device logs cleared', 'success');
+                
+                // Clear local logs and refresh display
+                deviceLogs = [];
+                renderDeviceLogs();
+                updateDeviceLogsUI();
+                logStats.style.display = 'none';
+            }
+        });
+    });
+
+    // Export logs as JSON
+    exportLogsBtn.addEventListener('click', () => {
+        if (deviceLogs.length === 0) {
+            log('[DEBUG] Export aborted: No logs to export', 'warn');
+            return;
+        }
+
+        const exportData = {
+            exportedAt: new Date().toISOString(),
+            deviceName: state.connection?.device?.name || 'Unknown',
+            logCount: deviceLogs.length,
+            logs: deviceLogs
+        };
+
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `device-logs-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        log(`Exported ${deviceLogs.length} log entries to JSON`, 'success');
+    });
+
+    // Filter change handlers
+    ['filterError', 'filterWarn', 'filterInfo', 'filterDebug'].forEach(id => {
+        $(id).addEventListener('change', renderDeviceLogs);
+    });
+
+    // Hook into updateUI to also update device logs buttons
+    const originalUpdateUI = updateUI;
+    updateUI = function() {
+        originalUpdateUI();
+        updateDeviceLogsUI();
+    };
 
     // ===== Initialize =====
     renderFirmwareGrid();

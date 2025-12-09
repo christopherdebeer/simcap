@@ -497,7 +497,7 @@ class SessionMetadata:
     timestamp: str
     subject_id: str = "unknown"
     environment: str = "unknown"
-    hand: str = "right"  # left, right
+    hand: str = "right"  # left, right, unknown, none
     split: str = "train"  # train, validation, test
     device_id: str = "puck_default"
     labels: List[LabeledSegment] = field(default_factory=list)

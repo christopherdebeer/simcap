@@ -391,6 +391,8 @@
                     <select id="hand">
                         <option value="right">Right</option>
                         <option value="left">Left</option>
+                        <option value="unknown">Unknown</option>
+                        <option value="none">None</option>
                     </select>
                 </div>
                 <div>
@@ -732,13 +734,20 @@
     window.addPresetLabels = function(preset) {
         const labels = PRESETS[preset] || [];
         labels.forEach(label => {
+            // Add to definitions if not already present
             if (!state.customLabelDefinitions.includes(label)) {
                 state.customLabelDefinitions.push(label);
+            }
+            // Also activate the label if not already active
+            if (!state.currentLabels.custom.includes(label)) {
+                state.currentLabels.custom.push(label);
             }
         });
         saveCustomLabels();
         renderCustomLabels();
-        log(`Added preset: ${preset}`);
+        updateActiveLabelsDisplay();
+        onLabelsChanged();
+        log(`Added and activated preset: ${preset}`);
     };
 
     window.removeCustomLabel = function(label) {
@@ -1066,7 +1075,8 @@
 
             state.gambitClient.on('firmware', (info) => {
                 console.log('[GAMBIT] Firmware info:', info);
-                const compat = state.gambitClient.checkCompatibility('1.0.0');
+                // Check compatibility with minimum version 0.1.0
+                const compat = state.gambitClient.checkCompatibility('0.1.0');
                 if (!compat.compatible) {
                     log(`Incompatible firmware: ${compat.reason}`);
                     setTimeout(() => state.gambitClient.disconnect(), 3000);
