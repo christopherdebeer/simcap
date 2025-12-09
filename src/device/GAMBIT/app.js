@@ -2,32 +2,140 @@
 var FIRMWARE_INFO = {
     id: "GAMBIT",
     name: "GAMBIT IMU Telemetry",
-    version: "0.1.1",
-    features: ["imu", "magnetometer", "environmental", "streaming"],
+    version: "0.2.0",
+    features: ["imu", "magnetometer", "environmental", "streaming", "logging", "framing"],
     author: "SIMCAP"
 };
 
 // Track boot time for uptime calculation
 var bootTime = Date.now();
 
+// ===== Length-Prefixed Framing Protocol =====
+// Format: \x02TYPE:LENGTH\nPAYLOAD\x03
+// STX (0x02) = Start of frame
+// ETX (0x03) = End of frame
+// This enables robust parsing on the receiver side
+function sendFrame(type, payload) {
+    var json = JSON.stringify(payload);
+    var frame = '\x02' + type + ':' + json.length + '\n' + json + '\x03';
+    Bluetooth.print(frame);
+}
+
+// ===== Device Logging System =====
+var LOG_MAX_ENTRIES = 50;  // Rolling window size (~2-3KB total)
+var logBuffer = [];
+var logIndex = 0;
+
+// Log levels: E=Error, W=Warn, I=Info, D=Debug
+function deviceLog(level, msg) {
+    var entry = {
+        i: logIndex++,              // sequence number
+        t: Date.now() - bootTime,   // ms since boot
+        l: level,                   // level code
+        m: String(msg).substring(0, 80)  // truncate long messages
+    };
+    
+    logBuffer.push(entry);
+    
+    // Rolling window - remove oldest when full
+    while (logBuffer.length > LOG_MAX_ENTRIES) {
+        logBuffer.shift();
+    }
+    
+    // Also emit to console for real-time viewing
+    console.log("[" + level + "] " + entry.m);
+}
+
+// Convenience logging functions
+function logError(msg) { deviceLog('E', msg); }
+function logWarn(msg) { deviceLog('W', msg); }
+function logInfo(msg) { deviceLog('I', msg); }
+function logDebug(msg) { deviceLog('D', msg); }
+
+// Get logs as JSON (called from loader)
+// Optional 'since' parameter to get only newer entries
+function getLogs(since) {
+    var filtered = (since !== undefined) ? 
+        logBuffer.filter(function(e) { return e.i > since; }) : 
+        logBuffer;
+    var response = {
+        count: filtered.length,
+        total: logBuffer.length,
+        nextIndex: logIndex,
+        entries: filtered
+    };
+    sendFrame('LOGS', response);
+    return response;
+}
+
+// Clear all logs
+function clearLogs() {
+    var count = logBuffer.length;
+    logBuffer = [];
+    logIndex = 0;
+    logInfo('Logs cleared (' + count + ' entries)');
+    var response = { cleared: count };
+    sendFrame('LOGS_CLEARED', response);
+    return response;
+}
+
+// Get log statistics
+function getLogStats() {
+    var stats = {
+        entries: logBuffer.length,
+        maxEntries: LOG_MAX_ENTRIES,
+        nextIndex: logIndex,
+        memUsed: process.memory().usage,
+        memTotal: process.memory().total,
+        uptime: Date.now() - bootTime
+    };
+    sendFrame('LOG_STATS', stats);
+    return stats;
+}
+
 // Return firmware information for compatibility checking
 function getFirmware() {
     var uptimeMs = Date.now() - bootTime;
-    var info = Object.assign({}, FIRMWARE_INFO, { uptime: uptimeMs });
-    console.log("\nFIRMWARE" + JSON.stringify(info));
+    var mem = process.memory();
+    var info = Object.assign({}, FIRMWARE_INFO, { 
+        uptime: uptimeMs,
+        memUsed: mem.usage,
+        memTotal: mem.total,
+        logCount: logBuffer.length
+    });
+    sendFrame('FW', info);
     return info;
 }
 
 // Initialize Bluetooth advertising with proper device name and appearance
 function init() {
+    logInfo('Boot: GAMBIT v' + FIRMWARE_INFO.version);
+    
     // Set Bluetooth appearance and flags for sensor device
-    NRF.setAdvertising([
-        {}, // include original advertising packet
-        [
-            2, 1, 6,           // Bluetooth flags (General Discoverable, BR/EDR Not Supported)
-            3, 0x19, 0x40, 0x05 // Appearance: Generic Sensor (0x0540)
-        ]
-    ], { name: "SIMCAP GAMBIT v" + FIRMWARE_INFO.version });
+    try {
+        NRF.setAdvertising([
+            {}, // include original advertising packet
+            [
+                2, 1, 6,           // Bluetooth flags (General Discoverable, BR/EDR Not Supported)
+                3, 0x19, 0x40, 0x05 // Appearance: Generic Sensor (0x0540)
+            ]
+        ], { name: "SIMCAP GAMBIT v" + FIRMWARE_INFO.version });
+        logInfo('BLE advertising configured');
+    } catch (e) {
+        logError('BLE init failed: ' + e.message);
+    }
+
+    // Log initial memory state
+    var mem = process.memory();
+    logDebug('Memory: ' + mem.usage + '/' + mem.total);
+    
+    // Log battery level at boot
+    var batt = Puck.getBatteryPercentage();
+    if (batt < 20) {
+        logWarn('Low battery: ' + batt + '%');
+    } else {
+        logInfo('Battery: ' + batt + '%');
+    }
 
     console.log("SIMCAP GAMBIT v" + FIRMWARE_INFO.version + " initialized");
     digitalPulse(LED2, 1, 200); // Green flash to indicate ready
@@ -101,9 +209,14 @@ var interval;
 var streamTimeout;
 
 function getData() {
+    var wasStreaming = !!interval;
+    
     // Reset sample counter if starting new stream
     if (!interval) {
         sampleCount = 0;
+        logInfo('Stream started (50Hz, 30s timeout)');
+    } else {
+        logDebug('Stream keepalive');
     }
 
     // CRITICAL: Always refresh the 30-second timeout when getData() is called
@@ -114,6 +227,7 @@ function getData() {
 
     // BATTERY OPTIMIZATION: Auto-stop after 30 seconds to prevent accidental battery drain
     streamTimeout = setTimeout(function(){
+        logInfo('Stream timeout (30s) - samples: ' + sampleCount);
         clearInterval(interval);
         interval = null;
         streamTimeout = null;
@@ -130,6 +244,7 @@ function getData() {
 // Optional: Stop streaming manually
 function stopData() {
     if (interval) {
+        logInfo('Stream stopped manually - samples: ' + sampleCount);
         clearInterval(interval);
         interval = null;
     }
@@ -143,6 +258,7 @@ function stopData() {
 //NFC Detection
 NRF.nfcURL("https://simcap.parc.land");
 NRF.on('NFCon', function() {
+    logInfo('NFC field detected');
     digitalPulse(LED2, 1, 500);//flash on green light
     console.log('nfc_field : [1]');
     NRF.setAdvertising({
@@ -150,6 +266,7 @@ NRF.on('NFCon', function() {
     }, { name: "SIMCAP GAMBIT v" + FIRMWARE_INFO.version });
 });
 NRF.on('NFCoff', function() {
+    logDebug('NFC field removed');
     digitalPulse(LED2, 1, 200);//flash on green light
     console.log('nfc_field : [0]');
     NRF.setAdvertising({
@@ -204,10 +321,11 @@ var pressCount = 0;
 setWatch(function() {
     pressCount++;
     state = (pressCount+1)%2;
+    logInfo('Button press #' + pressCount + ' -> state=' + state);
     if ((pressCount+1)%2) digitalPulse(LED3,1,1500); //long flash blue light
     else
         digitalPulse(LED3,1,100); //short flash blue light
-    getData()
+    getData();
     // console.log('button_press_count : [' + pressCount + ']');
     // console.log('button_state : [' + (pressCount+1) + ']');
     // console.log('state: ' + state); 
@@ -216,3 +334,14 @@ setWatch(function() {
     //     0x183c: [((pressCount+1)%2)],
     // });
 }, BTN, { edge:"rising", repeat:true, debounce:50 });
+
+// ===== BLE Connection Events =====
+NRF.on('connect', function(addr) {
+    logInfo('BLE connected: ' + addr);
+});
+
+NRF.on('disconnect', function(reason) {
+    logInfo('BLE disconnected: ' + reason);
+    // Stop streaming if client disconnects
+    stopData();
+});

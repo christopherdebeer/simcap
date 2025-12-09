@@ -103,7 +103,72 @@ sequenceDiagram
 
 ## Key Features
 
-### 1. Sensor Sampling (50 Hz)
+### 1. Length-Prefixed Framing Protocol (v0.2.0+)
+
+GAMBIT uses a robust framing protocol for structured data exchange:
+
+```
+Frame Format: \x02TYPE:LENGTH\nPAYLOAD\x03
+
+\x02 = STX (Start of Text) - Frame start marker
+TYPE = Message type identifier (e.g., FW, LOGS, LOG_STATS)
+LENGTH = Payload length in bytes (decimal)
+\n = Header/payload separator
+PAYLOAD = JSON data
+\x03 = ETX (End of Text) - Frame end marker
+```
+
+**Example Frame:**
+```
+\x02FW:89
+{"id":"GAMBIT","name":"GAMBIT IMU Telemetry","version":"0.2.0","uptime":12345}\x03
+```
+
+**Message Types:**
+| Type | Description | Triggered By |
+|------|-------------|--------------|
+| `FW` | Firmware info | `getFirmware()` |
+| `LOGS` | Device log entries | `getLogs()` |
+| `LOGS_CLEARED` | Confirmation of log clear | `clearLogs()` |
+| `LOG_STATS` | Log buffer statistics | `getLogStats()` |
+
+**Benefits:**
+- Robust parsing even with BLE packet fragmentation
+- Self-describing messages with type and length
+- Clear frame boundaries prevent JSON parsing errors
+- Extensible for future message types
+
+### 2. On-Device Logging (v0.1.2+)
+
+GAMBIT includes a rolling-window logging system for debugging:
+
+```javascript
+// Log levels: E=Error, W=Warn, I=Info, D=Debug
+logError('Sensor read failed');
+logWarn('Low battery: 15%');
+logInfo('Stream started');
+logDebug('Memory: 1234/2048');
+
+// Retrieve logs via BLE
+getLogs();      // Returns all logs as JSON
+getLogs(10);    // Returns logs since index 10
+clearLogs();    // Clear all logs
+getLogStats();  // Get memory/uptime stats
+```
+
+**What's Logged:**
+- Boot events (firmware version, battery level, memory)
+- BLE connections/disconnections
+- Button presses and state changes
+- Stream start/stop with sample counts
+- NFC field detection
+- Errors and warnings
+
+**Storage:** Rolling window of 50 entries (~2-3KB RAM)
+
+**Retrieval:** Use the "Device Logs" tab in the Firmware Loader to fetch, filter, and export logs.
+
+### 2. Sensor Sampling (50 Hz)
 
 The `emit()` function reads all sensors and constructs a telemetry object:
 

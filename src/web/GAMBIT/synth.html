@@ -842,7 +842,7 @@
                         console.log('[GAMBIT] Firmware info:', info);
 
                         // Check compatibility
-                        const compat = gambitClient.checkCompatibility('1.0.0');
+                        const compat = gambitClient.checkCompatibility('0.1.0');
                         if (!compat.compatible) {
                             statusDiv.textContent = `Incompatible firmware: ${compat.reason}`;
                             statusDiv.classList.add('error');
