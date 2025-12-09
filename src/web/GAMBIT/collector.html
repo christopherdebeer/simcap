@@ -946,9 +946,9 @@
     const calibration = new EnvironmentalCalibration();
     try {
         calibration.load('gambit_calibration');
-        log('Loaded previous calibration from localStorage');
+        console.log('[Calibration] Loaded previous calibration from localStorage');
     } catch (e) {
-        log('No previous calibration found, will calibrate during wizard');
+        console.log('[Calibration] No previous calibration found, will calibrate during wizard');
     }
 
     // Initialize 3D Kalman filter for magnetometer smoothing
@@ -2222,7 +2222,15 @@
     loadCustomLabels();
     updateActiveLabelsDisplay();
     updateUI();
-    log('Ready. Connect device to start.');
+
+    // Log calibration status
+    if (calibration.hasCalibration('earth_field') &&
+        calibration.hasCalibration('hard_iron') &&
+        calibration.hasCalibration('soft_iron')) {
+        log('Ready. Calibration loaded. Connect device to start.');
+    } else {
+        log('Ready. No calibration found - run wizard after connecting.');
+    }
     </script>
 </body>
 </html>
