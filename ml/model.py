@@ -340,6 +340,197 @@ def save_model_for_inference(
     return saved_paths
 
 
+def create_finger_tracking_model_keras(
+    window_size: int = 50,
+    num_features: int = NUM_FEATURES,
+    num_states: int = 3,  # extended, partial, flexed
+    filters: Tuple[int, ...] = (32, 64, 64),
+    kernel_size: int = 5,
+    dropout: float = 0.3
+) -> 'keras.Model':
+    """
+    Create a multi-output model for per-finger state prediction.
+    
+    Architecture:
+        Input -> Shared CNN feature extraction -> 5 output heads (one per finger)
+        Each head predicts 3-class state: extended(0), partial(1), flexed(2)
+    
+    Args:
+        window_size: Number of timesteps per window
+        num_features: Number of input features (9 for IMU)
+        num_states: Number of states per finger (3: extended, partial, flexed)
+        filters: Number of filters in each conv layer
+        kernel_size: Convolution kernel size
+        dropout: Dropout rate
+    
+    Returns:
+        Compiled Keras model with 5 outputs
+    """
+    if not HAS_TF:
+        raise ImportError("TensorFlow/Keras not installed. Run: pip install tensorflow")
+    
+    inputs = keras.Input(shape=(window_size, num_features))
+    
+    # Shared feature extraction
+    x = layers.Conv1D(filters[0], kernel_size, padding='same')(inputs)
+    x = layers.BatchNormalization()(x)
+    x = layers.ReLU()(x)
+    x = layers.MaxPooling1D(2)(x)
+    x = layers.Dropout(dropout)(x)
+    
+    x = layers.Conv1D(filters[1], kernel_size, padding='same')(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.ReLU()(x)
+    x = layers.MaxPooling1D(2)(x)
+    x = layers.Dropout(dropout)(x)
+    
+    x = layers.Conv1D(filters[2], kernel_size, padding='same')(x)
+    x = layers.BatchNormalization()(x)
+    x = layers.ReLU()(x)
+    
+    x = layers.GlobalAveragePooling1D()(x)
+    x = layers.Dense(64, activation='relu')(x)
+    x = layers.Dropout(dropout)(x)
+    
+    # Per-finger output heads
+    outputs = {}
+    for finger in ['thumb', 'index', 'middle', 'ring', 'pinky']:
+        out = layers.Dense(16, activation='relu')(x)
+        out = layers.Dropout(dropout / 2)(out)
+        out = layers.Dense(num_states, activation='softmax', name=f'{finger}_state')(out)
+        outputs[finger] = out
+    
+    model = keras.Model(inputs=inputs, outputs=outputs)
+    
+    # Multi-output loss and metrics
+    model.compile(
+        optimizer=keras.optimizers.Adam(learning_rate=1e-3),
+        loss={f'{finger}_state': 'sparse_categorical_crossentropy' 
+              for finger in ['thumb', 'index', 'middle', 'ring', 'pinky']},
+        metrics={f'{finger}_state': 'accuracy' 
+                 for finger in ['thumb', 'index', 'middle', 'ring', 'pinky']}
+    )
+    
+    return model
+
+
+def train_finger_tracking_model_keras(
+    model: 'keras.Model',
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    X_val: np.ndarray,
+    y_val: np.ndarray,
+    epochs: int = 50,
+    batch_size: int = 32,
+    early_stopping_patience: int = 10,
+    checkpoint_path: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Train a multi-output finger tracking model.
+    
+    Args:
+        model: Compiled multi-output Keras model
+        X_train, X_val: Training and validation data (N, window_size, 9)
+        y_train, y_val: Training and validation labels (N, 5) - one column per finger
+        epochs: Maximum training epochs
+        batch_size: Batch size
+        early_stopping_patience: Epochs to wait before early stopping
+        checkpoint_path: Path to save best model
+    
+    Returns:
+        Training history dict
+    """
+    if not HAS_TF:
+        raise ImportError("TensorFlow/Keras not installed")
+    
+    # Convert label array to dict format for multi-output model
+    fingers = ['thumb', 'index', 'middle', 'ring', 'pinky']
+    y_train_dict = {f'{finger}_state': y_train[:, i] for i, finger in enumerate(fingers)}
+    y_val_dict = {f'{finger}_state': y_val[:, i] for i, finger in enumerate(fingers)}
+    
+    callbacks = [
+        keras.callbacks.EarlyStopping(
+            monitor='val_loss',
+            patience=early_stopping_patience,
+            restore_best_weights=True
+        )
+    ]
+    
+    if checkpoint_path:
+        callbacks.append(
+            keras.callbacks.ModelCheckpoint(
+                checkpoint_path,
+                monitor='val_loss',
+                save_best_only=True
+            )
+        )
+    
+    history = model.fit(
+        X_train, y_train_dict,
+        validation_data=(X_val, y_val_dict),
+        epochs=epochs,
+        batch_size=batch_size,
+        callbacks=callbacks,
+        verbose=1
+    )
+    
+    return history.history
+
+
+def evaluate_finger_tracking_model(
+    model: 'keras.Model',
+    X_test: np.ndarray,
+    y_test: np.ndarray
+) -> Dict[str, Any]:
+    """
+    Evaluate finger tracking model performance.
+    
+    Args:
+        model: Trained multi-output model
+        X_test: Test data (N, window_size, 9)
+        y_test: Test labels (N, 5) - one column per finger
+    
+    Returns:
+        Dict with per-finger accuracy and confusion matrices
+    """
+    if not HAS_TF:
+        raise ImportError("TensorFlow/Keras not installed")
+    
+    # Get predictions
+    predictions = model.predict(X_test, verbose=0)
+    
+    fingers = ['thumb', 'index', 'middle', 'ring', 'pinky']
+    results = {
+        'per_finger_accuracy': {},
+        'per_finger_confusion': {},
+        'overall_accuracy': 0.0
+    }
+    
+    correct_total = 0
+    total_predictions = 0
+    
+    for i, finger in enumerate(fingers):
+        y_pred = np.argmax(predictions[f'{finger}_state'], axis=1)
+        y_true = y_test[:, i]
+        
+        # Accuracy
+        accuracy = np.mean(y_pred == y_true)
+        results['per_finger_accuracy'][finger] = float(accuracy)
+        
+        correct_total += np.sum(y_pred == y_true)
+        total_predictions += len(y_true)
+        
+        # Confusion matrix (3x3 for extended/partial/flexed)
+        confusion = np.zeros((3, 3), dtype=int)
+        for true, pred in zip(y_true, y_pred):
+            confusion[int(true), int(pred)] += 1
+        results['per_finger_confusion'][finger] = confusion.tolist()
+    
+    results['overall_accuracy'] = float(correct_total / total_predictions)
+    
+    return results
+
+
 if __name__ == '__main__':
     # Quick architecture test
     print("Testing model architectures...")

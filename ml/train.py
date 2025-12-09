@@ -112,6 +112,13 @@ def parse_args():
         help='Create 2D/3D visualizations of clusters'
     )
     
+    # Finger tracking options
+    parser.add_argument(
+        '--model-type', type=str, default='gesture',
+        choices=['gesture', 'finger_tracking'],
+        help='Model type: gesture (10-class) or finger_tracking (5-finger multi-output)'
+    )
+    
     return parser.parse_args()
 
 
@@ -363,58 +370,127 @@ def main():
     if args.summary_only:
         return
 
-    # Load train/val split
+    # Load train/val split based on model type
     print(f"\nLoading labeled data...")
-    X_train, y_train, X_val, y_val = dataset.get_train_val_split(args.val_ratio)
+    
+    if args.model_type == 'finger_tracking':
+        # Load multi-label data for finger tracking
+        X, y_multi = dataset.load_finger_tracking_sessions()
+        
+        if len(X) == 0:
+            print("\nERROR: No labeled finger tracking data found!")
+            print("Please label sessions with per-finger states (V2 format).")
+            sys.exit(1)
+        
+        # Split train/val
+        n = len(X)
+        indices = np.random.permutation(n)
+        val_size = int(n * args.val_ratio)
+        
+        val_idx = indices[:val_size]
+        train_idx = indices[val_size:]
+        
+        X_train, y_train = X[train_idx], y_multi[train_idx]
+        X_val, y_val = X[val_idx], y_multi[val_idx]
+        
+        print(f"  Training windows: {len(X_train)}")
+        print(f"  Validation windows: {len(X_val)}")
+        print(f"  Window shape: {X_train.shape[1:]}")
+        print(f"  Labels per window: 5 fingers × 3 states")
+        
+        # Check finger state distribution
+        print(f"\nFinger state distribution (training):")
+        fingers = ['thumb', 'index', 'middle', 'ring', 'pinky']
+        for i, finger in enumerate(fingers):
+            finger_labels = y_train[:, i]
+            unique, counts = np.unique(finger_labels, return_counts=True)
+            print(f"  {finger}:")
+            for state, count in zip(unique, counts):
+                state_name = ['extended', 'partial', 'flexed'][int(state)]
+                print(f"    {state_name}: {count} ({100*count/len(finger_labels):.1f}%)")
+    else:
+        # Standard gesture classification
+        X_train, y_train, X_val, y_val = dataset.get_train_val_split(args.val_ratio)
 
-    if len(X_train) == 0:
-        print("\nERROR: No labeled data found!")
-        print("Please label some sessions first using the labeling tool.")
-        print("See: python -m ml.label --help")
-        sys.exit(1)
+        if len(X_train) == 0:
+            print("\nERROR: No labeled data found!")
+            print("Please label some sessions first using the labeling tool.")
+            print("See: python -m ml.label --help")
+            sys.exit(1)
 
-    print(f"  Training windows: {len(X_train)}")
-    print(f"  Validation windows: {len(X_val)}")
-    print(f"  Window shape: {X_train.shape[1:]}")
+        print(f"  Training windows: {len(X_train)}")
+        print(f"  Validation windows: {len(X_val)}")
+        print(f"  Window shape: {X_train.shape[1:]}")
 
-    # Check class distribution
-    train_classes, train_counts = np.unique(y_train, return_counts=True)
-    print(f"\nTraining class distribution:")
-    for cls, count in zip(train_classes, train_counts):
-        print(f"  {Gesture(cls).name}: {count} ({100*count/len(y_train):.1f}%)")
+        # Check class distribution
+        train_classes, train_counts = np.unique(y_train, return_counts=True)
+        print(f"\nTraining class distribution:")
+        for cls, count in zip(train_classes, train_counts):
+            print(f"  {Gesture(cls).name}: {count} ({100*count/len(y_train):.1f}%)")
 
     # Create model
-    print(f"\nCreating {args.framework} model...")
+    print(f"\nCreating {args.framework} model ({args.model_type})...")
     num_classes = len(Gesture)
 
     if args.framework == 'keras':
-        model = create_cnn_model_keras(
-            window_size=args.window_size,
-            num_classes=num_classes
-        )
-        model.summary()
+        if args.model_type == 'finger_tracking':
+            from .model import (create_finger_tracking_model_keras,
+                              train_finger_tracking_model_keras,
+                              evaluate_finger_tracking_model)
+            
+            model = create_finger_tracking_model_keras(
+                window_size=args.window_size
+            )
+            model.summary()
 
-        # Train
-        print(f"\nTraining for up to {args.epochs} epochs...")
-        output_dir = Path(args.output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
+            # Train
+            print(f"\nTraining finger tracking model for up to {args.epochs} epochs...")
+            output_dir = Path(args.output_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
 
-        checkpoint_path = str(output_dir / 'best_model.keras')
-        history = train_model_keras(
-            model, X_train, y_train, X_val, y_val,
-            epochs=args.epochs,
-            batch_size=args.batch_size,
-            checkpoint_path=checkpoint_path
-        )
+            checkpoint_path = str(output_dir / 'best_finger_model.keras')
+            history = train_finger_tracking_model_keras(
+                model, X_train, y_train, X_val, y_val,
+                epochs=args.epochs,
+                batch_size=args.batch_size,
+                checkpoint_path=checkpoint_path
+            )
 
-        # Evaluate
-        print("\nEvaluating on validation set...")
-        metrics = evaluate_model(model, X_val, y_val)
-        print(f"  Validation Accuracy: {metrics['accuracy']*100:.2f}%")
-        print(f"\n  Per-class accuracy:")
-        for cls, acc in metrics['per_class_accuracy'].items():
-            if acc is not None:
-                print(f"    {cls}: {acc*100:.1f}%")
+            # Evaluate
+            print("\nEvaluating finger tracking model on validation set...")
+            metrics = evaluate_finger_tracking_model(model, X_val, y_val)
+            print(f"  Overall Accuracy: {metrics['overall_accuracy']*100:.2f}%")
+            print(f"\n  Per-finger accuracy:")
+            for finger, acc in metrics['per_finger_accuracy'].items():
+                print(f"    {finger}: {acc*100:.1f}%")
+        else:
+            model = create_cnn_model_keras(
+                window_size=args.window_size,
+                num_classes=num_classes
+            )
+            model.summary()
+
+            # Train
+            print(f"\nTraining for up to {args.epochs} epochs...")
+            output_dir = Path(args.output_dir)
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            checkpoint_path = str(output_dir / 'best_model.keras')
+            history = train_model_keras(
+                model, X_train, y_train, X_val, y_val,
+                epochs=args.epochs,
+                batch_size=args.batch_size,
+                checkpoint_path=checkpoint_path
+            )
+
+            # Evaluate
+            print("\nEvaluating on validation set...")
+            metrics = evaluate_model(model, X_val, y_val)
+            print(f"  Validation Accuracy: {metrics['accuracy']*100:.2f}%")
+            print(f"\n  Per-class accuracy:")
+            for cls, acc in metrics['per_class_accuracy'].items():
+                if acc is not None:
+                    print(f"    {cls}: {acc*100:.1f}%")
 
         # Save model
         print("\nSaving models...")
