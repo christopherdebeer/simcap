@@ -1,0 +1,1409 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SIMCAP | GAMBIT Collector v2</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes"/>
+    <meta name="mobile-web-app-capable" content="yes"/>
+    <!-- Eruda Dev Console for Mobile Debugging -->
+    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+    <script>eruda.init();</script>
+    <script src="puck.js"></script>
+    <script src="gambit-client.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body, html {
+            padding: 0;
+            margin: 0;
+            background-color: #1a1a2e;
+            color: #eee;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-size: 14px;
+        }
+        body {
+            padding: 10px;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-size: 1.5em;
+            margin: 0 0 5px 0;
+            color: #00d4ff;
+        }
+        .subtitle {
+            color: #888;
+            font-size: 0.85em;
+            margin-bottom: 15px;
+        }
+        section {
+            background: #16213e;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+        section h2 {
+            margin: 0 0 10px 0;
+            font-size: 1em;
+            color: #00d4ff;
+            border-bottom: 1px solid #333;
+            padding-bottom: 5px;
+        }
+        section h3 {
+            margin: 10px 0 5px 0;
+            font-size: 0.9em;
+            color: #aaa;
+        }
+        .row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+        }
+        .row > * {
+            flex: 1;
+            min-width: 100px;
+        }
+        label {
+            display: block;
+            font-size: 0.75em;
+            color: #888;
+            margin-bottom: 3px;
+        }
+        input, select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #333;
+            border-radius: 4px;
+            background: #0f0f23;
+            color: #fff;
+            font-size: 14px;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: #00d4ff;
+        }
+        button {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        button:hover { opacity: 0.9; }
+        button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .btn-primary { background: #00d4ff; color: #000; }
+        .btn-secondary { background: #333; color: #fff; }
+        .btn-success { background: #00ff88; color: #000; }
+        .btn-danger { background: #ff4757; color: #fff; }
+        .btn-warning { background: #ffa502; color: #000; }
+        .btn-small { padding: 5px 10px; font-size: 12px; }
+        .btn-tiny { padding: 3px 6px; font-size: 10px; }
+        .status {
+            padding: 8px;
+            border-radius: 4px;
+            text-align: center;
+            font-weight: 500;
+        }
+        .status.disconnected { background: #ff4757; }
+        .status.connected { background: #00ff88; color: #000; }
+        .status.recording { background: #ffa502; color: #000; animation: pulse 1s infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        /* Multi-label UI */
+        .label-category {
+            margin-bottom: 12px;
+            padding: 8px;
+            background: #0f0f23;
+            border-radius: 6px;
+        }
+        .label-category h4 {
+            margin: 0 0 8px 0;
+            font-size: 0.85em;
+            color: #00d4ff;
+        }
+        .label-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 4px;
+        }
+        .label-btn {
+            padding: 6px 4px;
+            font-size: 10px;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .label-btn.active {
+            background: #00ff88;
+            color: #000;
+        }
+        .label-btn.calibration {
+            background: #9b59b6;
+            color: #fff;
+        }
+        .label-btn.calibration.active {
+            background: #e74c3c;
+            color: #fff;
+        }
+
+        /* Finger state selector */
+        .finger-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 4px;
+        }
+        .finger-col {
+            text-align: center;
+        }
+        .finger-col label {
+            font-size: 10px;
+            margin-bottom: 2px;
+        }
+        .finger-state-btn {
+            width: 100%;
+            padding: 4px 2px;
+            font-size: 9px;
+            margin-bottom: 2px;
+        }
+        .finger-state-btn.extended { background: #2ecc71; color: #000; }
+        .finger-state-btn.partial { background: #f39c12; color: #000; }
+        .finger-state-btn.flexed { background: #e74c3c; color: #fff; }
+        .finger-state-btn.active {
+            box-shadow: 0 0 0 2px #fff;
+        }
+
+        /* Custom labels */
+        .custom-input-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .custom-input-row input {
+            flex: 1;
+        }
+        .custom-labels-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+        .custom-label-tag {
+            background: #3498db;
+            color: #fff;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+        }
+        .custom-label-tag.active {
+            background: #00ff88;
+            color: #000;
+        }
+        .custom-label-tag .remove {
+            cursor: pointer;
+            opacity: 0.7;
+        }
+        .custom-label-tag .remove:hover {
+            opacity: 1;
+        }
+
+        /* Active labels display */
+        .active-labels {
+            background: #0a0a15;
+            padding: 8px;
+            border-radius: 4px;
+            min-height: 40px;
+            margin-bottom: 12px;
+        }
+        .active-labels-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+        .active-label-chip {
+            background: #00ff88;
+            color: #000;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 500;
+        }
+
+        .data-view {
+            font-family: monospace;
+            font-size: 11px;
+            background: #0f0f23;
+            padding: 8px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        .data-view .row {
+            margin: 0;
+            padding: 2px 0;
+            border-bottom: 1px solid #222;
+        }
+        .data-view .label {
+            color: #888;
+            width: 40px;
+            flex: none;
+        }
+        .data-view .values {
+            display: flex;
+            gap: 8px;
+        }
+        .data-view .value {
+            width: 60px;
+            text-align: right;
+        }
+        .labels-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .label-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 8px;
+            background: #0f0f23;
+            margin-bottom: 4px;
+            border-radius: 4px;
+            font-size: 11px;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+        .label-item .time-range {
+            color: #888;
+            min-width: 80px;
+        }
+        .label-item .label-tags {
+            flex: 1;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2px;
+        }
+        .label-item .label-tag {
+            background: #333;
+            padding: 1px 4px;
+            border-radius: 2px;
+            font-size: 9px;
+        }
+        .label-item .label-tag.pose { background: #3498db; }
+        .label-item .label-tag.finger { background: #9b59b6; }
+        .label-item .label-tag.custom { background: #e67e22; }
+        .label-item .label-tag.calibration { background: #e74c3c; }
+        .sample-counter {
+            font-size: 2em;
+            font-weight: bold;
+            color: #00d4ff;
+            text-align: center;
+            padding: 10px;
+        }
+        .progress-bar {
+            height: 6px;
+            background: #333;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+        .progress-bar .fill {
+            height: 100%;
+            background: #00d4ff;
+            transition: width 0.1s;
+        }
+        #log {
+            font-family: monospace;
+            font-size: 10px;
+            max-height: 100px;
+            overflow-y: auto;
+            background: #0a0a15;
+            padding: 5px;
+            border-radius: 4px;
+            color: #666;
+        }
+
+        /* Collapsible sections */
+        .collapsible {
+            cursor: pointer;
+            user-select: none;
+        }
+        .collapsible::after {
+            content: ' ▼';
+            font-size: 0.8em;
+        }
+        .collapsible.collapsed::after {
+            content: ' ▶';
+        }
+        .collapse-content {
+            display: block;
+        }
+        .collapse-content.hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>SIMCAP GAMBIT Collector v2</h1>
+    <p class="subtitle">Multi-Label Data Collection for Magnetic Finger Tracking</p>
+
+    <!-- Connection -->
+    <section>
+        <h2>Connection</h2>
+        <div class="row">
+            <button id="connectBtn" class="btn-primary">Connect Device</button>
+            <div id="statusIndicator" class="status disconnected">Disconnected</div>
+        </div>
+    </section>
+
+    <!-- Session Metadata -->
+    <section>
+        <h2 class="collapsible">Session Metadata</h2>
+        <div class="collapse-content">
+            <div class="row">
+                <div>
+                    <label>Subject ID</label>
+                    <input type="text" id="subjectId" value="user_001" />
+                </div>
+                <div>
+                    <label>Environment</label>
+                    <select id="environment">
+                        <option value="home">Home</option>
+                        <option value="office">Office</option>
+                        <option value="outdoor">Outdoor</option>
+                        <option value="lab">Lab</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row">
+                <div>
+                    <label>Hand</label>
+                    <select id="hand">
+                        <option value="right">Right</option>
+                        <option value="left">Left</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Data Split</label>
+                    <select id="split">
+                        <option value="train">Train (80%)</option>
+                        <option value="validation">Validation (10%)</option>
+                        <option value="test">Test (10%)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row">
+                <div>
+                    <label>Magnet Configuration</label>
+                    <select id="magnetConfig">
+                        <option value="none">No Magnets</option>
+                        <option value="single_index">Single - Index</option>
+                        <option value="single_thumb">Single - Thumb</option>
+                        <option value="alternating">All Fingers (Alternating)</option>
+                        <option value="custom">Custom</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Magnet Type</label>
+                    <select id="magnetType">
+                        <option value="6x3mm_N48">6x3mm N48</option>
+                        <option value="5x2mm_N42">5x2mm N42</option>
+                        <option value="3x1mm_N35">3x1mm N35</option>
+                        <option value="custom">Custom</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row">
+                <div style="flex: 2">
+                    <label>Session Notes</label>
+                    <input type="text" id="sessionNotes" placeholder="Optional notes about this session..." />
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Multi-Label Selection -->
+    <section>
+        <h2>Active Labels (Multi-Select)</h2>
+
+        <!-- Current active labels display -->
+        <div class="active-labels">
+            <label>Currently Active:</label>
+            <div class="active-labels-list" id="activeLabelsDisplay">
+                <span style="color: #666;">No labels selected</span>
+            </div>
+        </div>
+
+        <!-- Hand Pose -->
+        <div class="label-category">
+            <h4>Hand Pose</h4>
+            <div class="label-grid" id="poseButtons">
+                <button class="btn-secondary label-btn" data-pose="rest">REST</button>
+                <button class="btn-secondary label-btn" data-pose="fist">FIST</button>
+                <button class="btn-secondary label-btn" data-pose="open_palm">OPEN</button>
+                <button class="btn-secondary label-btn" data-pose="index_up">POINT</button>
+                <button class="btn-secondary label-btn" data-pose="peace">PEACE</button>
+                <button class="btn-secondary label-btn" data-pose="thumbs_up">THUMBS</button>
+                <button class="btn-secondary label-btn" data-pose="ok_sign">OK</button>
+                <button class="btn-secondary label-btn" data-pose="pinch">PINCH</button>
+                <button class="btn-secondary label-btn" data-pose="grab">GRAB</button>
+                <button class="btn-secondary label-btn" data-pose="wave">WAVE</button>
+            </div>
+        </div>
+
+        <!-- Finger States -->
+        <div class="label-category">
+            <h4>Finger States (Per-Finger)</h4>
+            <div class="finger-grid">
+                <div class="finger-col">
+                    <label>Thumb</label>
+                    <button class="btn-secondary finger-state-btn extended" data-finger="thumb" data-state="extended">EXT</button>
+                    <button class="btn-secondary finger-state-btn partial" data-finger="thumb" data-state="partial">PART</button>
+                    <button class="btn-secondary finger-state-btn flexed" data-finger="thumb" data-state="flexed">FLEX</button>
+                </div>
+                <div class="finger-col">
+                    <label>Index</label>
+                    <button class="btn-secondary finger-state-btn extended" data-finger="index" data-state="extended">EXT</button>
+                    <button class="btn-secondary finger-state-btn partial" data-finger="index" data-state="partial">PART</button>
+                    <button class="btn-secondary finger-state-btn flexed" data-finger="index" data-state="flexed">FLEX</button>
+                </div>
+                <div class="finger-col">
+                    <label>Middle</label>
+                    <button class="btn-secondary finger-state-btn extended" data-finger="middle" data-state="extended">EXT</button>
+                    <button class="btn-secondary finger-state-btn partial" data-finger="middle" data-state="partial">PART</button>
+                    <button class="btn-secondary finger-state-btn flexed" data-finger="middle" data-state="flexed">FLEX</button>
+                </div>
+                <div class="finger-col">
+                    <label>Ring</label>
+                    <button class="btn-secondary finger-state-btn extended" data-finger="ring" data-state="extended">EXT</button>
+                    <button class="btn-secondary finger-state-btn partial" data-finger="ring" data-state="partial">PART</button>
+                    <button class="btn-secondary finger-state-btn flexed" data-finger="ring" data-state="flexed">FLEX</button>
+                </div>
+                <div class="finger-col">
+                    <label>Pinky</label>
+                    <button class="btn-secondary finger-state-btn extended" data-finger="pinky" data-state="extended">EXT</button>
+                    <button class="btn-secondary finger-state-btn partial" data-finger="pinky" data-state="partial">PART</button>
+                    <button class="btn-secondary finger-state-btn flexed" data-finger="pinky" data-state="flexed">FLEX</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Motion State -->
+        <div class="label-category">
+            <h4>Motion State</h4>
+            <div class="label-grid">
+                <button class="btn-secondary label-btn active" data-motion="static">STATIC</button>
+                <button class="btn-secondary label-btn" data-motion="moving">MOVING</button>
+                <button class="btn-secondary label-btn" data-motion="transition">TRANSITION</button>
+            </div>
+        </div>
+
+        <!-- Calibration -->
+        <div class="label-category">
+            <h4>Calibration Markers</h4>
+            <div class="label-grid">
+                <button class="btn-secondary label-btn calibration" data-calibration="earth_field">EARTH FIELD</button>
+                <button class="btn-secondary label-btn calibration" data-calibration="hard_iron">HARD IRON</button>
+                <button class="btn-secondary label-btn calibration" data-calibration="soft_iron">SOFT IRON</button>
+                <button class="btn-secondary label-btn calibration" data-calibration="finger_range">FINGER RANGE</button>
+                <button class="btn-secondary label-btn calibration" data-calibration="reference_pose">REF POSE</button>
+                <button class="btn-secondary label-btn calibration" data-calibration="magnet_baseline">MAG BASELINE</button>
+            </div>
+        </div>
+
+        <!-- Custom Labels -->
+        <div class="label-category">
+            <h4>Custom Labels</h4>
+            <div class="custom-input-row">
+                <input type="text" id="customLabelInput" placeholder="Add custom label..." />
+                <button class="btn-primary btn-small" onclick="addCustomLabel()">Add</button>
+            </div>
+            <div class="custom-labels-list" id="customLabelsList"></div>
+            <div style="margin-top: 8px;">
+                <label>Quick Add Presets:</label>
+                <div class="label-grid" style="margin-top: 4px;">
+                    <button class="btn-secondary btn-tiny" onclick="addPresetLabels('phase1')">Phase 1</button>
+                    <button class="btn-secondary btn-tiny" onclick="addPresetLabels('phase2')">Phase 2</button>
+                    <button class="btn-secondary btn-tiny" onclick="addPresetLabels('quality')">Quality</button>
+                    <button class="btn-secondary btn-tiny" onclick="addPresetLabels('transitions')">Transitions</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Recording Controls -->
+    <section>
+        <h2>Recording</h2>
+        <div class="sample-counter">
+            <span id="sampleCount">0</span> samples
+        </div>
+        <div class="progress-bar">
+            <div class="fill" id="progressFill" style="width: 0%"></div>
+        </div>
+        <div class="row" style="margin-top: 10px">
+            <button id="startBtn" class="btn-success" disabled>Start Recording</button>
+            <button id="stopBtn" class="btn-danger" disabled>Stop Recording</button>
+        </div>
+        <div class="row">
+            <button id="clearBtn" class="btn-secondary" disabled>Clear Session</button>
+            <button id="exportBtn" class="btn-primary" disabled>Export Data</button>
+        </div>
+        <div class="row">
+            <button id="uploadBtn" class="btn-success" disabled>Upload to GitHub</button>
+        </div>
+    </section>
+
+    <!-- GitHub Sync -->
+    <section>
+        <h2 class="collapsible collapsed">GitHub Sync</h2>
+        <div class="collapse-content hidden">
+            <div class="row">
+                <div style="flex: 2">
+                    <label>GitHub Token (PAT with repo scope)</label>
+                    <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxx" />
+                </div>
+            </div>
+            <div style="font-size: 11px; color: #888; margin-top: 5px;">
+                Token is stored locally. Data uploads to: data/GAMBIT/labeled/
+            </div>
+        </div>
+    </section>
+
+    <!-- Labels Created -->
+    <section>
+        <h2>Labels (<span id="labelCount">0</span>)</h2>
+        <div class="labels-list" id="labelsList">
+            <div style="color: #666; text-align: center; padding: 10px;">
+                No labels yet. Start recording and change labels to create segments.
+            </div>
+        </div>
+    </section>
+
+    <!-- Live Data View -->
+    <section>
+        <h2 class="collapsible">Live Sensor Data</h2>
+        <div class="collapse-content">
+            <div class="data-view">
+                <div class="row">
+                    <span class="label">Acc:</span>
+                    <div class="values">
+                        <span class="value" id="ax">-</span>
+                        <span class="value" id="ay">-</span>
+                        <span class="value" id="az">-</span>
+                    </div>
+                </div>
+                <div class="row">
+                    <span class="label">Gyro:</span>
+                    <div class="values">
+                        <span class="value" id="gx">-</span>
+                        <span class="value" id="gy">-</span>
+                        <span class="value" id="gz">-</span>
+                    </div>
+                </div>
+                <div class="row">
+                    <span class="label">Mag:</span>
+                    <div class="values">
+                        <span class="value" id="mx">-</span>
+                        <span class="value" id="my">-</span>
+                        <span class="value" id="mz">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Log -->
+    <section>
+        <h2 class="collapsible collapsed">Log</h2>
+        <div class="collapse-content hidden" id="logSection">
+            <div id="log"></div>
+        </div>
+    </section>
+
+    <script>
+    // ===== State =====
+    const state = {
+        connected: false,
+        recording: false,
+        sessionData: [],
+        labels: [],  // V2 multi-label segments
+        currentLabelStart: null,
+        gambitClient: null,
+
+        // Multi-label current state
+        currentLabels: {
+            pose: null,
+            fingers: {
+                thumb: 'unknown',
+                index: 'unknown',
+                middle: 'unknown',
+                ring: 'unknown',
+                pinky: 'unknown'
+            },
+            motion: 'static',
+            calibration: 'none',
+            custom: []
+        },
+
+        // Custom labels defined for this session
+        customLabelDefinitions: []
+    };
+
+    // GitHub token (will be loaded from localStorage)
+    let ghToken = null;
+
+    // Preset label sets
+    const PRESETS = {
+        phase1: ['single:thumb', 'single:index', 'flex_test', 'extend_test', 'snr_test'],
+        phase2: ['pose:00000', 'pose:22222', 'pose:02000', 'pose:00200', 'multi_finger'],
+        quality: ['quality:good', 'quality:noisy', 'quality:artifact', 'quality:review'],
+        transitions: ['trans:rest_fist', 'trans:fist_open', 'trans:flex_extend', 'trans:spread']
+    };
+
+    // ===== DOM Elements =====
+    const $ = id => document.getElementById(id);
+    const connectBtn = $('connectBtn');
+    const startBtn = $('startBtn');
+    const stopBtn = $('stopBtn');
+    const clearBtn = $('clearBtn');
+    const exportBtn = $('exportBtn');
+    const statusIndicator = $('statusIndicator');
+    const sampleCount = $('sampleCount');
+    const progressFill = $('progressFill');
+    const labelsList = $('labelsList');
+    const labelCount = $('labelCount');
+    const logDiv = $('log');
+    const activeLabelsDisplay = $('activeLabelsDisplay');
+    const customLabelsList = $('customLabelsList');
+
+    // ===== Logging =====
+    function log(msg) {
+        const time = new Date().toLocaleTimeString();
+        logDiv.innerHTML = `[${time}] ${msg}<br>` + logDiv.innerHTML;
+        if (logDiv.children.length > 50) {
+            logDiv.removeChild(logDiv.lastChild);
+        }
+    }
+
+    // ===== Load/Save Custom Labels =====
+    function loadCustomLabels() {
+        try {
+            const saved = localStorage.getItem('gambit_custom_labels');
+            if (saved) {
+                state.customLabelDefinitions = JSON.parse(saved);
+                renderCustomLabels();
+            }
+        } catch (e) {
+            console.error('Failed to load custom labels:', e);
+        }
+    }
+
+    function saveCustomLabels() {
+        try {
+            localStorage.setItem('gambit_custom_labels', JSON.stringify(state.customLabelDefinitions));
+        } catch (e) {
+            console.error('Failed to save custom labels:', e);
+        }
+    }
+
+    // ===== Custom Labels =====
+    window.addCustomLabel = function() {
+        const input = $('customLabelInput');
+        const label = input.value.trim().toLowerCase().replace(/\s+/g, '_');
+        if (label && !state.customLabelDefinitions.includes(label)) {
+            state.customLabelDefinitions.push(label);
+            saveCustomLabels();
+            renderCustomLabels();
+            input.value = '';
+            log(`Added custom label: ${label}`);
+        }
+    };
+
+    window.addPresetLabels = function(preset) {
+        const labels = PRESETS[preset] || [];
+        labels.forEach(label => {
+            if (!state.customLabelDefinitions.includes(label)) {
+                state.customLabelDefinitions.push(label);
+            }
+        });
+        saveCustomLabels();
+        renderCustomLabels();
+        log(`Added preset: ${preset}`);
+    };
+
+    window.removeCustomLabel = function(label) {
+        state.customLabelDefinitions = state.customLabelDefinitions.filter(l => l !== label);
+        state.currentLabels.custom = state.currentLabels.custom.filter(l => l !== label);
+        saveCustomLabels();
+        renderCustomLabels();
+        updateActiveLabelsDisplay();
+    };
+
+    window.toggleCustomLabel = function(label) {
+        const idx = state.currentLabels.custom.indexOf(label);
+        if (idx >= 0) {
+            state.currentLabels.custom.splice(idx, 1);
+        } else {
+            state.currentLabels.custom.push(label);
+        }
+        onLabelsChanged();
+        renderCustomLabels();
+        updateActiveLabelsDisplay();
+    };
+
+    function renderCustomLabels() {
+        customLabelsList.innerHTML = state.customLabelDefinitions.map(label => {
+            const isActive = state.currentLabels.custom.includes(label);
+            return `
+                <span class="custom-label-tag ${isActive ? 'active' : ''}" onclick="toggleCustomLabel('${label}')">
+                    ${label}
+                    <span class="remove" onclick="event.stopPropagation(); removeCustomLabel('${label}')">&times;</span>
+                </span>
+            `;
+        }).join('');
+    }
+
+    // ===== Get Current Labels Object =====
+    function getCurrentLabelsObject() {
+        const labels = {
+            motion: state.currentLabels.motion,
+            calibration: state.currentLabels.calibration,
+            custom: [...state.currentLabels.custom],
+            confidence: 'high',
+            quality_notes: ''
+        };
+
+        if (state.currentLabels.pose) {
+            labels.pose = state.currentLabels.pose;
+        }
+
+        // Only include fingers if any are set
+        const hasFingerState = Object.values(state.currentLabels.fingers).some(s => s !== 'unknown');
+        if (hasFingerState) {
+            labels.fingers = { ...state.currentLabels.fingers };
+        }
+
+        return labels;
+    }
+
+    // ===== Labels Changed Handler =====
+    function onLabelsChanged() {
+        if (state.recording) {
+            closeCurrentLabel();
+            state.currentLabelStart = state.sessionData.length;
+        }
+        updateActiveLabelsDisplay();
+    }
+
+    // ===== Update Active Labels Display =====
+    function updateActiveLabelsDisplay() {
+        const chips = [];
+
+        if (state.currentLabels.pose) {
+            chips.push(`<span class="active-label-chip">pose:${state.currentLabels.pose}</span>`);
+        }
+
+        // Show finger states if any set
+        const fingerStr = ['thumb', 'index', 'middle', 'ring', 'pinky']
+            .map(f => {
+                const s = state.currentLabels.fingers[f];
+                if (s === 'extended') return '0';
+                if (s === 'partial') return '1';
+                if (s === 'flexed') return '2';
+                return '?';
+            }).join('');
+        if (fingerStr !== '?????') {
+            chips.push(`<span class="active-label-chip">fingers:${fingerStr}</span>`);
+        }
+
+        chips.push(`<span class="active-label-chip">motion:${state.currentLabels.motion}</span>`);
+
+        if (state.currentLabels.calibration !== 'none') {
+            chips.push(`<span class="active-label-chip" style="background:#e74c3c;color:#fff">cal:${state.currentLabels.calibration}</span>`);
+        }
+
+        state.currentLabels.custom.forEach(c => {
+            chips.push(`<span class="active-label-chip" style="background:#e67e22">${c}</span>`);
+        });
+
+        activeLabelsDisplay.innerHTML = chips.length > 0 ? chips.join('') : '<span style="color: #666;">No labels selected</span>';
+    }
+
+    // ===== UI Updates =====
+    function updateUI() {
+        // Status indicator
+        if (state.recording) {
+            statusIndicator.className = 'status recording';
+            statusIndicator.textContent = 'Recording...';
+        } else if (state.connected) {
+            statusIndicator.className = 'status connected';
+            statusIndicator.textContent = 'Connected';
+        } else {
+            statusIndicator.className = 'status disconnected';
+            statusIndicator.textContent = 'Disconnected';
+        }
+
+        // Buttons
+        connectBtn.textContent = state.connected ? 'Disconnect' : 'Connect Device';
+        startBtn.disabled = !state.connected || state.recording;
+        stopBtn.disabled = !state.recording;
+        clearBtn.disabled = state.sessionData.length === 0 || state.recording;
+        exportBtn.disabled = state.sessionData.length === 0 || state.recording;
+
+        // Upload button (check if ghToken is available)
+        const uploadBtnEl = $('uploadBtn');
+        if (uploadBtnEl) {
+            uploadBtnEl.disabled = state.sessionData.length === 0 || state.recording || !ghToken;
+        }
+
+        // Sample count
+        sampleCount.textContent = state.sessionData.length;
+        progressFill.style.width = Math.min(100, state.sessionData.length / 15) + '%';
+
+        // Labels
+        labelCount.textContent = state.labels.length;
+        if (state.labels.length === 0) {
+            labelsList.innerHTML = '<div style="color: #666; text-align: center; padding: 10px;">No labels yet.</div>';
+        } else {
+            labelsList.innerHTML = state.labels.map((l, i) => {
+                const duration = ((l.end_sample - l.start_sample) / 50).toFixed(1);
+                const tags = [];
+
+                if (l.labels.pose) {
+                    tags.push(`<span class="label-tag pose">${l.labels.pose}</span>`);
+                }
+                if (l.labels.fingers) {
+                    const fs = ['thumb', 'index', 'middle', 'ring', 'pinky']
+                        .map(f => {
+                            const s = l.labels.fingers[f];
+                            if (s === 'extended') return '0';
+                            if (s === 'partial') return '1';
+                            if (s === 'flexed') return '2';
+                            return '?';
+                        }).join('');
+                    if (fs !== '?????') {
+                        tags.push(`<span class="label-tag finger">${fs}</span>`);
+                    }
+                }
+                if (l.labels.calibration && l.labels.calibration !== 'none') {
+                    tags.push(`<span class="label-tag calibration">${l.labels.calibration}</span>`);
+                }
+                (l.labels.custom || []).forEach(c => {
+                    tags.push(`<span class="label-tag custom">${c}</span>`);
+                });
+
+                return `
+                    <div class="label-item">
+                        <span class="time-range">${l.start_sample}-${l.end_sample} (${duration}s)</span>
+                        <div class="label-tags">${tags.join('')}</div>
+                        <button class="btn-danger btn-tiny" onclick="deleteLabel(${i})">×</button>
+                    </div>
+                `;
+            }).join('');
+        }
+    }
+
+    // ===== Pose Selection =====
+    document.querySelectorAll('[data-pose]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const pose = btn.dataset.pose;
+
+            // Toggle - if already selected, deselect
+            if (state.currentLabels.pose === pose) {
+                state.currentLabels.pose = null;
+            } else {
+                state.currentLabels.pose = pose;
+            }
+
+            // Update UI
+            document.querySelectorAll('[data-pose]').forEach(b => b.classList.remove('active'));
+            if (state.currentLabels.pose) {
+                btn.classList.add('active');
+            }
+
+            onLabelsChanged();
+            log(`Pose: ${state.currentLabels.pose || 'none'}`);
+        });
+    });
+
+    // ===== Finger State Selection =====
+    document.querySelectorAll('.finger-state-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const finger = btn.dataset.finger;
+            const newState = btn.dataset.state;
+
+            // Toggle - if already selected, set to unknown
+            if (state.currentLabels.fingers[finger] === newState) {
+                state.currentLabels.fingers[finger] = 'unknown';
+            } else {
+                state.currentLabels.fingers[finger] = newState;
+            }
+
+            // Update UI - clear all for this finger, then set active
+            document.querySelectorAll(`.finger-state-btn[data-finger="${finger}"]`).forEach(b => {
+                b.classList.remove('active');
+            });
+            if (state.currentLabels.fingers[finger] !== 'unknown') {
+                btn.classList.add('active');
+            }
+
+            onLabelsChanged();
+            log(`Finger ${finger}: ${state.currentLabels.fingers[finger]}`);
+        });
+    });
+
+    // ===== Motion State Selection =====
+    document.querySelectorAll('[data-motion]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            state.currentLabels.motion = btn.dataset.motion;
+
+            document.querySelectorAll('[data-motion]').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            onLabelsChanged();
+            log(`Motion: ${state.currentLabels.motion}`);
+        });
+    });
+
+    // ===== Calibration Selection =====
+    document.querySelectorAll('[data-calibration]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const cal = btn.dataset.calibration;
+
+            // Toggle - if already selected, set to none
+            if (state.currentLabels.calibration === cal) {
+                state.currentLabels.calibration = 'none';
+            } else {
+                state.currentLabels.calibration = cal;
+            }
+
+            document.querySelectorAll('[data-calibration]').forEach(b => b.classList.remove('active'));
+            if (state.currentLabels.calibration !== 'none') {
+                btn.classList.add('active');
+            }
+
+            onLabelsChanged();
+            log(`Calibration: ${state.currentLabels.calibration}`);
+        });
+    });
+
+    // ===== Label Management =====
+    function closeCurrentLabel() {
+        if (state.currentLabelStart !== null && state.sessionData.length > state.currentLabelStart) {
+            const labelsObj = getCurrentLabelsObject();
+            state.labels.push({
+                start_sample: state.currentLabelStart,
+                end_sample: state.sessionData.length,
+                labels: labelsObj,
+                notes: '',
+                _version: 2
+            });
+            log(`Label segment: ${state.currentLabelStart}-${state.sessionData.length}`);
+        }
+    }
+
+    window.deleteLabel = function(index) {
+        state.labels.splice(index, 1);
+        updateUI();
+    };
+
+    // ===== Data Handling =====
+    function onTelemetry(telemetry) {
+        if (!state.recording) return;
+
+        state.sessionData.push(telemetry);
+
+        // Update live display
+        $('ax').textContent = telemetry.ax;
+        $('ay').textContent = telemetry.ay;
+        $('az').textContent = telemetry.az;
+        $('gx').textContent = telemetry.gx;
+        $('gy').textContent = telemetry.gy;
+        $('gz').textContent = telemetry.gz;
+        $('mx').textContent = telemetry.mx;
+        $('my').textContent = telemetry.my;
+        $('mz').textContent = telemetry.mz;
+
+        // Update sample count (throttled)
+        if (state.sessionData.length % 10 === 0) {
+            updateUI();
+        }
+    }
+
+    // ===== Connection =====
+    connectBtn.addEventListener('click', async () => {
+        if (state.connected) {
+            console.log('[GAMBIT] Disconnecting...');
+            if (state.gambitClient) {
+                state.gambitClient.disconnect();
+                state.gambitClient = null;
+            }
+            state.connected = false;
+            log('Disconnected');
+            updateUI();
+            return;
+        }
+
+        log('Connecting...');
+
+        try {
+            state.gambitClient = new GambitClient({
+                debug: true,
+                autoKeepalive: false
+            });
+
+            state.gambitClient.on('data', onTelemetry);
+
+            state.gambitClient.on('firmware', (info) => {
+                console.log('[GAMBIT] Firmware info:', info);
+                const compat = state.gambitClient.checkCompatibility('1.0.0');
+                if (!compat.compatible) {
+                    log(`Incompatible firmware: ${compat.reason}`);
+                    setTimeout(() => state.gambitClient.disconnect(), 3000);
+                    return;
+                }
+                log(`Firmware: ${info.name} v${info.version}`);
+            });
+
+            state.gambitClient.on('disconnect', () => {
+                console.log('[GAMBIT] Device disconnected');
+                state.connected = false;
+                state.recording = false;
+                log('Connection closed');
+                updateUI();
+            });
+
+            state.gambitClient.on('error', (err) => {
+                console.error('[GAMBIT] Error:', err);
+                log(`Error: ${err.message}`);
+            });
+
+            await state.gambitClient.connect();
+
+            state.connected = true;
+            log('Connected!');
+            updateUI();
+
+        } catch (e) {
+            console.error('[GAMBIT] Connection error:', e);
+            log(`Connection failed: ${e.message}`);
+            if (state.gambitClient) {
+                state.gambitClient.disconnect();
+                state.gambitClient = null;
+            }
+        }
+    });
+
+    // ===== Recording Controls =====
+    startBtn.addEventListener('click', async () => {
+        if (!state.gambitClient || !state.connected) {
+            log('Error: Not connected to device');
+            return;
+        }
+
+        try {
+            state.recording = true;
+            state.currentLabelStart = state.sessionData.length;
+            log('Recording started');
+
+            await state.gambitClient.startStreaming();
+            log('Data collection active');
+
+            updateUI();
+        } catch (e) {
+            console.error('[GAMBIT] Failed to start recording:', e);
+            log('Error: Failed to start data collection');
+            state.recording = false;
+            updateUI();
+        }
+    });
+
+    stopBtn.addEventListener('click', async () => {
+        closeCurrentLabel();
+        state.recording = false;
+        state.currentLabelStart = null;
+        log('Recording stopped');
+
+        if (state.gambitClient && state.connected) {
+            try {
+                await state.gambitClient.stopStreaming();
+                log('Data streaming stopped');
+            } catch (e) {
+                console.error('[GAMBIT] Failed to stop streaming:', e);
+            }
+        }
+
+        updateUI();
+    });
+
+    clearBtn.addEventListener('click', () => {
+        if (confirm('Clear all session data?')) {
+            state.sessionData = [];
+            state.labels = [];
+            state.currentLabelStart = null;
+            log('Session cleared');
+            updateUI();
+        }
+    });
+
+    // ===== Get Magnet Config =====
+    function getMagnetConfig() {
+        const configType = $('magnetConfig').value;
+        const magnetType = $('magnetType').value;
+
+        if (configType === 'none') return null;
+
+        const config = {
+            magnet_type: magnetType
+        };
+
+        const fingers = ['thumb', 'index', 'middle', 'ring', 'pinky'];
+        const alternating = ['north_palm', 'south_palm', 'north_palm', 'south_palm', 'north_palm'];
+
+        fingers.forEach((f, i) => {
+            config[f] = { present: false, polarity: 'unknown' };
+        });
+
+        if (configType === 'single_index') {
+            config.index = { present: true, polarity: 'north_palm' };
+        } else if (configType === 'single_thumb') {
+            config.thumb = { present: true, polarity: 'north_palm' };
+        } else if (configType === 'alternating') {
+            fingers.forEach((f, i) => {
+                config[f] = { present: true, polarity: alternating[i] };
+            });
+        }
+
+        return config;
+    }
+
+    // ===== Export =====
+    exportBtn.addEventListener('click', () => {
+        const timestamp = new Date().toISOString();
+
+        // Create data file
+        const dataBlob = new Blob([JSON.stringify(state.sessionData)], { type: 'application/json' });
+        const dataUrl = URL.createObjectURL(dataBlob);
+
+        // Create metadata file (V2 format)
+        const metadata = {
+            timestamp: timestamp,
+            subject_id: $('subjectId').value,
+            environment: $('environment').value,
+            hand: $('hand').value,
+            split: $('split').value,
+            device_id: 'puck_default',
+            labels: [],  // V1 labels empty for backwards compat
+            labels_v2: state.labels,
+            session_notes: $('sessionNotes').value,
+            sample_rate_hz: 50,
+            magnet_config: getMagnetConfig(),
+            custom_label_definitions: state.customLabelDefinitions
+        };
+        const metaBlob = new Blob([JSON.stringify(metadata, null, 2)], { type: 'application/json' });
+        const metaUrl = URL.createObjectURL(metaBlob);
+
+        // Download data file
+        const dataLink = document.createElement('a');
+        dataLink.href = dataUrl;
+        dataLink.download = `${timestamp}.json`;
+        dataLink.click();
+
+        // Download metadata file
+        setTimeout(() => {
+            const metaLink = document.createElement('a');
+            metaLink.href = metaUrl;
+            metaLink.download = `${timestamp}.meta.json`;
+            metaLink.click();
+            log(`Exported: ${timestamp}`);
+        }, 100);
+    });
+
+    // ===== GitHub Upload =====
+    // Load saved token
+    try {
+        const savedToken = localStorage.getItem('gambit_gh_token');
+        if (savedToken) {
+            ghToken = savedToken;
+            $('ghToken').value = savedToken;
+        }
+    } catch (e) {
+        console.error('Failed to load GitHub token:', e);
+    }
+
+    // Save token on change
+    $('ghToken').addEventListener('change', (e) => {
+        ghToken = e.target.value;
+        if (ghToken) {
+            localStorage.setItem('gambit_gh_token', ghToken);
+            log('GitHub token saved');
+        } else {
+            localStorage.removeItem('gambit_gh_token');
+        }
+        updateUI();
+    });
+
+    // Base64 encode for GitHub API
+    function b64EncodeUnicode(str) {
+        return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1) {
+            return String.fromCharCode('0x' + p1);
+        }));
+    }
+
+    // GitHub API endpoint
+    function getGHEndpoint(path) {
+        return `https://api.github.com/repos/christopherdebeer/simcap/contents/${path}`;
+    }
+
+    // Upload file to GitHub
+    async function ghPutFile(path, content, message) {
+        if (!ghToken) {
+            throw new Error('GitHub token not set');
+        }
+
+        const endpoint = getGHEndpoint(path);
+
+        // Check if file exists (to get SHA for update)
+        let sha = null;
+        try {
+            const getResp = await fetch(endpoint, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `token ${ghToken}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            if (getResp.ok) {
+                const existing = await getResp.json();
+                sha = existing.sha;
+            }
+        } catch (e) {
+            // File doesn't exist, that's fine
+        }
+
+        // Create/update file
+        const body = {
+            message: message,
+            content: b64EncodeUnicode(content)
+        };
+        if (sha) {
+            body.sha = sha;
+        }
+
+        const putResp = await fetch(endpoint, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `token ${ghToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(body)
+        });
+
+        if (!putResp.ok) {
+            const error = await putResp.json();
+            throw new Error(error.message || 'Upload failed');
+        }
+
+        return await putResp.json();
+    }
+
+    // Upload button handler
+    const uploadBtn = $('uploadBtn');
+
+    uploadBtn.addEventListener('click', async () => {
+        if (!ghToken) {
+            log('Error: GitHub token not set');
+            return;
+        }
+
+        if (state.sessionData.length === 0) {
+            log('Error: No data to upload');
+            return;
+        }
+
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = 'Uploading...';
+
+        try {
+            const timestamp = new Date().toISOString();
+            const basePath = `data/GAMBIT/labeled/${timestamp}`;
+
+            // Upload data file
+            log('Uploading data file...');
+            await ghPutFile(
+                `${basePath}.json`,
+                JSON.stringify(state.sessionData),
+                `GAMBIT labeled data: ${timestamp}`
+            );
+
+            // Upload metadata file
+            log('Uploading metadata...');
+            const metadata = {
+                timestamp: timestamp,
+                subject_id: $('subjectId').value,
+                environment: $('environment').value,
+                hand: $('hand').value,
+                split: $('split').value,
+                device_id: 'puck_default',
+                labels: [],
+                labels_v2: state.labels,
+                session_notes: $('sessionNotes').value,
+                sample_rate_hz: 50,
+                magnet_config: getMagnetConfig(),
+                custom_label_definitions: state.customLabelDefinitions
+            };
+
+            await ghPutFile(
+                `${basePath}.meta.json`,
+                JSON.stringify(metadata, null, 2),
+                `GAMBIT labeled metadata: ${timestamp}`
+            );
+
+            log(`Uploaded to GitHub: ${timestamp}`);
+
+        } catch (e) {
+            console.error('Upload failed:', e);
+            log(`Upload failed: ${e.message}`);
+        } finally {
+            uploadBtn.disabled = false;
+            uploadBtn.textContent = 'Upload to GitHub';
+            updateUI();
+        }
+    });
+
+    // ===== Collapsible Sections =====
+    document.querySelectorAll('.collapsible').forEach(header => {
+        header.addEventListener('click', () => {
+            header.classList.toggle('collapsed');
+            const content = header.nextElementSibling;
+            if (content && content.classList.contains('collapse-content')) {
+                content.classList.toggle('hidden');
+            }
+        });
+    });
+
+    // ===== Custom label input enter key =====
+    $('customLabelInput').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            addCustomLabel();
+        }
+    });
+
+    // ===== Initialize =====
+    loadCustomLabels();
+    updateActiveLabelsDisplay();
+    updateUI();
+    log('Ready. Connect device to start.');
+    </script>
+</body>
+</html>

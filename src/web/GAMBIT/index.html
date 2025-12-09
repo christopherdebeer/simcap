@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>SIMCAP | GAMBIT</title>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+        <meta name="apple-mobile-web-app-capable" content="yes"/>
+        <meta name="mobile-web-app-capable" content="yes"/>
+        <meta name="apple-mobile-web-app-status-bar-style" content="black">
+        <script src="puck.js"></script>
+        <script src="kalman.js"></script>
+        <style>
+
+            body, html {
+                padding: 0;
+                margin: 0;
+                background-color: black;
+                color: white;
+                text-align: center;
+                height: 100%;
+            }
+
+            body {
+                padding: 0.3em;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-evenly;
+                height: 100%;
+                box-sizing: border-box;
+            }
+
+            .grad {
+                background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
+                background-size: 400% 400%;
+                animation: gradient 15s ease infinite;
+                overflow: visible;
+                background-clip: text;
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+            }
+
+            @keyframes gradient {
+                0% {
+                    background-position: 0% 50%;
+                }
+                50% {
+                    background-position: 100% 50%;
+                }
+                100% {
+                    background-position: 0% 50%;
+                }
+            }
+
+            button {
+                background-color: white;
+                color: black;
+                padding: 0.3em 0.6em;
+                border-radius: 0.4em;
+                border: 0 none;
+                cursor: pointer;
+                font-size: 1.2em;
+            }
+
+            .buttons {
+                display: flex;
+                justify-content: space-evenly;
+            }
+
+            input#token:not(:placeholder-shown) {
+                opacity: 0.5;
+                background-color: green;
+            }
+
+            input#token {
+                border: 0;
+                border-radius: 0.3em;
+                outline: 0 none;
+                padding: 0.3em 1em;
+            }
+
+            h1 {
+                font-size: 1.2em;
+                line-height: 1;
+                margin-bottom: 0;
+                font-weight: normal;
+                letter-spacing: 0.35em;
+            }
+
+            h1 .grad {
+                font-weight: bold;
+                display: block;
+                font-size: 2.5em;
+            }
+
+            .subtitle {
+                font-style: italic;
+            }
+
+            button[disabled] {
+                opacity: 0.5;
+                cursor: default;
+            }
+
+            .dataView {
+                border: 1px solid black;
+                display: flex;
+                flex-direction: column;
+                margin-top: 1em;
+                font-size: 1.3em;
+            }
+
+            .dataView > div {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .dataView > div > * {
+                padding: 0.3em;
+                text-align: center;
+                font-weight: bold;
+                display: flex;
+                flex-grow: 1;
+                justify-content: center;
+                box-sizing: border-box;
+                width: 25%;
+            }
+
+            #three-d {
+                perspective: 550px;
+                display: flex;
+                justify-content: space-evenly;
+            }
+
+            .cube {
+                width: 4em;
+                height: 4em;
+                transform-style: preserve-3d;
+                transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg);
+            }
+
+            .face {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 100%;
+                height: 100%;
+                position: absolute;
+                backface-visibility: inherit;
+                font-size: 1em;
+                color: #fff;
+            }
+
+            .front {
+                background: rgba(90,90,90,.7);
+                transform: translateZ(2em)
+            }
+
+            .back {
+                background: rgba(0,210,0,.7);
+                transform: rotateY(180deg) translateZ(2em)
+            }
+
+            .right {
+                background: rgba(210,0,0,.7);
+                transform: rotateY(90deg) translateZ(2em)
+            }
+
+            .left {
+                background: rgba(0,0,210,.7);
+                transform: rotateY(-90deg) translateZ(2em)
+            }
+
+            .top {
+                background: rgba(210,210,0,.7);
+                transform: rotateX(90deg) translateZ(2em)
+            }
+
+            .bottom {
+                background: rgba(210,0,210,.7);
+                transform: rotateX(-90deg) translateZ(2em)
+            }
+        </style>
+    </head>
+    <body>
+        <h1>- SIMCAP -<span class="grad">GAMBIT</span></h1>
+        <p class="subtitle">Gyroscope Accelerometer Magnetometer Baseline Inferrence Telemetry</p>
+        
+        <div class="buttons">
+            <button id="connect">Connect</button>
+            <button disabled id="getdata">Get data</button>
+        </div>
+        <input id="token" type="password" placeholder="GitHub token"/>
+
+        <div class="dataView">
+            <div id="battery"><progress max="100" value="0" id="b" title="0% battery"></progress></div>
+            <div id="button"><label>Btn: </label><span id="btn">0</span> <span id="count">0</span> <span id="state">0</span></div>
+            <div id="mag">
+                <label>Mag: </label>
+                <span id="mX">0</span>
+                <span id="mY">0</span>
+                <span id="mZ">0</span>
+            </div>
+            <div id="acc">
+                <label>Acc: </label>
+                <span id="aX">0</span>
+                <span id="aY">0</span>
+                <span id="aZ">0</span>
+            </div>
+            <div id="gyr">
+                <label>Gyro: </label>
+                <span id="gX">0</span>
+                <span id="gY">0</span>
+                <span id="gZ">0</span>
+            </div>
+        </div>
+
+        <section id="three-d" class="default-example">
+            <div id="cubeM" class="cube transition-all">
+                <div class="face front">mag 1</div>
+                <div class="face back">mag 2</div>
+                <div class="face right">mag 3</div>
+                <div class="face left">mag 4</div>
+                <div class="face top">mag 5</div>
+                <div class="face bottom">mag 6</div>
+              </div>
+            <div id="cubeA" class="cube transition-all">
+              <div class="face front">acc 1</div>
+              <div class="face back">acc 2</div>
+              <div class="face right">acc 3</div>
+              <div class="face left">acc 4</div>
+              <div class="face top">acc 5</div>
+              <div class="face bottom">acc 6</div>
+            </div>
+            <div id="cubeG" class="cube transition-all">
+                <div class="face front">gyro 1</div>
+                <div class="face back">gyro 2</div>
+                <div class="face right">gyro 3</div>
+                <div class="face left">gyro 4</div>
+                <div class="face top">gyro 5</div>
+                <div class="face bottom">gyro 6</div>
+              </div>
+              
+          </section>
+
+        <script>
+
+            function updateConnectionStatus(connected, connection) {
+                console.log(`SIMCAP Device connected: ${connected}, connection: `, connection)
+                connection = connected ? connection : undefined;
+                if (connected) {
+                    window.connect.innerHTML = "Disconnect"
+                    window.getdata.disabled = false
+                } else {
+                    window.connect.innerHTML = "Connect"
+                    window.getdata.disabled = true
+                }
+            }
+
+            const MAX_INIT_RETRIES = 9
+            let connection;
+            let initTries = MAX_INIT_RETRIES
+            let initInterval;
+            let ghToken;
+
+            let uploadTimeout;
+            let sessionData = []
+
+            function onLine(data) {
+
+                if (data.startsWith("GAMBIT")) {
+                    var t = JSON.parse(data.slice(6, -1))
+                    // console.log(data.slice(6, -1))
+                    // console.log(JSON.stringify(t))
+                    updateData(t)
+                }
+                if (uploadTimeout) clearTimeout(uploadTimeout)
+                uploadTimeout = setTimeout(function() {
+                    console.log("Uploading to gh")
+                    ghPutData(JSON.stringify(sessionData))
+                    sessionData = []    
+                }, 1000)
+
+            }
+
+            var minMaxs = {}
+
+            function updateMinMaxsReturnNorm(key, val) {
+                if (typeof minMaxs[key] === 'undefined') {
+                    var k = new KalmanFilter({R: 0.01, Q: 3})
+                    minMaxs[key] = {
+                        values: [],
+                        min: val,
+                        max: val, 
+                        kalman: k,
+                        kalmanValues: []
+                    }
+                } else if (minMaxs[key].min > val) {
+                    minMaxs[key].min = val
+                } else if (minMaxs[key].max < val) {
+                    minMaxs[key].max = val
+                }
+
+                var kalmanValue = minMaxs[key].kalman.filter(val)
+                minMaxs[key].values.push(val)
+                minMaxs[key].kalmanValues.push(kalmanValue)
+
+                if ((minMaxs[key].max - minMaxs[key].min) === 0) {
+                    return 0.5
+                }
+
+                return (val - minMaxs[key].min) / (minMaxs[key].max - minMaxs[key].min)
+            }
+
+            function normalise(t) {
+                return {
+                    l: t.l,
+                    t: t.t,
+                    s: t.s,
+                    c: t.c,
+                    n: t.n,
+                    b: t.b,
+                    mx: updateMinMaxsReturnNorm('mx', t.mx),
+                    my: updateMinMaxsReturnNorm('my', t.my),
+                    mz: updateMinMaxsReturnNorm('mz', t.mz),
+                    ax: updateMinMaxsReturnNorm('ax', t.ax ),
+                    ay: updateMinMaxsReturnNorm('ay', t.ay ),
+                    az: updateMinMaxsReturnNorm('az', t.az ),
+                    gx: updateMinMaxsReturnNorm('gx', t.gx ),
+                    gy: updateMinMaxsReturnNorm('gy', t.gy ),
+                    gz: updateMinMaxsReturnNorm('gz', t.gz ),
+                }
+            }
+
+            function updateData(prenorm) {
+                sessionData.push(prenorm)
+                // console.log("Data (prenorm): ", prenorm)
+                var t = normalise(prenorm)
+                // console.log("Data (postnorm)", t)
+
+                window.b.value = Math.floor( t.b )
+                window.b.title = t.b + '% battery'
+
+                window.state.innerHTML = t.s
+                window.count.innerHTML = t.n
+
+                window.mX.innerHTML = t.mx.toFixed(4)
+                window.mY.innerHTML = t.my.toFixed(4)
+                window.mZ.innerHTML = t.mz.toFixed(4)
+
+                window.aX.innerHTML = t.ax.toFixed(4)
+                window.aY.innerHTML = t.ay.toFixed(4)
+                window.aZ.innerHTML = t.az.toFixed(4)
+
+                window.gX.innerHTML = t.gx.toFixed(4)
+                window.gY.innerHTML = t.gy.toFixed(4)
+                window.gZ.innerHTML = t.gz.toFixed(4)
+
+                window.cubeA.style = `transform: rotateX(${360 * t.ax}deg) rotateY(${360 * t.ay}deg) rotateZ(${360 * t.az}deg);`
+                window.cubeG.style = `transform: rotateX(${360 * t.gx}deg) rotateY(${360 * t.gy}deg) rotateZ(${360 * t.gz}deg);`
+                window.cubeM.style = `transform: rotateX(${360 * t.mx}deg) rotateY(${360 * t.my}deg) rotateZ(${360 * t.mz}deg);`
+                
+            }
+
+            var newlineRegex = /\n/g;
+
+            const btoa = (str) => {
+            if (typeof window === 'undefined' || !window.btoa)  {
+                // const Buffer = require('buffer')
+                return Buffer.from(str, 'binary').toString('base64')
+            } else return window.btoa(str)
+            }
+
+            const atob = (str) => {
+            if (typeof window === 'undefined' || !window.atob)  {
+                // const Buffer = require('buffer')
+                return Buffer.from(str, 'base64').toString('binary')
+            }
+            else return window.atob(str)
+            }
+
+            function b64EncodeUnicode(str) {
+            return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1) {
+                return String.fromCharCode('0x' + p1);
+            }));
+            }
+
+            function b64DecodeUnicode(str) {
+                // atob on Mobile Safari for iOS 9 will throw an exception if there's a newline.
+                var b64Decoded = atob(str.replace(newlineRegex, ''));
+                var decodedWithUnicodeHexesRestored = Array.prototype.map.call(
+                    b64Decoded,
+                    hexEncodeCharCode
+                )
+                .join('');
+
+                return decodeURIComponent(decodedWithUnicodeHexesRestored);
+            }
+
+            function hexEncodeCharCode(c) {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }
+
+            const getEndpoint = (opts,file) => `https://api.github.com/repos/${opts.username}/${opts.repository}/contents/${file}`
+
+
+            async function ghPutData(content) {
+
+                if (!ghToken) {
+                    console.log("ghToken not found. skipping upload.")
+                    return;
+                } else {
+
+                }
+
+                const d = new Date()
+                const filename = `${d.toISOString()}.json`
+
+                const endpoint = getEndpoint({
+                    repository: 'simcap',
+                    username: 'christopherdebeer',
+                }, `data/GAMBIT/${filename}`)
+
+                const resp1 = await fetch(endpoint, {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `token ${ghToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                })
+                const json1 = await resp1.json()
+                console.log("ghGet response", json1)
+                const params = {
+                    method: "PUT",
+                    headers: {
+                        "Authorization": `token ${ghToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        sha: json1.sha,
+                        message: `GAMBIT Data ingest ${filename}`,
+                        content: b64EncodeUnicode(content)
+                    })
+                }
+                console.log("ghPutData params", params)
+                let resp2;
+                try {
+                    resp2 = await fetch(endpoint, params)
+                    var json2 = await resp2.json()
+                    console.log("ghPutData response", json2)
+                } catch(err) {
+                    console.log("ghPutData PUT failed", err)
+                }
+
+            }
+
+            async function init() {
+                
+                if (!Puck.isConnected()) await Puck.write("console.log('Connected from GAMBIT/web')")
+                var con = Puck.getConnection()
+                updateConnectionStatus( !!con, con);
+
+                console.log(con)
+
+                var buf = "";
+                con && con.on("data", function(d) {
+                    buf += d;
+                    var i = buf.indexOf("\n");
+                    while (i>=0) {
+                        onLine(buf.substr(0,i));
+                        buf = buf.substr(i+1);
+                        i = buf.indexOf("\n");
+                    }
+                });
+            }
+
+            try {
+                const t = localStorage.getItem("ghToken")
+                if (t) {
+                    ghToken = t
+                    window.token.value = t
+                }
+                else console.log("No ghToken in localStorage")
+            } catch(e) {
+                console.log("Error getting token from localStorage")
+            }
+
+            window.connect.onclick = function() {
+                 init()
+            }
+
+            window.token.addEventListener('change', function(e){
+                ghToken = e.target.value;
+                console.log("Updating ghToken")
+                localStorage.setItem("ghToken", ghToken)
+            })
+
+            window.getdata.onclick = function() {
+                const startTime = Date.now()
+                Puck.eval("getData()", function(d) {
+                    console.log(`getData() eval response time: ${(Date.now() - startTime)}ms`)
+                    console.log(d)
+                })
+            }
+            
+        </script>
+    </body>
+</html>

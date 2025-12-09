@@ -1,0 +1,22 @@
+{
+  "name": "SIMCAP",
+  "version": "0.1.0",
+  "description": "",
+  "main": "serial.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "nodemon serial.js"
+  },
+  "author": "",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "nodemon": "^1.15.0",
+    "raspi": "^5.0.2",
+    "raspi-i2c": "^6.1.0"
+  },
+  "dependencies": {
+    "express": "^4.16.2",
+    "serialport": "^6.0.4",
+    "websocket": "^1.0.25"
+  }
+}

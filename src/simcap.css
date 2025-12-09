@@ -1,0 +1,4 @@
+/* SIMCAP Custom Styles for GitHub Pages */
+
+h1 {display: none;}
+h1 ~ h1 { display: block; }

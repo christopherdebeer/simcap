@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GAMBIT Sensor Synthesizer</title>
+    <!-- Eruda Dev Console for Mobile Debugging -->
+    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+    <script>eruda.init();</script>
+    <script src="puck.js"></script>
+    <script src="gambit-client.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            color: #fff;
+        }
+
+        .container {
+            max-width: 1200px;
+            width: 100%;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            font-weight: 700;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .subtitle {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+        }
+
+        button {
+            padding: 12px 30px;
+            font-size: 16px;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        #connectBtn {
+            background: #4CAF50;
+            color: white;
+        }
+
+        #connectBtn:hover {
+            background: #45a049;
+        }
+
+        #connectBtn.connected {
+            background: #ff9800;
+        }
+
+        #toggleSynthBtn {
+            background: #2196F3;
+            color: white;
+        }
+
+        #toggleSynthBtn:hover {
+            background: #0b7dda;
+        }
+
+        #toggleSynthBtn.active {
+            background: #f44336;
+        }
+
+        #toggleSynthBtn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        .status {
+            text-align: center;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: 600;
+            background: rgba(0,0,0,0.2);
+        }
+
+        .status.connected {
+            background: rgba(76, 175, 80, 0.3);
+        }
+
+        .status.playing {
+            background: rgba(244, 67, 54, 0.3);
+        }
+
+        .sensor-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .sensor-group {
+            background: rgba(0,0,0,0.2);
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        .sensor-group h3 {
+            margin-bottom: 10px;
+            font-size: 1.2em;
+            border-bottom: 2px solid rgba(255,255,255,0.3);
+            padding-bottom: 8px;
+        }
+
+        .sensor-value {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+            font-family: 'Courier New', monospace;
+        }
+
+        .sensor-label {
+            font-weight: 600;
+            opacity: 0.8;
+        }
+
+        .sensor-num {
+            font-weight: 700;
+            color: #4CAF50;
+        }
+
+        .synth-params {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .param-group {
+            background: rgba(0,0,0,0.3);
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        .param-group h4 {
+            margin-bottom: 12px;
+            font-size: 1em;
+            color: #FFD700;
+        }
+
+        .param-value {
+            font-family: 'Courier New', monospace;
+            font-size: 1.3em;
+            font-weight: 700;
+            color: #fff;
+            text-shadow: 0 0 10px rgba(255,255,255,0.5);
+        }
+
+        .param-source {
+            font-size: 0.85em;
+            opacity: 0.7;
+            margin-top: 5px;
+        }
+
+        .visualizer {
+            height: 150px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            position: relative;
+            overflow: hidden;
+            margin-top: 20px;
+        }
+
+        #waveformCanvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .config-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .config-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .config-item label {
+            margin-bottom: 5px;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+
+        select, input[type="range"] {
+            padding: 8px;
+            border-radius: 5px;
+            border: none;
+            background: rgba(255,255,255,0.9);
+            font-size: 14px;
+        }
+
+        input[type="range"] {
+            cursor: pointer;
+        }
+
+        .range-value {
+            text-align: center;
+            margin-top: 5px;
+            font-weight: 600;
+        }
+
+        .battery {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+        }
+
+        .battery-bar {
+            flex: 1;
+            height: 20px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .battery-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #8BC34A);
+            transition: width 0.3s ease;
+            border-radius: 10px;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            opacity: 0.8;
+            font-size: 0.9em;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .recording {
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎵 GAMBIT Sensor Synthesizer</h1>
+            <p class="subtitle">Real-time sensor-reactive audio synthesis</p>
+        </header>
+
+        <div class="card">
+            <div class="controls">
+                <button id="connectBtn">Connect Device</button>
+                <button id="toggleSynthBtn" disabled>Start Synth</button>
+            </div>
+            <div id="status" class="status">Disconnected - Click "Connect Device" to begin</div>
+            <div class="battery" id="battery" style="display: none;">
+                <span>Battery:</span>
+                <div class="battery-bar">
+                    <div class="battery-fill" id="batteryFill" style="width: 0%"></div>
+                </div>
+                <span id="batteryText">0%</span>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>🎛️ Synthesizer Configuration</h2>
+            <div class="config-grid">
+                <div class="config-item">
+                    <label for="oscType">Oscillator Type</label>
+                    <select id="oscType">
+                        <option value="sine">Sine Wave</option>
+                        <option value="square">Square Wave</option>
+                        <option value="sawtooth">Sawtooth Wave</option>
+                        <option value="triangle">Triangle Wave</option>
+                    </select>
+                </div>
+                <div class="config-item">
+                    <label for="baseFreq">Base Frequency</label>
+                    <input type="range" id="baseFreq" min="100" max="800" value="440" step="10">
+                    <div class="range-value"><span id="baseFreqValue">440</span> Hz</div>
+                </div>
+                <div class="config-item">
+                    <label for="filterQ">Filter Resonance</label>
+                    <input type="range" id="filterQ" min="0.1" max="20" value="5" step="0.1">
+                    <div class="range-value"><span id="filterQValue">5</span></div>
+                </div>
+                <div class="config-item">
+                    <label for="reverbMix">Reverb Mix</label>
+                    <input type="range" id="reverbMix" min="0" max="1" value="0.3" step="0.01">
+                    <div class="range-value"><span id="reverbMixValue">0.3</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>🎚️ Live Synthesis Parameters</h2>
+            <div class="synth-params">
+                <div class="param-group">
+                    <h4>Frequency</h4>
+                    <div class="param-value" id="freqParam">0 Hz</div>
+                    <div class="param-source">← Accelerometer Y</div>
+                </div>
+                <div class="param-group">
+                    <h4>Filter Cutoff</h4>
+                    <div class="param-value" id="filterParam">0 Hz</div>
+                    <div class="param-source">← Gyroscope Z</div>
+                </div>
+                <div class="param-group">
+                    <h4>Volume</h4>
+                    <div class="param-value" id="volumeParam">0%</div>
+                    <div class="param-source">← Light Sensor</div>
+                </div>
+                <div class="param-group">
+                    <h4>LFO Rate</h4>
+                    <div class="param-value" id="lfoParam">0 Hz</div>
+                    <div class="param-source">← Magnetometer X</div>
+                </div>
+                <div class="param-group">
+                    <h4>Detune</h4>
+                    <div class="param-value" id="detuneParam">0 cents</div>
+                    <div class="param-source">← Gyroscope X</div>
+                </div>
+                <div class="param-group">
+                    <h4>Reverb</h4>
+                    <div class="param-value" id="reverbParam">0%</div>
+                    <div class="param-source">← Accelerometer Z</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>📊 Audio Waveform</h2>
+            <div class="visualizer">
+                <canvas id="waveformCanvas"></canvas>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>📡 Sensor Data</h2>
+            <div class="sensor-grid">
+                <div class="sensor-group">
+                    <h3>Accelerometer</h3>
+                    <div class="sensor-value">
+                        <span class="sensor-label">X:</span>
+                        <span class="sensor-num" id="ax">0</span>
+                    </div>
+                    <div class="sensor-value">
+                        <span class="sensor-label">Y:</span>
+                        <span class="sensor-num" id="ay">0</span>
+                    </div>
+                    <div class="sensor-value">
+                        <span class="sensor-label">Z:</span>
+                        <span class="sensor-num" id="az">0</span>
+                    </div>
+                </div>
+                <div class="sensor-group">
+                    <h3>Gyroscope</h3>
+                    <div class="sensor-value">
+                        <span class="sensor-label">X:</span>
+                        <span class="sensor-num" id="gx">0</span>
+                    </div>
+                    <div class="sensor-value">
+                        <span class="sensor-label">Y:</span>
+                        <span class="sensor-num" id="gy">0</span>
+                    </div>
+                    <div class="sensor-value">
+                        <span class="sensor-label">Z:</span>
+                        <span class="sensor-num" id="gz">0</span>
+                    </div>
+                </div>
+                <div class="sensor-group">
+                    <h3>Magnetometer</h3>
+                    <div class="sensor-value">
+                        <span class="sensor-label">X:</span>
+                        <span class="sensor-num" id="mx">0</span>
+                    </div>
+                    <div class="sensor-value">
+                        <span class="sensor-label">Y:</span>
+                        <span class="sensor-num" id="my">0</span>
+                    </div>
+                    <div class="sensor-value">
+                        <span class="sensor-label">Z:</span>
+                        <span class="sensor-num" id="mz">0</span>
+                    </div>
+                </div>
+                <div class="sensor-group">
+                    <h3>Environmental</h3>
+                    <div class="sensor-value">
+                        <span class="sensor-label">Light:</span>
+                        <span class="sensor-num" id="light">0</span>
+                    </div>
+                    <div class="sensor-value">
+                        <span class="sensor-label">Temp:</span>
+                        <span class="sensor-num" id="temp">0</span>
+                    </div>
+                    <div class="sensor-value">
+                        <span class="sensor-label">Capacitive:</span>
+                        <span class="sensor-num" id="cap">0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>GAMBIT Sensor Synthesizer | SIMCAP Platform</p>
+            <p style="margin-top: 10px; font-size: 0.85em;">
+                Connect your Puck.js running GAMBIT firmware and explore sensor-reactive sound synthesis
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // Audio Context and Nodes
+        let audioContext;
+        let oscillator;
+        let gainNode;
+        let filterNode;
+        let lfoOscillator;
+        let lfoGain;
+        let analyser;
+        let reverbNode;
+        let dryGain;
+        let wetGain;
+        let isPlaying = false;
+
+        // GAMBIT Client - centralized BLE handling
+        let gambitClient = null;
+        let isConnected = false;
+
+        // Sensor data normalization ranges
+        const ranges = {
+            ax: { min: -8000, max: 8000 },
+            ay: { min: -8000, max: 8000 },
+            az: { min: -8000, max: 8000 },
+            gx: { min: -2000, max: 2000 },
+            gy: { min: -2000, max: 2000 },
+            gz: { min: -2000, max: 2000 },
+            mx: { min: -50, max: 50 },
+            my: { min: -50, max: 50 },
+            mz: { min: -50, max: 50 },
+            l: { min: 0, max: 1 },
+            t: { min: 15, max: 35 },
+            c: { min: 0, max: 100 }
+        };
+
+        // Current sensor values
+        let sensorData = {
+            ax: 0, ay: 0, az: 0,
+            gx: 0, gy: 0, gz: 0,
+            mx: 0, my: 0, mz: 0,
+            l: 0, t: 0, c: 0,
+            b: 0, s: 0, n: 0
+        };
+
+        // UI Elements
+        const connectBtn = document.getElementById('connectBtn');
+        const toggleSynthBtn = document.getElementById('toggleSynthBtn');
+        const statusDiv = document.getElementById('status');
+        const batteryDiv = document.getElementById('battery');
+        const batteryFill = document.getElementById('batteryFill');
+        const batteryText = document.getElementById('batteryText');
+
+        // Config controls
+        const oscTypeSelect = document.getElementById('oscType');
+        const baseFreqSlider = document.getElementById('baseFreq');
+        const baseFreqValue = document.getElementById('baseFreqValue');
+        const filterQSlider = document.getElementById('filterQ');
+        const filterQValue = document.getElementById('filterQValue');
+        const reverbMixSlider = document.getElementById('reverbMix');
+        const reverbMixValue = document.getElementById('reverbMixValue');
+
+        // Canvas for waveform
+        const canvas = document.getElementById('waveformCanvas');
+        const canvasCtx = canvas.getContext('2d');
+
+        // Initialize canvas size
+        function resizeCanvas() {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Normalize sensor value to 0-1 range
+        function normalize(value, key) {
+            const range = ranges[key];
+            if (!range) return 0.5;
+            return Math.max(0, Math.min(1, (value - range.min) / (range.max - range.min)));
+        }
+
+        // Initialize Audio Context and create nodes
+        function initAudio() {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+            // Main oscillator
+            oscillator = audioContext.createOscillator();
+            oscillator.type = oscTypeSelect.value;
+            oscillator.frequency.value = parseFloat(baseFreqSlider.value);
+
+            // Filter
+            filterNode = audioContext.createBiquadFilter();
+            filterNode.type = 'lowpass';
+            filterNode.frequency.value = 2000;
+            filterNode.Q.value = parseFloat(filterQSlider.value);
+
+            // LFO for vibrato/tremolo
+            lfoOscillator = audioContext.createOscillator();
+            lfoOscillator.frequency.value = 5;
+            lfoGain = audioContext.createGain();
+            lfoGain.gain.value = 50;
+
+            // Gain node for volume control
+            gainNode = audioContext.createGain();
+            gainNode.gain.value = 0.3;
+
+            // Analyser for visualization
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 2048;
+
+            // Simple reverb (convolver with generated impulse response)
+            reverbNode = audioContext.createConvolver();
+            reverbNode.buffer = createReverbImpulse();
+
+            // Dry/Wet gain nodes for reverb mix
+            dryGain = audioContext.createGain();
+            wetGain = audioContext.createGain();
+
+            // Connect LFO
+            lfoOscillator.connect(lfoGain);
+            lfoGain.connect(oscillator.frequency);
+
+            // Connect audio graph: oscillator -> filter -> dry/wet split -> analyser -> output
+            oscillator.connect(filterNode);
+            filterNode.connect(dryGain);
+            filterNode.connect(reverbNode);
+            reverbNode.connect(wetGain);
+
+            dryGain.connect(gainNode);
+            wetGain.connect(gainNode);
+            gainNode.connect(analyser);
+            analyser.connect(audioContext.destination);
+
+            // Start oscillators
+            oscillator.start();
+            lfoOscillator.start();
+
+            // Update dry/wet mix
+            updateReverbMix();
+
+            isPlaying = true;
+            toggleSynthBtn.textContent = 'Stop Synth';
+            toggleSynthBtn.classList.add('active');
+            statusDiv.textContent = 'Synthesizer Active - Move device to control sound';
+            statusDiv.classList.add('playing');
+
+            // Start visualization
+            visualize();
+        }
+
+        // Create impulse response for reverb
+        function createReverbImpulse() {
+            const sampleRate = audioContext.sampleRate;
+            const length = sampleRate * 2; // 2 second reverb
+            const impulse = audioContext.createBuffer(2, length, sampleRate);
+            const leftChannel = impulse.getChannelData(0);
+            const rightChannel = impulse.getChannelData(1);
+
+            for (let i = 0; i < length; i++) {
+                const decay = Math.exp(-i / (sampleRate * 0.5));
+                leftChannel[i] = (Math.random() * 2 - 1) * decay;
+                rightChannel[i] = (Math.random() * 2 - 1) * decay;
+            }
+
+            return impulse;
+        }
+
+        // Stop audio
+        function stopAudio() {
+            if (oscillator) {
+                oscillator.stop();
+                lfoOscillator.stop();
+            }
+            if (audioContext) {
+                audioContext.close();
+            }
+            isPlaying = false;
+            toggleSynthBtn.textContent = 'Start Synth';
+            toggleSynthBtn.classList.remove('active');
+            statusDiv.classList.remove('playing');
+            if (isConnected) {
+                statusDiv.textContent = 'Connected - Press device button to start data capture';
+                statusDiv.classList.add('connected');
+            }
+        }
+
+        // Update reverb dry/wet mix
+        function updateReverbMix() {
+            if (!dryGain || !wetGain) return;
+            const mix = parseFloat(reverbMixSlider.value);
+            dryGain.gain.value = 1 - mix;
+            wetGain.gain.value = mix;
+        }
+
+        // Update synthesis parameters from sensor data
+        function updateSynthesis() {
+            if (!isPlaying || !oscillator) return;
+
+            const baseFreq = parseFloat(baseFreqSlider.value);
+
+            // Frequency control from accelerometer Y (-1 to 1 range, ±2 octaves)
+            const ayNorm = normalize(sensorData.ay, 'ay');
+            const freqMultiplier = Math.pow(2, (ayNorm - 0.5) * 4); // ±2 octaves
+            const targetFreq = baseFreq * freqMultiplier;
+            oscillator.frequency.setTargetAtTime(targetFreq, audioContext.currentTime, 0.01);
+            document.getElementById('freqParam').textContent = Math.round(targetFreq) + ' Hz';
+
+            // Filter cutoff from gyroscope Z
+            const gzNorm = normalize(sensorData.gz, 'gz');
+            const filterFreq = 200 + gzNorm * 4800; // 200Hz to 5000Hz
+            filterNode.frequency.setTargetAtTime(filterFreq, audioContext.currentTime, 0.01);
+            document.getElementById('filterParam').textContent = Math.round(filterFreq) + ' Hz';
+
+            // Volume from light sensor
+            const lightNorm = sensorData.l;
+            const volume = Math.max(0.1, lightNorm) * 0.5; // 0.1 to 0.5
+            gainNode.gain.setTargetAtTime(volume, audioContext.currentTime, 0.01);
+            document.getElementById('volumeParam').textContent = Math.round(volume * 100) + '%';
+
+            // LFO rate from magnetometer X
+            const mxNorm = normalize(sensorData.mx, 'mx');
+            const lfoRate = 0.5 + mxNorm * 15; // 0.5Hz to 15.5Hz
+            lfoOscillator.frequency.setTargetAtTime(lfoRate, audioContext.currentTime, 0.01);
+            document.getElementById('lfoParam').textContent = lfoRate.toFixed(2) + ' Hz';
+
+            // Detune from gyroscope X
+            const gxNorm = normalize(sensorData.gx, 'gx');
+            const detune = (gxNorm - 0.5) * 100; // ±50 cents
+            oscillator.detune.setTargetAtTime(detune, audioContext.currentTime, 0.01);
+            document.getElementById('detuneParam').textContent = Math.round(detune) + ' cents';
+
+            // Reverb mix from accelerometer Z
+            const azNorm = normalize(sensorData.az, 'az');
+            const reverbAmount = azNorm;
+            dryGain.gain.setTargetAtTime(1 - reverbAmount, audioContext.currentTime, 0.01);
+            wetGain.gain.setTargetAtTime(reverbAmount, audioContext.currentTime, 0.01);
+            document.getElementById('reverbParam').textContent = Math.round(reverbAmount * 100) + '%';
+        }
+
+        // Visualize waveform
+        function visualize() {
+            if (!isPlaying) return;
+
+            requestAnimationFrame(visualize);
+
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            analyser.getByteTimeDomainData(dataArray);
+
+            canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+            canvasCtx.lineWidth = 2;
+            canvasCtx.strokeStyle = '#4CAF50';
+            canvasCtx.beginPath();
+
+            const sliceWidth = canvas.width / bufferLength;
+            let x = 0;
+
+            for (let i = 0; i < bufferLength; i++) {
+                const v = dataArray[i] / 128.0;
+                const y = v * canvas.height / 2;
+
+                if (i === 0) {
+                    canvasCtx.moveTo(x, y);
+                } else {
+                    canvasCtx.lineTo(x, y);
+                }
+
+                x += sliceWidth;
+            }
+
+            canvasCtx.lineTo(canvas.width, canvas.height / 2);
+            canvasCtx.stroke();
+        }
+
+        // Update sensor display
+        function updateSensorDisplay() {
+            document.getElementById('ax').textContent = sensorData.ax.toFixed(0);
+            document.getElementById('ay').textContent = sensorData.ay.toFixed(0);
+            document.getElementById('az').textContent = sensorData.az.toFixed(0);
+            document.getElementById('gx').textContent = sensorData.gx.toFixed(0);
+            document.getElementById('gy').textContent = sensorData.gy.toFixed(0);
+            document.getElementById('gz').textContent = sensorData.gz.toFixed(0);
+            document.getElementById('mx').textContent = sensorData.mx.toFixed(2);
+            document.getElementById('my').textContent = sensorData.my.toFixed(2);
+            document.getElementById('mz').textContent = sensorData.mz.toFixed(2);
+            document.getElementById('light').textContent = sensorData.l.toFixed(3);
+            document.getElementById('temp').textContent = sensorData.t.toFixed(1);
+            document.getElementById('cap').textContent = sensorData.c.toFixed(0);
+        }
+
+        // Update battery display
+        function updateBattery(percent) {
+            batteryDiv.style.display = 'flex';
+            batteryFill.style.width = percent + '%';
+            batteryText.textContent = percent + '%';
+
+            if (percent < 20) {
+                batteryFill.style.background = 'linear-gradient(90deg, #f44336, #ff5722)';
+            } else if (percent < 50) {
+                batteryFill.style.background = 'linear-gradient(90deg, #ff9800, #ffc107)';
+            } else {
+                batteryFill.style.background = 'linear-gradient(90deg, #4CAF50, #8BC34A)';
+            }
+        }
+
+        // Handle incoming telemetry data from GAMBIT client
+        function onTelemetry(telemetry) {
+            // Update sensor data
+            sensorData = {
+                ax: telemetry.ax || 0,
+                ay: telemetry.ay || 0,
+                az: telemetry.az || 0,
+                gx: telemetry.gx || 0,
+                gy: telemetry.gy || 0,
+                gz: telemetry.gz || 0,
+                mx: telemetry.mx || 0,
+                my: telemetry.my || 0,
+                mz: telemetry.mz || 0,
+                l: telemetry.l || 0,
+                t: telemetry.t || 0,
+                c: telemetry.c || 0,
+                b: telemetry.b || 0,
+                s: telemetry.s || 0,
+                n: telemetry.n || 0
+            };
+
+            // Update displays
+            updateSensorDisplay();
+            updateBattery(sensorData.b);
+
+            // Update synthesis if playing
+            if (isPlaying) {
+                updateSynthesis();
+            }
+        }
+
+        // Connect to device using centralized GAMBIT client
+        connectBtn.addEventListener('click', async () => {
+            if (isConnected) {
+                // Disconnect
+                console.log('[GAMBIT] Disconnecting from device...');
+                if (gambitClient) {
+                    gambitClient.disconnect();
+                    gambitClient = null;
+                }
+                isConnected = false;
+                connectBtn.textContent = 'Connect Device';
+                connectBtn.classList.remove('connected');
+                statusDiv.textContent = 'Disconnected - Click "Connect Device" to begin';
+                statusDiv.classList.remove('connected', 'playing');
+                toggleSynthBtn.disabled = true;
+                batteryDiv.style.display = 'none';
+
+                if (isPlaying) {
+                    stopAudio();
+                }
+            } else {
+                // Connect
+                try {
+                    statusDiv.textContent = 'Connecting...';
+
+                    // Create new GAMBIT client
+                    gambitClient = new GambitClient({
+                        debug: true,
+                        autoKeepalive: true,
+                        keepaliveInterval: 25000
+                    });
+
+                    // Set up event handlers
+                    gambitClient.on('data', onTelemetry);
+
+                    gambitClient.on('firmware', (info) => {
+                        console.log('[GAMBIT] Firmware info:', info);
+
+                        // Check compatibility
+                        const compat = gambitClient.checkCompatibility('1.0.0');
+                        if (!compat.compatible) {
+                            statusDiv.textContent = `Incompatible firmware: ${compat.reason}`;
+                            statusDiv.classList.add('error');
+                            setTimeout(() => gambitClient.disconnect(), 3000);
+                            return;
+                        }
+
+                        statusDiv.textContent = `Connected - ${info.name} v${info.version}`;
+                    });
+
+                    gambitClient.on('disconnect', () => {
+                        console.log('[GAMBIT] Device disconnected');
+                        isConnected = false;
+                        connectBtn.textContent = 'Connect Device';
+                        connectBtn.classList.remove('connected');
+                        statusDiv.classList.remove('connected', 'playing');
+                        toggleSynthBtn.disabled = true;
+                        if (isPlaying) {
+                            stopAudio();
+                        }
+                    });
+
+                    gambitClient.on('error', (err) => {
+                        console.error('[GAMBIT] Error:', err);
+                        statusDiv.textContent = 'Error: ' + err.message;
+                    });
+
+                    // Connect to device
+                    const firmwareInfo = await gambitClient.connect();
+
+                    isConnected = true;
+                    connectBtn.textContent = 'Disconnect';
+                    connectBtn.classList.add('connected');
+                    statusDiv.classList.add('connected');
+                    toggleSynthBtn.disabled = false;
+
+                    // Start streaming sensor data
+                    await gambitClient.startStreaming();
+                    statusDiv.textContent = 'Connected - Receiving sensor data';
+
+                } catch (e) {
+                    console.error('[GAMBIT] Connection error:', e);
+                    statusDiv.textContent = 'Connection failed: ' + e.message;
+                    if (gambitClient) {
+                        gambitClient.disconnect();
+                        gambitClient = null;
+                    }
+                }
+            }
+        });
+
+        // Toggle synthesizer
+        toggleSynthBtn.addEventListener('click', () => {
+            if (isPlaying) {
+                stopAudio();
+            } else {
+                initAudio();
+            }
+        });
+
+        // Configuration controls
+        oscTypeSelect.addEventListener('change', () => {
+            if (oscillator && isPlaying) {
+                oscillator.type = oscTypeSelect.value;
+            }
+        });
+
+        baseFreqSlider.addEventListener('input', () => {
+            baseFreqValue.textContent = baseFreqSlider.value;
+        });
+
+        filterQSlider.addEventListener('input', () => {
+            filterQValue.textContent = filterQSlider.value;
+            if (filterNode && isPlaying) {
+                filterNode.Q.value = parseFloat(filterQSlider.value);
+            }
+        });
+
+        reverbMixSlider.addEventListener('input', () => {
+            reverbMixValue.textContent = reverbMixSlider.value;
+            if (isPlaying) {
+                updateReverbMix();
+            }
+        });
+    </script>
+</body>
+</html>

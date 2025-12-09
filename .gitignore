@@ -1,0 +1,11 @@
+node_modules
+logs/*
+*.log
+.DS_Store
+.AppleDouble
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
