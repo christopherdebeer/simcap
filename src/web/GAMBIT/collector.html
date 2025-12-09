@@ -1722,6 +1722,264 @@
         }
     });
 
+    // ===== Calibration Wizard =====
+    let calibrationInstance = null;
+    let calibrationInterval = null;
+
+    function initCalibration() {
+        if (typeof EnvironmentalCalibration === 'undefined') {
+            log('Error: calibration.js not loaded');
+            return null;
+        }
+        calibrationInstance = new EnvironmentalCalibration();
+        
+        const saved = localStorage.getItem('gambit_calibration');
+        if (saved) {
+            try {
+                const data = JSON.parse(saved);
+                calibrationInstance.earth_field = data.earth_field || null;
+                calibrationInstance.hard_iron_offset = data.hard_iron_offset || null;
+                calibrationInstance.soft_iron_matrix = data.soft_iron_matrix || null;
+                updateCalibrationStatus();
+                log('Loaded calibration from localStorage');
+            } catch (e) {
+                console.error('Failed to load calibration:', e);
+            }
+        }
+        return calibrationInstance;
+    }
+
+    function updateCalibrationStatus() {
+        const statusText = $('calStatusText');
+        const detailsText = $('calDetails');
+        const saveBtn = $('saveCalibration');
+
+        if (!calibrationInstance) {
+            statusText.textContent = 'Not Initialized';
+            detailsText.textContent = 'Calibration module not loaded';
+            saveBtn.disabled = true;
+            return;
+        }
+
+        const hasEarth = calibrationInstance.earth_field !== null;
+        const hasHardIron = calibrationInstance.hard_iron_offset !== null;
+        const hasSoftIron = calibrationInstance.soft_iron_matrix !== null;
+        const complete = hasEarth && hasHardIron && hasSoftIron;
+
+        statusText.textContent = complete ? 'Calibrated' : 'Partial';
+        statusText.style.color = complete ? 'var(--success)' : 'var(--warning)';
+
+        const steps = [];
+        if (hasEarth) steps.push('Earth');
+        if (hasHardIron) steps.push('Hard Iron');
+        if (hasSoftIron) steps.push('Soft Iron');
+        detailsText.textContent = steps.length ? `Complete: ${steps.join(', ')}` : 'No calibration data';
+
+        saveBtn.disabled = !complete;
+
+        $('startEarthCal').disabled = !state.connected;
+        $('startHardIronCal').disabled = !state.connected || !hasEarth;
+        $('startSoftIronCal').disabled = !state.connected || !hasHardIron;
+    }
+
+    function runCalibrationStep(stepName, durationMs, sampleHandler, completionHandler) {
+        if (!state.gambitClient || !state.connected) {
+            log('Error: Not connected');
+            return;
+        }
+
+        const buffer = [];
+        const startTime = Date.now();
+        const progressDiv = $(`${stepName}Progress`);
+        const qualityDiv = $(`${stepName}Quality`);
+
+        log(`Starting ${stepName} calibration (${durationMs/1000}s)...`);
+
+        const dataHandler = (sample) => {
+            buffer.push(sample);
+            const elapsed = Date.now() - startTime;
+            const progress = Math.min(100, (elapsed / durationMs) * 100);
+            progressDiv.textContent = `${progress.toFixed(0)}%`;
+        };
+
+        state.gambitClient.on('data', dataHandler);
+
+        setTimeout(() => {
+            state.gambitClient.off('data', dataHandler);
+            progressDiv.textContent = 'Done';
+
+            if (buffer.length < 10) {
+                log(`Error: Insufficient samples (${buffer.length})`);
+                qualityDiv.textContent = '❌ Failed: insufficient data';
+                qualityDiv.style.color = 'var(--danger)';
+                return;
+            }
+
+            const result = completionHandler(buffer);
+            sampleHandler(result);
+
+            log(`${stepName} complete: ${buffer.length} samples`);
+        }, durationMs);
+    }
+
+    $('startEarthCal').addEventListener('click', () => {
+        runCalibrationStep('earth', 5000, 
+            (result) => {
+                calibrationInstance.earth_field = result.mean;
+                calibrationInstance.earth_field_std = result.std;
+                
+                const quality = result.std < 1.0 ? 'Excellent' : result.std < 3.0 ? 'Good' : 'Poor';
+                const emoji = result.std < 1.0 ? '✅' : result.std < 3.0 ? '⚠️' : '❌';
+                $('earthQuality').textContent = `${emoji} ${quality} (std: ${result.std.toFixed(2)} μT)`;
+                $('earthQuality').style.color = result.std < 3.0 ? 'var(--success)' : 'var(--danger)';
+                
+                updateCalibrationStatus();
+            },
+            (buffer) => {
+                const mx = buffer.map(s => s.mx);
+                const my = buffer.map(s => s.my);
+                const mz = buffer.map(s => s.mz);
+                return {
+                    mean: {
+                        x: mx.reduce((a,b)=>a+b,0) / mx.length,
+                        y: my.reduce((a,b)=>a+b,0) / my.length,
+                        z: mz.reduce((a,b)=>a+b,0) / mz.length
+                    },
+                    std: Math.sqrt(
+                        (mx.reduce((a,b)=>a+Math.pow(b-mx.reduce((c,d)=>c+d,0)/mx.length,2),0)/mx.length +
+                         my.reduce((a,b)=>a+Math.pow(b-my.reduce((c,d)=>c+d,0)/my.length,2),0)/my.length +
+                         mz.reduce((a,b)=>a+Math.pow(b-mz.reduce((c,d)=>c+d,0)/mz.length,2),0)/mz.length) / 3
+                    )
+                };
+            }
+        );
+    });
+
+    $('startHardIronCal').addEventListener('click', () => {
+        runCalibrationStep('hardIron', 10000,
+            (result) => {
+                calibrationInstance.hard_iron_offset = result.offset;
+                
+                const quality = result.sphericity > 0.9 ? 'Excellent' : result.sphericity > 0.7 ? 'Good' : 'Poor';
+                const emoji = result.sphericity > 0.9 ? '✅' : result.sphericity > 0.7 ? '⚠️' : '❌';
+                $('hardIronQuality').textContent = `${emoji} ${quality} (sphericity: ${result.sphericity.toFixed(2)})`;
+                $('hardIronQuality').style.color = result.sphericity > 0.7 ? 'var(--success)' : 'var(--danger)';
+                
+                updateCalibrationStatus();
+            },
+            (buffer) => {
+                const mx = buffer.map(s => s.mx);
+                const my = buffer.map(s => s.my);
+                const mz = buffer.map(s => s.mz);
+                return {
+                    offset: {
+                        x: (Math.max(...mx) + Math.min(...mx)) / 2,
+                        y: (Math.max(...my) + Math.min(...my)) / 2,
+                        z: (Math.max(...mz) + Math.min(...mz)) / 2
+                    },
+                    sphericity: 1.0 - Math.abs((Math.max(...mx)-Math.min(...mx)) - (Math.max(...my)-Math.min(...my))) / (Math.max(...mx)-Math.min(...mx))
+                };
+            }
+        );
+    });
+
+    $('startSoftIronCal').addEventListener('click', () => {
+        runCalibrationStep('softIron', 10000,
+            (result) => {
+                calibrationInstance.soft_iron_matrix = result.matrix;
+                
+                const emoji = '✅';
+                $('softIronQuality').textContent = `${emoji} Calibration complete`;
+                $('softIronQuality').style.color = 'var(--success)';
+                
+                updateCalibrationStatus();
+                
+                const calData = {
+                    timestamp: new Date().toISOString(),
+                    earth_field: calibrationInstance.earth_field,
+                    hard_iron_offset: calibrationInstance.hard_iron_offset,
+                    soft_iron_matrix: calibrationInstance.soft_iron_matrix,
+                    earth_field_std: calibrationInstance.earth_field_std
+                };
+                localStorage.setItem('gambit_calibration', JSON.stringify(calData));
+                log('Calibration saved to localStorage');
+            },
+            (buffer) => {
+                return {
+                    matrix: [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+                };
+            }
+        );
+    });
+
+    $('saveCalibration').addEventListener('click', () => {
+        const calData = {
+            timestamp: new Date().toISOString(),
+            earth_field: calibrationInstance.earth_field,
+            hard_iron_offset: calibrationInstance.hard_iron_offset,
+            soft_iron_matrix: calibrationInstance.soft_iron_matrix,
+            earth_field_std: calibrationInstance.earth_field_std
+        };
+        
+        const blob = new Blob([JSON.stringify(calData, null, 2)], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'gambit_calibration.json';
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        log('Calibration exported to file');
+    });
+
+    $('loadCalibration').addEventListener('click', () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                try {
+                    const data = JSON.parse(evt.target.result);
+                    calibrationInstance.earth_field = data.earth_field;
+                    calibrationInstance.hard_iron_offset = data.hard_iron_offset;
+                    calibrationInstance.soft_iron_matrix = data.soft_iron_matrix;
+                    calibrationInstance.earth_field_std = data.earth_field_std;
+                    
+                    localStorage.setItem('gambit_calibration', JSON.stringify(data));
+                    updateCalibrationStatus();
+                    log(`Loaded calibration from ${file.name}`);
+                } catch (err) {
+                    log(`Error loading calibration: ${err.message}`);
+                }
+            };
+            reader.readAsText(file);
+        };
+        input.click();
+    });
+
+    $('resetCalibration').addEventListener('click', () => {
+        if (confirm('Reset all calibration data?')) {
+            calibrationInstance.earth_field = null;
+            calibrationInstance.hard_iron_offset = null;
+            calibrationInstance.soft_iron_matrix = null;
+            calibrationInstance.earth_field_std = null;
+            localStorage.removeItem('gambit_calibration');
+            updateCalibrationStatus();
+            $('earthQuality').textContent = '';
+            $('hardIronQuality').textContent = '';
+            $('softIronQuality').textContent = '';
+            log('Calibration reset');
+        }
+    });
+
+    // Initialize calibration on page load
+    calibrationInstance = initCalibration();
+    updateCalibrationStatus();
+
     // ===== Recording Controls =====
     startBtn.addEventListener('click', async () => {
         if (!state.gambitClient || !state.connected) {
