@@ -149,6 +149,27 @@ def compute_dataset_stats(data_dir: Path) -> DatasetStats:
 
     Returns:
         DatasetStats with mean, std, min, max for each feature
+    
+    TODO: Task 5 - Enhance with magnetic-specific normalization stats
+        Current implementation computes stats across ALL sessions (with and without magnets),
+        which can lead to poor normalization for magnetic finger tracking.
+        
+        Enhancement needed:
+        1. Add `with_magnets: bool = False` parameter
+        2. Filter sessions based on metadata.magnet_config field
+        3. Compute separate stats for:
+           - Baseline (no magnets): for calibration sessions
+           - With magnets: for finger tracking sessions
+        4. Save both stat sets: dataset_stats.npz and dataset_stats_magnetic.npz
+        5. Update GambitDataset.__init__ to load appropriate stats based on use case
+        
+        Impact: Currently acceptable for initial training, but may reduce accuracy
+                by 5-10% if magnetometer magnitude scales differ significantly between
+                calibration and tracking sessions.
+        
+        Priority: Low (implement only if finger tracking model accuracy < 60%)
+        
+        Reference: docs/design/magnetic-tracking-pipeline-analysis.md Section 3.4
     """
     all_data = []
 
