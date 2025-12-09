@@ -3,217 +3,149 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GAMBIT Sensor Synthesizer</title>
+    <title>SIMCAP | GAMBIT Synth</title>
+    <link rel="stylesheet" href="../../simcap.css">
     <!-- Eruda Dev Console for Mobile Debugging -->
     <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
     <script>eruda.init();</script>
     <script src="puck.js"></script>
     <script src="gambit-client.js"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        /* Page-specific styles */
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: var(--space-lg);
             min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 20px;
-            color: #fff;
         }
 
         .container {
             max-width: 1200px;
-            width: 100%;
+            margin: 0 auto;
         }
 
         header {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: var(--space-xl);
         }
 
-        h1 {
-            font-size: 2.5em;
-            font-weight: 700;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        header h1 {
+            font-size: 2rem;
+            margin-bottom: var(--space-sm);
         }
 
         .subtitle {
-            font-size: 1.1em;
-            opacity: 0.9;
-        }
-
-        .card {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border-radius: 15px;
-            padding: 25px;
-            margin-bottom: 20px;
-            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
-            border: 1px solid rgba(255, 255, 255, 0.18);
+            color: var(--fg-muted);
         }
 
         .controls {
             display: flex;
-            gap: 15px;
+            gap: var(--space-md);
             flex-wrap: wrap;
             align-items: center;
             justify-content: center;
-        }
-
-        button {
-            padding: 12px 30px;
-            font-size: 16px;
-            font-weight: 600;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-        }
-
-        button:active {
-            transform: translateY(0);
-        }
-
-        #connectBtn {
-            background: #4CAF50;
-            color: white;
-        }
-
-        #connectBtn:hover {
-            background: #45a049;
+            margin-bottom: var(--space-lg);
         }
 
         #connectBtn.connected {
-            background: #ff9800;
-        }
-
-        #toggleSynthBtn {
-            background: #2196F3;
-            color: white;
-        }
-
-        #toggleSynthBtn:hover {
-            background: #0b7dda;
+            background: var(--warning);
+            border-color: var(--warning);
         }
 
         #toggleSynthBtn.active {
-            background: #f44336;
-        }
-
-        #toggleSynthBtn:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-            opacity: 0.5;
+            background: var(--danger);
+            border-color: var(--danger);
         }
 
         .status {
             text-align: center;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
+            padding: var(--space-md);
+            border-radius: 4px;
+            margin-bottom: var(--space-lg);
             font-weight: 600;
-            background: rgba(0,0,0,0.2);
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
         }
 
         .status.connected {
-            background: rgba(76, 175, 80, 0.3);
+            border-color: var(--success);
+            color: var(--success);
         }
 
         .status.playing {
-            background: rgba(244, 67, 54, 0.3);
+            border-color: var(--danger);
+            color: var(--danger);
         }
 
         .sensor-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 15px;
-            margin-top: 20px;
-        }
-
-        .sensor-group {
-            background: rgba(0,0,0,0.2);
-            padding: 15px;
-            border-radius: 10px;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: var(--space-md);
         }
 
         .sensor-group h3 {
-            margin-bottom: 10px;
-            font-size: 1.2em;
-            border-bottom: 2px solid rgba(255,255,255,0.3);
-            padding-bottom: 8px;
+            font-size: 0.875rem;
+            margin-bottom: var(--space-sm);
+            padding-bottom: var(--space-xs);
+            border-bottom: 1px solid var(--border);
+            color: var(--fg-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
 
         .sensor-value {
             display: flex;
             justify-content: space-between;
-            margin: 8px 0;
-            font-family: 'Courier New', monospace;
+            margin: var(--space-xs) 0;
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
         }
 
         .sensor-label {
-            font-weight: 600;
-            opacity: 0.8;
+            color: var(--fg-muted);
         }
 
         .sensor-num {
-            font-weight: 700;
-            color: #4CAF50;
+            font-weight: 600;
+            color: var(--success);
         }
 
         .synth-params {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-top: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: var(--space-md);
         }
 
         .param-group {
-            background: rgba(0,0,0,0.3);
-            padding: 15px;
-            border-radius: 10px;
+            background: var(--bg-elevated);
+            padding: var(--space-md);
+            border: 1px solid var(--border);
         }
 
         .param-group h4 {
-            margin-bottom: 12px;
-            font-size: 1em;
-            color: #FFD700;
+            font-size: 0.75rem;
+            margin-bottom: var(--space-sm);
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
 
         .param-value {
-            font-family: 'Courier New', monospace;
-            font-size: 1.3em;
+            font-family: var(--font-mono);
+            font-size: 1.25rem;
             font-weight: 700;
-            color: #fff;
-            text-shadow: 0 0 10px rgba(255,255,255,0.5);
         }
 
         .param-source {
-            font-size: 0.85em;
-            opacity: 0.7;
-            margin-top: 5px;
+            font-size: 0.625rem;
+            color: var(--fg-muted);
+            margin-top: var(--space-xs);
         }
 
         .visualizer {
             height: 150px;
-            background: rgba(0,0,0,0.3);
-            border-radius: 10px;
+            background: var(--bg);
+            border: 1px solid var(--border);
             position: relative;
             overflow: hidden;
-            margin-top: 20px;
         }
 
         #waveformCanvas {
@@ -223,9 +155,8 @@
 
         .config-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-top: 15px;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: var(--space-md);
         }
 
         .config-item {
@@ -234,58 +165,67 @@
         }
 
         .config-item label {
-            margin-bottom: 5px;
+            margin-bottom: var(--space-xs);
             font-weight: 600;
-            font-size: 0.9em;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--fg-muted);
         }
 
-        select, input[type="range"] {
-            padding: 8px;
-            border-radius: 5px;
-            border: none;
-            background: rgba(255,255,255,0.9);
-            font-size: 14px;
+        select {
+            padding: var(--space-sm);
+            border: 1px solid var(--border);
+            background: var(--bg-surface);
+            color: var(--fg);
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
         }
 
         input[type="range"] {
+            width: 100%;
             cursor: pointer;
         }
 
         .range-value {
             text-align: center;
-            margin-top: 5px;
-            font-weight: 600;
+            margin-top: var(--space-xs);
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
         }
 
         .battery {
             display: flex;
             align-items: center;
-            gap: 10px;
-            padding: 10px;
-            background: rgba(0,0,0,0.2);
-            border-radius: 8px;
+            gap: var(--space-sm);
+            padding: var(--space-sm);
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            font-size: 0.75rem;
         }
 
         .battery-bar {
             flex: 1;
-            height: 20px;
-            background: rgba(255,255,255,0.2);
-            border-radius: 10px;
+            height: 12px;
+            background: var(--border);
             overflow: hidden;
         }
 
         .battery-fill {
             height: 100%;
-            background: linear-gradient(90deg, #4CAF50, #8BC34A);
+            background: var(--success);
             transition: width 0.3s ease;
-            border-radius: 10px;
         }
 
-        .footer {
+        .breadcrumb {
+            font-size: 0.75rem;
+            color: var(--fg-muted);
             text-align: center;
-            margin-top: 30px;
-            opacity: 0.8;
-            font-size: 0.9em;
+            margin-bottom: var(--space-lg);
+        }
+
+        .breadcrumb a:hover {
+            color: var(--fg);
         }
 
         @keyframes pulse {
@@ -300,15 +240,19 @@
 </head>
 <body>
     <div class="container">
+        <nav class="breadcrumb">
+            <a href="../../../">SIMCAP</a> / <a href="../">Web</a> / <a href="./">GAMBIT</a> / Synth
+        </nav>
+
         <header>
-            <h1>🎵 GAMBIT Sensor Synthesizer</h1>
+            <h1>🎵 GAMBIT Synth</h1>
             <p class="subtitle">Real-time sensor-reactive audio synthesis</p>
         </header>
 
         <div class="card">
             <div class="controls">
-                <button id="connectBtn">Connect Device</button>
-                <button id="toggleSynthBtn" disabled>Start Synth</button>
+                <button class="btn" id="connectBtn">Connect Device</button>
+                <button class="btn btn-primary" id="toggleSynthBtn" disabled>Start Synth</button>
             </div>
             <div id="status" class="status">Disconnected - Click "Connect Device" to begin</div>
             <div class="battery" id="battery" style="display: none;">
@@ -321,7 +265,7 @@
         </div>
 
         <div class="card">
-            <h2>🎛️ Synthesizer Configuration</h2>
+            <div class="card-header">Synthesizer Configuration</div>
             <div class="config-grid">
                 <div class="config-item">
                     <label for="oscType">Oscillator Type</label>
@@ -351,7 +295,7 @@
         </div>
 
         <div class="card">
-            <h2>🎚️ Live Synthesis Parameters</h2>
+            <div class="card-header">Live Synthesis Parameters</div>
             <div class="synth-params">
                 <div class="param-group">
                     <h4>Frequency</h4>
@@ -387,14 +331,14 @@
         </div>
 
         <div class="card">
-            <h2>📊 Audio Waveform</h2>
+            <div class="card-header">Audio Waveform</div>
             <div class="visualizer">
                 <canvas id="waveformCanvas"></canvas>
             </div>
         </div>
 
         <div class="card">
-            <h2>📡 Sensor Data</h2>
+            <div class="card-header">Sensor Data</div>
             <div class="sensor-grid">
                 <div class="sensor-group">
                     <h3>Accelerometer</h3>
@@ -459,12 +403,11 @@
             </div>
         </div>
 
-        <div class="footer">
-            <p>GAMBIT Sensor Synthesizer | SIMCAP Platform</p>
-            <p style="margin-top: 10px; font-size: 0.85em;">
-                Connect your Puck.js running GAMBIT firmware and explore sensor-reactive sound synthesis
-            </p>
-        </div>
+        <footer class="page-footer">
+            <span>SIMCAP GAMBIT Synth</span>
+            <a href="./">GAMBIT</a>
+            <a href="collector.html">Collector</a>
+        </footer>
     </div>
 
     <script>
@@ -714,11 +657,11 @@
             const dataArray = new Uint8Array(bufferLength);
             analyser.getByteTimeDomainData(dataArray);
 
-            canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            canvasCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#0a0a0a';
             canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
 
             canvasCtx.lineWidth = 2;
-            canvasCtx.strokeStyle = '#4CAF50';
+            canvasCtx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--success').trim() || '#00ff88';
             canvasCtx.beginPath();
 
             const sliceWidth = canvas.width / bufferLength;
@@ -764,11 +707,11 @@
             batteryText.textContent = percent + '%';
 
             if (percent < 20) {
-                batteryFill.style.background = 'linear-gradient(90deg, #f44336, #ff5722)';
+                batteryFill.style.background = 'var(--danger)';
             } else if (percent < 50) {
-                batteryFill.style.background = 'linear-gradient(90deg, #ff9800, #ffc107)';
+                batteryFill.style.background = 'var(--warning)';
             } else {
-                batteryFill.style.background = 'linear-gradient(90deg, #4CAF50, #8BC34A)';
+                batteryFill.style.background = 'var(--success)';
             }
         }
 

@@ -729,3 +729,7 @@ python ml/train.py --data data/GAMBIT --epochs 50
 **Version**: 1.0
 **Last Updated**: 2025-12-09
 **Status**: Pose Estimation (✅ DONE), Others (📋 PLANNED)
+
+---
+
+<link rel="stylesheet" href="../src/simcap.css">

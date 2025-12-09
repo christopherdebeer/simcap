@@ -37,3 +37,7 @@ Research direction exploring $1/$P/$N family gesture recognition algorithms appl
 ---
 
 [← Back to Documentation](../)
+
+---
+
+<link rel="stylesheet" href="../../src/simcap.css">

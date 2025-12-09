@@ -1,338 +1,99 @@
-# SIMCAP ML Pipeline
+# SIMCAP Machine Learning Pipeline
 
-Machine learning pipeline for gesture classification from 9-DoF IMU sensor data.
-
-## Overview
-
-```mermaid
-graph TB
-    subgraph "Data Collection"
-        DEVICE[Puck.js Device]
-        COLLECTOR[collector.html]
-        RAW[Raw JSON Data]
-        META[Metadata + Labels]
-    end
-
-    subgraph "Preprocessing"
-        LOADER[data_loader.py]
-        NORM[Normalize]
-        WINDOW[Windowing]
-    end
-
-    subgraph "Training"
-        MODEL[CNN Model]
-        TRAIN[train.py]
-        EVAL[Evaluate]
-    end
-
-    subgraph "Deployment"
-        KERAS[.keras]
-        TFLITE[.tflite]
-        ONNX[.onnx]
-    end
-
-    subgraph "Visualization"
-        VIZ[visualize.py]
-        COMPOSITE[Composite Images]
-        WINDOWS[Window Images]
-        HTML[HTML Explorer]
-    end
-
-    DEVICE --> COLLECTOR
-    COLLECTOR --> RAW
-    COLLECTOR --> META
-    RAW --> LOADER
-    RAW --> VIZ
-    META --> LOADER
-    LOADER --> NORM
-    NORM --> WINDOW
-    WINDOW --> MODEL
-    MODEL --> TRAIN
-    TRAIN --> EVAL
-    EVAL --> KERAS
-    KERAS --> TFLITE
-    KERAS --> ONNX
-    VIZ --> COMPOSITE
-    VIZ --> WINDOWS
-    VIZ --> HTML
-```
+End-to-end ML pipeline for gesture classification from 9-DoF IMU data.
 
 ## Quick Start
 
-### 1. Install Dependencies
-
 ```bash
-cd ml
-pip install -r requirements.txt
+# Install dependencies
+pip install -r ml/requirements.txt
+
+# Full pipeline: train + convert to all deployment formats
+python -m ml.build all --data-dir data/GAMBIT --version v1 --epochs 50
+
+# Or step by step:
+python -m ml.build train --data-dir data/GAMBIT --epochs 50
+python -m ml.build convert --model ml/models/gesture_model.keras --version v1
 ```
 
-### 2. Collect Labeled Data
+## Pipeline Overview
 
-Use the web-based collector UI:
-```bash
-# Serve locally
-python -m http.server 8000
-
-# Open in browser
-# http://localhost:8000/src/web/GAMBIT/collector.html
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           SIMCAP ML Pipeline                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────┐    ┌──────────┐    ┌─────────┐    ┌──────────────────────────┐│
+│  │  Data   │───▶│ Cluster  │───▶│  Train  │───▶│       Deploy             ││
+│  │ Collect │    │ (unsup.) │    │ (super.)│    │                          ││
+│  └─────────┘    └──────────┘    └─────────┘    │  ┌─────────────────────┐ ││
+│       │              │               │         │  │ TensorFlow.js       │ ││
+│       ▼              ▼               ▼         │  │ (Browser)           │ ││
+│  data/GAMBIT/   ml/models/      ml/models/     │  └─────────────────────┘ ││
+│  *.json         cluster_*.json  gesture_*.keras│  ┌─────────────────────┐ ││
+│  *.meta.json    label_templates/               │  │ TFLite Micro        │ ││
+│                                                │  │ (ESP32)             │ ││
+│                                                │  └─────────────────────┘ ││
+│                                                │  ┌─────────────────────┐ ││
+│                                                │  │ Centroid Classifier │ ││
+│                                                │  │ (Puck.js)           │ ││
+│                                                │  └─────────────────────┘ ││
+│                                                └──────────────────────────┘│
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Or use the command-line labeling tool on existing data:
-```bash
-python -m ml.label data/GAMBIT/2024-01-05T16:41:20.581Z.json
+## Directory Structure
+
 ```
-
-### 3. Train Model
-
-```bash
-python -m ml.train --data-dir data/GAMBIT --epochs 50
+ml/
+├── __init__.py           # Package init
+├── build.py              # Unified build pipeline
+├── train.py              # Training script
+├── cluster.py            # Unsupervised clustering
+├── visualize.py          # Data visualization
+├── generate_explorer.py  # Interactive explorer
+├── data_loader.py        # Dataset loading
+├── model.py              # Model architectures
+├── schema.py             # Data schemas & gestures
+├── filters.py            # Signal processing
+├── calibration.py        # Sensor calibration
+├── label.py              # Labeling utilities
+├── requirements.txt      # Python dependencies
+├── README.md             # This file
+├── CLUSTERING.md         # Clustering documentation
+└── models/               # Output directory
+    ├── gesture_model.keras       # Keras model
+    ├── gesture_model.tflite      # TFLite model
+    ├── gesture_model_quant.tflite# Quantized TFLite
+    ├── gesture_model.h           # C header for embedded
+    ├── training_results.json     # Training metrics
+    ├── clustering_results.json   # Cluster analysis
+    ├── cluster_analysis.json     # Detailed cluster info
+    └── label_templates/          # Auto-generated labels
 ```
-
-### 4. Evaluate Results
-
-Training outputs are saved to `ml/models/`:
-- `gesture_model.keras` - Keras model
-- `gesture_model.tflite` - TensorFlow Lite (for embedded)
-- `training_results.json` - Metrics and history
-
-## Components
-
-### Schema (`schema.py`)
-
-Defines the gesture vocabulary and data structures:
-
-```python
-from ml import Gesture, SessionMetadata, LabeledSegment
-
-# Available gestures
-print(Gesture.names())
-# ['rest', 'fist', 'open_palm', 'index_up', 'peace',
-#  'thumbs_up', 'ok_sign', 'pinch', 'grab', 'wave']
-
-# Create labeled segment
-segment = LabeledSegment(
-    start_sample=0,
-    end_sample=100,
-    gesture=Gesture.FIST,
-    confidence='high'
-)
-```
-
-### Data Loader (`data_loader.py`)
-
-Loads and preprocesses sensor data:
-
-```python
-from ml import GambitDataset
-
-dataset = GambitDataset('data/GAMBIT')
-
-# Get summary
-print(dataset.summary())
-
-# Load train/val split
-X_train, y_train, X_val, y_val = dataset.get_train_val_split()
-print(f"Train: {X_train.shape}, Val: {X_val.shape}")
-```
-
-### Model (`model.py`)
-
-1D CNN for gesture classification:
-
-```python
-from ml.model import create_cnn_model_keras
-
-model = create_cnn_model_keras(
-    window_size=50,    # 1 second at 50Hz
-    num_classes=10     # Gesture vocabulary size
-)
-model.summary()
-```
-
-### Labeling Tool (`label.py`)
-
-Interactive CLI for annotating sessions:
-
-```bash
-python -m ml.label data/GAMBIT/2024-01-05T16:41:20.581Z.json
-
-Commands:
-  l 0 100 fist     # Label samples 0-100 as "fist"
-  ls               # List labels
-  p 0 50           # Print/visualize samples 0-50
-  m split train    # Set metadata (train/validation/test)
-  w                # Save labels
-  q                # Quit
-```
-
-### Training Script (`train.py`)
-
-End-to-end training pipeline:
-
-```bash
-python -m ml.train \
-    --data-dir data/GAMBIT \
-    --output-dir ml/models \
-    --epochs 50 \
-    --batch-size 32 \
-    --window-size 50 \
-    --stride 25
-```
-
-### Visualization Pipeline (`visualize.py`)
-
-Generate comprehensive visualizations from sensor data:
-
-```bash
-# Visualize all sessions (run from ml/ directory)
-python visualize.py --data-dir ../data/GAMBIT --output-dir ../visualizations
-
-# Or run as module from project root
-python -m ml.visualize --data-dir data/GAMBIT --output-dir visualizations
-
-# Visualize limited sessions for testing
-python -m ml.visualize --data-dir data/GAMBIT --output-dir visualizations --limit 5
-```
-
-**What it creates:**
-
-1. **Composite Session Images** - Complete overview of each session showing:
-   - All 9 sensor axes (accelerometer, gyroscope, magnetometer)
-   - Magnitude comparisons across sensors
-   - Auxiliary sensors (light, capacitive touch)
-   - Visual signature/fingerprint based on sensor patterns
-
-2. **Per-Second Window Images** - Individual 1-second windows showing:
-   - Detailed 3-axis plots for each sensor type
-   - 3D trajectory visualization
-   - Statistical summaries
-   - Unique visual signatures that differ based on motion patterns
-
-3. **Raw Axis/Orientation Images** - Detailed visualizations showing:
-   - Individual axis plots for all 9 axes
-   - 3D spatial representations color-coded by time
-   - Orientation spaces for each sensor type
-
-4. **Interactive HTML Explorer** - Web-based interface to:
-   - Browse all sessions and visualizations
-   - Filter and sort by timestamp or duration
-   - Zoom into individual windows
-   - View full-resolution images in modal view
-
-**Visual Distinction Mechanism:**
-
-The pipeline creates visually distinct images based on observed data using:
-- **Color mapping**: HSV color space derived from sensor statistics
-  - Hue: Accelerometer X/Y angular position
-  - Saturation: Gyroscope magnitude variance (motion intensity)
-  - Value/Brightness: Accelerometer magnitude mean (static orientation)
-- **Spectral signatures**: Radial patterns mapping sensor data to 2D space
-  - Radial dimension: Accelerometer data progression
-  - Angular dimension: Gyroscope data distribution
-  - RGB channels: Different sensor axes
-
-**Example output:**
-```
-visualizations/
-├── index.html                           # Interactive explorer
-├── composite_2023-11-24T17:14:18.479Z.png
-├── raw_axes_2023-11-24T17:14:18.479Z.png
-├── orientation_3d_2023-11-24T17:14:18.479Z.png
-└── windows_2023-11-24T17:14:18.479Z/
-    ├── window_001.png
-    ├── window_002.png
-    └── window_003.png
-```
-
-Open `visualizations/index.html` in a browser to explore the results.
-
-### Unified Explorer Generator (`generate_explorer.py`)
-
-Generate the unified explorer HTML that combines session visualizations, clustering results, and labeling workflow:
-
-```bash
-# Generate explorer.html (run from project root)
-python -m ml.generate_explorer --data-dir data/GAMBIT --output visualizations/explorer.html
-
-# With custom options
-python -m ml.generate_explorer \
-    --data-dir data/GAMBIT \
-    --viz-dir visualizations \
-    --cluster-dir ml/models \
-    --output visualizations/explorer.html \
-    --n-clusters 10 \
-    --window-size 50 \
-    --stride 25
-```
-
-**Options:**
-- `--data-dir` - Path to data directory (default: `data/GAMBIT`)
-- `--viz-dir` - Path to visualizations directory (default: `visualizations`)
-- `--cluster-dir` - Path to clustering results directory (default: `ml/models`)
-- `--output` - Output HTML file path (default: `visualizations/explorer.html`)
-- `--n-clusters` - Number of clusters for K-means (default: 10)
-- `--window-size` - Window size in samples (default: 50)
-- `--stride` - Window stride (default: 25)
-
-**What it creates:**
-
-The unified explorer (`explorer.html`) provides:
-- **Explore Tab** - Browse sessions with cluster visualization canvas, filter by cluster
-- **Clusters Tab** - Detailed cluster analysis with statistics and sample windows
-- **Label Tab** - Assign gesture names to clusters and export label templates
-
-Open `visualizations/explorer.html` in a browser to explore the unified interface.
-
-### Clustering (`cluster.py`)
-
-Unsupervised clustering for discovering gesture patterns in unlabeled data:
-
-```bash
-# Run clustering via train.py
-python -m ml.train \
-    --data-dir data/GAMBIT \
-    --cluster-only \
-    --n-clusters 10 \
-    --create-templates \
-    --visualize-clusters
-```
-
-**Output files:**
-- `ml/models/clustering_results.json` - Raw clustering data
-- `ml/models/cluster_analysis.json` - Detailed statistics
-- `ml/models/clusters_2d_pca.png` - 2D PCA visualization
-- `ml/models/clusters_3d_pca.png` - 3D PCA visualization
-- `ml/models/clusters_2d_tsne.png` - 2D t-SNE visualization
-- `ml/models/label_templates/` - Template metadata files for labeling
-
-For detailed clustering documentation, see [CLUSTERING.md](CLUSTERING.md).
 
 ## Data Format
 
-### Sensor Data (`*.json`)
-
-Array of telemetry samples at 50Hz:
+### Session Data (`data/GAMBIT/*.json`)
 
 ```json
 [
   {
-    "ax": 4901, "ay": -3048, "az": 5982,
-    "gx": 2605, "gy": -10757, "gz": -18821,
-    "mx": 471, "my": -207, "mz": -1547,
-    "l": 0.089, "t": -75, "c": 3479,
-    "s": 0, "b": 100, "n": 1
+    "t": 1700845458479,
+    "ax": -1234, "ay": 5678, "az": -9012,
+    "gx": 123, "gy": -456, "gz": 789,
+    "mx": 1000, "my": -2000, "mz": 3000,
+    "b": 85
   },
   ...
 ]
 ```
 
-### Metadata (`*.meta.json`)
-
-Session metadata and labels:
+### Metadata (`data/GAMBIT/*.meta.json`)
 
 ```json
 {
-  "timestamp": "2024-01-05T16:41:20.581Z",
+  "timestamp": "2025-12-09T15:23:14.877Z",
   "subject_id": "user_001",
   "environment": "home",
   "hand": "right",
@@ -340,129 +101,226 @@ Session metadata and labels:
   "labels": [
     {
       "start_sample": 0,
-      "end_sample": 150,
-      "gesture": "rest",
-      "confidence": "high"
-    },
-    {
-      "start_sample": 150,
-      "end_sample": 300,
+      "end_sample": 50,
       "gesture": "fist",
       "confidence": "high"
     }
   ],
-  "session_notes": "",
-  "sample_rate_hz": 50
+  "calibration_markers": [...],
+  "finger_states": [...]
 }
 ```
 
-## Architecture
+## Gestures
 
-### CNN Model
+| ID | Name | Description |
+|----|------|-------------|
+| 0 | rest | Hand relaxed, neutral position |
+| 1 | fist | Closed fist |
+| 2 | open_palm | All fingers extended |
+| 3 | index_up | Index finger pointing up |
+| 4 | peace | Index and middle fingers up |
+| 5 | thumbs_up | Thumb extended upward |
+| 6 | ok_sign | Thumb and index forming circle |
+| 7 | pinch | Thumb and index touching |
+| 8 | grab | Fingers curled as if grabbing |
+| 9 | wave | Hand waving motion |
 
-```
-Input: (batch, 50, 9)  # 50 timesteps × 9 IMU features
-    ↓
-Conv1D(32, 5) + BN + ReLU + MaxPool(2) + Dropout
-    ↓
-Conv1D(64, 5) + BN + ReLU + MaxPool(2) + Dropout
-    ↓
-Conv1D(64, 5) + BN + ReLU
-    ↓
-GlobalAveragePooling1D
-    ↓
-Dense(64) + ReLU + Dropout
-    ↓
-Dense(10) + Softmax  # 10 gesture classes
-```
-
-### Data Pipeline
-
-```mermaid
-sequenceDiagram
-    participant Raw as Raw Data
-    participant Norm as Normalizer
-    participant Win as Windowing
-    participant Model as CNN
-
-    Raw->>Norm: (N, 9) float32
-    Note over Norm: Z-score normalization<br/>using global stats
-    Norm->>Win: (N, 9) normalized
-    Note over Win: Sliding windows<br/>size=50, stride=25
-    Win->>Model: (B, 50, 9) batched
-    Model-->>Model: Forward pass
-    Note over Model: Output: (B, 10) logits
-```
-
-## Workflow
-
-### 1. Data Collection Workflow
-
-```mermaid
-graph LR
-    A[Open collector.html] --> B[Connect Device]
-    B --> C[Set Metadata]
-    C --> D[Select Gesture]
-    D --> E[Start Recording]
-    E --> F{Change Gesture?}
-    F -->|Yes| G[Select New Gesture]
-    G --> E
-    F -->|No| H[Stop Recording]
-    H --> I[Export Data + Labels]
-```
-
-### 2. Training Workflow
-
-```bash
-# 1. Check dataset status
-python -m ml.label --info data/GAMBIT
-
-# 2. Label unlabeled sessions
-python -m ml.label data/GAMBIT/SESSION.json
-
-# 3. Train model
-python -m ml.train --data-dir data/GAMBIT
-
-# 4. Review results
-cat ml/models/training_results.json
-```
-
-## Best Practices
-
-### Data Collection
-
-1. **Consistent positioning** - Mount device in same orientation each session
-2. **Clear gestures** - Hold each pose for at least 1-2 seconds
-3. **Balanced classes** - Collect similar amounts of each gesture
-4. **Split assignment** - Use 80/10/10 train/val/test split
-5. **Multiple subjects** - Collect from different hands/users for generalization
-
-### Labeling
-
-1. **Clean boundaries** - Label only clear, stable gesture segments
-2. **Exclude transitions** - Don't label movement between gestures
-3. **Confidence levels** - Mark uncertain labels as "medium" or "low"
-4. **Verify visually** - Use `p` command to verify label boundaries
+## Commands
 
 ### Training
 
-1. **Start simple** - Use default hyperparameters first
-2. **Monitor overfitting** - Watch train vs. validation loss
-3. **Class imbalance** - Ensure reasonable gesture distribution
-4. **Augmentation** - Consider time-warping, noise injection (future)
+```bash
+# Train with default settings
+python -m ml.train --data-dir data/GAMBIT
 
-## Future Improvements
+# Train with custom parameters
+python -m ml.train \
+  --data-dir data/GAMBIT \
+  --epochs 100 \
+  --batch-size 64 \
+  --window-size 50 \
+  --stride 25 \
+  --val-ratio 0.2
 
-- [ ] Data augmentation (time warping, jittering)
-- [ ] Hyperparameter tuning
-- [ ] Cross-validation
-- [ ] Real-time inference demo
-- [ ] On-device deployment (ESP32/TFLite Micro)
-- [ ] Tier 2: Dynamic gesture sequences (LSTM/GRU)
-- [ ] Tier 3: Continuous hand pose regression
+# Summary only (no training)
+python -m ml.train --data-dir data/GAMBIT --summary-only
+```
 
-## Related
+### Clustering (Unsupervised)
 
-- [GAMBIT Device Firmware](../src/device/GAMBIT/)
-- [GAMBIT Web UI](../src/web/GAMBIT/)
-- [Design Documents](../docs/design/)
+```bash
+# K-means clustering
+python -m ml.train --data-dir data/GAMBIT --cluster-only \
+  --n-clusters 10 --visualize-clusters --create-templates
+
+# DBSCAN clustering
+python -m ml.train --data-dir data/GAMBIT --cluster-only \
+  --cluster-method dbscan --dbscan-eps 0.5 --dbscan-min-samples 5
+```
+
+### Visualization
+
+```bash
+# Generate visualizations for all sessions
+python -m ml.visualize --data-dir data/GAMBIT --output-dir visualizations
+
+# Generate interactive explorer
+python -m ml.generate_explorer --data-dir data/GAMBIT
+```
+
+### Build Pipeline
+
+```bash
+# Full pipeline
+python -m ml.build all --data-dir data/GAMBIT --version v2 --epochs 50
+
+# Train only
+python -m ml.build train --data-dir data/GAMBIT --epochs 50
+
+# Convert only
+python -m ml.build convert --model ml/models/gesture_model.keras --version v2
+```
+
+## Model Architecture
+
+```
+Input: (batch, 50, 9) - 1 second window @ 50Hz, 9 features
+
+Conv1D(32, kernel=5, padding=same)
+BatchNormalization
+ReLU
+MaxPooling1D(2)
+Dropout(0.3)
+
+Conv1D(64, kernel=5, padding=same)
+BatchNormalization
+ReLU
+MaxPooling1D(2)
+Dropout(0.3)
+
+Conv1D(64, kernel=5, padding=same)
+BatchNormalization
+ReLU
+GlobalAveragePooling1D
+
+Dense(64, activation=relu)
+Dropout(0.3)
+Dense(10, activation=softmax)
+
+Output: (batch, 10) - gesture probabilities
+```
+
+**Parameters:** ~37K trainable
+**Size:** ~150KB (Keras), ~75KB (quantized TFLite)
+
+## Deployment Targets
+
+### Browser (TensorFlow.js)
+
+```javascript
+const inference = createGestureInference('v1', {
+  confidenceThreshold: 0.5,
+  onPrediction: (result) => console.log(result.gesture)
+});
+await inference.load();
+inference.addSample({ax, ay, az, gx, gy, gz, mx, my, mz});
+```
+
+### ESP32 (TFLite Micro)
+
+```cpp
+#include "gesture_model.h"
+// See src/device/ESP32/gesture_inference.ino
+```
+
+### Puck.js (Centroid Classifier)
+
+```javascript
+// Lightweight nearest-centroid classification
+// See docs/INFERENCE_DEPLOYMENT.md
+```
+
+## Output Files
+
+After running `python -m ml.build all`:
+
+| File | Format | Size | Use |
+|------|--------|------|-----|
+| `gesture_model.keras` | Keras | ~150KB | Python inference |
+| `gesture_model.tflite` | TFLite | ~150KB | Mobile/Edge |
+| `gesture_model_quant.tflite` | TFLite | ~75KB | TinyML/ESP32 |
+| `gesture_model.h` | C Header | ~200KB | Arduino/ESP-IDF |
+| `models/gesture_v1/model.json` | TF.js | ~11KB | Browser |
+| `models/gesture_v1/*.bin` | TF.js | ~151KB | Browser |
+| `training_results.json` | JSON | - | Metrics/history |
+| `build_manifest.json` | JSON | - | Build metadata |
+
+## Workflow
+
+### 1. Collect Data
+
+Use the GAMBIT web collector (`src/web/GAMBIT/collector.html`) to record sessions.
+
+### 2. Cluster Unlabeled Data
+
+```bash
+python -m ml.train --data-dir data/GAMBIT --cluster-only \
+  --visualize-clusters --create-templates
+```
+
+### 3. Review & Label
+
+1. Check `ml/models/label_templates/`
+2. Assign gesture names to clusters
+3. Move `.meta.json` files to `data/GAMBIT/`
+
+### 4. Train Model
+
+```bash
+python -m ml.build all --data-dir data/GAMBIT --version v1
+```
+
+### 5. Deploy
+
+- **Browser:** Model auto-copied to `src/web/GAMBIT/models/`
+- **ESP32:** Copy `gesture_model.h` to firmware directory
+- **Puck.js:** Use centroid classifier from clustering results
+
+## Performance
+
+| Metric | Value |
+|--------|-------|
+| Training accuracy | ~90% |
+| Validation accuracy | ~55% (limited data) |
+| Inference time (browser) | 5-15ms |
+| Inference time (ESP32) | 15-50ms |
+| Model size (quantized) | ~75KB |
+
+## Troubleshooting
+
+### "No labeled data found"
+- Ensure `.meta.json` files exist in `data/GAMBIT/`
+- Run clustering first to generate label templates
+
+### "TensorFlow not found"
+```bash
+pip install tensorflow tensorflowjs
+```
+
+### "Model won't load in browser"
+- Check CORS headers
+- Verify `model.json` and `.bin` files are accessible
+- Check browser console for errors
+
+### "ESP32 out of memory"
+- Use quantized model (`gesture_model_quant.tflite`)
+- Reduce tensor arena size
+- Use ESP32-S3 (more RAM)
+
+## References
+
+- [TensorFlow Lite Micro](https://www.tensorflow.org/lite/microcontrollers)
+- [TensorFlow.js](https://www.tensorflow.org/js)
+- [Espruino Puck.js](https://www.espruino.com/Puck.js)
+- [SIMCAP Inference Deployment Guide](../docs/inference-deployment-guide.md)

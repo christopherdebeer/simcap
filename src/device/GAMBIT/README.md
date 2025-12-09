@@ -289,3 +289,7 @@ See the [Web UI README](../../web/GAMBIT/about) for data collection workflow.
 ---
 
 [← Back to SIMCAP](../../../)
+
+---
+
+<link rel="stylesheet" href="../../simcap.css">

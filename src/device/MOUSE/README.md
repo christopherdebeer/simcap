@@ -116,3 +116,7 @@ Use the [Firmware Loader](../../web/loader/) or Espruino Web IDE:
 ---
 
 [← Back to SIMCAP](../../../)
+
+---
+
+<link rel="stylesheet" href="../../simcap.css">

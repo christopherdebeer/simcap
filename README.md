@@ -1,10 +1,8 @@
 # SIMCAP
 
-*Sensor Inferred MOtion CAPture*
+*Sensor Inferred Motion CAPture*
 
 ---
-
-<link rel="stylesheet" href="src/simcap.css">
 
 ## Architecture
 
@@ -211,3 +209,7 @@ Baseline sensor data is stored in [`data/GAMBIT/`](data/GAMBIT/) with optional `
 - [Firmware Loader](https://christopherdebeer.github.io/simcap/src/web/loader/)
 - [Data Collector](https://christopherdebeer.github.io/simcap/src/web/GAMBIT/collector.html)
 - [Espruino Puck.js](https://www.puck-js.com/)
+
+---
+
+<link rel="stylesheet" href="src/simcap.css">
