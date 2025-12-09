@@ -18,6 +18,8 @@ from .schema import (
     MultiLabel, FingerLabels, FingerState,
     SENSOR_RANGES, FEATURE_NAMES, NUM_FEATURES
 )
+from .calibration import EnvironmentalCalibration, decorate_telemetry_with_calibration
+from .filters import KalmanFilter3D, decorate_telemetry_with_filtering
 
 
 @dataclass
@@ -43,27 +45,79 @@ class DatasetStats:
         )
 
 
-def load_session_data(json_path: Path) -> np.ndarray:
+def load_session_data(json_path: Path, apply_calibration: bool = True,
+                      apply_filtering: bool = True,
+                      calibration_file: Optional[str] = None) -> np.ndarray:
     """
-    Load raw sensor data from a JSON file.
+    Load raw sensor data from a JSON file with optional calibration and filtering.
+
+    IMPORTANT: Raw data is always preserved. Calibration and filtering add
+    decorated fields (calibrated_mx, filtered_mx, etc.) if available.
+    The returned array uses the best available data:
+    - filtered > calibrated > raw magnetometer values
 
     Args:
         json_path: Path to the .json data file
+        apply_calibration: Apply magnetometer calibration if available
+        apply_filtering: Apply Kalman filtering if available
+        calibration_file: Path to calibration JSON (default: 'gambit_calibration.json')
 
     Returns:
         numpy array of shape (N, 9) where N is number of samples
         and 9 is the IMU features [ax, ay, az, gx, gy, gz, mx, my, mz]
+        Note: mx, my, mz will be filtered/calibrated if available, otherwise raw
     """
     with open(json_path, 'r') as f:
         data = json.load(f)
 
-    # Extract IMU features
+    # Preserve raw data, apply decorations
+    if apply_calibration or apply_filtering:
+        # Try to load calibration
+        calibration = None
+        if apply_calibration:
+            try:
+                if calibration_file is None:
+                    # Try default locations
+                    cal_paths = [
+                        json_path.parent / 'gambit_calibration.json',
+                        Path.home() / '.gambit' / 'calibration.json'
+                    ]
+                else:
+                    cal_paths = [Path(calibration_file)]
+
+                for cal_path in cal_paths:
+                    if cal_path.exists():
+                        calibration = EnvironmentalCalibration()
+                        calibration.load(str(cal_path))
+                        print(f"Loaded calibration from {cal_path}")
+                        break
+            except Exception as e:
+                print(f"Warning: Failed to load calibration: {e}")
+
+        # Apply calibration decoration
+        if calibration is not None:
+            data = decorate_telemetry_with_calibration(data, calibration)
+
+        # Apply filtering decoration
+        if apply_filtering:
+            try:
+                mag_filter = KalmanFilter3D(process_noise=0.1, measurement_noise=1.0)
+                data = decorate_telemetry_with_filtering(data, mag_filter)
+            except Exception as e:
+                print(f"Warning: Failed to apply filtering: {e}")
+
+    # Extract IMU features, using best available magnetometer data
     samples = []
     for sample in data:
+        # Use filtered > calibrated > raw for magnetometer
+        mx = sample.get('filtered_mx', sample.get('calibrated_mx', sample.get('mx', 0)))
+        my = sample.get('filtered_my', sample.get('calibrated_my', sample.get('my', 0)))
+        mz = sample.get('filtered_mz', sample.get('calibrated_mz', sample.get('mz', 0)))
+
         row = [
             sample['ax'], sample['ay'], sample['az'],
             sample['gx'], sample['gy'], sample['gz'],
-            sample['mx'], sample['my'], sample['mz']
+            mx, my, mz
         ]
         samples.append(row)
 

@@ -11,6 +11,9 @@
     <script>eruda.init();</script>
     <script src="puck.js"></script>
     <script src="gambit-client.js"></script>
+    <script src="calibration.js"></script>
+    <script src="hand-model.js"></script>
+    <script src="filters.js"></script>
     <!-- Gallaudet ASL Font -->
     <style>
         @font-face {
@@ -828,6 +831,19 @@
         </div>
     </section>
 
+    <!-- Hand State Visualization -->
+    <section>
+        <h2 class="collapsible">Hand State Preview</h2>
+        <div class="collapse-content">
+            <div style="display: flex; justify-content: center; padding: 10px;">
+                <canvas id="handCanvas" width="400" height="400" style="border: 1px solid #333; background: #0f1419; border-radius: 8px;"></canvas>
+            </div>
+            <div style="text-align: center; color: #888; font-size: 12px; margin-top: 10px;">
+                Visual representation of current finger states
+            </div>
+        </div>
+    </section>
+
     <!-- Live Data View -->
     <section>
         <h2 class="collapsible">Live Sensor Data</h2>
@@ -923,6 +939,31 @@
 
         // Custom labels defined for this session
         customLabelDefinitions: []
+    };
+
+    // ===== Calibration and Filtering =====
+    // Initialize calibration instance (loads previous calibration if available)
+    const calibration = new EnvironmentalCalibration();
+    try {
+        calibration.load('gambit_calibration');
+        log('Loaded previous calibration from localStorage');
+    } catch (e) {
+        log('No previous calibration found, will calibrate during wizard');
+    }
+
+    // Initialize 3D Kalman filter for magnetometer smoothing
+    const magFilter = new KalmanFilter3D({
+        processNoise: 0.1,
+        measurementNoise: 1.0
+    });
+
+    // Calibration sample buffers for wizard steps
+    const calibrationBuffers = {
+        earth_field: [],
+        hard_iron: [],
+        soft_iron: [],
+        reference_pose: [],
+        magnet_baseline: []
     };
 
     // GitHub token (will be loaded from localStorage)
@@ -1231,6 +1272,7 @@
             }
 
             onLabelsChanged();
+            updateHandVisualizer();
             log(`Finger ${finger}: ${state.currentLabels.fingers[finger]}`);
         });
     });
@@ -1294,18 +1336,67 @@
     function onTelemetry(telemetry) {
         if (!state.recording) return;
 
-        state.sessionData.push(telemetry);
+        // IMPORTANT: Preserve raw data, only DECORATE with processed fields
+        // Create a decorated copy of telemetry with additional processed fields
+        const decoratedTelemetry = {...telemetry};
 
-        // Update live display
+        // Apply calibration correction if available (adds calibrated_ fields)
+        if (calibration.hasCalibration('earth_field') &&
+            calibration.hasCalibration('hard_iron') &&
+            calibration.hasCalibration('soft_iron')) {
+            try {
+                const corrected = calibration.correct({
+                    x: telemetry.mx,
+                    y: telemetry.my,
+                    z: telemetry.mz
+                });
+                decoratedTelemetry.calibrated_mx = corrected.x;
+                decoratedTelemetry.calibrated_my = corrected.y;
+                decoratedTelemetry.calibrated_mz = corrected.z;
+            } catch (e) {
+                // Calibration failed, skip decoration
+            }
+        }
+
+        // Apply Kalman filtering (adds filtered_ fields)
+        try {
+            const filteredMag = magFilter.update({
+                x: decoratedTelemetry.calibrated_mx || telemetry.mx,
+                y: decoratedTelemetry.calibrated_my || telemetry.my,
+                z: decoratedTelemetry.calibrated_mz || telemetry.mz
+            });
+            decoratedTelemetry.filtered_mx = filteredMag.x;
+            decoratedTelemetry.filtered_my = filteredMag.y;
+            decoratedTelemetry.filtered_mz = filteredMag.z;
+        } catch (e) {
+            // Filtering failed, skip decoration
+        }
+
+        // Store decorated telemetry (includes raw + processed fields)
+        state.sessionData.push(decoratedTelemetry);
+
+        // Collect samples for calibration buffers during wizard
+        if (wizard.active && wizard.phase === 'hold') {
+            const currentStep = wizard.steps[wizard.currentStep];
+            if (currentStep && calibrationBuffers[currentStep.id]) {
+                calibrationBuffers[currentStep.id].push({
+                    mx: telemetry.mx,
+                    my: telemetry.my,
+                    mz: telemetry.mz
+                });
+            }
+        }
+
+        // Update live display (show calibrated values if available, otherwise raw)
         $('ax').textContent = telemetry.ax;
         $('ay').textContent = telemetry.ay;
         $('az').textContent = telemetry.az;
         $('gx').textContent = telemetry.gx;
         $('gy').textContent = telemetry.gy;
         $('gz').textContent = telemetry.gz;
-        $('mx').textContent = telemetry.mx;
-        $('my').textContent = telemetry.my;
-        $('mz').textContent = telemetry.mz;
+        $('mx').textContent = (decoratedTelemetry.calibrated_mx || telemetry.mx).toFixed(2);
+        $('my').textContent = (decoratedTelemetry.calibrated_my || telemetry.my).toFixed(2);
+        $('mz').textContent = (decoratedTelemetry.calibrated_mz || telemetry.mz).toFixed(2);
 
         // Update sample count (throttled)
         if (state.sessionData.length % 10 === 0) {
@@ -1970,6 +2061,32 @@
                 state.currentLabels.calibration = 'none';
                 updateActiveLabelsDisplay();
 
+                // Process calibration data if this was a calibration step
+                if (calibrationBuffers[step.id] && calibrationBuffers[step.id].length > 0) {
+                    const samples = calibrationBuffers[step.id].map(s => ({x: s.mx, y: s.my, z: s.mz}));
+
+                    try {
+                        if (step.id === 'earth_field') {
+                            const result = calibration.runEarthFieldCalibration(samples);
+                            log(`Earth field calibration: ${samples.length} samples, quality=${result.quality.toFixed(2)}`);
+                        } else if (step.id === 'hard_iron') {
+                            const result = calibration.runHardIronCalibration(samples);
+                            log(`Hard iron calibration: offset=[${result.offset.x.toFixed(1)}, ${result.offset.y.toFixed(1)}, ${result.offset.z.toFixed(1)}], quality=${result.quality.toFixed(2)}`);
+                        } else if (step.id === 'soft_iron') {
+                            const result = calibration.runSoftIronCalibration(samples);
+                            log(`Soft iron calibration: ${samples.length} samples, quality=${result.quality.toFixed(2)}`);
+                        }
+
+                        // Save calibration to localStorage after each step
+                        calibration.save('gambit_calibration');
+                    } catch (e) {
+                        log(`Calibration failed for ${step.id}: ${e.message}`);
+                    }
+
+                    // Clear buffer for next run
+                    calibrationBuffers[step.id] = [];
+                }
+
                 wizard.currentStep++;
                 runWizardStep();
             }
@@ -2065,6 +2182,43 @@
     };
 
     // ===== Initialize =====
+    // Initialize hand visualizer
+    let handVisualizer = null;
+    try {
+        const canvas = $('handCanvas');
+        if (canvas) {
+            handVisualizer = new HandVisualizer2D(canvas);
+            handVisualizer.startAnimation();
+            log('Hand visualizer initialized');
+        }
+    } catch (e) {
+        console.error('Failed to initialize hand visualizer:', e);
+    }
+
+    // Function to update hand visualizer from current finger states
+    function updateHandVisualizer() {
+        if (!handVisualizer) return;
+
+        const stateToNumber = (state) => {
+            if (state === 'extended') return 0;
+            if (state === 'partial') return 1;
+            if (state === 'flexed') return 2;
+            return 0; // unknown defaults to extended
+        };
+
+        try {
+            handVisualizer.setFingerStates({
+                thumb: stateToNumber(state.currentLabels.fingers.thumb),
+                index: stateToNumber(state.currentLabels.fingers.index),
+                middle: stateToNumber(state.currentLabels.fingers.middle),
+                ring: stateToNumber(state.currentLabels.fingers.ring),
+                pinky: stateToNumber(state.currentLabels.fingers.pinky)
+            });
+        } catch (e) {
+            console.error('Failed to update hand visualizer:', e);
+        }
+    }
+
     loadCustomLabels();
     updateActiveLabelsDisplay();
     updateUI();
