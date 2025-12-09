@@ -383,3 +383,7 @@ Potential improvements:
 - [ ] Batch labeling UI for assigning gestures to clusters
 - [ ] Cross-validation of cluster stability
 - [ ] Integration with active learning for optimal sample selection
+
+---
+
+<link rel="stylesheet" href="../src/simcap.css">

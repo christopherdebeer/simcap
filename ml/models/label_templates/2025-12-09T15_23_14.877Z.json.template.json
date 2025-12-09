@@ -1,0 +1,162 @@
+{
+  "timestamp": "2025-12-09T15_23_14.877Z",
+  "subject_id": "UNKNOWN",
+  "environment": "UNKNOWN",
+  "hand": "UNKNOWN",
+  "split": "train",
+  "labels": [
+    {
+      "start_sample": 0,
+      "end_sample": 50,
+      "gesture": "CLUSTER_3",
+      "confidence": "medium",
+      "cluster_id": 3
+    },
+    {
+      "start_sample": 25,
+      "end_sample": 75,
+      "gesture": "CLUSTER_3",
+      "confidence": "medium",
+      "cluster_id": 3
+    },
+    {
+      "start_sample": 50,
+      "end_sample": 100,
+      "gesture": "CLUSTER_3",
+      "confidence": "medium",
+      "cluster_id": 3
+    },
+    {
+      "start_sample": 75,
+      "end_sample": 125,
+      "gesture": "CLUSTER_3",
+      "confidence": "medium",
+      "cluster_id": 3
+    },
+    {
+      "start_sample": 100,
+      "end_sample": 150,
+      "gesture": "CLUSTER_3",
+      "confidence": "medium",
+      "cluster_id": 3
+    },
+    {
+      "start_sample": 125,
+      "end_sample": 175,
+      "gesture": "CLUSTER_3",
+      "confidence": "medium",
+      "cluster_id": 3
+    },
+    {
+      "start_sample": 150,
+      "end_sample": 200,
+      "gesture": "CLUSTER_3",
+      "confidence": "medium",
+      "cluster_id": 3
+    },
+    {
+      "start_sample": 175,
+      "end_sample": 225,
+      "gesture": "CLUSTER_3",
+      "confidence": "medium",
+      "cluster_id": 3
+    },
+    {
+      "start_sample": 200,
+      "end_sample": 250,
+      "gesture": "CLUSTER_3",
+      "confidence": "medium",
+      "cluster_id": 3
+    },
+    {
+      "start_sample": 225,
+      "end_sample": 275,
+      "gesture": "CLUSTER_3",
+      "confidence": "medium",
+      "cluster_id": 3
+    },
+    {
+      "start_sample": 250,
+      "end_sample": 300,
+      "gesture": "CLUSTER_3",
+      "confidence": "medium",
+      "cluster_id": 3
+    },
+    {
+      "start_sample": 275,
+      "end_sample": 325,
+      "gesture": "CLUSTER_3",
+      "confidence": "medium",
+      "cluster_id": 3
+    },
+    {
+      "start_sample": 300,
+      "end_sample": 350,
+      "gesture": "CLUSTER_3",
+      "confidence": "medium",
+      "cluster_id": 3
+    },
+    {
+      "start_sample": 325,
+      "end_sample": 375,
+      "gesture": "CLUSTER_3",
+      "confidence": "medium",
+      "cluster_id": 3
+    },
+    {
+      "start_sample": 350,
+      "end_sample": 400,
+      "gesture": "CLUSTER_3",
+      "confidence": "medium",
+      "cluster_id": 3
+    },
+    {
+      "start_sample": 375,
+      "end_sample": 425,
+      "gesture": "CLUSTER_3",
+      "confidence": "medium",
+      "cluster_id": 3
+    },
+    {
+      "start_sample": 400,
+      "end_sample": 450,
+      "gesture": "CLUSTER_3",
+      "confidence": "medium",
+      "cluster_id": 3
+    },
+    {
+      "start_sample": 425,
+      "end_sample": 475,
+      "gesture": "CLUSTER_3",
+      "confidence": "medium",
+      "cluster_id": 3
+    },
+    {
+      "start_sample": 450,
+      "end_sample": 500,
+      "gesture": "CLUSTER_3",
+      "confidence": "medium",
+      "cluster_id": 3
+    },
+    {
+      "start_sample": 475,
+      "end_sample": 525,
+      "gesture": "CLUSTER_3",
+      "confidence": "medium",
+      "cluster_id": 3
+    },
+    {
+      "start_sample": 500,
+      "end_sample": 550,
+      "gesture": "CLUSTER_3",
+      "confidence": "medium",
+      "cluster_id": 3
+    }
+  ],
+  "session_notes": "Auto-generated from clustering. Review and assign gesture names.",
+  "sample_rate_hz": 50,
+  "clustering_info": {
+    "method": "kmeans",
+    "n_clusters": 10
+  }
+}

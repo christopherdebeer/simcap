@@ -273,3 +273,7 @@ data/GAMBIT/{ISO-timestamp}.json
 ---
 
 [← Back to SIMCAP](../../../)
+
+---
+
+<link rel="stylesheet" href="../../simcap.css">

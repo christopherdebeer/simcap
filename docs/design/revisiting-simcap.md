@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-SIMCAP (Sensor Inferred MOtion CAPture) represents a far richer concept than "gesture recognizer but nerdier." This document reframes the project's theoretical potential and contrasts it with the current implementation to identify the path forward.
+SIMCAP (Sensor Inferred Motion CAPture) represents a far richer concept than "gesture recognizer but nerdier." This document reframes the project's theoretical potential and contrasts it with the current implementation to identify the path forward.
 
 ---
 
@@ -445,3 +445,7 @@ With finger magnets, coordinate normalization, and a basic ML pipeline, SIMCAP c
 - Web UI: `src/web/GAMBIT/`
 - Project README: `README.md`
 - Hardware platform: Espruino Puck.js (puck-js.com)
+
+---
+
+<link rel="stylesheet" href="../../src/simcap.css">

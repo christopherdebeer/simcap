@@ -243,7 +243,7 @@ Potential improvements for the synthesizer:
 
 ## Credits
 
-Part of the **SIMCAP** (Sensor Inferred MOtion CAPture) platform.
+Part of the **SIMCAP** (Sensor Inferred Motion CAPture) platform.
 
 **Technologies Used:**
 - Web Bluetooth API
@@ -262,3 +262,7 @@ Inherits license from SIMCAP project.
 - [GAMBIT Data Collector](./collector.html)
 - [Firmware Loader](../loader/index.html)
 - [SIMCAP Project Overview](../../../README.md)
+
+---
+
+<link rel="stylesheet" href="../../simcap.css">

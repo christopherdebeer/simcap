@@ -7,29 +7,22 @@
         <meta name="apple-mobile-web-app-capable" content="yes"/>
         <meta name="mobile-web-app-capable" content="yes"/>
         <meta name="apple-mobile-web-app-status-bar-style" content="black">
+        <link rel="stylesheet" href="../../simcap.css">
+        <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
         <script src="puck.js"></script>
         <script src="gambit-client.js"></script>
         <script src="kalman.js"></script>
         <script src="calibration.js"></script>
         <script src="filters.js"></script>
+        <script src="gesture-inference.js"></script>
         <style>
-
-            body, html {
-                padding: 0;
-                margin: 0;
-                background-color: black;
-                color: white;
-                text-align: center;
-                height: 100%;
-            }
-
+            /* Page-specific styles */
             body {
-                padding: 0.3em;
+                padding: var(--space-md);
                 display: flex;
                 flex-direction: column;
-                justify-content: space-evenly;
-                height: 100%;
-                box-sizing: border-box;
+                min-height: 100vh;
+                gap: var(--space-lg);
             }
 
             .grad {
@@ -43,96 +36,81 @@
             }
 
             @keyframes gradient {
-                0% {
-                    background-position: 0% 50%;
-                }
-                50% {
-                    background-position: 100% 50%;
-                }
-                100% {
-                    background-position: 0% 50%;
-                }
+                0% { background-position: 0% 50%; }
+                50% { background-position: 100% 50%; }
+                100% { background-position: 0% 50%; }
             }
 
-            button {
-                background-color: white;
-                color: black;
-                padding: 0.3em 0.6em;
-                border-radius: 0.4em;
-                border: 0 none;
-                cursor: pointer;
-                font-size: 1.2em;
+            .page-title {
+                text-align: center;
             }
 
-            .buttons {
+            .page-title h1 {
+                font-size: 1rem;
+                font-weight: normal;
+                letter-spacing: 0.35em;
+                margin-bottom: var(--space-xs);
+            }
+
+            .page-title .grad {
+                font-weight: bold;
+                display: block;
+                font-size: 2.5rem;
+            }
+
+            .page-title .subtitle {
+                font-style: italic;
+                color: var(--fg-muted);
+                font-size: 0.75rem;
+            }
+
+            .controls {
                 display: flex;
-                justify-content: space-evenly;
+                flex-wrap: wrap;
+                gap: var(--space-md);
+                justify-content: center;
+                align-items: center;
             }
 
             input#token:not(:placeholder-shown) {
                 opacity: 0.5;
-                background-color: green;
+                background-color: var(--success);
             }
 
-            input#token {
-                border: 0;
-                border-radius: 0.3em;
-                outline: 0 none;
-                padding: 0.3em 1em;
-            }
-
-            h1 {
-                font-size: 1.2em;
-                line-height: 1;
-                margin-bottom: 0;
-                font-weight: normal;
-                letter-spacing: 0.35em;
-            }
-
-            h1 .grad {
-                font-weight: bold;
-                display: block;
-                font-size: 2.5em;
-            }
-
-            .subtitle {
-                font-style: italic;
-            }
-
-            button[disabled] {
-                opacity: 0.5;
-                cursor: default;
-            }
-
-            .dataView {
-                border: 1px solid black;
+            .data-view {
                 display: flex;
                 flex-direction: column;
-                margin-top: 1em;
-                font-size: 1.3em;
+                gap: var(--space-xs);
+                font-size: 1rem;
             }
 
-            .dataView > div {
+            .data-view > div {
                 display: flex;
                 align-items: center;
                 justify-content: center;
+                gap: var(--space-sm);
             }
 
-            .dataView > div > * {
-                padding: 0.3em;
+            .data-view > div > * {
+                padding: var(--space-xs);
                 text-align: center;
                 font-weight: bold;
-                display: flex;
-                flex-grow: 1;
-                justify-content: center;
-                box-sizing: border-box;
-                width: 25%;
+                flex: 1;
+                max-width: 5em;
+            }
+
+            .data-view label {
+                flex: 0 0 auto;
+                width: 3em;
+                font-weight: normal;
+                color: var(--fg-muted);
             }
 
             #three-d {
                 perspective: 550px;
                 display: flex;
                 justify-content: space-evenly;
+                padding: var(--space-lg) 0;
             }
 
             .cube {
@@ -150,101 +128,219 @@
                 height: 100%;
                 position: absolute;
                 backface-visibility: inherit;
-                font-size: 1em;
+                font-size: 0.75rem;
                 color: #fff;
             }
 
-            .front {
-                background: rgba(90,90,90,.7);
-                transform: translateZ(2em)
+            .front { background: rgba(90,90,90,.7); transform: translateZ(2em); }
+            .back { background: rgba(0,210,0,.7); transform: rotateY(180deg) translateZ(2em); }
+            .right { background: rgba(210,0,0,.7); transform: rotateY(90deg) translateZ(2em); }
+            .left { background: rgba(0,0,210,.7); transform: rotateY(-90deg) translateZ(2em); }
+            .top { background: rgba(210,210,0,.7); transform: rotateX(90deg) translateZ(2em); }
+            .bottom { background: rgba(210,0,210,.7); transform: rotateX(-90deg) translateZ(2em); }
+
+            progress {
+                width: 100%;
+                height: 8px;
+                appearance: none;
+                background: var(--border);
+                border: none;
+                border-radius: 4px;
             }
 
-            .back {
-                background: rgba(0,210,0,.7);
-                transform: rotateY(180deg) translateZ(2em)
+            progress::-webkit-progress-bar {
+                background: var(--border);
+                border-radius: 4px;
             }
 
-            .right {
-                background: rgba(210,0,0,.7);
-                transform: rotateY(90deg) translateZ(2em)
+            progress::-webkit-progress-value {
+                background: var(--success);
+                border-radius: 4px;
             }
 
-            .left {
-                background: rgba(0,0,210,.7);
-                transform: rotateY(-90deg) translateZ(2em)
+            /* Gesture inference styles */
+            .gesture-display {
+                text-align: center;
+                padding: var(--space-md);
+                border-radius: var(--radius);
+                background: var(--bg-card);
+                border: 2px solid var(--border);
+                transition: all 0.3s ease;
             }
 
-            .top {
-                background: rgba(210,210,0,.7);
-                transform: rotateX(90deg) translateZ(2em)
+            .gesture-display.active {
+                border-color: var(--success);
+                box-shadow: 0 0 20px rgba(0, 255, 0, 0.2);
             }
 
-            .bottom {
-                background: rgba(210,0,210,.7);
-                transform: rotateX(-90deg) translateZ(2em)
+            .gesture-display .gesture-name {
+                font-size: 2rem;
+                font-weight: bold;
+                text-transform: uppercase;
+                letter-spacing: 0.1em;
+            }
+
+            .gesture-display .confidence {
+                font-size: 0.875rem;
+                color: var(--fg-muted);
+                margin-top: var(--space-xs);
+            }
+
+            .gesture-display .inference-time {
+                font-size: 0.75rem;
+                color: var(--fg-muted);
+            }
+
+            .gesture-probabilities {
+                display: grid;
+                grid-template-columns: repeat(5, 1fr);
+                gap: var(--space-xs);
+                font-size: 0.75rem;
+            }
+
+            .gesture-probabilities .prob-item {
+                text-align: center;
+                padding: var(--space-xs);
+                background: var(--bg);
+                border-radius: var(--radius-sm);
+            }
+
+            .gesture-probabilities .prob-bar {
+                height: 4px;
+                background: var(--border);
+                border-radius: 2px;
+                margin-top: 2px;
+                overflow: hidden;
+            }
+
+            .gesture-probabilities .prob-fill {
+                height: 100%;
+                background: var(--accent);
+                transition: width 0.2s ease;
+            }
+
+            .model-status {
+                font-size: 0.75rem;
+                color: var(--fg-muted);
+                display: flex;
+                align-items: center;
+                gap: var(--space-xs);
+            }
+
+            .model-status .status-dot {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background: var(--warning);
+            }
+
+            .model-status.ready .status-dot {
+                background: var(--success);
+            }
+
+            .breadcrumb {
+                font-size: 0.75rem;
+                color: var(--fg-muted);
+                text-align: center;
+            }
+
+            .breadcrumb a:hover {
+                color: var(--fg);
             }
         </style>
     </head>
     <body>
-        <h1>- SIMCAP -<span class="grad">GAMBIT</span></h1>
-        <p class="subtitle">Gyroscope Accelerometer Magnetometer Baseline Inferrence Telemetry</p>
+        <nav class="breadcrumb">
+            <a href="../../../">SIMCAP</a> / <a href="../">Web</a> / GAMBIT
+        </nav>
+
+        <header class="page-title">
+            <h1>- SIMCAP -<span class="grad">GAMBIT</span></h1>
+            <p class="subtitle">Gyroscope Accelerometer Magnetometer Baseline Inferrence Telemetry</p>
+        </header>
         
-        <div class="buttons">
-            <button id="connect">Connect</button>
-            <button disabled id="getdata">Get data</button>
+        <div class="controls">
+            <button class="btn" id="connect">Connect</button>
+            <button class="btn" disabled id="getdata">Get data</button>
+            <input id="token" type="password" placeholder="GitHub token"/>
         </div>
-        <input id="token" type="password" placeholder="GitHub token"/>
 
-        <div class="dataView">
-            <div id="battery"><progress max="100" value="0" id="b" title="0% battery"></progress></div>
-            <div id="button"><label>Btn: </label><span id="btn">0</span> <span id="count">0</span> <span id="state">0</span></div>
-            <div id="mag">
-                <label>Mag: </label>
-                <span id="mX">0</span>
-                <span id="mY">0</span>
-                <span id="mZ">0</span>
+        <div class="card">
+            <div class="card-header">
+                Gesture Inference
+                <span class="model-status" id="modelStatus">
+                    <span class="status-dot"></span>
+                    <span>Loading model...</span>
+                </span>
             </div>
-            <div id="acc">
-                <label>Acc: </label>
-                <span id="aX">0</span>
-                <span id="aY">0</span>
-                <span id="aZ">0</span>
+            <div class="gesture-display" id="gestureDisplay">
+                <div class="gesture-name" id="gestureName">--</div>
+                <div class="confidence" id="gestureConfidence">Waiting for data...</div>
+                <div class="inference-time" id="inferenceTime"></div>
             </div>
-            <div id="gyr">
-                <label>Gyro: </label>
-                <span id="gX">0</span>
-                <span id="gY">0</span>
-                <span id="gZ">0</span>
+            <div class="gesture-probabilities" id="gestureProbabilities">
+                <!-- Populated by JS -->
             </div>
         </div>
 
-        <section id="three-d" class="default-example">
-            <div id="cubeM" class="cube transition-all">
+        <div class="card">
+            <div class="card-header">Sensor Data</div>
+            <div class="data-view">
+                <div id="battery"><progress max="100" value="0" id="b" title="0% battery"></progress></div>
+                <div id="button"><label>Btn:</label><span id="btn">0</span> <span id="count">0</span> <span id="state">0</span></div>
+                <div id="mag">
+                    <label>Mag:</label>
+                    <span id="mX">0</span>
+                    <span id="mY">0</span>
+                    <span id="mZ">0</span>
+                </div>
+                <div id="acc">
+                    <label>Acc:</label>
+                    <span id="aX">0</span>
+                    <span id="aY">0</span>
+                    <span id="aZ">0</span>
+                </div>
+                <div id="gyr">
+                    <label>Gyro:</label>
+                    <span id="gX">0</span>
+                    <span id="gY">0</span>
+                    <span id="gZ">0</span>
+                </div>
+            </div>
+        </div>
+
+        <section id="three-d">
+            <div id="cubeM" class="cube">
                 <div class="face front">mag 1</div>
                 <div class="face back">mag 2</div>
                 <div class="face right">mag 3</div>
                 <div class="face left">mag 4</div>
                 <div class="face top">mag 5</div>
                 <div class="face bottom">mag 6</div>
-              </div>
-            <div id="cubeA" class="cube transition-all">
-              <div class="face front">acc 1</div>
-              <div class="face back">acc 2</div>
-              <div class="face right">acc 3</div>
-              <div class="face left">acc 4</div>
-              <div class="face top">acc 5</div>
-              <div class="face bottom">acc 6</div>
             </div>
-            <div id="cubeG" class="cube transition-all">
+            <div id="cubeA" class="cube">
+                <div class="face front">acc 1</div>
+                <div class="face back">acc 2</div>
+                <div class="face right">acc 3</div>
+                <div class="face left">acc 4</div>
+                <div class="face top">acc 5</div>
+                <div class="face bottom">acc 6</div>
+            </div>
+            <div id="cubeG" class="cube">
                 <div class="face front">gyro 1</div>
                 <div class="face back">gyro 2</div>
                 <div class="face right">gyro 3</div>
                 <div class="face left">gyro 4</div>
                 <div class="face top">gyro 5</div>
                 <div class="face bottom">gyro 6</div>
-              </div>
-              
-          </section>
+            </div>
+        </section>
+
+        <footer class="page-footer">
+            <span>SIMCAP GAMBIT</span>
+            <a href="collector.html">Collector</a>
+            <a href="synth.html">Synth</a>
+        </footer>
 
         <script>
 
@@ -557,6 +653,96 @@
                     console.log(d)
                 })
             }
+
+            // ===== Gesture Inference =====
+            let gestureInference = null;
+
+            // Initialize gesture inference
+            async function initGestureInference() {
+                try {
+                    gestureInference = createGestureInference('v1', {
+                        confidenceThreshold: 0.3,
+                        onPrediction: (result) => {
+                            updateGestureDisplay(result);
+                        },
+                        onReady: () => {
+                            const status = document.getElementById('modelStatus');
+                            status.classList.add('ready');
+                            status.querySelector('span:last-child').textContent = 'Model ready (v1)';
+                            initProbabilityBars();
+                        },
+                        onError: (error) => {
+                            console.error('Gesture inference error:', error);
+                            const status = document.getElementById('modelStatus');
+                            status.querySelector('span:last-child').textContent = 'Model error';
+                        }
+                    });
+
+                    await gestureInference.load();
+                } catch (error) {
+                    console.error('Failed to initialize gesture inference:', error);
+                    const status = document.getElementById('modelStatus');
+                    status.querySelector('span:last-child').textContent = 'Model unavailable';
+                }
+            }
+
+            // Initialize probability bars
+            function initProbabilityBars() {
+                const container = document.getElementById('gestureProbabilities');
+                const labels = gestureInference.labels;
+                
+                container.innerHTML = labels.map(label => `
+                    <div class="prob-item">
+                        <div class="prob-label">${label.replace('_', ' ')}</div>
+                        <div class="prob-bar">
+                            <div class="prob-fill" id="prob-${label}" style="width: 0%"></div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            // Update gesture display
+            function updateGestureDisplay(result) {
+                const display = document.getElementById('gestureDisplay');
+                const name = document.getElementById('gestureName');
+                const confidence = document.getElementById('gestureConfidence');
+                const time = document.getElementById('inferenceTime');
+
+                // Update main display
+                name.textContent = result.gesture.replace('_', ' ');
+                confidence.textContent = `${(result.confidence * 100).toFixed(1)}% confidence`;
+                time.textContent = `${result.inferenceTime.toFixed(1)}ms inference`;
+
+                // Highlight if high confidence
+                if (result.confidence > 0.7) {
+                    display.classList.add('active');
+                } else {
+                    display.classList.remove('active');
+                }
+
+                // Update probability bars
+                for (const [label, prob] of Object.entries(result.probabilities)) {
+                    const bar = document.getElementById(`prob-${label}`);
+                    if (bar) {
+                        bar.style.width = `${prob * 100}%`;
+                    }
+                }
+            }
+
+            // Hook into data updates to feed inference
+            const originalUpdateData = updateData;
+            updateData = function(prenorm) {
+                // Call original function
+                originalUpdateData(prenorm);
+
+                // Feed to gesture inference
+                if (gestureInference && gestureInference.isReady) {
+                    gestureInference.addSample(prenorm);
+                }
+            };
+
+            // Initialize on page load
+            initGestureInference();
             
         </script>
     </body>

@@ -734,3 +734,7 @@ if (drift > 5.0) {
 **Last Updated**: 2025-12-09
 **Version**: 1.0
 **Authors**: Claude (integration), Christopher de Beer (GAMBIT system)
+
+---
+
+<link rel="stylesheet" href="../src/simcap.css">

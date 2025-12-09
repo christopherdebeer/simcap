@@ -143,3 +143,7 @@ Some Windows 11 systems have Bluetooth MTU issues. If uploads fail repeatedly:
 ---
 
 [← Back to SIMCAP](../../../)
+
+---
+
+<link rel="stylesheet" href="../../simcap.css">

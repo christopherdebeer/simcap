@@ -538,7 +538,7 @@ class SessionMetadata:
         labels_v2 = [LabeledSegmentV2.from_dict(l) for l in d.get('labels_v2', [])]
 
         magnet_config = None
-        if 'magnet_config' in d:
+        if 'magnet_config' in d and d['magnet_config'] is not None:
             magnet_config = MagnetConfig.from_dict(d['magnet_config'])
 
         return cls(

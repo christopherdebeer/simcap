@@ -8,44 +8,44 @@
     {
       "start_sample": 0,
       "end_sample": 50,
-      "gesture": "CLUSTER_1",
+      "gesture": "CLUSTER_5",
       "confidence": "medium",
-      "cluster_id": 1
+      "cluster_id": 5
     },
     {
       "start_sample": 25,
       "end_sample": 75,
-      "gesture": "CLUSTER_1",
+      "gesture": "CLUSTER_5",
       "confidence": "medium",
-      "cluster_id": 1
+      "cluster_id": 5
     },
     {
       "start_sample": 50,
       "end_sample": 100,
-      "gesture": "CLUSTER_1",
+      "gesture": "CLUSTER_5",
       "confidence": "medium",
-      "cluster_id": 1
+      "cluster_id": 5
     },
     {
       "start_sample": 75,
       "end_sample": 125,
-      "gesture": "CLUSTER_1",
+      "gesture": "CLUSTER_5",
       "confidence": "medium",
-      "cluster_id": 1
+      "cluster_id": 5
     },
     {
       "start_sample": 100,
       "end_sample": 150,
-      "gesture": "CLUSTER_1",
+      "gesture": "CLUSTER_5",
       "confidence": "medium",
-      "cluster_id": 1
+      "cluster_id": 5
     },
     {
       "start_sample": 125,
       "end_sample": 175,
-      "gesture": "CLUSTER_1",
+      "gesture": "CLUSTER_5",
       "confidence": "medium",
-      "cluster_id": 1
+      "cluster_id": 5
     }
   ],
   "session_notes": "Auto-generated from clustering. Review and assign gesture names.",

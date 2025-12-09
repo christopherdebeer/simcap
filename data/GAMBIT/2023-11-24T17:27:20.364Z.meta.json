@@ -1,0 +1,47 @@
+{
+  "timestamp": "2023-11-24T17:27:20.364Z",
+  "subject_id": "user_001",
+  "environment": "home",
+  "hand": "right",
+  "split": "train",
+  "labels": [
+    {
+      "start_sample": 50,
+      "end_sample": 100,
+      "gesture": "index_up",
+      "confidence": "medium"
+    },
+    {
+      "start_sample": 75,
+      "end_sample": 125,
+      "gesture": "index_up",
+      "confidence": "medium"
+    },
+    {
+      "start_sample": 100,
+      "end_sample": 150,
+      "gesture": "index_up",
+      "confidence": "medium"
+    },
+    {
+      "start_sample": 0,
+      "end_sample": 50,
+      "gesture": "grab",
+      "confidence": "medium"
+    },
+    {
+      "start_sample": 25,
+      "end_sample": 75,
+      "gesture": "grab",
+      "confidence": "medium"
+    },
+    {
+      "start_sample": 125,
+      "end_sample": 175,
+      "gesture": "grab",
+      "confidence": "medium"
+    }
+  ],
+  "session_notes": "Auto-generated from clustering. Review and assign gesture names.",
+  "sample_rate_hz": 50
+}

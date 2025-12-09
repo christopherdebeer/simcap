@@ -1,5 +1,13 @@
 # SIMCAP Documentation
 
+## Guides
+
+| Guide | Description |
+|-------|-------------|
+| [Inference Deployment Guide](inference-deployment-guide.md) | Deploying models to browser, ESP32, and Puck.js |
+| [Calibration & Filtering Guide](calibration-filtering-guide.md) | Magnetometer calibration and signal filtering |
+| [Future Enhancements](gambit-future-enhancements-imp.md) | Planned improvements and roadmap |
+
 ## Implementation Documentation
 
 For documentation on what's actually implemented, see the README files in each component:
@@ -16,6 +24,7 @@ For documentation on what's actually implemented, see the README files in each c
 | Component | Status | Description |
 |-----------|--------|-------------|
 | [GAMBIT](../src/device/GAMBIT/) | Active | 9-DoF IMU telemetry firmware for Puck.js |
+| [ESP32](../src/device/ESP32/) | Template | TFLite Micro gesture inference for ESP32 |
 | [MOUSE](../src/device/MOUSE/) | Active | BLE HID Mouse - tilt to move cursor |
 | [KEYBOARD](../src/device/KEYBOARD/) | Active | BLE HID Keyboard - macros & gestures |
 | [BAE](../src/device/BAE/) | Reference | BLE advertising reference implementation |
@@ -26,7 +35,7 @@ For documentation on what's actually implemented, see the README files in each c
 | Component | Status | Description |
 |-----------|--------|-------------|
 | [Firmware Loader](../src/web/loader/) | Active | Upload firmware to Puck.js via WebBLE |
-| [GAMBIT Web](../src/web/GAMBIT/) | Active | Real-time sensor visualization and data collection |
+| [GAMBIT Web](../src/web/GAMBIT/) | Active | Real-time sensor visualization and gesture inference |
 | [GAMBIT Collector](../src/web/GAMBIT/collector.html) | Active | Labeled data collection for ML training |
 | [GAMBIT Synth](../src/web/GAMBIT/synth.html) | Active | Sensor-reactive audio synthesizer |
 | [P0 Web](../src/web/P0/) | Prototype | D3.js visualization interface |
@@ -60,6 +69,8 @@ For speculative designs, proposals, and conceptual analysis, see:
 Contains future vision documents and research directions:
 
 - **[Revisiting SIMCAP](design/revisiting-simcap.md)** - Comprehensive analysis of theoretical vision vs. current implementation, including three-tier roadmap and ML architecture proposals
+- **[GAMBIT Workflow Review](design/gambit-workflow-review.md)** - Analysis of the GAMBIT data collection and training workflow
+- **[Magnetic Finger Tracking Analysis](design/magnetic-finger-tracking-analysis.md)** - Research on using magnetometer for finger position tracking
 
 ---
 
@@ -69,11 +80,13 @@ Contains future vision documents and research directions:
 graph TB
     subgraph "Hardware"
         PUCK[Puck.js]
+        ESP32[ESP32]
         IMU[9-DoF IMU]
     end
 
     subgraph "Firmware"
         GAMBIT[GAMBIT]
+        TFLITE[TFLite Micro]
         MOUSE[MOUSE HID]
         KEYBOARD[KEYBOARD HID]
     end
@@ -81,24 +94,33 @@ graph TB
     subgraph "Web Tools"
         FWLOADER[Firmware Loader]
         COLLECTOR[Data Collector]
+        INFERENCE[Gesture Inference]
     end
 
     subgraph "ML Pipeline"
         DATA[(Labeled Data)]
         TRAIN[Training]
         MODEL[CNN Model]
+        TFJS[TensorFlow.js]
+        TFLITEM[TFLite Model]
     end
 
     IMU --> GAMBIT
+    IMU --> TFLITE
     IMU --> MOUSE
     IMU --> KEYBOARD
     FWLOADER --> |Upload| GAMBIT
     FWLOADER --> |Upload| MOUSE
     FWLOADER --> |Upload| KEYBOARD
     GAMBIT --> |BLE| COLLECTOR
+    GAMBIT --> |BLE| INFERENCE
     COLLECTOR --> DATA
     DATA --> TRAIN
     TRAIN --> MODEL
+    MODEL --> TFJS
+    MODEL --> TFLITEM
+    TFJS --> INFERENCE
+    TFLITEM --> TFLITE
 ```
 
 ## Component Status Legend
@@ -106,6 +128,7 @@ graph TB
 | Status | Meaning |
 |--------|---------|
 | **Active** | Production-ready, actively maintained |
+| **Template** | Working template, needs customization |
 | **Prototype** | Functional but not production-ready |
 | **Reference** | Working example, not actively developed |
 | **Concept** | Design document only, not implemented |
@@ -114,3 +137,7 @@ graph TB
 ---
 
 [← Back to SIMCAP](../)
+
+---
+
+<link rel="stylesheet" href="../src/simcap.css">

@@ -615,3 +615,7 @@ Higher grades provide stronger fields but cost more and are more brittle.
 4. [ST Community - LIS3MDL Sensitivity](https://community.st.com/t5/mems-sensors/sensitivity-of-lis3mdl-lsb-gauss/td-p/401626)
 5. [Espruino Puck.js Documentation](https://www.espruino.com/Puck.js)
 6. [Espruino LIS3MDL Datasheet Mirror](https://www.espruino.com/datasheets/LIS3MDL.pdf)
+
+---
+
+<link rel="stylesheet" href="../../src/simcap.css">

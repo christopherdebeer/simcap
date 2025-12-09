@@ -20,3 +20,7 @@ This component is currently in the concept stage. Implementation requires:
 ---
 
 [← Back to SIMCAP](../../../)
+
+---
+
+<link rel="stylesheet" href="../../simcap.css">

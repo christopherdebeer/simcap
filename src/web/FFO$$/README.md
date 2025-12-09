@@ -34,3 +34,7 @@ This approach offers a lightweight alternative to neural network-based gesture r
 ---
 
 [← Back to SIMCAP](../../../)
+
+---
+
+<link rel="stylesheet" href="../../simcap.css">
