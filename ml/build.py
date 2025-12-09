@@ -68,7 +68,32 @@ print("Converted successfully")
     result = run_command(f'python3 -c \'{script}\'')
     print(result.stdout)
     
+    # Fix Keras 3 to TensorFlow.js compatibility issue
+    # Keras 3 exports "batch_shape" but TensorFlow.js expects "batchInputShape"
+    fix_tfjs_keras3_compat(tfjs_dir)
+    
     return tfjs_dir
+
+
+def fix_tfjs_keras3_compat(tfjs_dir):
+    """Fix Keras 3 to TensorFlow.js compatibility issues in model.json.
+    
+    Keras 3 exports InputLayer with 'batch_shape' (snake_case) but
+    TensorFlow.js expects 'batchInputShape' (camelCase).
+    """
+    model_json_path = Path(tfjs_dir) / "model.json"
+    if not model_json_path.exists():
+        return
+    
+    with open(model_json_path, 'r') as f:
+        content = f.read()
+    
+    # Fix the batch_shape -> batchInputShape issue
+    if '"batch_shape"' in content:
+        content = content.replace('"batch_shape"', '"batchInputShape"')
+        with open(model_json_path, 'w') as f:
+            f.write(content)
+        print("  Fixed Keras 3 compatibility: batch_shape -> batchInputShape")
 
 
 def convert_to_tflite(model_path, output_dir, quantize=True):
