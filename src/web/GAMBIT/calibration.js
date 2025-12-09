@@ -418,6 +418,24 @@ class EnvironmentalCalibration {
     }
 
     /**
+     * Check if a specific calibration type has been completed
+     * @param {string} type - 'hard_iron', 'soft_iron', or 'earth_field'
+     * @returns {boolean} Whether the calibration has been completed
+     */
+    hasCalibration(type) {
+        switch (type) {
+            case 'hard_iron':
+                return this.hardIronCalibrated;
+            case 'soft_iron':
+                return this.softIronCalibrated;
+            case 'earth_field':
+                return this.earthFieldCalibrated;
+            default:
+                return false;
+        }
+    }
+
+    /**
      * Save calibration to JSON
      */
     toJSON() {
@@ -456,7 +474,29 @@ class EnvironmentalCalibration {
     }
 
     /**
-     * Load from localStorage
+     * Load calibration from localStorage into this instance
+     * @param {string} key - localStorage key
+     * @returns {boolean} Whether calibration was loaded successfully
+     */
+    load(key = 'gambit_calibration') {
+        const json = localStorage.getItem(key);
+        if (json) {
+            const data = JSON.parse(json);
+            this.hardIronOffset = data.hardIronOffset || { x: 0, y: 0, z: 0 };
+            this.softIronMatrix = data.softIronMatrix ?
+                Matrix3.fromArray(data.softIronMatrix) : Matrix3.identity();
+            this.earthField = data.earthField || { x: 0, y: 0, z: 0 };
+            this.earthFieldMagnitude = data.earthFieldMagnitude || 50;
+            this.hardIronCalibrated = data.hardIronCalibrated || false;
+            this.softIronCalibrated = data.softIronCalibrated || false;
+            this.earthFieldCalibrated = data.earthFieldCalibrated || false;
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Load from localStorage (static factory method)
      */
     static load(key = 'gambit_calibration') {
         const json = localStorage.getItem(key);
