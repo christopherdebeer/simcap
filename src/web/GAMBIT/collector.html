@@ -803,6 +803,21 @@
         <div class="row">
             <button id="wizardBtn" class="btn-warning" disabled>🧙 Calibration Wizard</button>
         </div>
+        <div class="row">
+            <button id="poseEstimationBtn" class="btn-secondary" disabled>🎯 Enable Pose Tracking</button>
+        </div>
+        <div id="poseEstimationStatus" style="display: none; margin-top: 10px; padding: 10px; background: #0f1419; border-radius: 8px; border: 1px solid #333;">
+            <div style="font-size: 12px; color: #888; margin-bottom: 5px;">Pose Estimation</div>
+            <div style="font-size: 14px; color: #00d4ff;">
+                Status: <span id="poseStatusText">Disabled</span>
+            </div>
+            <div style="font-size: 14px; color: #00d4ff; margin-top: 5px;">
+                Confidence: <span id="poseConfidenceText">0%</span>
+            </div>
+            <div style="font-size: 11px; color: #666; margin-top: 5px;">
+                Updates: <span id="poseUpdatesText">0</span>
+            </div>
+        </div>
     </section>
 
     <!-- GitHub Sync -->
@@ -946,9 +961,9 @@
     const calibration = new EnvironmentalCalibration();
     try {
         calibration.load('gambit_calibration');
-        log('Loaded previous calibration from localStorage');
+        console.log('[Calibration] Loaded previous calibration from localStorage');
     } catch (e) {
-        log('No previous calibration found, will calibrate during wizard');
+        console.log('[Calibration] No previous calibration found, will calibrate during wizard');
     }
 
     // Initialize 3D Kalman filter for magnetometer smoothing
@@ -956,6 +971,128 @@
         processNoise: 0.1,
         measurementNoise: 1.0
     });
+
+    // ===== Real-time Pose Estimation =====
+    // Initialize particle filter for finger position tracking
+    let poseFilter = null;
+    let poseEstimationEnabled = false;
+
+    // Default reference pose (palm-down, fingers extended, typical geometry)
+    // Positions in mm relative to sensor (at origin)
+    const defaultReferencePose = {
+        thumb:  {x: -30, y: 40, z: 10},   // Left side, forward
+        index:  {x: -15, y: 60, z: 10},   // Slightly left, far forward
+        middle: {x: 0,   y: 65, z: 10},   // Center, farthest forward
+        ring:   {x: 15,  y: 60, z: 10},   // Slightly right, forward
+        pinky:  {x: 30,  y: 50, z: 10}    // Right side, less forward
+    };
+
+    // Magnet configuration (default N52 3mm x 2mm cylindrical magnets)
+    const magnetConfig = {
+        thumb:  {moment: {x: 0, y: 0, z: 0.01}},
+        index:  {moment: {x: 0, y: 0, z: 0.01}},
+        middle: {moment: {x: 0, y: 0, z: 0.01}},
+        ring:   {moment: {x: 0, y: 0, z: 0.01}},
+        pinky:  {moment: {x: 0, y: 0, z: 0.01}}
+    };
+
+    // Pose estimation state
+    const poseState = {
+        currentPose: null,         // Latest pose estimate
+        confidence: 0,             // 0-1, based on particle spread
+        updateCount: 0,            // Number of updates
+        enabled: false             // Can be toggled by user
+    };
+
+    function initializePoseEstimation(referencePose = null) {
+        try {
+            const initialPose = referencePose || defaultReferencePose;
+
+            poseFilter = new ParticleFilter({
+                numParticles: 500,
+                positionNoise: 5.0,    // mm
+                velocityNoise: 2.0     // mm/s
+            });
+
+            poseFilter.initialize(initialPose);
+            poseState.enabled = true;
+            poseEstimationEnabled = true;
+
+            console.log('[PoseEstimation] Initialized with', Object.keys(initialPose).length, 'fingers');
+            log('Pose estimation enabled');
+        } catch (e) {
+            console.error('[PoseEstimation] Failed to initialize:', e);
+            poseEstimationEnabled = false;
+        }
+    }
+
+    function updatePoseEstimation(magneticField) {
+        if (!poseEstimationEnabled || !poseFilter) return;
+
+        try {
+            // Prediction step (assume 50Hz = 0.02s)
+            poseFilter.predict(0.02);
+
+            // Update with measurement
+            poseFilter.update(magneticField, (particle, measurement) => {
+                return magneticLikelihood(particle, measurement, magnetConfig);
+            });
+
+            // Get pose estimate
+            poseState.currentPose = poseFilter.estimate();
+            poseState.updateCount++;
+
+            // Calculate confidence based on particle diversity
+            // Higher diversity = lower confidence
+            const diversity = poseFilter.diversity();
+            poseState.confidence = Math.max(0, 1.0 - diversity / 100);
+
+            // Update visualization every 10 samples (5Hz) to reduce overhead
+            if (poseState.updateCount % 10 === 0) {
+                updatePoseVisualization();
+            }
+        } catch (e) {
+            console.error('[PoseEstimation] Update failed:', e);
+        }
+    }
+
+    function updatePoseVisualization() {
+        // Update the UI status display with current pose estimation state
+
+        if (!poseState.currentPose) return;
+
+        try {
+            // Update confidence display
+            const confidencePercent = (poseState.confidence * 100).toFixed(1);
+            const confidenceEl = $('poseConfidenceText');
+            if (confidenceEl) {
+                confidenceEl.textContent = confidencePercent + '%';
+
+                // Color code by confidence level
+                if (poseState.confidence > 0.7) {
+                    confidenceEl.style.color = '#00ff88'; // High confidence - green
+                } else if (poseState.confidence > 0.4) {
+                    confidenceEl.style.color = '#ffa502'; // Medium confidence - orange
+                } else {
+                    confidenceEl.style.color = '#e74c3c'; // Low confidence - red
+                }
+            }
+
+            // Update updates counter
+            const updatesEl = $('poseUpdatesText');
+            if (updatesEl) {
+                updatesEl.textContent = poseState.updateCount;
+            }
+
+            // Log detailed pose data periodically (every second)
+            if (poseState.updateCount % 50 === 0) {
+                console.log('[PoseEstimation] Pose:', poseState.currentPose);
+                console.log('[PoseEstimation] Confidence:', confidencePercent + '%');
+            }
+        } catch (e) {
+            console.error('[PoseEstimation] Visualization update failed:', e);
+        }
+    }
 
     // Calibration sample buffers for wizard steps
     const calibrationBuffers = {
@@ -1368,6 +1505,15 @@
             decoratedTelemetry.filtered_mx = filteredMag.x;
             decoratedTelemetry.filtered_my = filteredMag.y;
             decoratedTelemetry.filtered_mz = filteredMag.z;
+
+            // Update pose estimation with filtered magnetic field
+            if (poseEstimationEnabled) {
+                updatePoseEstimation({
+                    x: filteredMag.x,
+                    y: filteredMag.y,
+                    z: filteredMag.z
+                });
+            }
         } catch (e) {
             // Filtering failed, skip decoration
         }
@@ -2174,11 +2320,38 @@
         }
     });
 
-    // Update wizard button state in updateUI
+    // Pose estimation button handler
+    const poseEstimationBtn = $('poseEstimationBtn');
+    poseEstimationBtn.addEventListener('click', () => {
+        if (!poseEstimationEnabled) {
+            // Enable pose estimation
+            initializePoseEstimation();
+            poseEstimationBtn.textContent = '⏸️ Disable Pose Tracking';
+            poseEstimationBtn.classList.remove('btn-secondary');
+            poseEstimationBtn.classList.add('btn-primary');
+            $('poseEstimationStatus').style.display = 'block';
+            $('poseStatusText').textContent = 'Active';
+            $('poseStatusText').style.color = '#00ff88';
+        } else {
+            // Disable pose estimation
+            poseEstimationEnabled = false;
+            poseState.enabled = false;
+            poseEstimationBtn.textContent = '🎯 Enable Pose Tracking';
+            poseEstimationBtn.classList.remove('btn-primary');
+            poseEstimationBtn.classList.add('btn-secondary');
+            $('poseEstimationStatus').style.display = 'none';
+            $('poseStatusText').textContent = 'Disabled';
+            $('poseStatusText').style.color = '#888';
+            log('Pose estimation disabled');
+        }
+    });
+
+    // Update wizard button and pose estimation button state in updateUI
     const originalUpdateUI = updateUI;
     updateUI = function() {
         originalUpdateUI();
         wizardBtn.disabled = !state.connected || state.recording;
+        poseEstimationBtn.disabled = !state.connected || state.recording;
     };
 
     // ===== Initialize =====
@@ -2222,7 +2395,15 @@
     loadCustomLabels();
     updateActiveLabelsDisplay();
     updateUI();
-    log('Ready. Connect device to start.');
+
+    // Log calibration status
+    if (calibration.hasCalibration('earth_field') &&
+        calibration.hasCalibration('hard_iron') &&
+        calibration.hasCalibration('soft_iron')) {
+        log('Ready. Calibration loaded. Connect device to start.');
+    } else {
+        log('Ready. No calibration found - run wizard after connecting.');
+    }
     </script>
 </body>
 </html>
