@@ -637,6 +637,60 @@
         </div>
     </section>
 
+    <!-- Calibration Wizard -->
+    <section>
+        <h2 class="collapsible">Calibration Wizard</h2>
+        <div class="collapse-content">
+            <p style="font-size: 11px; color: var(--fg-muted); margin-bottom: 12px;">
+                Calibrate the magnetometer to remove environmental interference. Required for accurate magnetic finger tracking.
+            </p>
+            
+            <div id="calibrationStatus" style="background: var(--bg); padding: 8px; border-radius: 4px; margin-bottom: 12px;">
+                <div style="font-size: 11px; font-weight: 500; margin-bottom: 4px;">Status: <span id="calStatusText">Not Calibrated</span></div>
+                <div style="font-size: 10px; color: var(--fg-muted);" id="calDetails">No calibration loaded</div>
+            </div>
+
+            <!-- Step 1: Earth Field -->
+            <div id="calStep1" class="calibration-step">
+                <h3>Step 1: Earth Field Calibration</h3>
+                <p style="font-size: 11px; margin-bottom: 8px;">Hold device still, away from magnets (>50cm)</p>
+                <div class="row">
+                    <button id="startEarthCal" class="btn-secondary" disabled>Start (5 seconds)</button>
+                    <div id="earthProgress" style="flex: 1;"></div>
+                </div>
+                <div id="earthQuality" style="font-size: 10px; margin-top: 4px;"></div>
+            </div>
+
+            <!-- Step 2: Hard Iron -->
+            <div id="calStep2" class="calibration-step">
+                <h3>Step 2: Hard Iron Calibration</h3>
+                <p style="font-size: 11px; margin-bottom: 8px;">Rotate device in figure-8 pattern covering all orientations</p>
+                <div class="row">
+                    <button id="startHardIronCal" class="btn-secondary" disabled>Start (10 seconds)</button>
+                    <div id="hardIronProgress" style="flex: 1;"></div>
+                </div>
+                <div id="hardIronQuality" style="font-size: 10px; margin-top: 4px;"></div>
+            </div>
+
+            <!-- Step 3: Soft Iron -->
+            <div id="calStep3" class="calibration-step">
+                <h3>Step 3: Soft Iron Calibration</h3>
+                <p style="font-size: 11px; margin-bottom: 8px;">Continue rotating to capture field distortion</p>
+                <div class="row">
+                    <button id="startSoftIronCal" class="btn-secondary" disabled>Start (10 seconds)</button>
+                    <div id="softIronProgress" style="flex: 1;"></div>
+                </div>
+                <div id="softIronQuality" style="font-size: 10px; margin-top: 4px;"></div>
+            </div>
+
+            <div class="row" style="margin-top: 12px;">
+                <button id="loadCalibration" class="btn-secondary">Load from File</button>
+                <button id="saveCalibration" class="btn-secondary" disabled>Save to File</button>
+                <button id="resetCalibration" class="btn-danger" style="margin-left: auto;">Reset</button>
+            </div>
+        </div>
+    </section>
+
     <!-- Session Metadata -->
     <section>
         <h2 class="collapsible">Session Metadata</h2>

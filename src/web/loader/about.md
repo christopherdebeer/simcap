@@ -37,7 +37,7 @@ graph LR
 ## Usage
 
 ### Online
-Open: https://christopherdebeer.github.io/simcap/src/web/loader/
+Open: https://simcap.parc.land/src/web/loader/
 
 ### Local
 ```bash

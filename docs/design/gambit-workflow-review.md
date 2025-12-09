@@ -128,7 +128,7 @@ The main UI upload code:
 async function ghPutData(content) {
     const endpoint = getEndpoint({
         repository: 'simcap',
-        username: 'christopherdebeer',
+        username: '<redacted>',
     }, `data/GAMBIT/${filename}`)
     // ...PUT request
 }

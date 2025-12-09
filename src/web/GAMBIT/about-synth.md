@@ -51,7 +51,7 @@ The synthesizer maps sensor data to audio parameters as follows:
 
 1. **Load the Synthesizer**
    - Open `synth.html` in a WebBLE-compatible browser
-   - Or navigate to the hosted version at: `https://christopherdebeer.github.io/simcap/src/web/GAMBIT/synth.html`
+   - Or navigate to the hosted version at: `https://simcap.parc.land/src/web/GAMBIT/synth.html`
 
 2. **Connect Your Device**
    - Click the **"Connect Device"** button
