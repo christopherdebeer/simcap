@@ -110,10 +110,12 @@ Using `B = (μ₀/2π) × m / r³` for on-axis field:
 | Earth's magnetic field | 25-65 μT (location dependent) |
 | Urban magnetic noise (buildings, wiring) | 0.1-10 μT |
 | Electronic devices nearby | 1-100 μT (highly variable) |
-| Magnetometer noise floor (typical MEMS) | 0.1-0.5 μT RMS |
-| Puck.js MMC5603 noise density | ~0.4 μT at 100 Hz BW |
+| **Puck.js LIS3MDL noise floor** | **~5-10 mgauss RMS (0.5-1.0 μT)** |
+| LIS3MDL resolution (±4 gauss range) | 0.146 mgauss/LSB (0.0146 μT) |
 
 **Key observation:** At typical finger-to-palm distances (50-100 mm), even small magnets produce fields comparable to or larger than Earth's field variation, but the r³ falloff means positioning within that range changes signal dramatically.
+
+**Important sensor limitation:** The LIS3MDL has been observed to exhibit ~2× higher noise than datasheet specifications in practice (see ST Community discussions). Real-world RMS noise of 5-10 mgauss (0.5-1.0 μT) should be assumed for SNR calculations.
 
 ---
 
@@ -122,9 +124,11 @@ Using `B = (μ₀/2π) × m / r³` for on-axis field:
 ### 4.1 Noise Sources
 
 1. **Sensor Noise (Intrinsic)**
-   - Puck.js uses MMC5603NJ magnetometer
-   - Typical noise: 0.4-2 μT RMS depending on bandwidth
-   - At 50 Hz sample rate: ~0.6 μT noise floor
+   - Puck.js uses **STMicroelectronics LIS3MDL** magnetometer
+   - Datasheet spec: ~5 mgauss RMS at ±12 gauss full-scale
+   - **Real-world measured: ~5-10 mgauss RMS (0.5-1.0 μT)**
+   - Higher noise than competing sensors (ST recommends LIS2MDL for lower noise applications)
+   - Sensitivity: 6,842 LSB/gauss at ±4 gauss (0.146 mgauss/LSB resolution)
 
 2. **Earth's Field (Static but Orientation-Dependent)**
    - Magnitude: 25-65 μT depending on location
@@ -145,15 +149,25 @@ Using `B = (μ₀/2π) × m / r³` for on-axis field:
 
 ### 4.2 Signal-to-Noise Ratio Estimates
 
-For a **5×2 mm magnet** at various distances:
+For a **5×2 mm magnet** at various distances (using LIS3MDL realistic noise of ~1.0 μT RMS):
 
 | Distance | Signal | Sensor Noise | Earth Field Variation | Effective SNR |
 |----------|--------|--------------|----------------------|---------------|
-| 50 mm | 59 μT | 0.6 μT | ~10 μT (orientation) | ~6:1 |
-| 80 mm | 14 μT | 0.6 μT | ~10 μT | ~1.4:1 |
-| 100 mm | 7 μT | 0.6 μT | ~10 μT | ~0.7:1 |
+| 50 mm (flexed) | 59 μT | 1.0 μT | ~10 μT (orientation) | ~5.4:1 |
+| 80 mm (extended) | 14 μT | 1.0 μT | ~10 μT | ~1.3:1 |
+| 100 mm (full reach) | 7 μT | 1.0 μT | ~10 μT | ~0.6:1 |
 
-**Critical insight:** At extended finger positions (80-100 mm), the magnetic signal approaches or falls below the noise floor from orientation-dependent Earth field variation. **Robust tracking requires either stronger magnets, closer distances, or sophisticated compensation.**
+For a **6×3 mm magnet** (recommended minimum):
+
+| Distance | Signal | Sensor Noise | Earth Field Variation | Effective SNR |
+|----------|--------|--------------|----------------------|---------------|
+| 50 mm (flexed) | 141 μT | 1.0 μT | ~10 μT | ~12.8:1 |
+| 80 mm (extended) | 34 μT | 1.0 μT | ~10 μT | ~3.1:1 |
+| 100 mm (full reach) | 18 μT | 1.0 μT | ~10 μT | ~1.6:1 |
+
+**Critical insight:** The LIS3MDL's higher-than-expected noise floor (~1 μT vs. ~0.5 μT for better sensors) makes the Earth field variation (~10 μT from orientation changes) the dominant noise source. **Earth field compensation via IMU fusion is essential, not optional.**
+
+**Implication for magnet sizing:** With realistic LIS3MDL noise, the 5×2 mm magnet is marginal. A 6×3 mm or larger magnet provides necessary SNR margin for extended finger positions.
 
 ---
 
@@ -527,17 +541,54 @@ Or in vector form:
 B = (μ₀/4π) × [ 3(m·r̂)r̂ - m ] / r³
 ```
 
-## Appendix B: Puck.js MMC5603 Magnetometer Specifications
+## Appendix B: Puck.js LIS3MDL Magnetometer Specifications
+
+*Source: [ST LIS3MDL Datasheet](https://www.st.com/resource/en/datasheet/lis3mdl.pdf), [ST Community Discussions](https://community.st.com/t5/mems-sensors/the-rms-noise-of-lis3mdl-and-lsm303d/td-p/401561)*
 
 | Parameter | Value |
 |-----------|-------|
-| Manufacturer | MEMSIC |
-| Type | AMR (Anisotropic Magnetoresistance) |
-| Range | ±30 Gauss (±3000 μT) |
-| Resolution | 0.0625 μT (16-bit) |
-| Noise density | 0.4 μT/√Hz |
-| Bandwidth | Up to 1000 Hz |
-| Sample rate (Puck.js) | Typically 10-100 Hz |
+| Manufacturer | STMicroelectronics |
+| Type | MEMS Magnetometer |
+| Full-Scale Range | ±4 / ±8 / ±12 / ±16 gauss (user selectable) |
+| Resolution | 16-bit |
+| **Sensitivity (±4 gauss)** | **6,842 LSB/gauss (0.146 mgauss/LSB)** |
+| Sensitivity (±8 gauss) | 3,421 LSB/gauss (0.29 mgauss/LSB) |
+| Sensitivity (±12 gauss) | 2,281 LSB/gauss (0.43 mgauss/LSB) |
+| Sensitivity (±16 gauss) | 1,711 LSB/gauss (0.58 mgauss/LSB) |
+| **Noise (datasheet)** | ~5 mgauss RMS at ±12 gauss |
+| **Noise (measured)** | **~5-10 mgauss RMS (0.5-1.0 μT)** |
+| Output Data Rate | Up to 155 Hz (high precision) or 1000 Hz (lower precision) |
+| Temperature Sensor | Yes (8 LSB/°C, 0 = 25°C) |
+| Operating Temperature | -40°C to +85°C |
+| Interface | I²C / SPI |
+| Sample rate (Puck.js firmware) | 10 Hz (every 5th sample at 50 Hz loop) |
+
+### LIS3MDL vs. Alternative Sensors
+
+| Sensor | Noise (RMS) | Notes |
+|--------|-------------|-------|
+| LIS3MDL | ~5-10 mgauss | Current Puck.js sensor |
+| LSM303D | ~5 mgauss | Lower noise in practice |
+| **LIS2MDL** | **~3 mgauss** | **ST-recommended upgrade for low-noise applications** |
+| IIS2MDC | ~5-10 mgauss | Similar to LIS3MDL |
+| MMC5603 | ~0.4 μT/√Hz | MEMSIC alternative, potentially lower noise |
+
+**Practical implication:** For future hardware revisions, consider LIS2MDL or MMC5603 for improved SNR.
+
+### Full-Scale Range Selection for Finger Tracking
+
+The LIS3MDL offers four full-scale ranges. For magnetic finger tracking:
+
+| Range | Max Field | Resolution | Best For |
+|-------|-----------|------------|----------|
+| ±4 gauss (±400 μT) | 400 μT | 0.146 mgauss | **Recommended** - best resolution for finger magnets |
+| ±8 gauss (±800 μT) | 800 μT | 0.29 mgauss | High-interference environments |
+| ±12 gauss (±1200 μT) | 1200 μT | 0.43 mgauss | Very strong magnets or very close range |
+| ±16 gauss (±1600 μT) | 1600 μT | 0.58 mgauss | Rarely needed |
+
+**Analysis:** Expected finger magnet signals (7-140 μT) plus Earth's field (~50 μT) fit comfortably within ±4 gauss (±400 μT). Using the ±4 gauss range provides maximum sensitivity (6,842 LSB/gauss) and best discrimination of small field changes.
+
+**Warning:** At ±4 gauss, the sensor will saturate if a strong magnet gets too close. A 6×3mm N48 magnet at 20mm produces ~800 μT—exceeding the ±4 gauss range. Consider ±8 gauss if fingers can come very close to the sensor.
 
 ## Appendix C: Neodymium Magnet Grade Reference
 
@@ -553,4 +604,14 @@ Higher grades provide stronger fields but cost more and are more brittle.
 ---
 
 *Document created: December 2024*
+*Updated: December 2024 - Corrected sensor specifications to LIS3MDL per Puck.js datasheet*
 *SIMCAP Project - Magnetic Finger Tracking Feasibility Analysis*
+
+## References
+
+1. [ST LIS3MDL Datasheet](https://www.st.com/resource/en/datasheet/lis3mdl.pdf)
+2. [ST Application Note AN4602 - LIS3MDL Configuration](https://www.st.com/resource/en/application_note/an4602-lis3mdl-threeaxis-digital-output-magnetometer-stmicroelectronics.pdf)
+3. [ST Community - LIS3MDL Noise Discussion](https://community.st.com/t5/mems-sensors/the-rms-noise-of-lis3mdl-and-lsm303d/td-p/401561)
+4. [ST Community - LIS3MDL Sensitivity](https://community.st.com/t5/mems-sensors/sensitivity-of-lis3mdl-lsb-gauss/td-p/401626)
+5. [Espruino Puck.js Documentation](https://www.espruino.com/Puck.js)
+6. [Espruino LIS3MDL Datasheet Mirror](https://www.espruino.com/datasheets/LIS3MDL.pdf)
