@@ -3,16 +3,19 @@ SIMCAP Data Loader
 
 Loads raw JSON data files, applies preprocessing, and creates
 windowed tensors suitable for ML training.
+
+Supports both V1 (single-label) and V2 (multi-label) formats.
 """
 
 import json
 import numpy as np
 from pathlib import Path
-from typing import List, Tuple, Optional, Dict, Any
+from typing import List, Tuple, Optional, Dict, Any, Set, Union
 from dataclasses import dataclass
 
 from .schema import (
-    Gesture, SessionMetadata, LabeledSegment,
+    Gesture, SessionMetadata, LabeledSegment, LabeledSegmentV2,
+    MultiLabel, FingerLabels, FingerState,
     SENSOR_RANGES, FEATURE_NAMES, NUM_FEATURES
 )
 
@@ -181,10 +184,65 @@ def create_windows(data: np.ndarray, labels: np.ndarray,
     return np.array(windows), np.array(window_labels)
 
 
+def create_windows_multilabel(
+    data: np.ndarray,
+    label_matrix: np.ndarray,
+    window_size: int = 50,
+    stride: int = 25,
+    require_consistent: bool = True
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Create sliding windows from sequential data with multi-label support.
+
+    Args:
+        data: Sensor data, shape (N, 9)
+        label_matrix: Per-sample multi-label matrix, shape (N, num_labels)
+        window_size: Number of samples per window
+        stride: Step size between windows
+        require_consistent: If True, only include windows where all samples
+                            have the same label vector
+
+    Returns:
+        Tuple of (windows, window_labels):
+        - windows: shape (num_windows, window_size, 9)
+        - window_labels: shape (num_windows, num_labels)
+    """
+    windows = []
+    window_labels = []
+
+    num_samples = len(data)
+
+    for start in range(0, num_samples - window_size + 1, stride):
+        end = start + window_size
+        window_data = data[start:end]
+        window_label_seq = label_matrix[start:end]
+
+        if require_consistent:
+            # Check if all rows are identical
+            if np.all(window_label_seq == window_label_seq[0]):
+                windows.append(window_data)
+                window_labels.append(window_label_seq[0])
+        else:
+            # Use mode for each label dimension
+            mode_labels = []
+            for col in range(window_label_seq.shape[1]):
+                counts = np.bincount(window_label_seq[:, col].astype(int))
+                mode_labels.append(counts.argmax())
+            windows.append(window_data)
+            window_labels.append(mode_labels)
+
+    if not windows:
+        num_labels = label_matrix.shape[1] if len(label_matrix.shape) > 1 else 1
+        return (np.array([]).reshape(0, window_size, NUM_FEATURES),
+                np.array([]).reshape(0, num_labels))
+
+    return np.array(windows), np.array(window_labels)
+
+
 def labels_from_segments(num_samples: int, segments: List[LabeledSegment],
                          default_label: Gesture = Gesture.REST) -> np.ndarray:
     """
-    Convert labeled segments to per-sample labels array.
+    Convert labeled segments to per-sample labels array (V1 format).
 
     Args:
         num_samples: Total number of samples in the session
@@ -202,9 +260,98 @@ def labels_from_segments(num_samples: int, segments: List[LabeledSegment],
     return labels
 
 
+def labels_from_segments_v2(
+    num_samples: int,
+    segments: List[LabeledSegmentV2],
+    label_columns: List[str]
+) -> np.ndarray:
+    """
+    Convert V2 labeled segments to per-sample multi-label matrix.
+
+    Args:
+        num_samples: Total number of samples in the session
+        segments: List of V2 labeled segments
+        label_columns: List of label column names to extract
+
+    Returns:
+        Array of shape (num_samples, len(label_columns))
+    """
+    # Initialize with -1 (unlabeled)
+    label_matrix = np.full((num_samples, len(label_columns)), -1, dtype=np.int32)
+
+    for seg in segments:
+        for i, col in enumerate(label_columns):
+            value = _extract_label_value(seg.labels, col)
+            if value is not None:
+                label_matrix[seg.start_sample:seg.end_sample, i] = value
+
+    return label_matrix
+
+
+def _extract_label_value(labels: MultiLabel, column: str) -> Optional[int]:
+    """
+    Extract a numeric label value from a MultiLabel object.
+
+    Supported columns:
+    - 'pose': Maps pose name to Gesture enum value
+    - 'motion': Maps motion state to 0/1/2
+    - 'calibration': Maps calibration type to 0-6
+    - 'thumb', 'index', 'middle', 'ring', 'pinky': Finger state 0/1/2
+    - 'fingers_binary': Binary encoding of all finger states
+    """
+    if column == 'pose':
+        if labels.pose:
+            try:
+                return Gesture.from_name(labels.pose).value
+            except (KeyError, ValueError):
+                return None
+        return None
+
+    elif column == 'motion':
+        motion_map = {'static': 0, 'moving': 1, 'transition': 2}
+        return motion_map.get(labels.motion.value, 0)
+
+    elif column == 'calibration':
+        cal_map = {
+            'none': 0, 'earth_field': 1, 'hard_iron': 2,
+            'soft_iron': 3, 'finger_range': 4, 'reference_pose': 5,
+            'magnet_baseline': 6
+        }
+        return cal_map.get(labels.calibration.value, 0)
+
+    elif column in ['thumb', 'index', 'middle', 'ring', 'pinky']:
+        if labels.fingers:
+            state = getattr(labels.fingers, column)
+            state_map = {'extended': 0, 'partial': 1, 'flexed': 2, 'unknown': -1}
+            return state_map.get(state.value, -1)
+        return -1
+
+    elif column == 'fingers_binary':
+        if labels.fingers:
+            # Encode as base-3 number: 00000 to 22222
+            values = []
+            for f in ['thumb', 'index', 'middle', 'ring', 'pinky']:
+                state = getattr(labels.fingers, f)
+                if state == FingerState.EXTENDED:
+                    values.append(0)
+                elif state == FingerState.PARTIAL:
+                    values.append(1)
+                elif state == FingerState.FLEXED:
+                    values.append(2)
+                else:
+                    return -1  # Unknown state
+            # Convert to single integer
+            return sum(v * (3 ** (4-i)) for i, v in enumerate(values))
+        return -1
+
+    return None
+
+
 class GambitDataset:
     """
     Dataset class for loading and preparing GAMBIT data for training.
+
+    Supports both V1 (single-label) and V2 (multi-label) formats.
     """
 
     def __init__(self, data_dir: str, window_size: int = 50, stride: int = 25,
@@ -236,7 +383,7 @@ class GambitDataset:
     def load_labeled_sessions(self, split: Optional[str] = None
                               ) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Load all labeled sessions and create windowed dataset.
+        Load all labeled sessions and create windowed dataset (V1 format).
 
         Args:
             split: If specified, only load sessions with this split ('train', 'validation', 'test')
@@ -254,7 +401,14 @@ class GambitDataset:
                 continue
 
             meta = load_session_metadata(json_path)
-            if meta is None or not meta.labels:
+            if meta is None:
+                continue
+
+            # Check for V1 or V2 labels
+            has_v1_labels = bool(meta.labels)
+            has_v2_labels = bool(meta.labels_v2)
+
+            if not has_v1_labels and not has_v2_labels:
                 continue  # Skip unlabeled sessions
 
             if split is not None and meta.split != split:
@@ -264,8 +418,13 @@ class GambitDataset:
             data = load_session_data(json_path)
             data = normalize_data(data, self.stats, self.normalize_method)
 
-            # Create per-sample labels
-            labels = labels_from_segments(len(data), meta.labels)
+            # Create per-sample labels (prefer V2, fall back to V1)
+            if has_v2_labels:
+                # Convert V2 to V1-style pose labels
+                segments = meta.get_all_labels_v2()
+                labels = self._v2_to_pose_labels(len(data), segments)
+            else:
+                labels = labels_from_segments(len(data), meta.labels)
 
             # Create windows
             windows, window_labels = create_windows(
@@ -281,6 +440,95 @@ class GambitDataset:
                     np.array([]))
 
         return np.concatenate(all_windows), np.concatenate(all_labels)
+
+    def _v2_to_pose_labels(self, num_samples: int,
+                           segments: List[LabeledSegmentV2]) -> np.ndarray:
+        """Convert V2 segments to V1-style pose labels."""
+        labels = np.full(num_samples, Gesture.REST.value, dtype=np.int32)
+
+        for seg in segments:
+            if seg.labels.pose:
+                try:
+                    gesture = Gesture.from_name(seg.labels.pose)
+                    labels[seg.start_sample:seg.end_sample] = gesture.value
+                except (KeyError, ValueError):
+                    pass  # Unknown pose, keep default
+
+        return labels
+
+    def load_multilabel_sessions(
+        self,
+        label_columns: List[str] = ['pose', 'motion'],
+        split: Optional[str] = None
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Load all labeled sessions with multi-label support (V2 format).
+
+        Args:
+            label_columns: List of label columns to extract
+            split: If specified, only load sessions with this split
+
+        Returns:
+            Tuple of (X, y):
+            - X: shape (num_windows, window_size, 9)
+            - y: shape (num_windows, len(label_columns))
+        """
+        all_windows = []
+        all_labels = []
+
+        for json_path in sorted(self.data_dir.glob('*.json')):
+            if json_path.name.endswith('.meta.json'):
+                continue
+
+            meta = load_session_metadata(json_path)
+            if meta is None:
+                continue
+
+            segments = meta.get_all_labels_v2()
+            if not segments:
+                continue
+
+            if split is not None and meta.split != split:
+                continue
+
+            # Load and normalize data
+            data = load_session_data(json_path)
+            data = normalize_data(data, self.stats, self.normalize_method)
+
+            # Create per-sample label matrix
+            label_matrix = labels_from_segments_v2(len(data), segments, label_columns)
+
+            # Create windows
+            windows, window_labels = create_windows_multilabel(
+                data, label_matrix, self.window_size, self.stride
+            )
+
+            if len(windows) > 0:
+                all_windows.append(windows)
+                all_labels.append(window_labels)
+
+        if not all_windows:
+            return (np.array([]).reshape(0, self.window_size, NUM_FEATURES),
+                    np.array([]).reshape(0, len(label_columns)))
+
+        return np.concatenate(all_windows), np.concatenate(all_labels)
+
+    def load_finger_tracking_sessions(
+        self,
+        split: Optional[str] = None
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Load sessions for finger tracking (5-finger state prediction).
+
+        Returns:
+            Tuple of (X, y):
+            - X: shape (num_windows, window_size, 9)
+            - y: shape (num_windows, 5) - one column per finger
+        """
+        return self.load_multilabel_sessions(
+            label_columns=['thumb', 'index', 'middle', 'ring', 'pinky'],
+            split=split
+        )
 
     def get_train_val_split(self, val_ratio: float = 0.2
                             ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -310,12 +558,39 @@ class GambitDataset:
 
         return X_train, y_train, X_val, y_val
 
+    def get_all_custom_labels(self) -> Set[str]:
+        """Get all unique custom labels used across all sessions."""
+        custom_labels = set()
+
+        for json_path in sorted(self.data_dir.glob('*.json')):
+            if json_path.name.endswith('.meta.json'):
+                continue
+
+            meta = load_session_metadata(json_path)
+            if meta is None:
+                continue
+
+            # From custom_label_definitions
+            custom_labels.update(meta.custom_label_definitions)
+
+            # From actual labels in V2 segments
+            for seg in meta.labels_v2:
+                custom_labels.update(seg.labels.custom)
+
+        return custom_labels
+
     def summary(self) -> Dict[str, Any]:
         """Return summary statistics about the dataset."""
         labeled_count = 0
         unlabeled_count = 0
+        v1_count = 0
+        v2_count = 0
         total_samples = 0
         gesture_counts = {g.name: 0 for g in Gesture}
+        finger_state_counts = {
+            'extended': 0, 'partial': 0, 'flexed': 0, 'unknown': 0
+        }
+        custom_labels = set()
 
         for json_path in sorted(self.data_dir.glob('*.json')):
             if json_path.name.endswith('.meta.json'):
@@ -325,11 +600,38 @@ class GambitDataset:
             total_samples += len(data)
 
             meta = load_session_metadata(json_path)
-            if meta and meta.labels:
-                labeled_count += 1
+            if meta:
+                has_labels = bool(meta.labels) or bool(meta.labels_v2)
+                if has_labels:
+                    labeled_count += 1
+                    if meta.labels:
+                        v1_count += 1
+                    if meta.labels_v2:
+                        v2_count += 1
+                else:
+                    unlabeled_count += 1
+
+                # Count V1 gestures
                 for seg in meta.labels:
                     samples = seg.end_sample - seg.start_sample
                     gesture_counts[seg.gesture.name] += samples
+
+                # Count V2 poses and finger states
+                for seg in meta.labels_v2:
+                    samples = seg.end_sample - seg.start_sample
+                    if seg.labels.pose:
+                        try:
+                            gesture = Gesture.from_name(seg.labels.pose)
+                            gesture_counts[gesture.name] += samples
+                        except (KeyError, ValueError):
+                            pass
+
+                    if seg.labels.fingers:
+                        for finger in ['thumb', 'index', 'middle', 'ring', 'pinky']:
+                            state = getattr(seg.labels.fingers, finger)
+                            finger_state_counts[state.value] += samples
+
+                    custom_labels.update(seg.labels.custom)
             else:
                 unlabeled_count += 1
 
@@ -337,8 +639,12 @@ class GambitDataset:
             'total_sessions': labeled_count + unlabeled_count,
             'labeled_sessions': labeled_count,
             'unlabeled_sessions': unlabeled_count,
+            'v1_sessions': v1_count,
+            'v2_sessions': v2_count,
             'total_samples': total_samples,
             'gesture_counts': gesture_counts,
+            'finger_state_counts': finger_state_counts,
+            'custom_labels': list(custom_labels),
             'stats': {
                 'mean': self.stats.mean.tolist(),
                 'std': self.stats.std.tolist()
@@ -357,3 +663,7 @@ if __name__ == '__main__':
 
     X_train, y_train, X_val, y_val = dataset.get_train_val_split()
     print(f"\nTrain: {X_train.shape}, Val: {X_val.shape}")
+
+    # Test multi-label loading
+    X_ml, y_ml = dataset.load_multilabel_sessions(['pose', 'motion', 'thumb', 'index'])
+    print(f"\nMulti-label: X={X_ml.shape}, y={y_ml.shape}")
