@@ -662,31 +662,59 @@
 
             // Initialize gesture inference
             async function initGestureInference() {
+                console.log('=== GAMBIT Gesture Inference Initialization ===');
+                console.log('Current URL:', window.location.href);
+                console.log('Page loaded at:', new Date().toISOString());
+
                 try {
+                    console.log('Creating gesture inference instance...');
+
                     gestureInference = createGestureInference('v1', {
                         confidenceThreshold: 0.3,
                         onPrediction: (result) => {
+                            console.log('[GAMBIT] Prediction callback triggered:', result.gesture, result.confidence);
                             updateGestureDisplay(result);
                         },
                         onReady: () => {
+                            console.log('[GAMBIT] ✓ Model ready callback triggered');
                             const status = document.getElementById('modelStatus');
                             status.classList.add('ready');
                             status.querySelector('span:last-child').textContent = 'Model ready (v1)';
                             initProbabilityBars();
+                            console.log('[GAMBIT] UI updated to show model ready state');
                         },
                         onError: (error) => {
-                            console.error('Gesture inference error:', error);
+                            console.error('[GAMBIT] ✗ Error callback triggered');
+                            console.error('[GAMBIT] Error details:', {
+                                name: error.name,
+                                message: error.message,
+                                stack: error.stack
+                            });
                             const status = document.getElementById('modelStatus');
-                            status.querySelector('span:last-child').textContent = 'Model error';
+                            status.querySelector('span:last-child').textContent = 'Model error: ' + error.message;
                         }
                     });
 
-                    await gestureInference.load();
+                    console.log('[GAMBIT] Gesture inference instance created, starting model load...');
+                    const loadSuccess = await gestureInference.load();
+
+                    if (loadSuccess) {
+                        console.log('[GAMBIT] ✓ Model load completed successfully');
+                    } else {
+                        console.error('[GAMBIT] ✗ Model load returned false');
+                    }
                 } catch (error) {
-                    console.error('Failed to initialize gesture inference:', error);
+                    console.error('[GAMBIT] ✗ FAILED TO INITIALIZE GESTURE INFERENCE');
+                    console.error('[GAMBIT] Error type:', error.name);
+                    console.error('[GAMBIT] Error message:', error.message);
+                    console.error('[GAMBIT] Full error object:', error);
+                    console.error('[GAMBIT] Stack trace:', error.stack);
+
                     const status = document.getElementById('modelStatus');
-                    status.querySelector('span:last-child').textContent = 'Model unavailable';
+                    status.querySelector('span:last-child').textContent = 'Model unavailable: ' + error.message;
                 }
+
+                console.log('=== Gesture Inference Initialization Complete ===');
             }
 
             // Initialize probability bars
@@ -734,13 +762,39 @@
 
             // Hook into data updates to feed inference
             const originalUpdateData = updateData;
+            let sampleCount = 0;
             updateData = function(prenorm) {
                 // Call original function
                 originalUpdateData(prenorm);
 
+                sampleCount++;
+
                 // Feed to gesture inference
                 if (gestureInference && gestureInference.isReady) {
                     gestureInference.addSample(prenorm);
+
+                    // Log first few samples for debugging
+                    if (sampleCount <= 3) {
+                        console.log(`[GAMBIT] Sample ${sampleCount} fed to inference:`, {
+                            ax: prenorm.ax,
+                            ay: prenorm.ay,
+                            az: prenorm.az,
+                            gx: prenorm.gx,
+                            gy: prenorm.gy,
+                            gz: prenorm.gz,
+                            mx: prenorm.mx,
+                            my: prenorm.my,
+                            mz: prenorm.mz
+                        });
+                    }
+                } else if (gestureInference && !gestureInference.isReady) {
+                    if (sampleCount === 1) {
+                        console.warn('[GAMBIT] Data received but model not ready yet');
+                    }
+                } else {
+                    if (sampleCount === 1) {
+                        console.warn('[GAMBIT] Data received but gesture inference not initialized');
+                    }
                 }
             };
 
