@@ -597,32 +597,77 @@ class ParticleFilter {
  * compute how likely the measurement is.
  */
 function magneticLikelihood(particle, measurement, magnetConfig = null) {
-    // Simplified model: assume each finger contributes additively
-    // Real model would use dipole equations from analysis doc
-
-    // For now, use Gaussian likelihood based on expected vs measured
-    const sigma = 10; // Measurement noise in arbitrary units
-
-    // This is a placeholder - real implementation needs:
-    // 1. Dipole field equations for each magnet
-    // 2. Summation of all contributions
-    // 3. Comparison with actual measurement
-
-    let expectedX = 0, expectedY = 0, expectedZ = 0;
-
-    // Simplified: just use particle positions as proxy
-    for (const finger of Object.values(particle)) {
-        expectedX += finger.x * 0.01;
-        expectedY += finger.y * 0.01;
-        expectedZ += finger.z * 0.01;
+    // Default magnet configuration if not provided
+    // Assumes small cylindrical magnets (e.g., 3mm x 2mm N52 neodymium)
+    // Magnetic moment ≈ 0.01 A·m² for small magnets
+    if (!magnetConfig) {
+        magnetConfig = {
+            thumb: {moment: {x: 0, y: 0, z: 0.01}},   // Z-axis oriented
+            index: {moment: {x: 0, y: 0, z: 0.01}},
+            middle: {moment: {x: 0, y: 0, z: 0.01}},
+            ring: {moment: {x: 0, y: 0, z: 0.01}},
+            pinky: {moment: {x: 0, y: 0, z: 0.01}}
+        };
     }
 
+    // Sensor position (reference frame origin)
+    const sensorPos = {x: 0, y: 0, z: 0};
+
+    // Calculate expected field as sum of all dipole contributions
+    let expectedX = 0, expectedY = 0, expectedZ = 0;
+
+    for (const finger of ['thumb', 'index', 'middle', 'ring', 'pinky']) {
+        if (particle[finger] && magnetConfig[finger]) {
+            // Compute dipole field from this finger's magnet
+            const magnetPos = particle[finger];
+            const magnetMoment = magnetConfig[finger].moment;
+
+            // Position vector from magnet to sensor (in mm, converted to m)
+            const rx = (sensorPos.x - magnetPos.x) * 0.001; // mm to m
+            const ry = (sensorPos.y - magnetPos.y) * 0.001;
+            const rz = (sensorPos.z - magnetPos.z) * 0.001;
+
+            // Distance
+            const r = Math.sqrt(rx * rx + ry * ry + rz * rz);
+
+            // Avoid singularity at r=0
+            if (r >= 0.001) { // 1mm threshold
+                // Unit vector r̂
+                const rx_hat = rx / r;
+                const ry_hat = ry / r;
+                const rz_hat = rz / r;
+
+                // Dot product m·r̂
+                const m_dot_r = magnetMoment.x * rx_hat + magnetMoment.y * ry_hat + magnetMoment.z * rz_hat;
+
+                // Dipole field: B = (μ₀/4π) * (3(m·r̂)r̂ - m) / r³
+                // Using simplified constant k = 1.0 (units absorbed into calibration)
+                const k = 1.0;
+                const r3 = r * r * r;
+
+                expectedX += k * (3 * m_dot_r * rx_hat - magnetMoment.x) / r3;
+                expectedY += k * (3 * m_dot_r * ry_hat - magnetMoment.y) / r3;
+                expectedZ += k * (3 * m_dot_r * rz_hat - magnetMoment.z) / r3;
+            }
+        }
+    }
+
+    // Compute residual (measurement - expected)
     const dx = measurement.x - expectedX;
     const dy = measurement.y - expectedY;
     const dz = measurement.z - expectedZ;
 
-    const distSq = dx * dx + dy * dy + dz * dz;
-    return Math.exp(-distSq / (2 * sigma * sigma));
+    // Euclidean distance
+    const residual = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+    // Gaussian likelihood with standard deviation sigma
+    // Sigma represents measurement noise + model uncertainty
+    const sigma = 10.0; // Tunable parameter (adjust based on calibration data)
+
+    // Likelihood: exp(-residual² / (2σ²))
+    const likelihood = Math.exp(-(residual * residual) / (2 * sigma * sigma));
+
+    return likelihood;
 }
 
 // Export for use

@@ -10,6 +10,8 @@
         <script src="puck.js"></script>
         <script src="gambit-client.js"></script>
         <script src="kalman.js"></script>
+        <script src="calibration.js"></script>
+        <script src="filters.js"></script>
         <style>
 
             body, html {
@@ -267,6 +269,22 @@
             let uploadTimeout;
             let sessionData = []
 
+            // ===== Calibration and 3D Filtering =====
+            // Initialize calibration (loads previous calibration if available)
+            const calibration = new EnvironmentalCalibration();
+            try {
+                calibration.load('gambit_calibration');
+                console.log('Loaded calibration from localStorage');
+            } catch (e) {
+                console.log('No previous calibration found');
+            }
+
+            // Initialize 3D Kalman filter for proper magnetometer filtering
+            const magFilter3D = new KalmanFilter3D({
+                processNoise: 0.1,
+                measurementNoise: 1.0
+            });
+
             function onLine(data) {
 
                 if (data.startsWith("GAMBIT")) {
@@ -334,7 +352,43 @@
             }
 
             function updateData(prenorm) {
-                sessionData.push(prenorm)
+                // IMPORTANT: Preserve raw data, only DECORATE with processed fields
+                const decoratedData = {...prenorm};
+
+                // Apply calibration if available (adds calibrated_ fields)
+                if (calibration.hasCalibration('earth_field') &&
+                    calibration.hasCalibration('hard_iron') &&
+                    calibration.hasCalibration('soft_iron')) {
+                    try {
+                        const corrected = calibration.correct({
+                            x: prenorm.mx,
+                            y: prenorm.my,
+                            z: prenorm.mz
+                        });
+                        decoratedData.calibrated_mx = corrected.x;
+                        decoratedData.calibrated_my = corrected.y;
+                        decoratedData.calibrated_mz = corrected.z;
+                    } catch (e) {
+                        // Calibration failed, skip
+                    }
+                }
+
+                // Apply 3D Kalman filtering (adds filtered_ fields)
+                try {
+                    const filteredMag = magFilter3D.update({
+                        x: decoratedData.calibrated_mx || prenorm.mx,
+                        y: decoratedData.calibrated_my || prenorm.my,
+                        z: decoratedData.calibrated_mz || prenorm.mz
+                    });
+                    decoratedData.filtered_mx = filteredMag.x;
+                    decoratedData.filtered_my = filteredMag.y;
+                    decoratedData.filtered_mz = filteredMag.z;
+                } catch (e) {
+                    // Filtering failed, skip
+                }
+
+                // Store decorated data (raw + calibrated + filtered fields)
+                sessionData.push(decoratedData)
                 // console.log("Data (prenorm): ", prenorm)
                 var t = normalise(prenorm)
                 // console.log("Data (postnorm)", t)
