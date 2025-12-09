@@ -558,6 +558,25 @@
             <button id="clearBtn" class="btn-secondary" disabled>Clear Session</button>
             <button id="exportBtn" class="btn-primary" disabled>Export Data</button>
         </div>
+        <div class="row">
+            <button id="uploadBtn" class="btn-success" disabled>Upload to GitHub</button>
+        </div>
+    </section>
+
+    <!-- GitHub Sync -->
+    <section>
+        <h2 class="collapsible collapsed">GitHub Sync</h2>
+        <div class="collapse-content hidden">
+            <div class="row">
+                <div style="flex: 2">
+                    <label>GitHub Token (PAT with repo scope)</label>
+                    <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxx" />
+                </div>
+            </div>
+            <div style="font-size: 11px; color: #888; margin-top: 5px;">
+                Token is stored locally. Data uploads to: data/GAMBIT/labeled/
+            </div>
+        </div>
     </section>
 
     <!-- Labels Created -->
@@ -639,6 +658,9 @@
         // Custom labels defined for this session
         customLabelDefinitions: []
     };
+
+    // GitHub token (will be loaded from localStorage)
+    let ghToken = null;
 
     // Preset label sets
     const PRESETS = {
@@ -837,6 +859,12 @@
         stopBtn.disabled = !state.recording;
         clearBtn.disabled = state.sessionData.length === 0 || state.recording;
         exportBtn.disabled = state.sessionData.length === 0 || state.recording;
+
+        // Upload button (check if ghToken is available)
+        const uploadBtnEl = $('uploadBtn');
+        if (uploadBtnEl) {
+            uploadBtnEl.disabled = state.sessionData.length === 0 || state.recording || !ghToken;
+        }
 
         // Sample count
         sampleCount.textContent = state.sessionData.length;
@@ -1199,6 +1227,158 @@
             metaLink.click();
             log(`Exported: ${timestamp}`);
         }, 100);
+    });
+
+    // ===== GitHub Upload =====
+    // Load saved token
+    try {
+        const savedToken = localStorage.getItem('gambit_gh_token');
+        if (savedToken) {
+            ghToken = savedToken;
+            $('ghToken').value = savedToken;
+        }
+    } catch (e) {
+        console.error('Failed to load GitHub token:', e);
+    }
+
+    // Save token on change
+    $('ghToken').addEventListener('change', (e) => {
+        ghToken = e.target.value;
+        if (ghToken) {
+            localStorage.setItem('gambit_gh_token', ghToken);
+            log('GitHub token saved');
+        } else {
+            localStorage.removeItem('gambit_gh_token');
+        }
+        updateUI();
+    });
+
+    // Base64 encode for GitHub API
+    function b64EncodeUnicode(str) {
+        return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1) {
+            return String.fromCharCode('0x' + p1);
+        }));
+    }
+
+    // GitHub API endpoint
+    function getGHEndpoint(path) {
+        return `https://api.github.com/repos/christopherdebeer/simcap/contents/${path}`;
+    }
+
+    // Upload file to GitHub
+    async function ghPutFile(path, content, message) {
+        if (!ghToken) {
+            throw new Error('GitHub token not set');
+        }
+
+        const endpoint = getGHEndpoint(path);
+
+        // Check if file exists (to get SHA for update)
+        let sha = null;
+        try {
+            const getResp = await fetch(endpoint, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `token ${ghToken}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            if (getResp.ok) {
+                const existing = await getResp.json();
+                sha = existing.sha;
+            }
+        } catch (e) {
+            // File doesn't exist, that's fine
+        }
+
+        // Create/update file
+        const body = {
+            message: message,
+            content: b64EncodeUnicode(content)
+        };
+        if (sha) {
+            body.sha = sha;
+        }
+
+        const putResp = await fetch(endpoint, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `token ${ghToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(body)
+        });
+
+        if (!putResp.ok) {
+            const error = await putResp.json();
+            throw new Error(error.message || 'Upload failed');
+        }
+
+        return await putResp.json();
+    }
+
+    // Upload button handler
+    const uploadBtn = $('uploadBtn');
+
+    uploadBtn.addEventListener('click', async () => {
+        if (!ghToken) {
+            log('Error: GitHub token not set');
+            return;
+        }
+
+        if (state.sessionData.length === 0) {
+            log('Error: No data to upload');
+            return;
+        }
+
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = 'Uploading...';
+
+        try {
+            const timestamp = new Date().toISOString();
+            const basePath = `data/GAMBIT/labeled/${timestamp}`;
+
+            // Upload data file
+            log('Uploading data file...');
+            await ghPutFile(
+                `${basePath}.json`,
+                JSON.stringify(state.sessionData),
+                `GAMBIT labeled data: ${timestamp}`
+            );
+
+            // Upload metadata file
+            log('Uploading metadata...');
+            const metadata = {
+                timestamp: timestamp,
+                subject_id: $('subjectId').value,
+                environment: $('environment').value,
+                hand: $('hand').value,
+                split: $('split').value,
+                device_id: 'puck_default',
+                labels: [],
+                labels_v2: state.labels,
+                session_notes: $('sessionNotes').value,
+                sample_rate_hz: 50,
+                magnet_config: getMagnetConfig(),
+                custom_label_definitions: state.customLabelDefinitions
+            };
+
+            await ghPutFile(
+                `${basePath}.meta.json`,
+                JSON.stringify(metadata, null, 2),
+                `GAMBIT labeled metadata: ${timestamp}`
+            );
+
+            log(`Uploaded to GitHub: ${timestamp}`);
+
+        } catch (e) {
+            console.error('Upload failed:', e);
+            log(`Upload failed: ${e.message}`);
+        } finally {
+            uploadBtn.disabled = false;
+            uploadBtn.textContent = 'Upload to GitHub';
+            updateUI();
+        }
     });
 
     // ===== Collapsible Sections =====

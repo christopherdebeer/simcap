@@ -512,17 +512,123 @@ Supported label columns:
 | Custom labels | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Calibration markers | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Magnet config tracking | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| GitHub upload (labeled) | ❌ | ❌ | ⚠️ | ⚠️ | ⚠️ | ⚠️ |
-| Environmental calibration | ❌ | ❌ | ⚠️ | ✅ needed | ✅ needed | ✅ needed |
-| Extended filtering | ❌ | ❌ | ❌ | ⚠️ | ✅ needed | ✅ needed |
-| Hand visualization | ❌ | ❌ | ❌ | ⚠️ | ⚠️ | ✅ needed |
+| GitHub upload (labeled) | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Environmental calibration | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Extended filtering | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Hand visualization | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
-### Remaining Priorities
+### Priority 2: GitHub Upload for Collector ✅ COMPLETE
 
-1. **GitHub Upload for Collector** - Add cloud sync for labeled data
-2. **Environmental Calibration** - Hard/soft iron correction, Earth field compensation
-3. **Extended Filtering** - Multi-dimensional Kalman, particle filter
-4. **Hand Visualization** - 2D/3D hand model for real-time feedback
+**Implemented:** 2024-12-09
+
+#### Changes to `src/web/GAMBIT/collector.html`
+
+- Added GitHub token input with localStorage persistence
+- Added "Upload to GitHub" button
+- Implemented `ghPutFile()` function for GitHub API interaction
+- Uploads both data (`.json`) and metadata (`.meta.json`) to `data/GAMBIT/labeled/`
+- Handles file creation and updates (checks for existing SHA)
+
+### Priority 3: Environmental Calibration ✅ COMPLETE
+
+**Implemented:** 2024-12-09
+
+#### New File: `src/web/GAMBIT/calibration.js`
+
+Classes implemented:
+- **`Matrix3`**: 3x3 matrix operations (multiply, transpose, invert)
+- **`Quaternion`**: Orientation representation with Euler conversion and rotation matrices
+- **`EnvironmentalCalibration`**: Main calibration class
+
+EnvironmentalCalibration features:
+- `runHardIronCalibration(samples)`: Computes constant offset from ellipsoid center
+- `runSoftIronCalibration(samples)`: Computes distortion correction matrix
+- `runEarthFieldCalibration(samples)`: Captures Earth field reference
+- `correct(raw, orientation)`: Applies full correction pipeline
+- Quality metrics: sphericity, coverage, confidence
+- Save/load to localStorage and JSON
+
+### Priority 4: Extended Filtering ✅ COMPLETE
+
+**Implemented:** 2024-12-09
+
+#### New File: `src/web/GAMBIT/filters.js`
+
+Classes implemented:
+- **`KalmanFilter3D`**: Multi-dimensional Kalman filter
+  - 6-state tracking: [x, y, z, vx, vy, vz]
+  - Configurable process/measurement noise
+  - Predict and update steps with proper matrix operations
+
+- **`MultiFingerKalmanFilter`**: 5-finger tracking
+  - Independent KalmanFilter3D per finger
+  - `updateFinger()`, `predictAll()`, `getAllPositions()`
+
+- **`ParticleFilter`**: Multi-hypothesis tracking
+  - Configurable particle count (default 500)
+  - Systematic resampling
+  - Effective sample size monitoring
+  - `predict()`, `update()`, `estimate()` methods
+
+- **`magneticLikelihood()`**: Measurement likelihood function (placeholder for dipole model)
+
+### Priority 5: Hand Visualization ✅ COMPLETE
+
+**Implemented:** 2024-12-09
+
+#### New File: `src/web/GAMBIT/hand-model.js`
+
+Classes implemented:
+- **`HandVisualizer2D`**: Canvas-based 2D hand rendering
+  - Palm-down view with realistic finger geometry
+  - Animated finger flexion states (extended/partial/flexed)
+  - Color-coded fingers with state labels
+  - `setFingerStates()`, `setFromBinaryString()`, `render()`
+
+- **`HandVisualizer3D`**: CSS 3D transform-based visualization
+  - 3D palm and finger segments
+  - Rotation controls (auto-rotate option)
+  - Per-segment flexion animation
+
+- **`FingerStateDisplay`**: Text-based compact display
+  - Progress bars for each finger
+  - Color-coded state indicators
+
+### Final Capability Matrix
+
+| Capability | Before | After | Phase 1 | Phase 2 | Phase 3 | Phase 4 |
+|------------|--------|-------|---------|---------|---------|---------|
+| Basic data collection | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Fixed gesture labels | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ |
+| Multi-label support | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Per-finger states | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Custom labels | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Calibration markers | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Magnet config tracking | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| GitHub upload (labeled) | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Environmental calibration | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Extended filtering | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Hand visualization | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+### Files Modified/Created
+
+**Modified:**
+- `ml/schema.py` - Multi-label schema with V2 format
+- `ml/data_loader.py` - Multi-label data loading
+- `src/web/GAMBIT/collector.html` - Multi-label UI + GitHub upload
+
+**Created:**
+- `src/web/GAMBIT/calibration.js` - Environmental calibration utilities
+- `src/web/GAMBIT/filters.js` - Extended Kalman and particle filters
+- `src/web/GAMBIT/hand-model.js` - Hand visualization components
+
+### Next Steps
+
+All priorities complete. System is now ready for:
+1. **Phase 1 testing** - Single finger magnetic tracking proof-of-concept
+2. **Data collection** - Use collector UI with multi-label and calibration support
+3. **Integration** - Connect calibration → filtering → visualization pipeline
+4. **Model training** - Use extended data loader for multi-label ML
 
 ---
 
