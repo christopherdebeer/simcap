@@ -208,7 +208,7 @@ function getData() {
 Tapping a phone to the device triggers the WebBLE pairing flow:
 
 ```javascript
-NRF.nfcURL("webble://christopherdebeer.github.io/simcap/src/web/GAMBIT/");
+NRF.nfcURL("webble://simcap.parc.land/src/web/GAMBIT/");
 ```
 
 ### 4. LED Feedback

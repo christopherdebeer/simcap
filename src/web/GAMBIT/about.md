@@ -195,7 +195,7 @@ window.cubeM.style = `transform: rotateX(${360 * t.mx}deg) rotateY(${360 * t.my}
 
 ### Manual Setup
 
-1. Open [hosted Web UI](https://christopherdebeer.github.io/simcap/src/web/GAMBIT/)
+1. Open [hosted Web UI](https://simcap.parc.land/src/web/GAMBIT/)
 2. Click "Connect"
 3. Select your Puck.js device from the browser picker
 4. Click "Get data" to start capture

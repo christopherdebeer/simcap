@@ -185,7 +185,7 @@ function onButtonRelease() {
 }
 
 // NFC tap to toggle enabled state
-NRF.nfcURL("https://christopherdebeer.github.io/simcap/src/web/loader/");
+NRF.nfcURL("webble://simcap.parc.land/src/web/loader/");
 NRF.on('NFCon', function() {
     state.enabled = !state.enabled;
     if (state.enabled) {

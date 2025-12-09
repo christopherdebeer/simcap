@@ -256,7 +256,7 @@ function stopData() {
 
 
 //NFC Detection
-NRF.nfcURL("https://simcap.parc.land");
+NRF.nfcURL("webble://simcap.parc.land/src/web/GAMBIT/");
 NRF.on('NFCon', function() {
     logInfo('NFC field detected');
     digitalPulse(LED2, 1, 500);//flash on green light
