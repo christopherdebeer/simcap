@@ -545,7 +545,7 @@ class SessionMetadata:
             timestamp=d['timestamp'],
             subject_id=d.get('subject_id', 'unknown'),
             environment=d.get('environment', 'unknown'),
-            hand=d.get('hand', 'right'),
+            hand=d.get('hand', 'unknown'),
             split=d.get('split', 'train'),
             device_id=d.get('device_id', 'puck_default'),
             labels=labels,
