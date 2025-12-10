@@ -328,7 +328,7 @@ class SessionVisualizer:
         ax2.legend(loc='upper right')
         ax2.grid(True, alpha=0.3)
 
-        # 3. Magnetometer 3-axis time series with calibration stages
+        # 3. Magnetometer 3-axis time series with ALL calibration stages
         ax3 = fig.add_subplot(gs[2, :])
 
         # Determine calibration status for title
@@ -336,9 +336,12 @@ class SessionVisualizer:
         has_fused = sensors.get('_has_fused', False)
         has_filtered = sensors.get('_has_filtered', False)
 
-        if has_fused:
-            calib_status = 'Full (Iron + Earth Field)'
+        if has_filtered:
+            calib_status = 'Full (Iron + Earth + Filtered)'
             status_color = '#4daf4a'  # Green
+        elif has_fused:
+            calib_status = 'Fused (Iron + Earth Field)'
+            status_color = '#377eb8'  # Blue
         elif has_calibrated:
             calib_status = 'Partial (Iron Only)'
             status_color = '#ff7f00'  # Orange
@@ -346,50 +349,56 @@ class SessionVisualizer:
             calib_status = 'None (Raw)'
             status_color = '#e41a1c'  # Red
 
-        # Plot raw magnetometer (gray, dashed for comparison)
-        ax3.plot(sensors['time'], sensors['mx'], 'gray', alpha=0.4, linewidth=1, linestyle='--', label='Raw X')
-        ax3.plot(sensors['time'], sensors['my'], 'gray', alpha=0.4, linewidth=1, linestyle='--', label='Raw Y')
-        ax3.plot(sensors['time'], sensors['mz'], 'gray', alpha=0.4, linewidth=1, linestyle='--', label='Raw Z')
+        # Plot ALL calibration stages with distinct colors per documentation:
+        # Raw (gray, dashed), Calibrated (blue), Fused (green), Filtered (red, bold)
 
-        # Plot best available calibration stage
+        # Stage 1: Raw magnetometer (gray, dashed for reference)
+        ax3.plot(sensors['time'], sensors['mx'], color='gray', alpha=0.4, linewidth=1, linestyle='--', label='Raw X')
+        ax3.plot(sensors['time'], sensors['my'], color='gray', alpha=0.4, linewidth=1, linestyle='-.', label='Raw Y')
+        ax3.plot(sensors['time'], sensors['mz'], color='gray', alpha=0.4, linewidth=1, linestyle=':', label='Raw Z')
+
+        # Stage 2: Iron corrected (blue tones) - if available
+        if has_calibrated:
+            ax3.plot(sensors['time'], sensors['calibrated_mx'], color='#1f77b4', alpha=0.6, linewidth=1, label='Iron X')
+            ax3.plot(sensors['time'], sensors['calibrated_my'], color='#17becf', alpha=0.6, linewidth=1, label='Iron Y')
+            ax3.plot(sensors['time'], sensors['calibrated_mz'], color='#9467bd', alpha=0.6, linewidth=1, label='Iron Z')
+
+        # Stage 3: Fused / Earth field subtracted (green tones) - if available
         if has_fused:
-            # Fused (Earth field subtracted) - primary display
-            ax3.plot(sensors['time'], sensors['fused_mx'], 'r-', alpha=0.8, linewidth=1.2, label='Fused X')
-            ax3.plot(sensors['time'], sensors['fused_my'], 'g-', alpha=0.8, linewidth=1.2, label='Fused Y')
-            ax3.plot(sensors['time'], sensors['fused_mz'], 'b-', alpha=0.8, linewidth=1.2, label='Fused Z')
-        elif has_calibrated:
-            # Calibrated (iron corrected) - fallback
-            ax3.plot(sensors['time'], sensors['calibrated_mx'], 'r-', alpha=0.8, linewidth=1.2, label='Calibrated X')
-            ax3.plot(sensors['time'], sensors['calibrated_my'], 'g-', alpha=0.8, linewidth=1.2, label='Calibrated Y')
-            ax3.plot(sensors['time'], sensors['calibrated_mz'], 'b-', alpha=0.8, linewidth=1.2, label='Calibrated Z')
-        else:
-            # Raw only - replot with color
-            ax3.plot(sensors['time'], sensors['mx'], 'r-', alpha=0.8, linewidth=1.2, label='X')
-            ax3.plot(sensors['time'], sensors['my'], 'g-', alpha=0.8, linewidth=1.2, label='Y')
-            ax3.plot(sensors['time'], sensors['mz'], 'b-', alpha=0.8, linewidth=1.2, label='Z')
+            ax3.plot(sensors['time'], sensors['fused_mx'], color='#2ca02c', alpha=0.7, linewidth=1.2, label='Fused X')
+            ax3.plot(sensors['time'], sensors['fused_my'], color='#98df8a', alpha=0.7, linewidth=1.2, label='Fused Y')
+            ax3.plot(sensors['time'], sensors['fused_mz'], color='#006400', alpha=0.7, linewidth=1.2, label='Fused Z')
+
+        # Stage 4: Filtered / Kalman smoothed (red tones, bold) - if available
+        if has_filtered:
+            ax3.plot(sensors['time'], sensors['filtered_mx'], color='#d62728', alpha=0.9, linewidth=1.8, label='Filtered X')
+            ax3.plot(sensors['time'], sensors['filtered_my'], color='#ff9896', alpha=0.9, linewidth=1.8, label='Filtered Y')
+            ax3.plot(sensors['time'], sensors['filtered_mz'], color='#8b0000', alpha=0.9, linewidth=1.8, label='Filtered Z')
 
         ax3.set_title(f'Magnetometer (3-axis) | Calibration: {calib_status}', fontweight='bold', color=status_color)
         ax3.set_xlabel('Time (s)')
-        ax3.set_ylabel('Value (uT)')
-        ax3.legend(loc='upper right', fontsize=8, ncol=2)
+        ax3.set_ylabel('Value (μT)')
+        ax3.legend(loc='upper right', fontsize=7, ncol=4)
         ax3.grid(True, alpha=0.3)
 
-        # 4. Magnitudes comparison (with calibration stages)
+        # 4. Magnitudes comparison (with ALL calibration stages)
         ax4 = fig.add_subplot(gs[3, 0])
         ax4.plot(sensors['time'], sensors['accel_mag'], label='Accel', alpha=0.8)
         ax4.plot(sensors['time'], sensors['gyro_mag'], label='Gyro', alpha=0.8)
 
-        # Plot magnetometer magnitudes based on calibration state
-        ax4.plot(sensors['time'], sensors['mag_mag'], 'gray', alpha=0.4, linestyle='--', label='Mag (Raw)')
+        # Plot ALL magnetometer magnitude stages
+        ax4.plot(sensors['time'], sensors['mag_mag'], color='gray', alpha=0.4, linestyle='--', label='Mag (Raw)')
+        if has_calibrated and 'calibrated_mag' in sensors:
+            ax4.plot(sensors['time'], sensors['calibrated_mag'], color='#1f77b4', alpha=0.6, linewidth=1, label='Mag (Iron)')
         if has_fused and 'fused_mag' in sensors:
-            ax4.plot(sensors['time'], sensors['fused_mag'], 'g-', alpha=0.8, linewidth=1.5, label='Mag (Fused)')
-        elif has_calibrated and 'calibrated_mag' in sensors:
-            ax4.plot(sensors['time'], sensors['calibrated_mag'], 'orange', alpha=0.8, linewidth=1.5, label='Mag (Calibrated)')
+            ax4.plot(sensors['time'], sensors['fused_mag'], color='#2ca02c', alpha=0.7, linewidth=1.2, label='Mag (Fused)')
+        if has_filtered and 'filtered_mag' in sensors:
+            ax4.plot(sensors['time'], sensors['filtered_mag'], color='#d62728', alpha=0.9, linewidth=1.5, label='Mag (Filtered)')
 
         ax4.set_title('Magnitude Comparison', fontweight='bold')
         ax4.set_xlabel('Time (s)')
         ax4.set_ylabel('Magnitude')
-        ax4.legend(fontsize=8)
+        ax4.legend(fontsize=7, ncol=2)
         ax4.grid(True, alpha=0.3)
 
         # 5. Auxiliary sensors OR Orientation (if available)
@@ -709,36 +718,48 @@ Magnetometer:
         axes[1, 2].set_title('Gyroscope Z', fontweight='bold')
         axes[1, 2].grid(True, alpha=0.3)
 
-        # Magnetometer (with calibration overlay)
-        axes[2, 0].plot(sensors['time'], sensors['mx'], 'gray', alpha=0.5, linewidth=1, label='Raw')
+        # Magnetometer (with ALL calibration stages overlay)
+        # Colors: Raw=gray dashed, Iron=blue, Fused=green, Filtered=red bold
+        has_filtered = sensors.get('_has_filtered', False)
+
+        # Mag X
+        axes[2, 0].plot(sensors['time'], sensors['mx'], color='gray', alpha=0.4, linewidth=1, linestyle='--', label='Raw')
+        if has_calibrated:
+            axes[2, 0].plot(sensors['time'], sensors['calibrated_mx'], color='#1f77b4', alpha=0.6, linewidth=1, label='Iron')
         if has_fused:
-            axes[2, 0].plot(sensors['time'], sensors['fused_mx'], 'r-', linewidth=1, label='Fused')
-        elif has_calibrated:
-            axes[2, 0].plot(sensors['time'], sensors['calibrated_mx'], 'r-', linewidth=1, label='Calibrated')
+            axes[2, 0].plot(sensors['time'], sensors['fused_mx'], color='#2ca02c', alpha=0.7, linewidth=1.2, label='Fused')
+        if has_filtered:
+            axes[2, 0].plot(sensors['time'], sensors['filtered_mx'], color='#d62728', alpha=0.9, linewidth=1.5, label='Filtered')
         axes[2, 0].set_title('Magnetometer X', fontweight='bold')
         axes[2, 0].set_xlabel('Time (s)')
-        axes[2, 0].set_ylabel('Value (uT)')
-        axes[2, 0].legend(fontsize=7)
+        axes[2, 0].set_ylabel('Value (μT)')
+        axes[2, 0].legend(fontsize=6)
         axes[2, 0].grid(True, alpha=0.3)
 
-        axes[2, 1].plot(sensors['time'], sensors['my'], 'gray', alpha=0.5, linewidth=1, label='Raw')
+        # Mag Y
+        axes[2, 1].plot(sensors['time'], sensors['my'], color='gray', alpha=0.4, linewidth=1, linestyle='--', label='Raw')
+        if has_calibrated:
+            axes[2, 1].plot(sensors['time'], sensors['calibrated_my'], color='#1f77b4', alpha=0.6, linewidth=1, label='Iron')
         if has_fused:
-            axes[2, 1].plot(sensors['time'], sensors['fused_my'], 'g-', linewidth=1, label='Fused')
-        elif has_calibrated:
-            axes[2, 1].plot(sensors['time'], sensors['calibrated_my'], 'g-', linewidth=1, label='Calibrated')
+            axes[2, 1].plot(sensors['time'], sensors['fused_my'], color='#2ca02c', alpha=0.7, linewidth=1.2, label='Fused')
+        if has_filtered:
+            axes[2, 1].plot(sensors['time'], sensors['filtered_my'], color='#d62728', alpha=0.9, linewidth=1.5, label='Filtered')
         axes[2, 1].set_title('Magnetometer Y', fontweight='bold')
         axes[2, 1].set_xlabel('Time (s)')
-        axes[2, 1].legend(fontsize=7)
+        axes[2, 1].legend(fontsize=6)
         axes[2, 1].grid(True, alpha=0.3)
 
-        axes[2, 2].plot(sensors['time'], sensors['mz'], 'gray', alpha=0.5, linewidth=1, label='Raw')
+        # Mag Z
+        axes[2, 2].plot(sensors['time'], sensors['mz'], color='gray', alpha=0.4, linewidth=1, linestyle='--', label='Raw')
+        if has_calibrated:
+            axes[2, 2].plot(sensors['time'], sensors['calibrated_mz'], color='#1f77b4', alpha=0.6, linewidth=1, label='Iron')
         if has_fused:
-            axes[2, 2].plot(sensors['time'], sensors['fused_mz'], 'b-', linewidth=1, label='Fused')
-        elif has_calibrated:
-            axes[2, 2].plot(sensors['time'], sensors['calibrated_mz'], 'b-', linewidth=1, label='Calibrated')
+            axes[2, 2].plot(sensors['time'], sensors['fused_mz'], color='#2ca02c', alpha=0.7, linewidth=1.2, label='Fused')
+        if has_filtered:
+            axes[2, 2].plot(sensors['time'], sensors['filtered_mz'], color='#d62728', alpha=0.9, linewidth=1.5, label='Filtered')
         axes[2, 2].set_title('Magnetometer Z', fontweight='bold')
         axes[2, 2].set_xlabel('Time (s)')
-        axes[2, 2].legend(fontsize=7)
+        axes[2, 2].legend(fontsize=6)
         axes[2, 2].grid(True, alpha=0.3)
 
         plt.tight_layout()
@@ -814,19 +835,23 @@ Magnetometer:
             plt.colorbar(scatter, ax=ax2, label='Time (s)')
             ax2.grid(True, alpha=0.3)
 
-            # Magnetometer raw vs fused comparison (if fused available)
+            # Magnetometer ALL stages magnitude comparison
             ax3 = fig.add_subplot(gs[1, 1])
-            if has_fused:
-                ax3.plot(sensors['time'], sensors['mag_mag'], 'gray', alpha=0.6, linewidth=1, label='Raw Magnitude')
-                ax3.plot(sensors['time'], sensors['fused_mag'], 'g-', linewidth=1.2, label='Fused Magnitude')
-                ax3.set_title('Magnetometer: Raw vs Fused', fontweight='bold')
-                ax3.set_ylabel('Magnitude (uT)')
-                ax3.legend(loc='upper right')
-            else:
-                ax3.plot(sensors['time'], sensors['mag_mag'], 'b-', linewidth=1)
-                ax3.set_title('Magnetometer Magnitude', fontweight='bold')
-                ax3.set_ylabel('Magnitude (uT)')
+            has_filtered = sensors.get('_has_filtered', False)
+
+            # Plot all available magnitude stages
+            ax3.plot(sensors['time'], sensors['mag_mag'], color='gray', alpha=0.4, linewidth=1, linestyle='--', label='Raw')
+            if has_calibrated and 'calibrated_mag' in sensors:
+                ax3.plot(sensors['time'], sensors['calibrated_mag'], color='#1f77b4', alpha=0.6, linewidth=1, label='Iron')
+            if has_fused and 'fused_mag' in sensors:
+                ax3.plot(sensors['time'], sensors['fused_mag'], color='#2ca02c', alpha=0.7, linewidth=1.2, label='Fused')
+            if has_filtered and 'filtered_mag' in sensors:
+                ax3.plot(sensors['time'], sensors['filtered_mag'], color='#d62728', alpha=0.9, linewidth=1.5, label='Filtered')
+
+            ax3.set_title('Magnetometer: All Calibration Stages', fontweight='bold')
+            ax3.set_ylabel('Magnitude (μT)')
             ax3.set_xlabel('Time (s)')
+            ax3.legend(loc='upper right', fontsize=8)
             ax3.grid(True, alpha=0.3)
 
             fig.suptitle(f'Orientation Analysis: {session["filename"]}', fontsize=14, fontweight='bold')
@@ -839,6 +864,184 @@ Magnetometer:
 
         print(f"  Created raw axis images: {len(output_files)} files")
         return output_files
+
+    def create_calibration_stages_image(self, session: Dict, processor: SensorDataProcessor) -> Optional[Path]:
+        """Create a dedicated multi-stage magnetometer calibration comparison visualization.
+
+        Shows all 4 calibration stages (Raw, Iron Corrected, Fused, Filtered)
+        in a clear comparison format per the documentation requirements.
+        """
+        data = session['data']
+        sensors = processor.extract_sensor_arrays(data)
+
+        has_calibrated = sensors.get('_has_calibrated', False)
+        has_fused = sensors.get('_has_fused', False)
+        has_filtered = sensors.get('_has_filtered', False)
+
+        # Only create this visualization if we have at least some calibration data
+        if not (has_calibrated or has_fused or has_filtered):
+            return None
+
+        # Create figure with 4 rows (one per axis + magnitude) and stages as overlaid traces
+        fig = plt.figure(figsize=(20, 16))
+        gs = GridSpec(4, 2, figure=fig, hspace=0.35, wspace=0.25, width_ratios=[3, 1])
+
+        # Title with calibration status summary
+        stages_available = []
+        if has_calibrated:
+            stages_available.append('Iron')
+        if has_fused:
+            stages_available.append('Fused')
+        if has_filtered:
+            stages_available.append('Filtered')
+
+        fig.suptitle(f'Magnetometer Calibration Stages: {session["filename"]}\n'
+                     f'Available: Raw + {", ".join(stages_available)}',
+                     fontsize=16, fontweight='bold')
+
+        # Color scheme per documentation:
+        # Raw (gray, dashed), Iron Corrected (blue), Fused (green), Filtered (red, bold)
+        colors = {
+            'raw': {'color': 'gray', 'alpha': 0.5, 'linewidth': 1, 'linestyle': '--', 'label': 'Raw'},
+            'iron': {'color': '#1f77b4', 'alpha': 0.7, 'linewidth': 1.2, 'linestyle': '-', 'label': 'Iron Corrected'},
+            'fused': {'color': '#2ca02c', 'alpha': 0.8, 'linewidth': 1.5, 'linestyle': '-', 'label': 'Fused (Earth Sub)'},
+            'filtered': {'color': '#d62728', 'alpha': 0.95, 'linewidth': 2, 'linestyle': '-', 'label': 'Filtered (Kalman)'}
+        }
+
+        # Row 1: X-axis comparison
+        ax1 = fig.add_subplot(gs[0, 0])
+        ax1.plot(sensors['time'], sensors['mx'], **{k: v for k, v in colors['raw'].items() if k != 'label'}, label=colors['raw']['label'])
+        if has_calibrated:
+            ax1.plot(sensors['time'], sensors['calibrated_mx'], **{k: v for k, v in colors['iron'].items() if k != 'label'}, label=colors['iron']['label'])
+        if has_fused:
+            ax1.plot(sensors['time'], sensors['fused_mx'], **{k: v for k, v in colors['fused'].items() if k != 'label'}, label=colors['fused']['label'])
+        if has_filtered:
+            ax1.plot(sensors['time'], sensors['filtered_mx'], **{k: v for k, v in colors['filtered'].items() if k != 'label'}, label=colors['filtered']['label'])
+        ax1.set_title('Magnetometer X-Axis', fontweight='bold', fontsize=12)
+        ax1.set_ylabel('Value (μT)')
+        ax1.legend(loc='upper right', fontsize=9)
+        ax1.grid(True, alpha=0.3)
+
+        # Row 2: Y-axis comparison
+        ax2 = fig.add_subplot(gs[1, 0])
+        ax2.plot(sensors['time'], sensors['my'], **{k: v for k, v in colors['raw'].items() if k != 'label'}, label=colors['raw']['label'])
+        if has_calibrated:
+            ax2.plot(sensors['time'], sensors['calibrated_my'], **{k: v for k, v in colors['iron'].items() if k != 'label'}, label=colors['iron']['label'])
+        if has_fused:
+            ax2.plot(sensors['time'], sensors['fused_my'], **{k: v for k, v in colors['fused'].items() if k != 'label'}, label=colors['fused']['label'])
+        if has_filtered:
+            ax2.plot(sensors['time'], sensors['filtered_my'], **{k: v for k, v in colors['filtered'].items() if k != 'label'}, label=colors['filtered']['label'])
+        ax2.set_title('Magnetometer Y-Axis', fontweight='bold', fontsize=12)
+        ax2.set_ylabel('Value (μT)')
+        ax2.legend(loc='upper right', fontsize=9)
+        ax2.grid(True, alpha=0.3)
+
+        # Row 3: Z-axis comparison
+        ax3 = fig.add_subplot(gs[2, 0])
+        ax3.plot(sensors['time'], sensors['mz'], **{k: v for k, v in colors['raw'].items() if k != 'label'}, label=colors['raw']['label'])
+        if has_calibrated:
+            ax3.plot(sensors['time'], sensors['calibrated_mz'], **{k: v for k, v in colors['iron'].items() if k != 'label'}, label=colors['iron']['label'])
+        if has_fused:
+            ax3.plot(sensors['time'], sensors['fused_mz'], **{k: v for k, v in colors['fused'].items() if k != 'label'}, label=colors['fused']['label'])
+        if has_filtered:
+            ax3.plot(sensors['time'], sensors['filtered_mz'], **{k: v for k, v in colors['filtered'].items() if k != 'label'}, label=colors['filtered']['label'])
+        ax3.set_title('Magnetometer Z-Axis', fontweight='bold', fontsize=12)
+        ax3.set_ylabel('Value (μT)')
+        ax3.legend(loc='upper right', fontsize=9)
+        ax3.grid(True, alpha=0.3)
+
+        # Row 4: Magnitude comparison
+        ax4 = fig.add_subplot(gs[3, 0])
+        ax4.plot(sensors['time'], sensors['mag_mag'], **{k: v for k, v in colors['raw'].items() if k != 'label'}, label=colors['raw']['label'])
+        if has_calibrated and 'calibrated_mag' in sensors:
+            ax4.plot(sensors['time'], sensors['calibrated_mag'], **{k: v for k, v in colors['iron'].items() if k != 'label'}, label=colors['iron']['label'])
+        if has_fused and 'fused_mag' in sensors:
+            ax4.plot(sensors['time'], sensors['fused_mag'], **{k: v for k, v in colors['fused'].items() if k != 'label'}, label=colors['fused']['label'])
+        if has_filtered and 'filtered_mag' in sensors:
+            ax4.plot(sensors['time'], sensors['filtered_mag'], **{k: v for k, v in colors['filtered'].items() if k != 'label'}, label=colors['filtered']['label'])
+        ax4.set_title('Magnetometer Magnitude', fontweight='bold', fontsize=12)
+        ax4.set_xlabel('Time (s)')
+        ax4.set_ylabel('Magnitude (μT)')
+        ax4.legend(loc='upper right', fontsize=9)
+        ax4.grid(True, alpha=0.3)
+
+        # Right column: Statistics per stage
+        ax_stats = fig.add_subplot(gs[:, 1])
+        ax_stats.axis('off')
+
+        # Compute statistics for each stage
+        def compute_stats(mx, my, mz):
+            mag = np.sqrt(mx**2 + my**2 + mz**2)
+            return {
+                'mean_x': np.mean(mx),
+                'mean_y': np.mean(my),
+                'mean_z': np.mean(mz),
+                'std_x': np.std(mx),
+                'std_y': np.std(my),
+                'std_z': np.std(mz),
+                'mean_mag': np.mean(mag),
+                'std_mag': np.std(mag),
+            }
+
+        raw_stats = compute_stats(sensors['mx'], sensors['my'], sensors['mz'])
+
+        stats_text = f"""
+CALIBRATION STAGE STATISTICS
+{'='*40}
+
+◆ RAW (Original Sensor Data)
+  Mean: [{raw_stats['mean_x']:.1f}, {raw_stats['mean_y']:.1f}, {raw_stats['mean_z']:.1f}] μT
+  Std:  [{raw_stats['std_x']:.1f}, {raw_stats['std_y']:.1f}, {raw_stats['std_z']:.1f}] μT
+  Magnitude: {raw_stats['mean_mag']:.1f} ± {raw_stats['std_mag']:.1f} μT
+"""
+
+        if has_calibrated:
+            iron_stats = compute_stats(sensors['calibrated_mx'], sensors['calibrated_my'], sensors['calibrated_mz'])
+            stats_text += f"""
+◆ IRON CORRECTED (Hard/Soft Iron)
+  Mean: [{iron_stats['mean_x']:.1f}, {iron_stats['mean_y']:.1f}, {iron_stats['mean_z']:.1f}] μT
+  Std:  [{iron_stats['std_x']:.1f}, {iron_stats['std_y']:.1f}, {iron_stats['std_z']:.1f}] μT
+  Magnitude: {iron_stats['mean_mag']:.1f} ± {iron_stats['std_mag']:.1f} μT
+"""
+
+        if has_fused:
+            fused_stats = compute_stats(sensors['fused_mx'], sensors['fused_my'], sensors['fused_mz'])
+            stats_text += f"""
+◆ FUSED (Earth Field Subtracted)
+  Mean: [{fused_stats['mean_x']:.1f}, {fused_stats['mean_y']:.1f}, {fused_stats['mean_z']:.1f}] μT
+  Std:  [{fused_stats['std_x']:.1f}, {fused_stats['std_y']:.1f}, {fused_stats['std_z']:.1f}] μT
+  Magnitude: {fused_stats['mean_mag']:.1f} ± {fused_stats['std_mag']:.1f} μT
+"""
+
+        if has_filtered:
+            filtered_stats = compute_stats(sensors['filtered_mx'], sensors['filtered_my'], sensors['filtered_mz'])
+            stats_text += f"""
+◆ FILTERED (Kalman Smoothed)
+  Mean: [{filtered_stats['mean_x']:.1f}, {filtered_stats['mean_y']:.1f}, {filtered_stats['mean_z']:.1f}] μT
+  Std:  [{filtered_stats['std_x']:.1f}, {filtered_stats['std_y']:.1f}, {filtered_stats['std_z']:.1f}] μT
+  Magnitude: {filtered_stats['mean_mag']:.1f} ± {filtered_stats['std_mag']:.1f} μT
+"""
+
+        stats_text += f"""
+{'='*40}
+COLOR LEGEND:
+  ▬▬▬ Gray (dashed): Raw
+  ▬▬▬ Blue: Iron Corrected
+  ▬▬▬ Green: Fused
+  ▬▬▬ Red (bold): Filtered
+"""
+
+        ax_stats.text(0.05, 0.95, stats_text.strip(), transform=ax_stats.transAxes,
+                     fontsize=10, verticalalignment='top', fontfamily='monospace',
+                     bbox=dict(boxstyle='round,pad=0.5', facecolor='#f8f9fa', alpha=0.9, edgecolor='#dee2e6'))
+
+        # Save
+        output_file = self.output_dir / f"calibration_stages_{session['timestamp']}.png"
+        plt.savefig(output_file, dpi=150, bbox_inches='tight')
+        plt.close(fig)
+
+        print(f"  Created calibration stages image: {output_file.name}")
+        return output_file
 
 
 class HTMLGenerator:
@@ -1252,6 +1455,10 @@ class HTMLGenerator:
                         📊 Composite
                     </label>
                     <label class="checkbox-label">
+                        <input type="checkbox" id="show-calibration" checked>
+                        🧲 Calibration
+                    </label>
+                    <label class="checkbox-label">
                         <input type="checkbox" id="show-windows" checked>
                         🔍 Windows
                     </label>
@@ -1290,6 +1497,7 @@ class HTMLGenerator:
         // View settings
         let viewSettings = {
             showComposite: true,
+            showCalibration: true,
             showWindows: true,
             showRaw: true
         };
@@ -1332,6 +1540,13 @@ class HTMLGenerator:
                             <h3 class="section-title">📊 Composite Session View</h3>
                             <img src="${session.composite_image}" class="composite-image" onclick="openModal(this.src)" alt="Composite view">
                         </div>
+
+                        ${session.calibration_stages_image ? `
+                        <div class="image-section calibration-section ${viewSettings.showCalibration ? '' : 'hidden'}">
+                            <h3 class="section-title">🧲 Magnetometer Calibration Stages (Raw → Iron → Fused → Filtered)</h3>
+                            <img src="${session.calibration_stages_image}" class="composite-image" onclick="openModal(this.src)" alt="Calibration stages comparison">
+                        </div>
+                        ` : ''}
 
                         <div class="image-section windows-section ${viewSettings.showWindows ? '' : 'hidden'}">
                             <h3 class="section-title">🔍 Per-Second Windows (${session.windows.length})</h3>
@@ -1386,12 +1601,16 @@ class HTMLGenerator:
 
         function updateViewSettings() {
             viewSettings.showComposite = document.getElementById('show-composite').checked;
+            viewSettings.showCalibration = document.getElementById('show-calibration').checked;
             viewSettings.showWindows = document.getElementById('show-windows').checked;
             viewSettings.showRaw = document.getElementById('show-raw').checked;
 
             // Update visibility of sections
             document.querySelectorAll('.composite-section').forEach(el => {
                 el.classList.toggle('hidden', !viewSettings.showComposite);
+            });
+            document.querySelectorAll('.calibration-section').forEach(el => {
+                el.classList.toggle('hidden', !viewSettings.showCalibration);
             });
             document.querySelectorAll('.windows-section').forEach(el => {
                 el.classList.toggle('hidden', !viewSettings.showWindows);
@@ -1457,6 +1676,7 @@ class HTMLGenerator:
 
             // View filter checkboxes
             document.getElementById('show-composite').addEventListener('change', updateViewSettings);
+            document.getElementById('show-calibration').addEventListener('change', updateViewSettings);
             document.getElementById('show-windows').addEventListener('change', updateViewSettings);
             document.getElementById('show-raw').addEventListener('change', updateViewSettings);
 
@@ -1543,15 +1763,24 @@ def main():
             # Generate raw axis images
             raw_images = visualizer.create_raw_axis_images(session, processor)
 
+            # Generate calibration stages comparison image (if calibration data available)
+            calibration_stages_path = visualizer.create_calibration_stages_image(session, processor)
+
             # Store session data for HTML generation
-            sessions_data.append({
+            session_entry = {
                 'filename': session['filename'],
                 'timestamp': session['timestamp'],
                 'duration': session['duration'],
                 'composite_image': str(composite_path.relative_to(output_dir)),
                 'windows': windows_info,
                 'raw_images': [str(img.relative_to(output_dir)) for img in raw_images],
-            })
+            }
+
+            # Include calibration stages image if it was created
+            if calibration_stages_path:
+                session_entry['calibration_stages_image'] = str(calibration_stages_path.relative_to(output_dir))
+
+            sessions_data.append(session_entry)
 
         except Exception as e:
             print(f"  ❌ Error processing session: {e}")
