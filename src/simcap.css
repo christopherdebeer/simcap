@@ -155,6 +155,17 @@ a:hover {
 .mb-lg { margin-bottom: var(--space-lg); }
 .mb-xl { margin-bottom: var(--space-xl); }
 
+/* ===== Breadcrumb Navigation ===== */
+.breadcrumb {
+    font-size: 0.75rem;
+    color: var(--fg-muted);
+    margin-bottom: var(--space-lg);
+}
+
+.breadcrumb a:hover {
+    color: var(--fg);
+}
+
 /* ===== Page Header ===== */
 .page-header {
     border-bottom: 1px solid var(--border);
@@ -162,13 +173,7 @@ a:hover {
 }
 
 .page-header .breadcrumb {
-    font-size: 0.75rem;
-    color: var(--fg-muted);
     margin-bottom: var(--space-sm);
-}
-
-.page-header .breadcrumb a:hover {
-    color: var(--fg);
 }
 
 .page-header .title {
