@@ -76,7 +76,7 @@ async function init() {
         wizard: wizard,
         calibrationBuffers: calibrationBuffers,
         poseState: poseState,
-        updatePoseEstimation: null,  // TODO: implement if needed
+        updatePoseEstimation: updatePoseEstimationFromMag,
         updateUI: updateUI,
         $: $
     });
@@ -101,6 +101,12 @@ async function init() {
 
     // Initialize export functionality
     initExport();
+
+    // Initialize wizard functionality
+    initWizard();
+
+    // Initialize pose estimation functionality
+    initPoseEstimation();
 
     // Initialize collapsible sections
     initCollapsibleSections();
@@ -165,6 +171,24 @@ function updateUI() {
     const uploadBtn = $('uploadBtn');
     if (uploadBtn) {
         uploadBtn.disabled = state.sessionData.length === 0 || state.recording || !ghToken;
+    }
+
+    // Wizard button - enable when connected
+    const wizardBtn = $('wizardBtn');
+    if (wizardBtn) {
+        wizardBtn.disabled = !state.connected;
+        wizardBtn.title = state.connected ? 'Start guided data collection' : 'Connect device to enable';
+    }
+
+    // Pose estimation button - enable when connected
+    const poseEstimationBtn = $('poseEstimationBtn');
+    if (poseEstimationBtn) {
+        poseEstimationBtn.disabled = !state.connected;
+        // Update button text based on pose state
+        poseEstimationBtn.textContent = poseState.enabled ? '🎯 Disable Pose Tracking' : '🎯 Enable Pose Tracking';
+        poseEstimationBtn.title = state.connected
+            ? (poseState.enabled ? 'Disable similarity-based pose tracking' : 'Enable similarity-based pose tracking')
+            : 'Connect device to enable';
     }
 
     // Sample count
@@ -486,6 +510,123 @@ function loadCustomLabels() {
  */
 function renderCustomLabels() {
     // TODO: Implement custom label rendering if needed
+}
+
+/**
+ * Initialize wizard functionality
+ */
+function initWizard() {
+    const wizardBtn = $('wizardBtn');
+    if (wizardBtn) {
+        wizardBtn.addEventListener('click', startWizard);
+    }
+}
+
+/**
+ * Start data collection wizard
+ */
+function startWizard() {
+    if (!state.connected) {
+        log('Error: Connect device first');
+        return;
+    }
+
+    log('Data collection wizard started');
+    alert('Data Collection Wizard\n\nThis feature helps guide you through structured data collection.\n\nComing soon: Interactive wizard for collecting labeled training data.');
+    // TODO: Implement full wizard workflow
+}
+
+/**
+ * Initialize pose estimation functionality
+ */
+function initPoseEstimation() {
+    const poseEstimationBtn = $('poseEstimationBtn');
+    if (poseEstimationBtn) {
+        poseEstimationBtn.addEventListener('click', togglePoseEstimation);
+    }
+}
+
+/**
+ * Toggle pose estimation on/off
+ */
+function togglePoseEstimation() {
+    if (!state.connected) {
+        log('Error: Connect device first');
+        return;
+    }
+
+    poseState.enabled = !poseState.enabled;
+
+    if (poseState.enabled) {
+        log('Pose tracking enabled');
+        // Show pose estimation status section
+        const statusSection = $('poseEstimationStatus');
+        if (statusSection) {
+            statusSection.style.display = 'block';
+        }
+        updatePoseEstimationDisplay();
+    } else {
+        log('Pose tracking disabled');
+        // Hide pose estimation status section
+        const statusSection = $('poseEstimationStatus');
+        if (statusSection) {
+            statusSection.style.display = 'none';
+        }
+        // Reset pose state
+        poseState.currentPose = null;
+        poseState.confidence = 0;
+        poseState.updateCount = 0;
+    }
+
+    updateUI();
+}
+
+/**
+ * Update pose estimation from magnetic field data
+ * Called by telemetry handler when pose tracking is enabled
+ * @param {Object} magField - Filtered magnetic field {x, y, z}
+ */
+function updatePoseEstimationFromMag(magField) {
+    if (!poseState.enabled) return;
+
+    // Simple similarity-based pose estimation
+    // TODO: Implement proper pose estimation algorithm
+    // For now, just track that we're receiving data
+    poseState.updateCount++;
+
+    // Calculate field strength as a simple confidence metric
+    const strength = Math.sqrt(magField.x * magField.x + magField.y * magField.y + magField.z * magField.z);
+
+    // Simple confidence based on field strength (normalized)
+    // Typical finger magnet field: 10-100 µT above background
+    poseState.confidence = Math.min(1.0, strength / 100);
+
+    // Update display every 10 samples to avoid excessive DOM updates
+    if (poseState.updateCount % 10 === 0) {
+        updatePoseEstimationDisplay();
+    }
+}
+
+/**
+ * Update pose estimation display
+ */
+function updatePoseEstimationDisplay() {
+    const statusText = $('poseStatusText');
+    const confidenceText = $('poseConfidenceText');
+    const updatesText = $('poseUpdatesText');
+
+    if (statusText) {
+        statusText.textContent = poseState.enabled ? 'Active' : 'Disabled';
+        statusText.style.color = poseState.enabled ? 'var(--success)' : 'var(--fg-muted)';
+    }
+
+    if (confidenceText) {
+        confidenceText.textContent = Math.round(poseState.confidence * 100) + '%';
+    }
+
+    if (updatesText) {
+        updatesText.textContent = poseState.updateCount;
+    }
 }
 
 /**
