@@ -13,6 +13,7 @@
     <script src="gambit-client.js"></script>
     <script src="calibration.js"></script>
     <script src="hand-model.js"></script>
+    <script src="hand-3d-renderer.js"></script>
     <script src="filters.js"></script>
     <link rel="stylesheet" href="../../simcap.css">
     <!-- Gallaudet ASL Font -->
@@ -946,10 +947,10 @@
             <button id="uploadBtn" class="btn-success" disabled>Upload to GitHub</button>
         </div>
         <div class="row">
-            <button id="wizardBtn" class="btn-warning" disabled>📋 Data Collection Wizard</button>
+            <button id="wizardBtn" class="btn-warning" disabled title="Connect device to enable">📋 Data Collection Wizard</button>
         </div>
         <div class="row">
-            <button id="poseEstimationBtn" class="btn-secondary" disabled>🎯 Enable Pose Tracking</button>
+            <button id="poseEstimationBtn" class="btn-secondary" disabled title="Connect device to enable">🎯 Enable Pose Tracking</button>
         </div>
         <div id="poseEstimationStatus" style="display: none; margin-top: 10px; padding: 10px; background: var(--bg); border-radius: 8px; border: 1px solid var(--border);">
             <div style="font-size: 12px; color: var(--fg-muted); margin-bottom: 5px;">Pose Estimation</div>
@@ -1004,8 +1005,15 @@
             <div id="handModeIndicator" style="text-align: center; padding: 6px; margin-bottom: 10px; border-radius: 4px; font-size: 11px; font-weight: 500; background: var(--accent); color: var(--bg);">
                 📋 Showing: Manual Labels
             </div>
+            <!-- View Toggle (2D/3D) -->
+            <div style="display: flex; justify-content: center; gap: 8px; margin-bottom: 10px;">
+                <button id="handView2D" class="btn-primary btn-small" onclick="setHandViewMode('2d')">📐 2D</button>
+                <button id="handView3D" class="btn-secondary btn-small" onclick="setHandViewMode('3d')">🎨 3D</button>
+            </div>
+            <!-- Canvas containers -->
             <div style="display: flex; justify-content: center; padding: 10px;">
                 <canvas id="handCanvas" width="400" height="400" style="border: 1px solid var(--border); background: var(--bg); border-radius: 8px;"></canvas>
+                <canvas id="handCanvas3D" width="400" height="400" style="border: 1px solid var(--border); background: var(--bg); border-radius: 8px; display: none;"></canvas>
             </div>
             <div id="handPreviewDescription" style="text-align: center; color: var(--fg-muted); font-size: 12px; margin-top: 10px;">
                 Visual representation of manually selected finger states

@@ -135,12 +135,17 @@ export function onTelemetry(telemetry) {
             decoratedTelemetry.filtered_my = filteredMag.y;
             decoratedTelemetry.filtered_mz = filteredMag.z;
 
-            // Update pose estimation with filtered magnetic field
+            // Update pose estimation with filtered magnetic field + orientation context
             if (deps.poseState?.enabled && deps.updatePoseEstimation) {
                 deps.updatePoseEstimation({
-                    x: filteredMag.x,
-                    y: filteredMag.y,
-                    z: filteredMag.z
+                    magField: {
+                        x: filteredMag.x,
+                        y: filteredMag.y,
+                        z: filteredMag.z
+                    },
+                    orientation: orientation,      // Quaternion from IMU fusion
+                    euler: euler,                  // Euler angles (roll, pitch, yaw)
+                    sample: decoratedTelemetry     // Full sample with all fields (calibrated, fused, raw)
                 });
             }
         } catch (e) {
