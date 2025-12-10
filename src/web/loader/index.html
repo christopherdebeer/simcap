@@ -109,13 +109,13 @@
         }
         .firmware-card p {
             margin: 0;
-            color: var(--text-muted);
+            color: var(--fg-muted);
             font-size: 0.85em;
         }
         .firmware-card .size {
             margin-top: 8px;
             font-size: 0.75em;
-            color: var(--text-muted);
+            color: var(--fg-muted);
         }
         .firmware-card .copy-btn {
             margin-top: 10px;
@@ -151,7 +151,7 @@
         .progress-text {
             margin-top: 5px;
             font-size: 0.85em;
-            color: var(--text-muted);
+            color: var(--fg-muted);
             text-align: center;
         }
 
@@ -167,7 +167,7 @@
             white-space: pre-wrap;
             word-break: break-all;
         }
-        .console .info { color: var(--text-muted); }
+        .console .info { color: var(--fg-muted); }
         .console .success { color: var(--success); }
         .console .error { color: var(--danger); }
         .console .warn { color: var(--warning); }
@@ -183,7 +183,7 @@
             background: var(--surface-alt);
             border: none;
             border-radius: 6px 6px 0 0;
-            color: var(--text-muted);
+            color: var(--fg-muted);
             cursor: pointer;
             font-size: 13px;
         }
@@ -234,7 +234,7 @@
         }
         .firmware-status.unknown {
             background: rgba(136,136,136,0.2);
-            border: 1px solid var(--text-muted);
+            border: 1px solid var(--fg-muted);
         }
         .firmware-status.detected {
             background: rgba(0,255,136,0.15);
@@ -253,7 +253,7 @@
             font-size: 1.1em;
         }
         .firmware-version {
-            color: var(--text-muted);
+            color: var(--fg-muted);
             font-size: 0.9em;
         }
         .firmware-meta {
@@ -269,7 +269,7 @@
             gap: 5px;
         }
         .firmware-meta-item .label {
-            color: var(--text-muted);
+            color: var(--fg-muted);
         }
         .firmware-meta-item .value {
             color: var(--text);
@@ -416,7 +416,7 @@ setTimeout(function() { LED1.reset(); }, 1000);
                 <input type="checkbox" id="filterInfo" checked> <span style="color: var(--success);">Info</span>
             </label>
             <label style="display: flex; align-items: center; gap: 5px; flex: 0;">
-                <input type="checkbox" id="filterDebug" checked> <span style="color: var(--text-muted);">Debug</span>
+                <input type="checkbox" id="filterDebug" checked> <span style="color: var(--fg-muted);">Debug</span>
             </label>
         </div>
 
@@ -630,16 +630,36 @@ setTimeout(function() { LED1.reset(); }, 1000);
 
     // Global frame parser instance
     const frameParser = new FrameParser();
+    
+    // Firmware query timeout (cleared by frame parser when FW received)
+    let firmwareQueryTimeout = null;
+    
+    // Device logs query timeout (cleared by frame parser when LOGS received)
+    let deviceLogsQueryTimeout = null;
 
     // ===== Frame Handlers =====
     // Register handlers for each message type from the device
     frameParser.on('FW', (data) => {
         log('[FRAME] Firmware info received via framing protocol', 'success');
+        // Clear the firmware query timeout since we got a response
+        if (firmwareQueryTimeout) {
+            clearTimeout(firmwareQueryTimeout);
+            firmwareQueryTimeout = null;
+            log('[DEBUG] Firmware query timeout cleared', 'info');
+        }
         updateFirmwareDisplay(data);
     });
 
     frameParser.on('LOGS', (data) => {
         log(`[FRAME] Device logs received: ${data.count} entries`, 'success');
+        
+        // Clear the device logs query timeout since we got a response
+        if (deviceLogsQueryTimeout) {
+            clearTimeout(deviceLogsQueryTimeout);
+            deviceLogsQueryTimeout = null;
+            log('[DEBUG] Device logs query timeout cleared', 'info');
+        }
+        
         deviceLogs = data.entries || [];
         
         // Update stats display
@@ -1326,6 +1346,7 @@ setTimeout(function() { LED1.reset(); }, 1000);
     });
 
     // ===== Firmware Info Query =====
+    // Uses the frame parser to receive FW responses - no custom data handler needed
     function queryFirmwareInfo() {
         if (!state.connected || !state.connection) {
             log('[DEBUG] Firmware query aborted: Not connected', 'warn');
@@ -1345,50 +1366,27 @@ setTimeout(function() { LED1.reset(); }, 1000);
             </div>
         `;
 
-        let fwData = '';
-        let timeout;
-        const originalDataHandler = state.connection.ondata;
+        // Clear any existing timeout
+        if (firmwareQueryTimeout) {
+            clearTimeout(firmwareQueryTimeout);
+        }
 
-        const fwHandler = (data) => {
-            log('[DEBUG] Firmware query data received: ' + JSON.stringify(data), 'info');
-            fwData += data;
-
-            // Look for FIRMWARE marker followed by JSON
-            const match = fwData.match(/FIRMWARE(\{[^}]+\})/);
-            if (match) {
-                clearTimeout(timeout);
-                try {
-                    const info = JSON.parse(match[1]);
-                    log(`[DEBUG] Firmware info parsed: ${JSON.stringify(info)}`, 'success');
-                    state.connection.ondata = originalDataHandler;
-                    updateFirmwareDisplay(info);
-                } catch (e) {
-                    log(`[DEBUG] Firmware JSON parse error: ${e.message}`, 'error');
-                    state.connection.ondata = originalDataHandler;
-                    updateFirmwareDisplay(null);
-                }
-            }
-        };
-
-        state.connection.ondata = (data) => {
-            if (originalDataHandler) originalDataHandler(data);
-            fwHandler(data);
-        };
-
-        // Set timeout for firmware query
-        timeout = setTimeout(() => {
+        // Set timeout for firmware query - will be cleared by frame parser's FW handler
+        firmwareQueryTimeout = setTimeout(() => {
             log('[DEBUG] Firmware query timeout - getFirmware() may not exist', 'warn');
-            state.connection.ondata = originalDataHandler;
+            firmwareQueryTimeout = null;
             updateFirmwareDisplay(null);
         }, 3000);
 
-        // Query getFirmware() function
+        // Query getFirmware() function - response handled by frame parser's FW handler
         log('[DEBUG] Sending: getFirmware()', 'info');
         state.connection.write('\x10if(typeof getFirmware==="function")getFirmware();\n', (err) => {
             if (err) {
                 log('[DEBUG] Firmware query write error: ' + err, 'error');
-                clearTimeout(timeout);
-                state.connection.ondata = originalDataHandler;
+                if (firmwareQueryTimeout) {
+                    clearTimeout(firmwareQueryTimeout);
+                    firmwareQueryTimeout = null;
+                }
                 updateFirmwareDisplay(null);
             } else {
                 log('[DEBUG] Firmware query command sent successfully', 'success');
@@ -1612,7 +1610,7 @@ setTimeout(function() { LED1.reset(); }, 1000);
             case 'E': return { name: 'ERROR', class: 'error', color: 'var(--danger)' };
             case 'W': return { name: 'WARN', class: 'warn', color: 'var(--warning)' };
             case 'I': return { name: 'INFO', class: 'success', color: 'var(--success)' };
-            case 'D': return { name: 'DEBUG', class: 'info', color: 'var(--text-muted)' };
+            case 'D': return { name: 'DEBUG', class: 'info', color: 'var(--fg-muted)' };
             default: return { name: level, class: 'info', color: 'var(--text)' };
         }
     }
@@ -1648,7 +1646,7 @@ setTimeout(function() { LED1.reset(); }, 1000);
             const levelInfo = getLogLevelInfo(entry.l);
             const timeStr = formatLogTime(entry.t);
             return `<div class="${levelInfo.class}" style="margin-bottom: 2px;">` +
-                `<span style="color: var(--text-muted);">[${timeStr}]</span> ` +
+                `<span style="color: var(--fg-muted);">[${timeStr}]</span> ` +
                 `<span style="color: ${levelInfo.color}; font-weight: 600;">[${levelInfo.name}]</span> ` +
                 `${entry.m}</div>`;
         }).join('');
@@ -1656,7 +1654,7 @@ setTimeout(function() { LED1.reset(); }, 1000);
         deviceLogsOutput.scrollTop = deviceLogsOutput.scrollHeight;
     }
 
-    // Fetch logs from device
+    // Fetch logs from device - uses frame parser to receive LOGS responses
     fetchLogsBtn.addEventListener('click', () => {
         if (!state.connected || !state.connection) {
             log('[DEBUG] Fetch logs aborted: Not connected', 'warn');
@@ -1666,71 +1664,27 @@ setTimeout(function() { LED1.reset(); }, 1000);
         log('[DEBUG] ========== FETCHING DEVICE LOGS ==========', 'info');
         deviceLogsOutput.innerHTML = '<span class="info">Fetching logs from device...</span>';
 
-        let logsData = '';
-        let timeout;
-        const originalDataHandler = state.connection.ondata;
+        // Clear any existing timeout
+        if (deviceLogsQueryTimeout) {
+            clearTimeout(deviceLogsQueryTimeout);
+        }
 
-        const logsHandler = (data) => {
-            log('[DEBUG] Device logs data received: ' + data.length + ' bytes', 'info');
-            logsData += data;
-
-            // Wait for the Espruino prompt ">" which indicates command completion
-            // The JSON ends with }]} so we look for that pattern followed by newline/prompt
-            if (logsData.includes('\r\n>') || logsData.includes('\n>')) {
-                clearTimeout(timeout);
-                
-                // Extract JSON: look for DEVICE_LOGS followed by JSON ending with }]}
-                const match = logsData.match(/DEVICE_LOGS(\{[\s\S]*?\}\]\})/);
-                if (match) {
-                    try {
-                        const response = JSON.parse(match[1]);
-                        log(`[DEBUG] Device logs parsed: ${response.count} entries`, 'success');
-                        
-                        // Store logs for export
-                        deviceLogs = response.entries || [];
-                        
-                        // Update stats display
-                        logStats.style.display = 'block';
-                        logFilterRow.style.display = 'flex';
-                        $('logCount').textContent = response.total || deviceLogs.length;
-                        
-                        // Render logs
-                        renderDeviceLogs();
-                        updateDeviceLogsUI();
-                        
-                        log(`Fetched ${deviceLogs.length} device log entries`, 'success');
-                    } catch (e) {
-                        log(`[DEBUG] Device logs JSON parse error: ${e.message}`, 'error');
-                        log(`[DEBUG] Raw data: ${logsData.substring(0, 200)}...`, 'error');
-                        deviceLogsOutput.innerHTML = `<span class="error">Failed to parse device logs: ${e.message}</span>`;
-                    }
-                } else {
-                    log('[DEBUG] DEVICE_LOGS marker not found in response', 'warn');
-                    deviceLogsOutput.innerHTML = '<span class="warn">No logs found - device may not have logging firmware (GAMBIT v0.1.2+)</span>';
-                }
-                state.connection.ondata = originalDataHandler;
-            }
-        };
-
-        state.connection.ondata = (data) => {
-            if (originalDataHandler) originalDataHandler(data);
-            logsHandler(data);
-        };
-
-        // Set timeout for logs query
-        timeout = setTimeout(() => {
+        // Set timeout for logs query - will be cleared by frame parser's LOGS handler
+        deviceLogsQueryTimeout = setTimeout(() => {
             log('[DEBUG] Device logs query timeout - getLogs() may not exist', 'warn');
-            state.connection.ondata = originalDataHandler;
+            deviceLogsQueryTimeout = null;
             deviceLogsOutput.innerHTML = '<span class="warn">Timeout: Device may not have logging firmware (GAMBIT v0.1.2+)</span>';
         }, 5000);
 
-        // Query getLogs() function
+        // Query getLogs() function - response handled by frame parser's LOGS handler
         log('[DEBUG] Sending: getLogs()', 'info');
         state.connection.write('\x10if(typeof getLogs==="function")getLogs();\n', (err) => {
             if (err) {
                 log('[DEBUG] Device logs query write error: ' + err, 'error');
-                clearTimeout(timeout);
-                state.connection.ondata = originalDataHandler;
+                if (deviceLogsQueryTimeout) {
+                    clearTimeout(deviceLogsQueryTimeout);
+                    deviceLogsQueryTimeout = null;
+                }
                 deviceLogsOutput.innerHTML = `<span class="error">Failed to query device logs: ${err}</span>`;
             } else {
                 log('[DEBUG] Device logs query command sent successfully', 'success');

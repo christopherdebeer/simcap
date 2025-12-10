@@ -620,6 +620,55 @@
         }
 
         #handCanvas { max-width: 100%;}
+
+        /* Calibration Diagnostics Styles */
+        .cal-diagnostics {
+            margin-top: 8px;
+            padding: 10px;
+            background: var(--bg);
+            border-radius: 6px;
+            border-left: 3px solid var(--warning);
+            font-size: 11px;
+        }
+        .cal-recommendations {
+            margin-bottom: 8px;
+        }
+        .cal-rec-item {
+            padding: 6px 8px;
+            margin-bottom: 4px;
+            background: var(--bg-surface);
+            border-radius: 4px;
+            line-height: 1.4;
+        }
+        .cal-details {
+            margin-top: 8px;
+        }
+        .cal-details summary {
+            cursor: pointer;
+            color: var(--fg-muted);
+            font-size: 10px;
+            padding: 4px 0;
+        }
+        .cal-details summary:hover {
+            color: var(--fg);
+        }
+        .cal-stats {
+            padding: 8px;
+            background: var(--bg-surface);
+            border-radius: 4px;
+            margin-top: 4px;
+            font-family: var(--font-mono);
+            font-size: 10px;
+            line-height: 1.6;
+        }
+        .cal-stats hr {
+            border: none;
+            border-top: 1px solid var(--border);
+            margin: 6px 0;
+        }
+        .cal-stats strong {
+            color: var(--fg);
+        }
     </style>
 </head>
 <body>
@@ -663,6 +712,7 @@
                     <div id="earthProgress" style="flex: 1;"></div>
                 </div>
                 <div id="earthQuality" style="font-size: 10px; margin-top: 4px;"></div>
+                <div id="earthDiagnostics" class="cal-diagnostics" style="display: none;"></div>
             </div>
 
             <!-- Step 2: Hard Iron -->
@@ -1039,7 +1089,7 @@
     <footer class="page-footer">
         <span>SIMCAP GAMBIT Collector</span>
         <a href="./">GAMBIT</a>
-        <a href="synth.html">Synth</a>
+        <a href="../loader/">FW Loader</a>
     </footer>
 
     <!-- Module Scripts -->

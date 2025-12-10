@@ -17,8 +17,11 @@
  *   // Stream telemetry
  *   client.on('data', (telemetry) => console.log(telemetry));
  *   await client.startStreaming();
+ *   
+ *   // Collect specific number of samples
+ *   const result = await client.collectSamples(500, 50); // 500 samples at 50Hz
  * 
- * @version 1.1.0
+ * @version 2.0.0
  * @requires puck.js
  */
 
@@ -142,85 +145,11 @@
         }
     }
 
-    // ===== Legacy Message Parser =====
-    // For backwards compatibility with older firmware using marker-based messages
-    class LegacyParser {
-        constructor() {
-            this.buffer = '';
-            this.handlers = {};
-        }
-
-        onData(data) {
-            this.buffer += data;
-            this.processBuffer();
-        }
-
-        processBuffer() {
-            // Look for newline-delimited messages with markers
-            const lines = this.buffer.split('\n');
-            
-            // Keep the last incomplete line in buffer
-            this.buffer = lines.pop() || '';
-
-            for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed) continue;
-
-                // Check for known markers
-                if (trimmed.startsWith('GAMBIT{')) {
-                    this.parseAndEmit('telemetry', trimmed.slice(6));
-                } else if (trimmed.startsWith('FIRMWARE{')) {
-                    this.parseAndEmit('firmware', trimmed.slice(8));
-                } else if (trimmed.startsWith('DEVICE_LOGS{')) {
-                    this.parseAndEmit('logs', trimmed.slice(11));
-                } else if (trimmed.startsWith('LOG_STATS{')) {
-                    this.parseAndEmit('logStats', trimmed.slice(9));
-                }
-            }
-        }
-
-        parseAndEmit(type, jsonStr) {
-            try {
-                const data = JSON.parse(jsonStr);
-                this.emit(type, data);
-            } catch (e) {
-                console.error(`[LEGACY] JSON parse error for ${type}:`, e);
-            }
-        }
-
-        on(type, handler) {
-            if (!this.handlers[type]) {
-                this.handlers[type] = [];
-            }
-            this.handlers[type].push(handler);
-        }
-
-        off(type, handler) {
-            if (!this.handlers[type]) return;
-            if (handler) {
-                this.handlers[type] = this.handlers[type].filter(h => h !== handler);
-            } else {
-                delete this.handlers[type];
-            }
-        }
-
-        emit(type, data) {
-            if (this.handlers[type]) {
-                this.handlers[type].forEach(h => h(data));
-            }
-        }
-
-        clear() {
-            this.buffer = '';
-        }
-    }
-
     // ===== GAMBIT Client =====
     class GambitClient {
         constructor(options = {}) {
             this.connection = null;
             this.frameParser = new FrameParser();
-            this.legacyParser = new LegacyParser();
             this.eventHandlers = {};
             this.debug = options.debug || false;
             this.firmwareInfo = null;
@@ -230,15 +159,10 @@
 
             // Wire up frame parser events to client events
             this.frameParser.on('FW', (data) => this._handleFirmware(data));
+            this.frameParser.on('T', (data) => this.emit('data', data));  // Telemetry
             this.frameParser.on('LOGS', (data) => this._handleLogs(data));
             this.frameParser.on('LOGS_CLEARED', (data) => this._handleLogsCleared(data));
             this.frameParser.on('LOG_STATS', (data) => this._handleLogStats(data));
-
-            // Wire up legacy parser for backwards compatibility
-            this.legacyParser.on('telemetry', (data) => this.emit('data', data));
-            this.legacyParser.on('firmware', (data) => this._handleFirmware(data));
-            this.legacyParser.on('logs', (data) => this._handleLogs(data));
-            this.legacyParser.on('logStats', (data) => this._handleLogStats(data));
         }
 
         // ===== Event Handling =====
@@ -297,17 +221,13 @@
                     this.connection = conn;
                     this._log('Connected!');
 
-                    // Clear parser buffers
+                    // Clear parser buffer
                     this.frameParser.clear();
-                    this.legacyParser.clear();
 
-                    // Set up data listener
+                    // Set up data listener - all data uses framing protocol
                     conn.on('data', (data) => {
                         this._log(`Received ${data.length} bytes`);
-                        // Feed to both parsers - frame parser handles framed messages,
-                        // legacy parser handles marker-based messages
                         this.frameParser.onData(data);
-                        this.legacyParser.onData(data);
                     });
 
                     conn.on('close', () => {
@@ -583,7 +503,7 @@
 
         /**
          * Collect exact number of samples at specified Hz
-         * Uses progress-based timeout - only fails if samples stop arriving
+         * Uses parameterized getData() - firmware auto-stops after count samples
          * 
          * @param {number} count - Number of samples to collect
          * @param {number} hz - Sample rate in Hz (default: 50)
@@ -621,7 +541,7 @@
                     if (progressTimeout) clearTimeout(progressTimeout);
                     progressTimeout = setTimeout(() => {
                         cleanup();
-                        const elapsed = Date.now() - startTime;
+                        const elapsed = startTime ? Date.now() - startTime : 0;
                         reject(new Error(`Collection stalled - no samples received for ${progressTimeoutMs}ms (${sampleCount}/${count} samples in ${elapsed}ms)`));
                     }, progressTimeoutMs);
                 };
@@ -629,8 +549,6 @@
                 const cleanup = () => {
                     if (progressTimeout) clearTimeout(progressTimeout);
                     this.off('data', dataHandler);
-                    this.frameParser.off('COLLECTION_COMPLETE', completeHandler);
-                    this.frameParser.off('COLLECTION_ERROR', errorHandler);
                 };
 
                 const dataHandler = () => {
@@ -653,32 +571,11 @@
                     }
                 };
 
-                const completeHandler = (data) => {
-                    cleanup();
-                    this._log(`Collection complete (firmware): ${data.collectedCount} samples in ${data.durationMs}ms (${data.actualHz}Hz)`);
-                    this.emit('collectionComplete', data);
-                    resolve(data);
-                };
-
-                const errorHandler = (data) => {
-                    cleanup();
-                    this._log(`Collection error: ${data.error}`);
-                    reject(new Error(data.error || 'Collection failed'));
-                };
-
                 this.on('data', dataHandler);
-                this.frameParser.on('COLLECTION_COMPLETE', completeHandler);
-                this.frameParser.on('COLLECTION_ERROR', errorHandler);
-                this.frameParser.on('COLLECTION_START', (data) => {
-                    startTime = Date.now();
-                    resetProgressTimeout();
-                    this._log(`Collection started: ${data.requestedCount} samples @ ${data.hz}Hz`);
-                    this.emit('collectionStart', data);
-                });
-
                 resetProgressTimeout();
 
-                this.write(`\x10if(typeof collectSamples==="function")collectSamples(${count}, ${intervalMs});\n`)
+                // Use parameterized getData(count, intervalMs) - firmware auto-stops after count samples
+                this.write(`\x10if(typeof getData==="function")getData(${count}, ${intervalMs});\n`)
                     .catch((err) => {
                         cleanup();
                         reject(err);
@@ -791,9 +688,8 @@
         'D': { name: 'DEBUG', color: '#888888' }
     };
 
-    // Export classes for advanced usage
+    // Export FrameParser for advanced usage
     GambitClient.FrameParser = FrameParser;
-    GambitClient.LegacyParser = LegacyParser;
 
     return GambitClient;
 }));

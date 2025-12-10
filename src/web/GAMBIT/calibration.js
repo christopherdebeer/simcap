@@ -266,7 +266,7 @@ class EnvironmentalCalibration {
      * Should be done with sensor in a known orientation (e.g., flat on table)
      *
      * @param {Array} samples - Array of {x, y, z} readings in reference orientation
-     * @returns {Object} Earth field estimate
+     * @returns {Object} Earth field estimate with detailed diagnostics
      */
     runEarthFieldCalibration(samples) {
         if (samples.length < 50) {
@@ -296,19 +296,74 @@ class EnvironmentalCalibration {
             this.earthField.z ** 2
         );
 
-        // Calculate quality based on stability/variance of readings
-        let variance = 0;
-        for (const s of corrected) {
-            const dx = s.x - this.earthField.x;
-            const dy = s.y - this.earthField.y;
-            const dz = s.z - this.earthField.z;
-            variance += Math.sqrt(dx*dx + dy*dy + dz*dz);
-        }
-        const avgDeviation = variance / corrected.length;
+        // === ENHANCED DIAGNOSTICS ===
+        
+        // Per-axis statistics
+        const deviations = corrected.map(s => ({
+            x: s.x - this.earthField.x,
+            y: s.y - this.earthField.y,
+            z: s.z - this.earthField.z,
+            magnitude: Math.sqrt(
+                (s.x - this.earthField.x) ** 2 +
+                (s.y - this.earthField.y) ** 2 +
+                (s.z - this.earthField.z) ** 2
+            )
+        }));
+
+        // Per-axis standard deviation
+        const axisStats = {
+            x: this._calculateAxisStats(deviations.map(d => d.x)),
+            y: this._calculateAxisStats(deviations.map(d => d.y)),
+            z: this._calculateAxisStats(deviations.map(d => d.z))
+        };
+
+        // Overall deviation stats
+        const magnitudeDeviations = deviations.map(d => d.magnitude);
+        const avgDeviation = magnitudeDeviations.reduce((a, b) => a + b, 0) / magnitudeDeviations.length;
+        const maxDeviation = Math.max(...magnitudeDeviations);
+        const minDeviation = Math.min(...magnitudeDeviations);
+        
+        // Variance (sum of squared deviations)
+        const variance = magnitudeDeviations.reduce((sum, d) => sum + d * d, 0);
+        const stdDev = Math.sqrt(variance / magnitudeDeviations.length);
+
+        // Outlier detection (samples > 2 std devs from mean)
+        const outlierThreshold = avgDeviation + 2 * stdDev;
+        const outliers = deviations.map((d, i) => ({ index: i, deviation: d.magnitude }))
+            .filter(o => o.deviation > outlierThreshold);
+        const outlierPercentage = (outliers.length / corrected.length) * 100;
+
+        // Temporal analysis - detect drift and sudden jumps
+        const temporalAnalysis = this._analyzeTemporalStability(corrected);
+
         // Quality: 1.0 if deviation is very small, decreases with larger deviation
         // Typical good reading has <5% deviation
         const quality = Math.max(0, Math.min(1, 1 - (avgDeviation / this.earthFieldMagnitude) * 10));
-        console.log(`Earth field calibration details:`, {quality, avgDeviation, variance, earthField: this.earthField, earthFieldMagnitude: this.earthFieldMagnitude}, this)
+        
+        // Determine dominant issue for diagnostics
+        const diagnostics = this._generateEarthFieldDiagnostics({
+            quality,
+            avgDeviation,
+            stdDev,
+            axisStats,
+            outlierPercentage,
+            temporalAnalysis,
+            earthFieldMagnitude: this.earthFieldMagnitude
+        });
+
+        console.log(`Earth field calibration details:`, {
+            quality, 
+            avgDeviation, 
+            stdDev,
+            variance, 
+            axisStats,
+            outliers: outliers.length,
+            temporalAnalysis,
+            diagnostics,
+            earthField: this.earthField, 
+            earthFieldMagnitude: this.earthFieldMagnitude
+        });
+        
         this.earthFieldCalibrated = true;
 
         return {
@@ -317,8 +372,168 @@ class EnvironmentalCalibration {
             // Convert to μT using scale factor
             magnitudeUT: this.earthFieldMagnitude * this.scaleFactorLSBToUT,
             quality: quality, // Numeric quality metric (0.0 to 1.0)
-            avgDeviation: avgDeviation
+            avgDeviation: avgDeviation,
+            // Enhanced diagnostics
+            diagnostics: {
+                stdDev,
+                maxDeviation,
+                minDeviation,
+                axisStats,
+                outlierCount: outliers.length,
+                outlierPercentage: outlierPercentage.toFixed(1),
+                temporalAnalysis,
+                recommendations: diagnostics.recommendations,
+                dominantIssue: diagnostics.dominantIssue
+            }
         };
+    }
+
+    /**
+     * Calculate statistics for a single axis
+     * @private
+     */
+    _calculateAxisStats(values) {
+        const mean = values.reduce((a, b) => a + b, 0) / values.length;
+        const variance = values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / values.length;
+        const stdDev = Math.sqrt(variance);
+        const max = Math.max(...values);
+        const min = Math.min(...values);
+        const range = max - min;
+        
+        return { mean, stdDev, max, min, range };
+    }
+
+    /**
+     * Analyze temporal stability of samples
+     * @private
+     */
+    _analyzeTemporalStability(samples) {
+        if (samples.length < 10) {
+            return { stable: true, drift: 0, jumps: 0 };
+        }
+
+        // Calculate magnitude for each sample
+        const magnitudes = samples.map(s => Math.sqrt(s.x**2 + s.y**2 + s.z**2));
+        
+        // Check for drift (compare first 10% vs last 10%)
+        const windowSize = Math.max(5, Math.floor(samples.length * 0.1));
+        const firstWindow = magnitudes.slice(0, windowSize);
+        const lastWindow = magnitudes.slice(-windowSize);
+        const firstAvg = firstWindow.reduce((a, b) => a + b, 0) / windowSize;
+        const lastAvg = lastWindow.reduce((a, b) => a + b, 0) / windowSize;
+        const drift = lastAvg - firstAvg;
+        const driftPercent = (Math.abs(drift) / firstAvg) * 100;
+
+        // Detect sudden jumps (sample-to-sample changes > 3x median change)
+        const changes = [];
+        for (let i = 1; i < magnitudes.length; i++) {
+            changes.push(Math.abs(magnitudes[i] - magnitudes[i-1]));
+        }
+        changes.sort((a, b) => a - b);
+        const medianChange = changes[Math.floor(changes.length / 2)];
+        const jumpThreshold = Math.max(medianChange * 3, 1); // At least 1 unit
+        const jumps = changes.filter(c => c > jumpThreshold).length;
+        const jumpPercentage = (jumps / changes.length) * 100;
+
+        // Check for periodic noise (simple autocorrelation check)
+        let periodicScore = 0;
+        if (samples.length >= 50) {
+            // Check correlation at common interference frequencies (50Hz, 60Hz harmonics)
+            for (const lag of [1, 2, 5, 10]) {
+                if (lag < samples.length / 2) {
+                    let correlation = 0;
+                    for (let i = lag; i < magnitudes.length; i++) {
+                        correlation += (magnitudes[i] - firstAvg) * (magnitudes[i - lag] - firstAvg);
+                    }
+                    correlation /= (magnitudes.length - lag);
+                    periodicScore = Math.max(periodicScore, Math.abs(correlation));
+                }
+            }
+        }
+
+        return {
+            stable: driftPercent < 2 && jumpPercentage < 5,
+            drift: drift.toFixed(2),
+            driftPercent: driftPercent.toFixed(1),
+            jumps,
+            jumpPercentage: jumpPercentage.toFixed(1),
+            periodicScore: periodicScore.toFixed(2),
+            firstAvg: firstAvg.toFixed(2),
+            lastAvg: lastAvg.toFixed(2)
+        };
+    }
+
+    /**
+     * Generate diagnostic recommendations based on calibration results
+     * @private
+     */
+    _generateEarthFieldDiagnostics(stats) {
+        const recommendations = [];
+        let dominantIssue = 'unknown';
+
+        const deviationPercent = (stats.avgDeviation / stats.earthFieldMagnitude) * 100;
+        const { temporalAnalysis, axisStats, outlierPercentage } = stats;
+
+        // Check for movement during calibration
+        if (temporalAnalysis.jumpPercentage > 10) {
+            recommendations.push('🚶 Movement detected: Keep device completely still during calibration');
+            dominantIssue = 'movement';
+        }
+
+        // Check for drift (device slowly moving or warming up)
+        if (parseFloat(temporalAnalysis.driftPercent) > 3) {
+            recommendations.push(`📈 Drift detected (${temporalAnalysis.driftPercent}%): Device may be moving slowly or sensor warming up. Wait 30s after connecting before calibrating.`);
+            if (dominantIssue === 'unknown') dominantIssue = 'drift';
+        }
+
+        // Check for high outlier percentage (interference spikes)
+        if (outlierPercentage > 5) {
+            recommendations.push(`⚡ ${outlierPercentage.toFixed(1)}% outliers detected: Possible electromagnetic interference. Move away from electronics, motors, or power cables.`);
+            if (dominantIssue === 'unknown') dominantIssue = 'interference';
+        }
+
+        // Check for axis-specific issues
+        const axisStdDevs = [
+            { axis: 'X', stdDev: axisStats.x.stdDev },
+            { axis: 'Y', stdDev: axisStats.y.stdDev },
+            { axis: 'Z', stdDev: axisStats.z.stdDev }
+        ].sort((a, b) => b.stdDev - a.stdDev);
+
+        const worstAxis = axisStdDevs[0];
+        const bestAxis = axisStdDevs[2];
+        
+        if (worstAxis.stdDev > bestAxis.stdDev * 3) {
+            recommendations.push(`📊 ${worstAxis.axis}-axis has ${(worstAxis.stdDev / bestAxis.stdDev).toFixed(1)}x more noise than ${bestAxis.axis}-axis. Check sensor orientation or nearby magnetic interference along ${worstAxis.axis}-axis.`);
+            if (dominantIssue === 'unknown') dominantIssue = 'axis_noise';
+        }
+
+        // Check for periodic interference
+        if (parseFloat(temporalAnalysis.periodicScore) > 100) {
+            recommendations.push('🔄 Periodic noise detected: Possible 50/60Hz interference from power lines or electronics.');
+            if (dominantIssue === 'unknown') dominantIssue = 'periodic_noise';
+        }
+
+        // General high deviation
+        if (deviationPercent > 5 && recommendations.length === 0) {
+            recommendations.push(`📏 High deviation (${deviationPercent.toFixed(1)}%): Ensure device is stationary and away from magnets (>50cm).`);
+            dominantIssue = 'high_deviation';
+        }
+
+        // Check earth field magnitude sanity
+        if (stats.earthFieldMagnitude < 200 || stats.earthFieldMagnitude > 700) {
+            recommendations.push(`🧲 Unusual earth field magnitude (${stats.earthFieldMagnitude.toFixed(0)}). Expected 250-650 for typical locations. Check for nearby strong magnets or ferromagnetic materials.`);
+            if (dominantIssue === 'unknown') dominantIssue = 'magnitude_anomaly';
+        }
+
+        // Success case
+        if (stats.quality > 0.9) {
+            recommendations.push('✅ Excellent calibration quality!');
+            dominantIssue = 'none';
+        } else if (stats.quality > 0.7) {
+            recommendations.push('⚠️ Acceptable quality, but could be improved by reducing movement/interference.');
+        }
+
+        return { recommendations, dominantIssue };
     }
 
     /**
