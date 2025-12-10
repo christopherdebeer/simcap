@@ -2310,55 +2310,57 @@
 
     // Wizard step definitions
     // Each step has: transition time (unlabeled) + hold time (labeled)
-    const TRANSITION_TIME = 2; // seconds of unlabeled transition
+    const TRANSITION_TIME = 5; // seconds of unlabeled transition
     const HOLD_TIME = 3; // seconds of labeled hold
+    const HOLD_TIME_MED = 6; // seconds of labeled hold
+    const HOLD_TIME_LONG = 10; // seconds of labeled hold
 
     const WIZARD_STEPS = {
         // Reference poses for data collection (calibration is handled separately by manual wizard)
         reference: [
-            { id: 'reference_pose', label: 'Reference Pose', icon: '✋', transition: TRANSITION_TIME, hold: 5, desc: 'Hold hand flat, palm down, fingers together.' },
-            { id: 'magnet_baseline', label: 'Magnet Baseline', icon: '📍', transition: TRANSITION_TIME, hold: 5, desc: 'Keep hand in reference pose with magnets attached.' }
+            { id: 'reference_pose', label: 'Reference Pose', icon: '✋', transition: TRANSITION_TIME, hold: HOLD_TIME_LONG, desc: 'Hold hand flat, palm down, fingers together.' },
+            { id: 'magnet_baseline', label: 'Magnet Baseline', icon: '📍', transition: TRANSITION_TIME, hold: HOLD_TIME_LONG, desc: 'Keep hand in reference pose with magnets attached.' }
         ],
         fingers: [
-            { id: 'finger_isolation:thumb', label: 'Thumb Isolation', icon: '👍', transition: TRANSITION_TIME, hold: 5, desc: 'Move only your thumb through full range of motion.' },
-            { id: 'finger_isolation:index', label: 'Index Isolation', icon: '☝️', transition: TRANSITION_TIME, hold: 5, desc: 'Move only your index finger through full range.' },
-            { id: 'finger_isolation:middle', label: 'Middle Isolation', icon: '🖕', transition: TRANSITION_TIME, hold: 5, desc: 'Move only your middle finger through full range.' },
-            { id: 'finger_isolation:ring', label: 'Ring Isolation', icon: '💍', transition: TRANSITION_TIME, hold: 5, desc: 'Move only your ring finger through full range.' },
-            { id: 'finger_isolation:pinky', label: 'Pinky Isolation', icon: '🤙', transition: TRANSITION_TIME, hold: 5, desc: 'Move only your pinky finger through full range.' }
+            { id: 'finger_isolation:thumb', label: 'Thumb Isolation', icon: '👍', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Move only your thumb through full range of motion.' },
+            { id: 'finger_isolation:index', label: 'Index Isolation', icon: '☝️', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Move only your index finger through full range.' },
+            { id: 'finger_isolation:middle', label: 'Middle Isolation', icon: '🖕', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Move only your middle finger through full range.' },
+            { id: 'finger_isolation:ring', label: 'Ring Isolation', icon: '💍', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Move only your ring finger through full range.' },
+            { id: 'finger_isolation:pinky', label: 'Pinky Isolation', icon: '🤙', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Move only your pinky finger through full range.' }
         ],
         // Finger tracking: All 5 magnets attached (standard configuration)
         fingerTracking5Mag: [
-            { id: 'ft5:reference', label: 'Reference (5 mag)', icon: '✋', transition: TRANSITION_TIME, hold: 5, desc: 'Palm down, all fingers extended. All 5 magnets attached.' },
-            { id: 'ft5:all_extended', label: 'All Extended', icon: '🖐️', transition: TRANSITION_TIME, hold: 5, desc: 'Spread all fingers wide, fully extended.' },
-            { id: 'ft5:all_flexed', label: 'All Flexed (Fist)', icon: '✊', transition: TRANSITION_TIME, hold: 5, desc: 'Make a tight fist, all fingers flexed.' },
-            { id: 'ft5:thumb_flex', label: 'Thumb Flex Only', icon: '👍', transition: TRANSITION_TIME, hold: 5, desc: 'Flex only thumb, others extended.' },
-            { id: 'ft5:index_flex', label: 'Index Flex Only', icon: '☝️', transition: TRANSITION_TIME, hold: 5, desc: 'Flex only index finger, others extended.' },
-            { id: 'ft5:middle_flex', label: 'Middle Flex Only', icon: '🖕', transition: TRANSITION_TIME, hold: 5, desc: 'Flex only middle finger, others extended.' },
-            { id: 'ft5:ring_flex', label: 'Ring Flex Only', icon: '💍', transition: TRANSITION_TIME, hold: 5, desc: 'Flex only ring finger, others extended.' },
-            { id: 'ft5:pinky_flex', label: 'Pinky Flex Only', icon: '🤙', transition: TRANSITION_TIME, hold: 5, desc: 'Flex only pinky finger, others extended.' },
-            { id: 'ft5:thumb_index', label: 'Thumb+Index Flex', icon: '🤏', transition: TRANSITION_TIME, hold: 5, desc: 'Flex thumb and index only.' },
-            { id: 'ft5:ring_pinky', label: 'Ring+Pinky Flex', icon: '🤟', transition: TRANSITION_TIME, hold: 5, desc: 'Flex ring and pinky only.' },
-            { id: 'ft5:middle_ring_pinky', label: 'Mid+Ring+Pinky Flex', icon: '✌️', transition: TRANSITION_TIME, hold: 5, desc: 'Flex middle, ring, pinky (peace sign).' }
+            { id: 'ft5:reference', label: 'Reference (5 mag)', icon: '✋', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Palm down, all fingers extended. All 5 magnets attached.' },
+            { id: 'ft5:all_extended', label: 'All Extended', icon: '🖐️', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Spread all fingers wide, fully extended.' },
+            { id: 'ft5:all_flexed', label: 'All Flexed (Fist)', icon: '✊', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Make a tight fist, all fingers flexed.' },
+            { id: 'ft5:thumb_flex', label: 'Thumb Flex Only', icon: '👍', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex only thumb, others extended.' },
+            { id: 'ft5:index_flex', label: 'Index Flex Only', icon: '☝️', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex only index finger, others extended.' },
+            { id: 'ft5:middle_flex', label: 'Middle Flex Only', icon: '🖕', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex only middle finger, others extended.' },
+            { id: 'ft5:ring_flex', label: 'Ring Flex Only', icon: '💍', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex only ring finger, others extended.' },
+            { id: 'ft5:pinky_flex', label: 'Pinky Flex Only', icon: '🤙', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex only pinky finger, others extended.' },
+            { id: 'ft5:thumb_index', label: 'Thumb+Index Flex', icon: '🤏', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex thumb and index only.' },
+            { id: 'ft5:ring_pinky', label: 'Ring+Pinky Flex', icon: '🤟', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex ring and pinky only.' },
+            { id: 'ft5:middle_ring_pinky', label: 'Mid+Ring+Pinky Flex', icon: '✌️', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex middle, ring, pinky (peace sign).' }
         ],
         // Finger tracking: No magnets (baseline noise floor)
         fingerTrackingNoMag: [
-            { id: 'ft0:reference', label: 'Reference (no mag)', icon: '✋', transition: TRANSITION_TIME, hold: 5, desc: 'Palm down, all fingers extended. NO magnets attached.' },
-            { id: 'ft0:all_extended', label: 'All Extended', icon: '🖐️', transition: TRANSITION_TIME, hold: 5, desc: 'Spread all fingers wide.' },
-            { id: 'ft0:all_flexed', label: 'All Flexed (Fist)', icon: '✊', transition: TRANSITION_TIME, hold: 5, desc: 'Make a tight fist.' },
-            { id: 'ft0:index_flex', label: 'Index Flex Only', icon: '☝️', transition: TRANSITION_TIME, hold: 5, desc: 'Flex only index finger.' },
-            { id: 'ft0:thumb_flex', label: 'Thumb Flex Only', icon: '👍', transition: TRANSITION_TIME, hold: 5, desc: 'Flex only thumb.' },
-            { id: 'ft0:random_motion', label: 'Random Motion', icon: '👋', transition: TRANSITION_TIME, hold: 8, desc: 'Move fingers randomly to capture baseline noise.' }
+            { id: 'ft0:reference', label: 'Reference (no mag)', icon: '✋', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Palm down, all fingers extended. NO magnets attached.' },
+            { id: 'ft0:all_extended', label: 'All Extended', icon: '🖐️', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Spread all fingers wide.' },
+            { id: 'ft0:all_flexed', label: 'All Flexed (Fist)', icon: '✊', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Make a tight fist.' },
+            { id: 'ft0:index_flex', label: 'Index Flex Only', icon: '☝️', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex only index finger.' },
+            { id: 'ft0:thumb_flex', label: 'Thumb Flex Only', icon: '👍', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex only thumb.' },
+            { id: 'ft0:random_motion', label: 'Random Motion', icon: '👋', transition: TRANSITION_TIME, hold: HOLD_TIME_LONG, desc: 'Move fingers randomly to capture baseline noise.' }
         ],
         // Finger tracking: Index magnet only (proof-of-concept)
         fingerTrackingIndexOnly: [
-            { id: 'ft1:reference', label: 'Reference (index mag)', icon: '✋', transition: TRANSITION_TIME, hold: 5, desc: 'Palm down, all extended. Magnet on INDEX ONLY.' },
-            { id: 'ft1:index_extended', label: 'Index Extended', icon: '☝️', transition: TRANSITION_TIME, hold: 5, desc: 'Index finger fully extended (far from sensor).' },
-            { id: 'ft1:index_partial', label: 'Index Partial Flex', icon: '👆', transition: TRANSITION_TIME, hold: 5, desc: 'Index finger half-flexed (mid-range).' },
-            { id: 'ft1:index_flexed', label: 'Index Fully Flexed', icon: '👊', transition: TRANSITION_TIME, hold: 5, desc: 'Index finger fully flexed (close to palm).' },
-            { id: 'ft1:index_sweep_slow', label: 'Index Slow Sweep', icon: '🔄', transition: TRANSITION_TIME, hold: 8, desc: 'Slowly flex and extend index finger repeatedly.' },
-            { id: 'ft1:index_sweep_fast', label: 'Index Fast Sweep', icon: '⚡', transition: TRANSITION_TIME, hold: 8, desc: 'Quickly flex and extend index finger repeatedly.' },
-            { id: 'ft1:index_abduction', label: 'Index Abduction', icon: '↔️', transition: TRANSITION_TIME, hold: 5, desc: 'Move index finger side-to-side (abduction/adduction).' },
-            { id: 'ft1:other_fingers', label: 'Other Fingers Motion', icon: '🖐️', transition: TRANSITION_TIME, hold: 5, desc: 'Move other fingers while index stays still (interference test).' }
+            { id: 'ft1:reference', label: 'Reference (index mag)', icon: '✋', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Palm down, all extended. Magnet on INDEX ONLY.' },
+            { id: 'ft1:index_extended', label: 'Index Extended', icon: '☝️', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Index finger fully extended (far from sensor).' },
+            { id: 'ft1:index_partial', label: 'Index Partial Flex', icon: '👆', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Index finger half-flexed (mid-range).' },
+            { id: 'ft1:index_flexed', label: 'Index Fully Flexed', icon: '👊', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Index finger fully flexed (close to palm).' },
+            { id: 'ft1:index_sweep_slow', label: 'Index Slow Sweep', icon: '🔄', transition: TRANSITION_TIME, hold: HOLD_TIME_LONG, desc: 'Slowly flex and extend index finger repeatedly.' },
+            { id: 'ft1:index_sweep_fast', label: 'Index Fast Sweep', icon: '⚡', transition: TRANSITION_TIME, hold: HOLD_TIME_LONG, desc: 'Quickly flex and extend index finger repeatedly.' },
+            { id: 'ft1:index_abduction', label: 'Index Abduction', icon: '↔️', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Move index finger side-to-side (abduction/adduction).' },
+            { id: 'ft1:other_fingers', label: 'Other Fingers Motion', icon: '🖐️', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Move other fingers while index stays still (interference test).' }
         ],
         asl: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(letter => ({
             id: `asl:${letter.toLowerCase()}`,
