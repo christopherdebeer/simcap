@@ -41,6 +41,10 @@ const poseState = {
     updateCount: 0
 };
 
+// Hand visualization
+let handVisualizer = null;
+let handPreviewMode = 'labels'; // 'labels' or 'predictions'
+
 // Wizard and calibration buffers (for wizard functionality)
 const wizard = {
     active: false,
@@ -107,6 +111,9 @@ async function init() {
 
     // Initialize pose estimation functionality
     initPoseEstimation();
+
+    // Initialize hand visualization
+    initHandVisualization();
 
     // Initialize collapsible sections
     initCollapsibleSections();
@@ -445,6 +452,7 @@ function onLabelsChanged() {
         closeCurrentLabel();
     }
     updateActiveLabelsDisplay();
+    updateHandVisualization();
 }
 
 /**
@@ -788,7 +796,7 @@ function updatePoseEstimationFromMag(magField) {
     if (!poseState.enabled) return;
 
     // Simple similarity-based pose estimation
-    // TODO: Implement proper pose estimation algorithm
+    // TODO: Implement proper pose estimation algorithm with template matching
     // For now, just track that we're receiving data
     poseState.updateCount++;
 
@@ -799,9 +807,27 @@ function updatePoseEstimationFromMag(magField) {
     // Typical finger magnet field: 10-100 µT above background
     poseState.confidence = Math.min(1.0, strength / 100);
 
+    // Simple pose estimation based on field strength thresholds
+    // This is a placeholder - real implementation would use template matching
+    if (strength < 20) {
+        // Low field - likely open hand (fingers extended)
+        poseState.currentPose = { thumb: 0, index: 0, middle: 0, ring: 0, pinky: 0 };
+    } else if (strength > 60) {
+        // High field - likely fist (fingers flexed)
+        poseState.currentPose = { thumb: 2, index: 2, middle: 2, ring: 2, pinky: 2 };
+    } else {
+        // Medium field - partial flexion
+        const flex = (strength - 20) / 40; // 0-1 range
+        const state = Math.round(flex * 2); // 0, 1, or 2
+        poseState.currentPose = { thumb: state, index: state, middle: state, ring: state, pinky: state };
+    }
+
     // Update display every 10 samples to avoid excessive DOM updates
     if (poseState.updateCount % 10 === 0) {
         updatePoseEstimationDisplay();
+        if (handPreviewMode === 'predictions') {
+            updateHandVisualization();
+        }
     }
 }
 
@@ -826,6 +852,108 @@ function updatePoseEstimationDisplay() {
         updatesText.textContent = poseState.updateCount;
     }
 }
+
+/**
+ * Initialize hand visualization
+ */
+function initHandVisualization() {
+    const canvas = $('handCanvas');
+    if (!canvas || typeof HandVisualizer2D === 'undefined') {
+        console.warn('Hand visualization not available');
+        return;
+    }
+
+    // Create visualizer
+    handVisualizer = new HandVisualizer2D(canvas, {
+        showLabels: true,
+        backgroundColor: 'var(--bg)'
+    });
+
+    // Start animation loop
+    handVisualizer.startAnimation();
+
+    // Initial update
+    updateHandVisualization();
+}
+
+/**
+ * Set hand preview mode
+ */
+function setHandPreviewMode(mode) {
+    handPreviewMode = mode;
+
+    // Update button states
+    const labelsBtn = $('handModeLabels');
+    const predictionsBtn = $('handModePredictions');
+    const indicator = $('handModeIndicator');
+    const description = $('handPreviewDescription');
+
+    if (labelsBtn && predictionsBtn) {
+        if (mode === 'labels') {
+            labelsBtn.className = 'btn-primary btn-small';
+            predictionsBtn.className = 'btn-secondary btn-small';
+            if (indicator) indicator.innerHTML = '📋 Showing: Manual Labels';
+            if (description) description.textContent = 'Visual representation of manually selected finger states';
+        } else {
+            labelsBtn.className = 'btn-secondary btn-small';
+            predictionsBtn.className = 'btn-primary btn-small';
+            if (indicator) indicator.innerHTML = '🎯 Showing: Pose Predictions';
+            if (description) description.textContent = 'Real-time pose estimation from magnetic field data';
+        }
+    }
+
+    updateHandVisualization();
+    log(`Hand preview mode: ${mode}`);
+}
+
+/**
+ * Update hand visualization based on current mode
+ */
+function updateHandVisualization() {
+    if (!handVisualizer) return;
+
+    if (handPreviewMode === 'labels') {
+        // Show manual labels
+        const fingerStates = convertFingerLabelsToStates(state.currentLabels.fingers);
+        handVisualizer.setFingerStates(fingerStates);
+    } else {
+        // Show predictions (if available)
+        if (poseState.enabled && poseState.currentPose) {
+            handVisualizer.setFingerStates(poseState.currentPose);
+        } else {
+            // No predictions available - show neutral
+            handVisualizer.setFingerStates({
+                thumb: 0, index: 0, middle: 0, ring: 0, pinky: 0
+            });
+        }
+    }
+}
+
+/**
+ * Convert finger label strings to numeric states for visualization
+ */
+function convertFingerLabelsToStates(fingerLabels) {
+    const states = {};
+    const fingers = ['thumb', 'index', 'middle', 'ring', 'pinky'];
+
+    for (const finger of fingers) {
+        const label = fingerLabels[finger];
+        if (label === 'extended') {
+            states[finger] = 0;
+        } else if (label === 'partial') {
+            states[finger] = 1;
+        } else if (label === 'flexed') {
+            states[finger] = 2;
+        } else {
+            states[finger] = 0; // Default to extended for unknown
+        }
+    }
+
+    return states;
+}
+
+// Export for HTML onclick handlers
+window.setHandPreviewMode = setHandPreviewMode;
 
 /**
  * Initialize export functionality
