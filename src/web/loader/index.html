@@ -53,16 +53,6 @@
         .btn-danger { background: var(--danger); color: #fff; border-color: var(--danger); }
         .btn-secondary { background: var(--bg-elevated); color: var(--fg); border-color: var(--border); }
 
-        .breadcrumb {
-            font-size: 0.75rem;
-            color: var(--fg-muted);
-            margin-bottom: var(--space-lg);
-        }
-
-        .breadcrumb a:hover {
-            color: var(--fg);
-        }
-
         /* Connection status */
         .status-bar {
             display: flex;
@@ -1820,5 +1810,11 @@ setTimeout(function() { LED1.reset(); }, 1000);
     log('[DEBUG] Firmware loader initialized', 'success');
     log('[DEBUG] Eruda dev console available - click icon in bottom-right to open', 'info');
     </script>
+
+    <footer class="page-footer">
+        <span>SIMCAP Firmware Loader</span>
+        <a href="../">Web Tools</a>
+        <a href="../GAMBIT/">GAMBIT</a>
+    </footer>
 </body>
 </html>
