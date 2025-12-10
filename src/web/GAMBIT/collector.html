@@ -761,9 +761,9 @@
 
     <!-- Multi-Label Selection -->
     <section>
-        <h2>Active Labels (Multi-Select)</h2>
+        <h2 class="collapsible">Active Labels (Multi-Select)</h2>
 
-        <!-- Current active labels display -->
+        <!-- Current active labels display - always visible -->
         <div class="active-labels">
             <label>Currently Active:</label>
             <div class="active-labels-list" id="activeLabelsDisplay">
@@ -771,6 +771,8 @@
             </div>
         </div>
 
+        <!-- Collapsible content - label selection buttons -->
+        <div class="collapse-content">
         <!-- Hand Pose -->
         <div class="label-category">
             <h4>Hand Pose</h4>
@@ -865,6 +867,7 @@
                     <button class="btn-secondary btn-tiny" onclick="addPresetLabels('transitions')">Transitions</button>
                 </div>
             </div>
+        </div>
         </div>
     </section>
 
@@ -1748,6 +1751,7 @@
             state.connected = false;
             log('Disconnected');
             updateUI();
+            updateCalibrationStatus();
             return;
         }
 
@@ -1779,6 +1783,7 @@
                 state.recording = false;
                 log('Connection closed');
                 updateUI();
+                updateCalibrationStatus();
             });
 
             state.gambitClient.on('error', (err) => {
@@ -1791,6 +1796,7 @@
             state.connected = true;
             log('Connected!');
             updateUI();
+            updateCalibrationStatus();
 
         } catch (e) {
             console.error('[GAMBIT] Connection error:', e);
@@ -2280,7 +2286,9 @@
     document.querySelectorAll('.collapsible').forEach(header => {
         header.addEventListener('click', () => {
             header.classList.toggle('collapsed');
-            const content = header.nextElementSibling;
+            // Find the collapse-content within the same section (may not be immediate sibling)
+            const section = header.closest('section');
+            const content = section ? section.querySelector('.collapse-content') : header.nextElementSibling;
             if (content && content.classList.contains('collapse-content')) {
                 content.classList.toggle('hidden');
             }
