@@ -13,7 +13,13 @@ import {
 } from './modules/calibration-ui.js';
 import { onTelemetry, setDependencies as setTelemetryDeps, resetIMU } from './modules/telemetry-handler.js';
 import { setCallbacks as setConnectionCallbacks, initConnectionUI } from './modules/connection-manager.js';
-import { setCallbacks as setRecordingCallbacks, initRecordingUI } from './modules/recording-controls.js';
+import { setCallbacks as setRecordingCallbacks, initRecordingUI, startRecording } from './modules/recording-controls.js';
+import {
+    initWizard,
+    setDependencies as setWizardDeps,
+    getWizardState,
+    getCalibrationBuffers
+} from './modules/wizard.js';
 
 // Export state for global access (used by inline functions in HTML)
 window.appState = state;
@@ -41,17 +47,42 @@ const poseState = {
     updateCount: 0
 };
 
-// Wizard and calibration buffers (for wizard functionality)
-const wizard = {
-    active: false,
-    mode: null,
-    currentStep: 0,
-    steps: [],
-    phase: null,  // 'transition' | 'hold'
-    phaseStart: null
+// Particle filter for pose estimation
+let poseFilter = null;
+let poseEstimationEnabled = false;
+
+// Default reference pose (palm-down, fingers extended, typical geometry)
+// Positions in mm relative to sensor (at origin)
+const defaultReferencePose = {
+    thumb:  {x: -30, y: 40, z: 10},   // Left side, forward
+    index:  {x: -15, y: 60, z: 10},   // Slightly left, far forward
+    middle: {x: 0,   y: 65, z: 10},   // Center, farthest forward
+    ring:   {x: 15,  y: 60, z: 10},   // Slightly right, forward
+    pinky:  {x: 30,  y: 50, z: 10}    // Right side, less forward
 };
 
-const calibrationBuffers = {};
+// Magnet configuration (default N52 3mm x 2mm cylindrical magnets)
+const magnetConfig = {
+    thumb:  {moment: {x: 0, y: 0, z: 0.01}},
+    index:  {moment: {x: 0, y: 0, z: 0.01}},
+    middle: {moment: {x: 0, y: 0, z: 0.01}},
+    ring:   {moment: {x: 0, y: 0, z: 0.01}},
+    pinky:  {moment: {x: 0, y: 0, z: 0.01}}
+};
+
+// Hand visualization
+let handVisualizer = null;
+let hand3DRenderer = null;
+let handPreviewMode = 'labels'; // 'labels' or 'predictions'
+let handViewMode = '2d'; // '2d' or '3d'
+
+// Pose estimation options
+const poseEstimationOptions = {
+    useCalibration: true,  // Use calibrated magnetic field data
+    useOrientation: true,  // Use IMU orientation for context
+    show3DOrientation: false,  // Show 3D orientation cube
+    useParticleFilter: false  // Use ParticleFilter vs threshold-based estimation
+};
 
 // GitHub token (for upload functionality)
 let ghToken = null;
@@ -68,15 +99,23 @@ async function init() {
     // Initialize calibration
     const calInstance = initCalibration();
 
+    // Set wizard dependencies
+    setWizardDeps({
+        state: state,
+        startRecording: startRecording,
+        $: $,
+        log: log
+    });
+
     // Set telemetry dependencies
     setTelemetryDeps({
         calibrationInstance: calInstance,
         magFilter: magFilter,
         imuFusion: imuFusion,
-        wizard: wizard,
-        calibrationBuffers: calibrationBuffers,
+        wizard: getWizardState(),
+        calibrationBuffers: getCalibrationBuffers(),
         poseState: poseState,
-        updatePoseEstimation: null,  // TODO: implement if needed
+        updatePoseEstimation: updatePoseEstimationFromMag,
         updateUI: updateUI,
         $: $
     });
@@ -101,6 +140,15 @@ async function init() {
 
     // Initialize export functionality
     initExport();
+
+    // Initialize pose estimation functionality
+    initPoseEstimation();
+
+    // Initialize wizard functionality
+    initWizard();
+
+    // Initialize hand visualization
+    initHandVisualization();
 
     // Initialize collapsible sections
     initCollapsibleSections();
@@ -165,6 +213,24 @@ function updateUI() {
     const uploadBtn = $('uploadBtn');
     if (uploadBtn) {
         uploadBtn.disabled = state.sessionData.length === 0 || state.recording || !ghToken;
+    }
+
+    // Wizard button - enable when connected
+    const wizardBtn = $('wizardBtn');
+    if (wizardBtn) {
+        wizardBtn.disabled = !state.connected;
+        wizardBtn.title = state.connected ? 'Start guided data collection' : 'Connect device to enable';
+    }
+
+    // Pose estimation button - enable when connected
+    const poseEstimationBtn = $('poseEstimationBtn');
+    if (poseEstimationBtn) {
+        poseEstimationBtn.disabled = !state.connected;
+        // Update button text based on pose state
+        poseEstimationBtn.textContent = poseState.enabled ? '🎯 Disable Pose Tracking' : '🎯 Enable Pose Tracking';
+        poseEstimationBtn.title = state.connected
+            ? (poseState.enabled ? 'Disable similarity-based pose tracking' : 'Enable similarity-based pose tracking')
+            : 'Connect device to enable';
     }
 
     // Sample count
@@ -421,6 +487,7 @@ function onLabelsChanged() {
         closeCurrentLabel();
     }
     updateActiveLabelsDisplay();
+    updateHandVisualization();
 }
 
 /**
@@ -487,6 +554,391 @@ function loadCustomLabels() {
 function renderCustomLabels() {
     // TODO: Implement custom label rendering if needed
 }
+
+/**
+ * Initialize pose estimation functionality
+ */
+function initPoseEstimation() {
+    const poseEstimationBtn = $('poseEstimationBtn');
+    if (poseEstimationBtn) {
+        poseEstimationBtn.addEventListener('click', togglePoseEstimation);
+    }
+}
+
+/**
+ * Toggle pose estimation on/off
+ */
+function togglePoseEstimation() {
+    if (!state.connected) {
+        log('Error: Connect device first');
+        return;
+    }
+
+    poseState.enabled = !poseState.enabled;
+
+    if (poseState.enabled) {
+        log('Pose tracking enabled');
+        // Show pose estimation status section
+        const statusSection = $('poseEstimationStatus');
+        if (statusSection) {
+            statusSection.style.display = 'block';
+        }
+        renderPoseEstimationOptions();
+        updatePoseEstimationDisplay();
+    } else {
+        log('Pose tracking disabled');
+        // Hide pose estimation status section
+        const statusSection = $('poseEstimationStatus');
+        if (statusSection) {
+            statusSection.style.display = 'none';
+        }
+        // Reset pose state
+        poseState.currentPose = null;
+        poseState.confidence = 0;
+        poseState.updateCount = 0;
+    }
+
+    updateUI();
+}
+
+/**
+ * Render pose estimation options UI
+ */
+function renderPoseEstimationOptions() {
+    const statusSection = $('poseEstimationStatus');
+    if (!statusSection) return;
+
+    // Check if options already rendered
+    if ($('poseOptionsPanel')) return;
+
+    const optionsHTML = `
+        <div id="poseOptionsPanel" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);">
+            <div style="font-size: 11px; color: var(--fg-muted); margin-bottom: 8px;">Estimation Options:</div>
+            <div style="display: flex; flex-direction: column; gap: 6px; font-size: 11px;">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" id="useCalibrationToggle" ${poseEstimationOptions.useCalibration ? 'checked' : ''}
+                           onchange="togglePoseOption('useCalibration')" />
+                    <span>Use Calibration (when available)</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" id="useOrientationToggle" ${poseEstimationOptions.useOrientation ? 'checked' : ''}
+                           onchange="togglePoseOption('useOrientation')" />
+                    <span>Use IMU Orientation (sensor fusion)</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" id="show3DOrientationToggle" ${poseEstimationOptions.show3DOrientation ? 'checked' : ''}
+                           onchange="togglePoseOption('show3DOrientation')" />
+                    <span>Show 3D Orientation Cube</span>
+                </label>
+            </div>
+            <div id="orientation3DCube" style="display: none; margin-top: 12px; perspective: 500px; height: 120px;">
+                <div id="orientationCube" class="cube" style="margin: 0 auto; width: 60px; height: 60px; transform-style: preserve-3d; transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg);">
+                    <div class="face front" style="background: rgba(90,90,90,.7); width: 100%; height: 100%; position: absolute; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; transform: translateZ(30px);">F</div>
+                    <div class="face back" style="background: rgba(0,210,0,.7); width: 100%; height: 100%; position: absolute; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; transform: rotateY(180deg) translateZ(30px);">B</div>
+                    <div class="face right" style="background: rgba(210,0,0,.7); width: 100%; height: 100%; position: absolute; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; transform: rotateY(90deg) translateZ(30px);">R</div>
+                    <div class="face left" style="background: rgba(0,0,210,.7); width: 100%; height: 100%; position: absolute; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; transform: rotateY(-90deg) translateZ(30px);">L</div>
+                    <div class="face top" style="background: rgba(210,210,0,.7); width: 100%; height: 100%; position: absolute; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; transform: rotateX(90deg) translateZ(30px);">T</div>
+                    <div class="face bottom" style="background: rgba(210,0,210,.7); width: 100%; height: 100%; position: absolute; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; transform: rotateX(-90deg) translateZ(30px);">Bo</div>
+                </div>
+                <div id="orientationAngles" style="text-align: center; margin-top: 8px; font-size: 10px; color: var(--fg-muted); font-family: monospace;"></div>
+            </div>
+        </div>
+    `;
+
+    statusSection.insertAdjacentHTML('beforeend', optionsHTML);
+}
+
+/**
+ * Toggle pose estimation option
+ */
+function togglePoseOption(option) {
+    poseEstimationOptions[option] = !poseEstimationOptions[option];
+
+    // Show/hide 3D cube
+    if (option === 'show3DOrientation') {
+        const cube = $('orientation3DCube');
+        if (cube) {
+            cube.style.display = poseEstimationOptions.show3DOrientation ? 'block' : 'none';
+        }
+    }
+
+    log(`Pose option ${option}: ${poseEstimationOptions[option]}`);
+}
+
+// Export for HTML onclick
+window.togglePoseOption = togglePoseOption;
+
+/**
+ * Update pose estimation from magnetic field data
+ * Called by telemetry handler when pose tracking is enabled
+ * @param {Object} data - Sensor data {magField, orientation, euler, sample}
+ */
+function updatePoseEstimationFromMag(data) {
+    if (!poseState.enabled) return;
+
+    const { magField, orientation, euler, sample } = data;
+    poseState.updateCount++;
+
+    // Get magnetic field data - use calibrated if option enabled and available
+    let mx = magField.x;
+    let my = magField.y;
+    let mz = magField.z;
+
+    if (poseEstimationOptions.useCalibration && sample) {
+        // Prefer fused (calibrated + earth field removed) > calibrated (iron corrected) > raw
+        if (sample.fused_mx !== undefined) {
+            mx = sample.fused_mx;
+            my = sample.fused_my;
+            mz = sample.fused_mz;
+        } else if (sample.calibrated_mx !== undefined) {
+            mx = sample.calibrated_mx;
+            my = sample.calibrated_my;
+            mz = sample.calibrated_mz;
+        }
+    }
+
+    // Calculate field strength as a simple confidence metric
+    const strength = Math.sqrt(mx * mx + my * my + mz * mz);
+
+    // Simple confidence based on field strength (normalized)
+    // Typical finger magnet field: 10-100 µT above background
+    poseState.confidence = Math.min(1.0, strength / 100);
+
+    // Enhanced pose estimation using orientation context
+    let baseThreshold = 20;
+    let highThreshold = 60;
+
+    if (poseEstimationOptions.useOrientation && euler) {
+        // Adjust thresholds based on device orientation
+        // When tilted, gravity affects the perceived magnetic field strength
+        const tiltFactor = Math.abs(Math.cos(euler.pitch * Math.PI / 180) * Math.cos(euler.roll * Math.PI / 180));
+        baseThreshold *= tiltFactor;
+        highThreshold *= tiltFactor;
+
+        // Store orientation for 3D visualization
+        poseState.orientation = { roll: euler.roll, pitch: euler.pitch, yaw: euler.yaw };
+    }
+
+    // Simple pose estimation based on field strength thresholds
+    // TODO: Implement proper template matching using labeled training data
+    if (strength < baseThreshold) {
+        // Low field - likely open hand (fingers extended)
+        poseState.currentPose = { thumb: 0, index: 0, middle: 0, ring: 0, pinky: 0 };
+    } else if (strength > highThreshold) {
+        // High field - likely fist (fingers flexed)
+        poseState.currentPose = { thumb: 2, index: 2, middle: 2, ring: 2, pinky: 2 };
+    } else {
+        // Medium field - partial flexion
+        const flex = (strength - baseThreshold) / (highThreshold - baseThreshold); // 0-1 range
+        const fingerState = Math.round(flex * 2); // 0, 1, or 2
+        poseState.currentPose = { thumb: fingerState, index: fingerState, middle: fingerState, ring: fingerState, pinky: fingerState };
+    }
+
+    // Update display every 10 samples to avoid excessive DOM updates
+    if (poseState.updateCount % 10 === 0) {
+        updatePoseEstimationDisplay();
+        if (handPreviewMode === 'predictions') {
+            updateHandVisualization();
+        }
+        if (poseEstimationOptions.show3DOrientation && poseState.orientation) {
+            update3DOrientationCube(poseState.orientation);
+        }
+    }
+}
+
+/**
+ * Update 3D orientation cube visualization
+ */
+function update3DOrientationCube(orientation) {
+    const cube = $('orientationCube');
+    const angles = $('orientationAngles');
+
+    if (cube) {
+        cube.style.transform = `rotateX(${orientation.pitch}deg) rotateY(${orientation.roll}deg) rotateZ(${orientation.yaw}deg)`;
+    }
+
+    if (angles) {
+        angles.textContent = `R: ${orientation.roll.toFixed(1)}° P: ${orientation.pitch.toFixed(1)}° Y: ${orientation.yaw.toFixed(1)}°`;
+    }
+}
+
+/**
+ * Update pose estimation display
+ */
+function updatePoseEstimationDisplay() {
+    const statusText = $('poseStatusText');
+    const confidenceText = $('poseConfidenceText');
+    const updatesText = $('poseUpdatesText');
+
+    if (statusText) {
+        statusText.textContent = poseState.enabled ? 'Active' : 'Disabled';
+        statusText.style.color = poseState.enabled ? 'var(--success)' : 'var(--fg-muted)';
+    }
+
+    if (confidenceText) {
+        confidenceText.textContent = Math.round(poseState.confidence * 100) + '%';
+    }
+
+    if (updatesText) {
+        updatesText.textContent = poseState.updateCount;
+    }
+}
+
+/**
+ * Initialize hand visualization
+ */
+function initHandVisualization() {
+    // Initialize 2D visualizer
+    const canvas2D = $('handCanvas');
+    if (canvas2D && typeof HandVisualizer2D !== 'undefined') {
+        handVisualizer = new HandVisualizer2D(canvas2D, {
+            showLabels: true,
+            backgroundColor: 'var(--bg)'
+        });
+        handVisualizer.startAnimation();
+    } else {
+        console.warn('2D hand visualization not available');
+    }
+
+    // Initialize 3D renderer
+    const canvas3D = $('handCanvas3D');
+    if (canvas3D && typeof Hand3DRenderer !== 'undefined') {
+        hand3DRenderer = new Hand3DRenderer(canvas3D, {
+            backgroundColor: '#1a1a2e'
+        });
+        hand3DRenderer.startAnimation();
+    } else {
+        console.warn('3D hand renderer not available');
+    }
+
+    // Initial update
+    updateHandVisualization();
+}
+
+/**
+ * Set hand preview mode
+ */
+function setHandPreviewMode(mode) {
+    handPreviewMode = mode;
+
+    // Update button states
+    const labelsBtn = $('handModeLabels');
+    const predictionsBtn = $('handModePredictions');
+    const indicator = $('handModeIndicator');
+    const description = $('handPreviewDescription');
+
+    if (labelsBtn && predictionsBtn) {
+        if (mode === 'labels') {
+            labelsBtn.className = 'btn-primary btn-small';
+            predictionsBtn.className = 'btn-secondary btn-small';
+            if (indicator) indicator.innerHTML = '📋 Showing: Manual Labels';
+            if (description) description.textContent = 'Visual representation of manually selected finger states';
+        } else {
+            labelsBtn.className = 'btn-secondary btn-small';
+            predictionsBtn.className = 'btn-primary btn-small';
+            if (indicator) indicator.innerHTML = '🎯 Showing: Pose Predictions';
+            if (description) description.textContent = 'Real-time pose estimation from magnetic field data';
+        }
+    }
+
+    updateHandVisualization();
+    log(`Hand preview mode: ${mode}`);
+}
+
+/**
+ * Set hand view mode (2D or 3D)
+ */
+function setHandViewMode(mode) {
+    handViewMode = mode;
+
+    // Update button states
+    const btn2D = $('handView2D');
+    const btn3D = $('handView3D');
+    const canvas2D = $('handCanvas');
+    const canvas3D = $('handCanvas3D');
+
+    if (btn2D && btn3D) {
+        if (mode === '2d') {
+            btn2D.className = 'btn-primary btn-small';
+            btn3D.className = 'btn-secondary btn-small';
+            if (canvas2D) canvas2D.style.display = 'block';
+            if (canvas3D) canvas3D.style.display = 'none';
+        } else {
+            btn2D.className = 'btn-secondary btn-small';
+            btn3D.className = 'btn-primary btn-small';
+            if (canvas2D) canvas2D.style.display = 'none';
+            if (canvas3D) canvas3D.style.display = 'block';
+        }
+    }
+
+    updateHandVisualization();
+    log(`Hand view mode: ${mode}`);
+}
+
+/**
+ * Update hand visualization based on current mode
+ */
+function updateHandVisualization() {
+    // Determine finger states based on preview mode
+    let fingerStates;
+    if (handPreviewMode === 'labels') {
+        // Show manual labels
+        fingerStates = convertFingerLabelsToStates(state.currentLabels.fingers);
+    } else {
+        // Show predictions (if available)
+        if (poseState.enabled && poseState.currentPose) {
+            fingerStates = poseState.currentPose;
+        } else {
+            // No predictions available - show neutral
+            fingerStates = {
+                thumb: 0, index: 0, middle: 0, ring: 0, pinky: 0
+            };
+        }
+    }
+
+    // Update active renderer based on view mode
+    if (handViewMode === '2d' && handVisualizer) {
+        handVisualizer.setFingerStates(fingerStates);
+    } else if (handViewMode === '3d' && hand3DRenderer) {
+        hand3DRenderer.setFingerPoses(fingerStates);
+
+        // Update orientation from IMU if available
+        if (poseState.orientation) {
+            hand3DRenderer.setOrientation({
+                pitch: poseState.orientation.pitch,
+                yaw: poseState.orientation.yaw,
+                roll: poseState.orientation.roll
+            });
+        }
+    }
+}
+
+/**
+ * Convert finger label strings to numeric states for visualization
+ */
+function convertFingerLabelsToStates(fingerLabels) {
+    const states = {};
+    const fingers = ['thumb', 'index', 'middle', 'ring', 'pinky'];
+
+    for (const finger of fingers) {
+        const label = fingerLabels[finger];
+        if (label === 'extended') {
+            states[finger] = 0;
+        } else if (label === 'partial') {
+            states[finger] = 1;
+        } else if (label === 'flexed') {
+            states[finger] = 2;
+        } else {
+            states[finger] = 0; // Default to extended for unknown
+        }
+    }
+
+    return states;
+}
+
+// Export for HTML onclick handlers
+window.setHandPreviewMode = setHandPreviewMode;
+window.setHandViewMode = setHandViewMode;
 
 /**
  * Initialize export functionality
