@@ -868,6 +868,11 @@ function setHandViewMode(mode) {
             btn3D.className = 'btn-primary btn-small';
             if (canvas2D) canvas2D.style.display = 'none';
             if (canvas3D) canvas3D.style.display = 'block';
+            // Resize 3D renderer now that canvas is visible
+            // (getBoundingClientRect returns 0 for hidden elements)
+            if (hand3DRenderer) {
+                hand3DRenderer.resize();
+            }
         }
     }
 
