@@ -820,10 +820,52 @@ function nextWizardStep() {
     }
 }
 
+/**
+ * Start wizard with selected mode
+ */
+async function startWizardMode(mode) {
+    wizard.mode = mode;
+    wizard.currentStep = 0;
+
+    // Build step list based on mode
+    switch (mode) {
+        case 'quick':
+            wizard.steps = [
+                ...WIZARD_STEPS.reference,
+                ...WIZARD_STEPS.fingers
+            ];
+            break;
+        case 'full':
+            wizard.steps = [
+                ...WIZARD_STEPS.reference,
+                ...WIZARD_STEPS.fingers,
+                ...WIZARD_STEPS.gestures
+            ];
+            break;
+        case 'ft5mag':
+            wizard.steps = [...WIZARD_STEPS.fingerTracking5Mag];
+            break;
+        default:
+            wizard.steps = [...WIZARD_STEPS.reference, ...WIZARD_STEPS.fingers];
+    }
+
+    const stats = $('wizardStats');
+    if (stats) stats.style.display = 'flex';
+
+    // Start recording if not already
+    if (!state.recording && state.connected && state.gambitClient) {
+        await startRecording();
+    }
+
+    log(`Wizard mode: ${mode} (${wizard.steps.length} steps)`);
+    renderWizardStep();
+}
+
 // Export wizard functions to window for onclick handlers
 window.closeWizard = closeWizard;
 window.nextWizardStep = nextWizardStep;
 window.startWizardCollection = startWizardCollection;
+window.startWizardMode = startWizardMode;
 
 /**
  * Initialize pose estimation functionality
