@@ -382,9 +382,10 @@
 
             // ===== Proper Orientation Estimation for Cube Visualization =====
             // Use Madgwick AHRS for fused acc+gyro orientation (for gyro cube)
+            // Lower beta = more stable but slower response (0.01-0.1 typical range)
             const ahrs = new MadgwickAHRS({
                 sampleFreq: 20,  // 20Hz (firmware default)
-                beta: 0.1       // Filter gain
+                beta: 0.02      // Very low filter gain for stability at rest
             });
 
             // Low-pass filter for smoothing cube rotations
@@ -407,10 +408,11 @@
             }
 
             // Filters for each cube axis (smooth display)
+            // Lower alpha = smoother but more lag
             const cubeFilters = {
-                acc: { x: new LowPassFilter(0.3), y: new LowPassFilter(0.3), z: new LowPassFilter(0.3) },
-                gyro: { x: new LowPassFilter(0.3), y: new LowPassFilter(0.3), z: new LowPassFilter(0.3) },
-                mag: { x: new LowPassFilter(0.3), y: new LowPassFilter(0.3), z: new LowPassFilter(0.3) }
+                acc: { x: new LowPassFilter(0.2), y: new LowPassFilter(0.2), z: new LowPassFilter(0.2) },
+                gyro: { x: new LowPassFilter(0.1), y: new LowPassFilter(0.1), z: new LowPassFilter(0.1) },  // Extra smooth for gyro
+                mag: { x: new LowPassFilter(0.2), y: new LowPassFilter(0.2), z: new LowPassFilter(0.2) }
             };
 
             // Track last timestamp for dt calculation
@@ -604,26 +606,38 @@
                 
                 window.cubeG.style = `transform: rotateX(${filteredGyroPitch}deg) rotateY(${filteredGyroRoll}deg) rotateZ(${filteredGyroYaw}deg);`;
 
-                // --- MAGNETOMETER CUBE: Heading from magnetic field ---
-                // Calculate heading (compass direction) from magnetometer
-                // Also show tilt based on magnetic field vector direction
+                // --- MAGNETOMETER CUBE: Shows magnetic field vector direction ---
+                // The cube rotates to point toward the magnetic field vector
+                // This responds to both heading changes AND tilting the device
                 const mx = prenorm.mx || 0;
                 const my = prenorm.my || 0;
                 const mz = prenorm.mz || 0;
                 
-                // Magnetic heading (yaw) - compass direction
-                // Note: This is uncorrected for tilt, but gives a visual indication
-                const magHeading = Math.atan2(my, mx) * (180 / Math.PI);
+                // Calculate spherical coordinates of the magnetic field vector
+                // This gives us the direction the field is pointing in 3D space
                 
-                // Magnetic inclination (dip angle) - how much field points down
-                const magHorizontal = Math.sqrt(mx * mx + my * my);
-                const magInclination = Math.atan2(mz, magHorizontal) * (180 / Math.PI);
+                // Azimuth (heading) - rotation around Z axis (compass direction)
+                // atan2(y, x) gives angle in XY plane
+                const magAzimuth = Math.atan2(my, mx) * (180 / Math.PI);
+                
+                // Elevation (pitch) - rotation around Y axis (how much field points up/down)
+                // This is the angle from the horizontal plane
+                const magMagnitude = Math.sqrt(mx * mx + my * my + mz * mz);
+                const magElevation = magMagnitude > 0.1 ? 
+                    Math.asin(mz / magMagnitude) * (180 / Math.PI) : 0;
+                
+                // Roll based on the ratio of X to Y components (tilt indication)
+                // This helps show when the device is tilted sideways
+                const magRoll = Math.atan2(mx, Math.sqrt(my * my + mz * mz)) * (180 / Math.PI);
                 
                 // Apply low-pass filter for smooth display
-                const filteredMagHeading = cubeFilters.mag.z.filter(magHeading);
-                const filteredMagInclination = cubeFilters.mag.x.filter(magInclination);
+                const filteredMagAzimuth = cubeFilters.mag.z.filter(magAzimuth);
+                const filteredMagElevation = cubeFilters.mag.x.filter(magElevation);
+                const filteredMagRoll = cubeFilters.mag.y.filter(magRoll);
                 
-                window.cubeM.style = `transform: rotateX(${filteredMagInclination}deg) rotateY(0deg) rotateZ(${-filteredMagHeading}deg);`;
+                // Apply rotations: first azimuth (Z), then elevation (X), then roll (Y)
+                // This makes the cube "point" toward the magnetic field vector
+                window.cubeM.style = `transform: rotateZ(${-filteredMagAzimuth}deg) rotateX(${filteredMagElevation}deg) rotateY(${filteredMagRoll}deg);`;
             }
 
             var newlineRegex = /\n/g;
