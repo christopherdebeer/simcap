@@ -96,8 +96,11 @@ ChangeLog:
     console.warn("No Web Bluetooth on this platform");
     var iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
     if (iOS) {
-      if (confirm("To use Web Bluetooth on iOS you'll need the WebBLE App.\nPlease click Ok to go to the App Store and download it."))
+      if (confirm("To use Web Bluetooth on iOS you'll need the WebBLE App.\nPlease click Ok to go to the App Store and download it. Cancel to load webble://")) {
         window.location = "https://itunes.apple.com/us/app/webble/id1193531073";
+      } else {
+        window.location = window.location.href.replace(/^https?:\/\//,"webble://");
+      }
     } else {
       if (confirm("This Web Browser doesn't support Web Bluetooth.\nPlease click Ok to see instructions for enabling it."))
         window.location = "https://www.espruino.com/Quick+Start+BLE#with-web-bluetooth";
@@ -409,7 +412,7 @@ ChangeLog:
   var puck = {
     version : "1.02",
     /// Are we writing debug information? 0 is no, 1 is some, 2 is more, 3 is all.
-    debug : 3,
+    debug : 2,
     /** When we receive more than 20 bytes, should we increase the chunk size we use
     for writing to match it? Normally this is fine but it seems some phones have
     a broken bluetooth implementation that doesn't allow it. */
