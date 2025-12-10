@@ -45,6 +45,13 @@ const poseState = {
 let handVisualizer = null;
 let handPreviewMode = 'labels'; // 'labels' or 'predictions'
 
+// Pose estimation options
+const poseEstimationOptions = {
+    useCalibration: true,  // Use calibrated magnetic field data
+    useOrientation: true,  // Use IMU orientation for context
+    show3DOrientation: false  // Show 3D orientation cube
+};
+
 // Wizard and calibration buffers (for wizard functionality)
 const wizard = {
     active: false,
@@ -770,6 +777,7 @@ function togglePoseEstimation() {
         if (statusSection) {
             statusSection.style.display = 'block';
         }
+        renderPoseEstimationOptions();
         updatePoseEstimationDisplay();
     } else {
         log('Pose tracking disabled');
@@ -788,38 +796,136 @@ function togglePoseEstimation() {
 }
 
 /**
+ * Render pose estimation options UI
+ */
+function renderPoseEstimationOptions() {
+    const statusSection = $('poseEstimationStatus');
+    if (!statusSection) return;
+
+    // Check if options already rendered
+    if ($('poseOptionsPanel')) return;
+
+    const optionsHTML = `
+        <div id="poseOptionsPanel" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);">
+            <div style="font-size: 11px; color: var(--fg-muted); margin-bottom: 8px;">Estimation Options:</div>
+            <div style="display: flex; flex-direction: column; gap: 6px; font-size: 11px;">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" id="useCalibrationToggle" ${poseEstimationOptions.useCalibration ? 'checked' : ''}
+                           onchange="togglePoseOption('useCalibration')" />
+                    <span>Use Calibration (when available)</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" id="useOrientationToggle" ${poseEstimationOptions.useOrientation ? 'checked' : ''}
+                           onchange="togglePoseOption('useOrientation')" />
+                    <span>Use IMU Orientation (sensor fusion)</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" id="show3DOrientationToggle" ${poseEstimationOptions.show3DOrientation ? 'checked' : ''}
+                           onchange="togglePoseOption('show3DOrientation')" />
+                    <span>Show 3D Orientation Cube</span>
+                </label>
+            </div>
+            <div id="orientation3DCube" style="display: none; margin-top: 12px; perspective: 500px; height: 120px;">
+                <div id="orientationCube" class="cube" style="margin: 0 auto; width: 60px; height: 60px; transform-style: preserve-3d; transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg);">
+                    <div class="face front" style="background: rgba(90,90,90,.7); width: 100%; height: 100%; position: absolute; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; transform: translateZ(30px);">F</div>
+                    <div class="face back" style="background: rgba(0,210,0,.7); width: 100%; height: 100%; position: absolute; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; transform: rotateY(180deg) translateZ(30px);">B</div>
+                    <div class="face right" style="background: rgba(210,0,0,.7); width: 100%; height: 100%; position: absolute; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; transform: rotateY(90deg) translateZ(30px);">R</div>
+                    <div class="face left" style="background: rgba(0,0,210,.7); width: 100%; height: 100%; position: absolute; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; transform: rotateY(-90deg) translateZ(30px);">L</div>
+                    <div class="face top" style="background: rgba(210,210,0,.7); width: 100%; height: 100%; position: absolute; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; transform: rotateX(90deg) translateZ(30px);">T</div>
+                    <div class="face bottom" style="background: rgba(210,0,210,.7); width: 100%; height: 100%; position: absolute; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; transform: rotateX(-90deg) translateZ(30px);">Bo</div>
+                </div>
+                <div id="orientationAngles" style="text-align: center; margin-top: 8px; font-size: 10px; color: var(--fg-muted); font-family: monospace;"></div>
+            </div>
+        </div>
+    `;
+
+    statusSection.insertAdjacentHTML('beforeend', optionsHTML);
+}
+
+/**
+ * Toggle pose estimation option
+ */
+function togglePoseOption(option) {
+    poseEstimationOptions[option] = !poseEstimationOptions[option];
+
+    // Show/hide 3D cube
+    if (option === 'show3DOrientation') {
+        const cube = $('orientation3DCube');
+        if (cube) {
+            cube.style.display = poseEstimationOptions.show3DOrientation ? 'block' : 'none';
+        }
+    }
+
+    log(`Pose option ${option}: ${poseEstimationOptions[option]}`);
+}
+
+// Export for HTML onclick
+window.togglePoseOption = togglePoseOption;
+
+/**
  * Update pose estimation from magnetic field data
  * Called by telemetry handler when pose tracking is enabled
- * @param {Object} magField - Filtered magnetic field {x, y, z}
+ * @param {Object} data - Sensor data {magField, orientation, euler, sample}
  */
-function updatePoseEstimationFromMag(magField) {
+function updatePoseEstimationFromMag(data) {
     if (!poseState.enabled) return;
 
-    // Simple similarity-based pose estimation
-    // TODO: Implement proper pose estimation algorithm with template matching
-    // For now, just track that we're receiving data
+    const { magField, orientation, euler, sample } = data;
     poseState.updateCount++;
 
+    // Get magnetic field data - use calibrated if option enabled and available
+    let mx = magField.x;
+    let my = magField.y;
+    let mz = magField.z;
+
+    if (poseEstimationOptions.useCalibration && sample) {
+        // Prefer fused (calibrated + earth field removed) > calibrated (iron corrected) > raw
+        if (sample.fused_mx !== undefined) {
+            mx = sample.fused_mx;
+            my = sample.fused_my;
+            mz = sample.fused_mz;
+        } else if (sample.calibrated_mx !== undefined) {
+            mx = sample.calibrated_mx;
+            my = sample.calibrated_my;
+            mz = sample.calibrated_mz;
+        }
+    }
+
     // Calculate field strength as a simple confidence metric
-    const strength = Math.sqrt(magField.x * magField.x + magField.y * magField.y + magField.z * magField.z);
+    const strength = Math.sqrt(mx * mx + my * my + mz * mz);
 
     // Simple confidence based on field strength (normalized)
     // Typical finger magnet field: 10-100 µT above background
     poseState.confidence = Math.min(1.0, strength / 100);
 
+    // Enhanced pose estimation using orientation context
+    let baseThreshold = 20;
+    let highThreshold = 60;
+
+    if (poseEstimationOptions.useOrientation && euler) {
+        // Adjust thresholds based on device orientation
+        // When tilted, gravity affects the perceived magnetic field strength
+        const tiltFactor = Math.abs(Math.cos(euler.pitch * Math.PI / 180) * Math.cos(euler.roll * Math.PI / 180));
+        baseThreshold *= tiltFactor;
+        highThreshold *= tiltFactor;
+
+        // Store orientation for 3D visualization
+        poseState.orientation = { roll: euler.roll, pitch: euler.pitch, yaw: euler.yaw };
+    }
+
     // Simple pose estimation based on field strength thresholds
-    // This is a placeholder - real implementation would use template matching
-    if (strength < 20) {
+    // TODO: Implement proper template matching using labeled training data
+    if (strength < baseThreshold) {
         // Low field - likely open hand (fingers extended)
         poseState.currentPose = { thumb: 0, index: 0, middle: 0, ring: 0, pinky: 0 };
-    } else if (strength > 60) {
+    } else if (strength > highThreshold) {
         // High field - likely fist (fingers flexed)
         poseState.currentPose = { thumb: 2, index: 2, middle: 2, ring: 2, pinky: 2 };
     } else {
         // Medium field - partial flexion
-        const flex = (strength - 20) / 40; // 0-1 range
-        const state = Math.round(flex * 2); // 0, 1, or 2
-        poseState.currentPose = { thumb: state, index: state, middle: state, ring: state, pinky: state };
+        const flex = (strength - baseThreshold) / (highThreshold - baseThreshold); // 0-1 range
+        const fingerState = Math.round(flex * 2); // 0, 1, or 2
+        poseState.currentPose = { thumb: fingerState, index: fingerState, middle: fingerState, ring: fingerState, pinky: fingerState };
     }
 
     // Update display every 10 samples to avoid excessive DOM updates
@@ -828,6 +934,25 @@ function updatePoseEstimationFromMag(magField) {
         if (handPreviewMode === 'predictions') {
             updateHandVisualization();
         }
+        if (poseEstimationOptions.show3DOrientation && poseState.orientation) {
+            update3DOrientationCube(poseState.orientation);
+        }
+    }
+}
+
+/**
+ * Update 3D orientation cube visualization
+ */
+function update3DOrientationCube(orientation) {
+    const cube = $('orientationCube');
+    const angles = $('orientationAngles');
+
+    if (cube) {
+        cube.style.transform = `rotateX(${orientation.pitch}deg) rotateY(${orientation.roll}deg) rotateZ(${orientation.yaw}deg)`;
+    }
+
+    if (angles) {
+        angles.textContent = `R: ${orientation.roll.toFixed(1)}° P: ${orientation.pitch.toFixed(1)}° Y: ${orientation.yaw.toFixed(1)}°`;
     }
 }
 
