@@ -1091,6 +1091,16 @@
         measurementNoise: 1.0
     });
 
+    // Initialize IMU sensor fusion for orientation estimation
+    // Uses Madgwick AHRS to fuse accelerometer + gyroscope into device orientation
+    // This orientation is used to subtract Earth's magnetic field from magnetometer readings
+    const imuFusion = new MadgwickAHRS({
+        sampleFreq: 50,   // 50 Hz telemetry rate
+        beta: 0.1         // Filter gain (lower = smoother, higher = faster response)
+    });
+    let lastTelemetryTime = null;
+    let imuInitialized = false;
+
     // ===== Real-time Pose Estimation =====
     // Initialize particle filter for finger position tracking
     let poseFilter = null;
@@ -1598,32 +1608,87 @@
         // Create a decorated copy of telemetry with additional processed fields
         const decoratedTelemetry = {...telemetry};
 
-        // Apply calibration correction if available (adds calibrated_ fields)
+        // Calculate time step for IMU fusion
+        const now = performance.now();
+        const dt = lastTelemetryTime ? (now - lastTelemetryTime) / 1000 : 0.02; // Default 50Hz
+        lastTelemetryTime = now;
+
+        // Update IMU sensor fusion to estimate device orientation
+        // Uses accelerometer + gyroscope (NOT magnetometer - it's our measurement target)
+        if (telemetry.ax !== undefined && telemetry.gx !== undefined) {
+            if (!imuInitialized && Math.abs(telemetry.ax) + Math.abs(telemetry.ay) + Math.abs(telemetry.az) > 0.5) {
+                // Initialize orientation from accelerometer (assumes stationary)
+                imuFusion.initFromAccelerometer(telemetry.ax, telemetry.ay, telemetry.az);
+                imuInitialized = true;
+            }
+            // Update orientation estimate
+            imuFusion.update(
+                telemetry.ax, telemetry.ay, telemetry.az,  // Accelerometer
+                telemetry.gx, telemetry.gy, telemetry.gz,  // Gyroscope
+                dt,                                         // Time step
+                true                                        // Gyro is in deg/s
+            );
+        }
+
+        // Get current orientation for Earth field subtraction
+        const orientation = imuInitialized ? imuFusion.getQuaternion() : null;
+        const euler = imuInitialized ? imuFusion.getEulerAngles() : null;
+
+        // Add orientation to telemetry
+        if (orientation) {
+            decoratedTelemetry.orientation_w = orientation.w;
+            decoratedTelemetry.orientation_x = orientation.x;
+            decoratedTelemetry.orientation_y = orientation.y;
+            decoratedTelemetry.orientation_z = orientation.z;
+            decoratedTelemetry.euler_roll = euler.roll;
+            decoratedTelemetry.euler_pitch = euler.pitch;
+            decoratedTelemetry.euler_yaw = euler.yaw;
+        }
+
+        // Apply calibration correction (adds calibrated_ fields - iron correction only)
         if (calibrationInstance &&
-            calibrationInstance.earthFieldCalibrated &&
             calibrationInstance.hardIronCalibrated &&
             calibrationInstance.softIronCalibrated) {
             try {
-                const corrected = calibrationInstance.correct({
+                // Iron correction only (no Earth field subtraction yet)
+                const ironCorrected = calibrationInstance.correctIronOnly({
                     x: telemetry.mx,
                     y: telemetry.my,
                     z: telemetry.mz
                 });
-                decoratedTelemetry.calibrated_mx = corrected.x;
-                decoratedTelemetry.calibrated_my = corrected.y;
-                decoratedTelemetry.calibrated_mz = corrected.z;
+                decoratedTelemetry.calibrated_mx = ironCorrected.x;
+                decoratedTelemetry.calibrated_my = ironCorrected.y;
+                decoratedTelemetry.calibrated_mz = ironCorrected.z;
+
+                // Full correction with Earth field subtraction (requires orientation)
+                if (calibrationInstance.earthFieldCalibrated && orientation) {
+                    // Create Quaternion object for calibration.correct()
+                    const quatOrientation = new Quaternion(
+                        orientation.w, orientation.x, orientation.y, orientation.z
+                    );
+                    const fused = calibrationInstance.correct(
+                        { x: telemetry.mx, y: telemetry.my, z: telemetry.mz },
+                        quatOrientation
+                    );
+                    decoratedTelemetry.fused_mx = fused.x;
+                    decoratedTelemetry.fused_my = fused.y;
+                    decoratedTelemetry.fused_mz = fused.z;
+                }
             } catch (e) {
                 // Calibration failed, skip decoration
+                console.debug('[Calibration] Correction failed:', e.message);
             }
         }
 
         // Apply Kalman filtering (adds filtered_ fields)
+        // Use best available source: fused > calibrated > raw
         try {
-            const filteredMag = magFilter.update({
-                x: decoratedTelemetry.calibrated_mx || telemetry.mx,
-                y: decoratedTelemetry.calibrated_my || telemetry.my,
-                z: decoratedTelemetry.calibrated_mz || telemetry.mz
-            });
+            const magInput = {
+                x: decoratedTelemetry.fused_mx || decoratedTelemetry.calibrated_mx || telemetry.mx,
+                y: decoratedTelemetry.fused_my || decoratedTelemetry.calibrated_my || telemetry.my,
+                z: decoratedTelemetry.fused_mz || decoratedTelemetry.calibrated_mz || telemetry.mz
+            };
+            const filteredMag = magFilter.update(magInput);
             decoratedTelemetry.filtered_mx = filteredMag.x;
             decoratedTelemetry.filtered_my = filteredMag.y;
             decoratedTelemetry.filtered_mz = filteredMag.z;

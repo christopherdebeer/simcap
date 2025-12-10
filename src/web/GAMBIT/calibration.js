@@ -335,6 +335,18 @@ class EnvironmentalCalibration {
 
     /**
      * Apply only iron corrections (no Earth field subtraction)
+     * Use this when orientation is not available or when you want
+     * to see the iron-corrected signal before Earth field compensation.
+     *
+     * @param {Object} raw - Raw {x, y, z} magnetometer reading
+     * @returns {Object} Iron-corrected {x, y, z} reading
+     */
+    correctIronOnly(raw) {
+        return this._applyIronCorrection(raw);
+    }
+
+    /**
+     * Apply only iron corrections (internal method)
      */
     _applyIronCorrection(raw) {
         let corrected = {
