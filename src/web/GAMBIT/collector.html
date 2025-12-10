@@ -2261,6 +2261,40 @@
             { id: 'finger_isolation:ring', label: 'Ring Isolation', icon: '💍', transition: TRANSITION_TIME, hold: 5, desc: 'Move only your ring finger through full range.' },
             { id: 'finger_isolation:pinky', label: 'Pinky Isolation', icon: '🤙', transition: TRANSITION_TIME, hold: 5, desc: 'Move only your pinky finger through full range.' }
         ],
+        // Finger tracking: All 5 magnets attached (standard configuration)
+        fingerTracking5Mag: [
+            { id: 'ft5:reference', label: 'Reference (5 mag)', icon: '✋', transition: TRANSITION_TIME, hold: 5, desc: 'Palm down, all fingers extended. All 5 magnets attached.' },
+            { id: 'ft5:all_extended', label: 'All Extended', icon: '🖐️', transition: TRANSITION_TIME, hold: 5, desc: 'Spread all fingers wide, fully extended.' },
+            { id: 'ft5:all_flexed', label: 'All Flexed (Fist)', icon: '✊', transition: TRANSITION_TIME, hold: 5, desc: 'Make a tight fist, all fingers flexed.' },
+            { id: 'ft5:thumb_flex', label: 'Thumb Flex Only', icon: '👍', transition: TRANSITION_TIME, hold: 5, desc: 'Flex only thumb, others extended.' },
+            { id: 'ft5:index_flex', label: 'Index Flex Only', icon: '☝️', transition: TRANSITION_TIME, hold: 5, desc: 'Flex only index finger, others extended.' },
+            { id: 'ft5:middle_flex', label: 'Middle Flex Only', icon: '🖕', transition: TRANSITION_TIME, hold: 5, desc: 'Flex only middle finger, others extended.' },
+            { id: 'ft5:ring_flex', label: 'Ring Flex Only', icon: '💍', transition: TRANSITION_TIME, hold: 5, desc: 'Flex only ring finger, others extended.' },
+            { id: 'ft5:pinky_flex', label: 'Pinky Flex Only', icon: '🤙', transition: TRANSITION_TIME, hold: 5, desc: 'Flex only pinky finger, others extended.' },
+            { id: 'ft5:thumb_index', label: 'Thumb+Index Flex', icon: '🤏', transition: TRANSITION_TIME, hold: 5, desc: 'Flex thumb and index only.' },
+            { id: 'ft5:ring_pinky', label: 'Ring+Pinky Flex', icon: '🤟', transition: TRANSITION_TIME, hold: 5, desc: 'Flex ring and pinky only.' },
+            { id: 'ft5:middle_ring_pinky', label: 'Mid+Ring+Pinky Flex', icon: '✌️', transition: TRANSITION_TIME, hold: 5, desc: 'Flex middle, ring, pinky (peace sign).' }
+        ],
+        // Finger tracking: No magnets (baseline noise floor)
+        fingerTrackingNoMag: [
+            { id: 'ft0:reference', label: 'Reference (no mag)', icon: '✋', transition: TRANSITION_TIME, hold: 5, desc: 'Palm down, all fingers extended. NO magnets attached.' },
+            { id: 'ft0:all_extended', label: 'All Extended', icon: '🖐️', transition: TRANSITION_TIME, hold: 5, desc: 'Spread all fingers wide.' },
+            { id: 'ft0:all_flexed', label: 'All Flexed (Fist)', icon: '✊', transition: TRANSITION_TIME, hold: 5, desc: 'Make a tight fist.' },
+            { id: 'ft0:index_flex', label: 'Index Flex Only', icon: '☝️', transition: TRANSITION_TIME, hold: 5, desc: 'Flex only index finger.' },
+            { id: 'ft0:thumb_flex', label: 'Thumb Flex Only', icon: '👍', transition: TRANSITION_TIME, hold: 5, desc: 'Flex only thumb.' },
+            { id: 'ft0:random_motion', label: 'Random Motion', icon: '👋', transition: TRANSITION_TIME, hold: 8, desc: 'Move fingers randomly to capture baseline noise.' }
+        ],
+        // Finger tracking: Index magnet only (proof-of-concept)
+        fingerTrackingIndexOnly: [
+            { id: 'ft1:reference', label: 'Reference (index mag)', icon: '✋', transition: TRANSITION_TIME, hold: 5, desc: 'Palm down, all extended. Magnet on INDEX ONLY.' },
+            { id: 'ft1:index_extended', label: 'Index Extended', icon: '☝️', transition: TRANSITION_TIME, hold: 5, desc: 'Index finger fully extended (far from sensor).' },
+            { id: 'ft1:index_partial', label: 'Index Partial Flex', icon: '👆', transition: TRANSITION_TIME, hold: 5, desc: 'Index finger half-flexed (mid-range).' },
+            { id: 'ft1:index_flexed', label: 'Index Fully Flexed', icon: '👊', transition: TRANSITION_TIME, hold: 5, desc: 'Index finger fully flexed (close to palm).' },
+            { id: 'ft1:index_sweep_slow', label: 'Index Slow Sweep', icon: '🔄', transition: TRANSITION_TIME, hold: 8, desc: 'Slowly flex and extend index finger repeatedly.' },
+            { id: 'ft1:index_sweep_fast', label: 'Index Fast Sweep', icon: '⚡', transition: TRANSITION_TIME, hold: 8, desc: 'Quickly flex and extend index finger repeatedly.' },
+            { id: 'ft1:index_abduction', label: 'Index Abduction', icon: '↔️', transition: TRANSITION_TIME, hold: 5, desc: 'Move index finger side-to-side (abduction/adduction).' },
+            { id: 'ft1:other_fingers', label: 'Other Fingers Motion', icon: '🖐️', transition: TRANSITION_TIME, hold: 5, desc: 'Move other fingers while index stays still (interference test).' }
+        ],
         asl: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(letter => ({
             id: `asl:${letter.toLowerCase()}`,
             label: `Letter ${letter}`,
@@ -2316,20 +2350,42 @@
 
         $('wizardContent').innerHTML = `
             <div class="wizard-instruction">Choose a data collection mode</div>
+
+            <div style="font-size: 11px; color: var(--accent); margin: 10px 0 5px; font-weight: 500;">General Collection</div>
             <div class="wizard-start-options">
                 <div class="wizard-option" onclick="startWizard('quick')">
                     <h4>⚡ Quick Collection</h4>
-                    <p>Reference poses + finger isolation only</p>
+                    <p>Reference poses + finger isolation</p>
                     <div class="duration">~50 seconds • 7 steps</div>
                 </div>
                 <div class="wizard-option" onclick="startWizard('full')">
                     <h4>📚 Full Collection</h4>
-                    <p>Includes ASL alphabet (A-Z) + common gestures</p>
+                    <p>Includes ASL alphabet (A-Z) + gestures</p>
                     <div class="duration">~210 seconds • 39 steps</div>
                 </div>
             </div>
+
+            <div style="font-size: 11px; color: var(--accent); margin: 15px 0 5px; font-weight: 500;">Magnetic Finger Tracking</div>
+            <div class="wizard-start-options">
+                <div class="wizard-option" onclick="startWizard('ft5mag')" style="border-color: var(--success);">
+                    <h4>🧲 5 Magnets (Standard)</h4>
+                    <p>All fingers with magnets - full tracking data</p>
+                    <div class="duration">~85 seconds • 11 steps</div>
+                </div>
+                <div class="wizard-option" onclick="startWizard('ft1mag')" style="border-color: var(--warning);">
+                    <h4>☝️ Index Only (PoC)</h4>
+                    <p>Single magnet on index - proof of concept</p>
+                    <div class="duration">~65 seconds • 8 steps</div>
+                </div>
+                <div class="wizard-option" onclick="startWizard('ft0mag')" style="border-color: var(--fg-muted);">
+                    <h4>📊 No Magnets (Baseline)</h4>
+                    <p>Captures noise floor without magnets</p>
+                    <div class="duration">~45 seconds • 6 steps</div>
+                </div>
+            </div>
+
             <div style="margin-top: 15px; padding: 10px; background: var(--bg); border-radius: 4px; font-size: 11px; color: var(--fg-muted);">
-                <strong>Note:</strong> Magnetometer calibration is now handled separately via the Calibration Wizard section above. Complete calibration before collecting data for best results.
+                <strong>Note:</strong> Complete magnetometer calibration before collecting finger tracking data. Calibration removes environmental interference to isolate magnet signals.
             </div>
         `;
     }
@@ -2339,18 +2395,36 @@
         wizard.currentStep = 0;
         wizard.paused = false;
 
-        // Build step list based on mode (reference poses + fingers for quick, + ASL/gestures for full)
-        wizard.steps = [
-            ...WIZARD_STEPS.reference,
-            ...WIZARD_STEPS.fingers
-        ];
-
-        if (mode === 'full') {
-            wizard.steps = [
-                ...wizard.steps,
-                ...WIZARD_STEPS.asl,
-                ...WIZARD_STEPS.gestures
-            ];
+        // Build step list based on mode
+        switch (mode) {
+            case 'quick':
+                wizard.steps = [
+                    ...WIZARD_STEPS.reference,
+                    ...WIZARD_STEPS.fingers
+                ];
+                break;
+            case 'full':
+                wizard.steps = [
+                    ...WIZARD_STEPS.reference,
+                    ...WIZARD_STEPS.fingers,
+                    ...WIZARD_STEPS.asl,
+                    ...WIZARD_STEPS.gestures
+                ];
+                break;
+            case 'ft5mag':
+                // 5-magnet finger tracking (standard configuration)
+                wizard.steps = [...WIZARD_STEPS.fingerTracking5Mag];
+                break;
+            case 'ft1mag':
+                // Index-only magnet (proof of concept)
+                wizard.steps = [...WIZARD_STEPS.fingerTrackingIndexOnly];
+                break;
+            case 'ft0mag':
+                // No magnets (baseline noise floor)
+                wizard.steps = [...WIZARD_STEPS.fingerTrackingNoMag];
+                break;
+            default:
+                wizard.steps = [...WIZARD_STEPS.reference, ...WIZARD_STEPS.fingers];
         }
 
         wizard.totalSteps = wizard.steps.length;
@@ -2393,14 +2467,18 @@
         if (step.id.startsWith('finger_isolation')) phaseLabel = 'Finger Isolation';
         else if (step.id.startsWith('asl:')) phaseLabel = 'ASL Alphabet';
         else if (step.id.startsWith('pose:')) phaseLabel = 'Common Gestures';
+        else if (step.id.startsWith('ft5:')) phaseLabel = 'Finger Tracking (5 Magnets)';
+        else if (step.id.startsWith('ft1:')) phaseLabel = 'Finger Tracking (Index Only)';
+        else if (step.id.startsWith('ft0:')) phaseLabel = 'Baseline (No Magnets)';
         $('wizardPhase').textContent = phaseLabel;
 
         // Start with TRANSITION phase (unlabeled)
         // Close any previous label and ensure no labels are active during transition
         closeCurrentLabel();
         state.currentLabels.calibration = 'none';
-        state.currentLabels.custom = state.currentLabels.custom.filter(c => 
-            !c.startsWith('asl:') && !c.startsWith('pose:') && !c.startsWith('finger_isolation')
+        state.currentLabels.custom = state.currentLabels.custom.filter(c =>
+            !c.startsWith('asl:') && !c.startsWith('pose:') && !c.startsWith('finger_isolation') &&
+            !c.startsWith('ft5:') && !c.startsWith('ft1:') && !c.startsWith('ft0:')
         );
         state.currentLabelStart = null; // No label during transition
         updateActiveLabelsDisplay();
