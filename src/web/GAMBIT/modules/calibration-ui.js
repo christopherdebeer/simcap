@@ -168,6 +168,53 @@ export function initCalibrationUI() {
                 $('earthQuality').textContent = `${emoji} ${quality} (quality: ${result.quality.toFixed(2)})`;
                 $('earthQuality').style.color = result.quality > thresholds.good ? 'var(--success)' : 'var(--danger)';
 
+                // Display enhanced diagnostics if quality is not excellent
+                const diagDiv = $('earthDiagnostics');
+                if (diagDiv && result.diagnostics) {
+                    const { diagnostics } = result;
+                    let diagHTML = '';
+                    
+                    // Show recommendations
+                    if (diagnostics.recommendations && diagnostics.recommendations.length > 0) {
+                        diagHTML += '<div class="cal-recommendations">';
+                        diagnostics.recommendations.forEach(rec => {
+                            diagHTML += `<div class="cal-rec-item">${rec}</div>`;
+                        });
+                        diagHTML += '</div>';
+                    }
+                    
+                    // Show detailed stats for debugging (collapsible)
+                    diagHTML += `<details class="cal-details">
+                        <summary>📊 Detailed Statistics</summary>
+                        <div class="cal-stats">
+                            <div><strong>Avg Deviation:</strong> ${result.avgDeviation.toFixed(2)} (${((result.avgDeviation / result.magnitude) * 100).toFixed(1)}%)</div>
+                            <div><strong>Std Dev:</strong> ${diagnostics.stdDev.toFixed(2)}</div>
+                            <div><strong>Min/Max Dev:</strong> ${diagnostics.minDeviation.toFixed(2)} / ${diagnostics.maxDeviation.toFixed(2)}</div>
+                            <div><strong>Outliers:</strong> ${diagnostics.outlierCount} (${diagnostics.outlierPercentage}%)</div>
+                            <div><strong>Earth Field:</strong> ${result.magnitude.toFixed(1)} (${result.magnitudeUT.toFixed(1)} μT)</div>
+                            <hr>
+                            <div><strong>Per-Axis Std Dev:</strong></div>
+                            <div style="padding-left: 12px;">
+                                X: ${diagnostics.axisStats.x.stdDev.toFixed(2)} | 
+                                Y: ${diagnostics.axisStats.y.stdDev.toFixed(2)} | 
+                                Z: ${diagnostics.axisStats.z.stdDev.toFixed(2)}
+                            </div>
+                            <hr>
+                            <div><strong>Temporal Analysis:</strong></div>
+                            <div style="padding-left: 12px;">
+                                Drift: ${diagnostics.temporalAnalysis.drift} (${diagnostics.temporalAnalysis.driftPercent}%)<br>
+                                Jumps: ${diagnostics.temporalAnalysis.jumps} (${diagnostics.temporalAnalysis.jumpPercentage}%)<br>
+                                Stable: ${diagnostics.temporalAnalysis.stable ? '✅' : '❌'}
+                            </div>
+                        </div>
+                    </details>`;
+                    
+                    diagDiv.innerHTML = diagHTML;
+                    diagDiv.style.display = 'block';
+                } else if (diagDiv) {
+                    diagDiv.style.display = 'none';
+                }
+
                 calibrationInstance.save('gambit_calibration');
                 updateCalibrationStatus();
             },

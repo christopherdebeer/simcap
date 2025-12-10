@@ -2,7 +2,7 @@
 var FIRMWARE_INFO = {
     id: "GAMBIT",
     name: "GAMBIT IMU Telemetry",
-    version: "0.2.1",
+    version: "0.3.2",
     features: ["imu", "magnetometer", "environmental", "streaming", "logging", "framing"],
     author: "SIMCAP"
 };
@@ -27,6 +27,9 @@ var logBuffer = [];
 var logIndex = 0;
 
 // Log levels: E=Error, W=Warn, I=Info, D=Debug
+// Note: console.log is suppressed during streaming to prevent BLE interleaving
+var streamingActive = false;
+
 function deviceLog(level, msg) {
     var entry = {
         i: logIndex++,              // sequence number
@@ -42,8 +45,10 @@ function deviceLog(level, msg) {
         logBuffer.shift();
     }
     
-    // Also emit to console for real-time viewing
-    console.log("[" + level + "] " + entry.m);
+    // Only emit to console when NOT streaming (prevents BLE interleaving)
+    if (!streamingActive) {
+        console.log("[" + level + "] " + entry.m);
+    }
 }
 
 // Convenience logging functions
@@ -178,8 +183,8 @@ function emit() {
     telemetry.gz = accel.gyro.z;
 
     // BATTERY OPTIMIZATION: Read expensive sensors less frequently
-    // Magnetometer is power-hungry (requires sensor wake-up) - read every 5th sample (10Hz instead of 20Hz)
-    if (sampleCount % 5 === 0) {
+    // Magnetometer is power-hungry (requires sensor wake-up) - read every 2nd sample (10Hz instead of 20Hz)
+    if (sampleCount % 2 === 0) {
         var mag = Puck.mag();
         telemetry.mx = mag.x;
         telemetry.my = mag.y;
@@ -201,50 +206,79 @@ function emit() {
     telemetry.s = state;
     telemetry.n = pressCount;
 
-    console.log("\nGAMBIT" + JSON.stringify(telemetry));
+    // Send telemetry using framing protocol
+    sendFrame('T', telemetry);
     return telemetry;
 }
 
 var interval;
 var streamTimeout;
+var streamCount = null;  // Target sample count (null = unlimited)
+var streamStartTime = null;
 
-function getData() {
-    var wasStreaming = !!interval;
+// getData(count, intervalMs) - Start streaming telemetry
+// count: optional number of samples to collect before auto-stop
+// intervalMs: optional sample interval in ms (default 50ms = 20Hz)
+function getData(count, intervalMs) {
+    // Default interval is 50ms (20Hz)
+    if (!intervalMs || intervalMs < 10) {
+        intervalMs = 50;
+    }
     
-    // Reset sample counter if starting new stream
-    if (!interval) {
-        sampleCount = 0;
-        logInfo('Stream started (50Hz, 30s timeout)');
+    var hz = Math.round(1000 / intervalMs);
+    
+    // If already streaming, this acts as keepalive (no log to avoid interleaving)
+    if (interval) {
+        // Keepalive - just refresh timeout, don't log
     } else {
-        logDebug('Stream keepalive');
+        // Starting new stream - log before enabling streaming flag
+        if (count && count > 0) {
+            logInfo('Stream: ' + count + ' @ ' + hz + 'Hz');
+        } else {
+            logInfo('Stream: ' + hz + 'Hz (30s timeout)');
+        }
+        
+        sampleCount = 0;
+        streamCount = (count && count > 0) ? count : null;
+        streamStartTime = Date.now();
+        streamingActive = true;  // Suppress console.log during streaming
     }
 
-    // CRITICAL: Always refresh the 30-second timeout when getData() is called
-    // This enables keepalive mechanism (web app calls getData() every 25s to prevent timeout)
-    if (streamTimeout) {
-        clearTimeout(streamTimeout);
+    // Only set timeout for unlimited streaming (no count specified)
+    // Fixed-count collection auto-stops when complete, no timeout needed
+    if (!streamCount) {
+        // Clear any existing timeout
+        if (streamTimeout) {
+            clearTimeout(streamTimeout);
+        }
+        
+        // BATTERY OPTIMIZATION: Auto-stop after 30 seconds to prevent accidental battery drain
+        // Only for unlimited streaming - fixed-count collection doesn't need this
+        streamTimeout = setTimeout(function(){
+            stopData();  // stopData re-enables logging, then logs
+        }, 30000);
     }
 
-    // BATTERY OPTIMIZATION: Auto-stop after 30 seconds to prevent accidental battery drain
-    streamTimeout = setTimeout(function(){
-        logInfo('Stream timeout (30s) - samples: ' + sampleCount);
-        clearInterval(interval);
-        interval = null;
-        streamTimeout = null;
-    }, 30000);
-
-    // Start streaming at 20Hz (50ms interval) if not already running
+    // Start streaming if not already running
     if (!interval) {
-        interval = setInterval(emit, 50);
+        interval = setInterval(function() {
+            emit();
+            
+            // Auto-stop if we've reached the target count
+            if (streamCount && sampleCount >= streamCount) {
+                stopData();  // stopData re-enables logging, then logs
+            }
+        }, intervalMs);
     }
 
     return emit();
 }
 
-// Optional: Stop streaming manually
+// Stop streaming
 function stopData() {
+    streamingActive = false;  // Re-enable console.log
     if (interval) {
-        logInfo('Stream stopped manually - samples: ' + sampleCount);
+        logInfo('Stream stopped - ' + sampleCount + ' samples');
         clearInterval(interval);
         interval = null;
     }
@@ -252,60 +286,8 @@ function stopData() {
         clearTimeout(streamTimeout);
         streamTimeout = null;
     }
-}
-
-// Guaranteed sample collection for calibration
-// Collects exact number of samples at specified Hz
-var collectionInterval = null;
-function collectSamples(count, intervalMs) {
-    if (!count || count < 1) {
-        logError('Invalid sample count: ' + count);
-        sendFrame('COLLECTION_ERROR', {error: 'Invalid sample count', count: count});
-        return;
-    }
-    if (!intervalMs || intervalMs < 10) {
-        logError('Invalid interval: ' + intervalMs + 'ms (min 10ms)');
-        sendFrame('COLLECTION_ERROR', {error: 'Invalid interval', intervalMs: intervalMs});
-        return;
-    }
-
-    if (collectionInterval) {
-        logWarn('Collection already in progress');
-        sendFrame('COLLECTION_ERROR', {error: 'Collection already in progress'});
-        return;
-    }
-
-    var collected = 0;
-    var startTime = Date.now();
-    var hz = Math.round(1000 / intervalMs);
-    
-    logInfo('Collecting ' + count + ' samples @ ' + hz + 'Hz (' + intervalMs + 'ms)');
-    sendFrame('COLLECTION_START', {
-        requestedCount: count,
-        intervalMs: intervalMs,
-        hz: hz
-    });
-
-    collectionInterval = setInterval(function() {
-        emit();
-        collected++;
-        
-        if (collected >= count) {
-            clearInterval(collectionInterval);
-            collectionInterval = null;
-            var duration = Date.now() - startTime;
-            var actualHz = Math.round((collected / duration) * 1000);
-            
-            logInfo('Collection complete: ' + collected + '/' + count + ' samples in ' + duration + 'ms (' + actualHz + 'Hz)');
-            sendFrame('COLLECTION_COMPLETE', {
-                collectedCount: collected,
-                requestedCount: count,
-                durationMs: duration,
-                requestedHz: hz,
-                actualHz: actualHz
-            });
-        }
-    }, intervalMs);
+    streamCount = null;
+    streamStartTime = null;
 }
 
 

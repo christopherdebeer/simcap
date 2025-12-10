@@ -114,6 +114,7 @@
                 display: flex;
                 justify-content: space-evenly;
                 padding: var(--space-lg) 0;
+                font-size: 15px;
             }
 
             .cube {
@@ -135,12 +136,12 @@
                 color: #fff;
             }
 
-            .front { background: rgba(90,90,90,.7); transform: translateZ(2em); }
-            .back { background: rgba(0,210,0,.7); transform: rotateY(180deg) translateZ(2em); }
-            .right { background: rgba(210,0,0,.7); transform: rotateY(90deg) translateZ(2em); }
-            .left { background: rgba(0,0,210,.7); transform: rotateY(-90deg) translateZ(2em); }
-            .top { background: rgba(210,210,0,.7); transform: rotateX(90deg) translateZ(2em); }
-            .bottom { background: rgba(210,0,210,.7); transform: rotateX(-90deg) translateZ(2em); }
+            .front { background: rgba(90,90,90,.7); transform: translateZ(2.5em); }
+            .back { background: rgba(0,210,0,.7); transform: rotateY(180deg) translateZ(2.5em); }
+            .right { background: rgba(210,0,0,.7); transform: rotateY(90deg) translateZ(2.5em); }
+            .left { background: rgba(0,0,210,.7); transform: rotateY(-90deg) translateZ(2.5em); }
+            .top { background: rgba(210,210,0,.7); transform: rotateX(90deg) translateZ(2.5em); }
+            .bottom { background: rgba(210,0,210,.7); transform: rotateX(-90deg) translateZ(2.5em); }
 
             progress {
                 width: 100%;
@@ -341,22 +342,23 @@
 
         <script>
 
-            function updateConnectionStatus(connected, connection) {
-                console.log(`SIMCAP Device connected: ${connected}, connection: `, connection)
-                connection = connected ? connection : undefined;
+            // ===== GambitClient for Frame-Based Protocol =====
+            const gambitClient = new GambitClient({ debug: true });
+            let isStreaming = false;
+
+            function updateConnectionStatus(connected) {
+                console.log(`SIMCAP Device connected: ${connected}`)
                 if (connected) {
                     window.connect.innerHTML = "Disconnect"
                     window.getdata.disabled = false
                 } else {
                     window.connect.innerHTML = "Connect"
                     window.getdata.disabled = true
+                    isStreaming = false;
+                    window.getdata.innerHTML = "Get data"
                 }
             }
 
-            const MAX_INIT_RETRIES = 9
-            let connection;
-            let initTries = MAX_INIT_RETRIES
-            let initInterval;
             let ghToken;
 
             let uploadTimeout;
@@ -378,22 +380,72 @@
                 measurementNoise: 1.0
             });
 
-            function onLine(data) {
+            // ===== Proper Orientation Estimation for Cube Visualization =====
+            // Use Madgwick AHRS for fused acc+gyro orientation (for gyro cube)
+            const ahrs = new MadgwickAHRS({
+                sampleFreq: 20,  // 20Hz (firmware default)
+                beta: 0.1       // Filter gain
+            });
 
-                if (data.startsWith("GAMBIT")) {
-                    var t = JSON.parse(data.slice(6, -1))
-                    // console.log(data.slice(6, -1))
-                    // console.log(JSON.stringify(t))
-                    updateData(t)
+            // Low-pass filter for smoothing cube rotations
+            class LowPassFilter {
+                constructor(alpha = 0.3) {
+                    this.alpha = alpha;  // 0-1, lower = smoother but more lag
+                    this.value = null;
                 }
-                if (uploadTimeout) clearTimeout(uploadTimeout)
-                uploadTimeout = setTimeout(function() {
-                    console.log("Uploading to gh")
-                    ghPutData(JSON.stringify(sessionData))
-                    sessionData = []    
-                }, 1000)
-
+                filter(newValue) {
+                    if (this.value === null) {
+                        this.value = newValue;
+                    } else {
+                        this.value = this.alpha * newValue + (1 - this.alpha) * this.value;
+                    }
+                    return this.value;
+                }
+                reset() {
+                    this.value = null;
+                }
             }
+
+            // Filters for each cube axis (smooth display)
+            const cubeFilters = {
+                acc: { x: new LowPassFilter(0.3), y: new LowPassFilter(0.3), z: new LowPassFilter(0.3) },
+                gyro: { x: new LowPassFilter(0.3), y: new LowPassFilter(0.3), z: new LowPassFilter(0.3) },
+                mag: { x: new LowPassFilter(0.3), y: new LowPassFilter(0.3), z: new LowPassFilter(0.3) }
+            };
+
+            // Track last timestamp for dt calculation
+            let lastTimestamp = null;
+
+            // ===== GambitClient Event Handlers =====
+            // Handle telemetry data from frame-based protocol
+            gambitClient.on('data', function(t) {
+                updateData(t);
+                
+                // Auto-upload to GitHub after 1s of no data
+                if (uploadTimeout) clearTimeout(uploadTimeout);
+                uploadTimeout = setTimeout(function() {
+                    if (sessionData.length > 0) {
+                        console.log("Uploading to gh");
+                        ghPutData(JSON.stringify(sessionData));
+                        sessionData = [];
+                    }
+                }, 1000);
+            });
+
+            // Handle connection events
+            gambitClient.on('connect', function() {
+                console.log('[GambitClient] Connected');
+                updateConnectionStatus(true);
+            });
+
+            gambitClient.on('disconnect', function() {
+                console.log('[GambitClient] Disconnected');
+                updateConnectionStatus(false);
+            });
+
+            gambitClient.on('firmware', function(fw) {
+                console.log('[GambitClient] Firmware:', fw);
+            });
 
             var minMaxs = {}
 
@@ -482,32 +534,96 @@
 
                 // Store decorated data (raw + calibrated + filtered fields)
                 sessionData.push(decoratedData)
-                // console.log("Data (prenorm): ", prenorm)
-                var t = normalise(prenorm)
-                // console.log("Data (postnorm)", t)
 
-                window.b.value = Math.floor( t.b )
-                window.b.title = t.b + '% battery'
+                // ===== Update UI displays =====
+                // Battery
+                if (prenorm.b !== null && prenorm.b !== undefined) {
+                    window.b.value = Math.floor(prenorm.b);
+                    window.b.title = prenorm.b + '% battery';
+                }
 
-                window.state.innerHTML = t.s
-                window.count.innerHTML = t.n
+                // Button state
+                window.state.innerHTML = prenorm.s || 0;
+                window.count.innerHTML = prenorm.n || 0;
 
-                window.mX.innerHTML = t.mx.toFixed(4)
-                window.mY.innerHTML = t.my.toFixed(4)
-                window.mZ.innerHTML = t.mz.toFixed(4)
+                // Raw sensor values display (show actual values, not normalized)
+                window.mX.innerHTML = (prenorm.mx || 0).toFixed(1);
+                window.mY.innerHTML = (prenorm.my || 0).toFixed(1);
+                window.mZ.innerHTML = (prenorm.mz || 0).toFixed(1);
 
-                window.aX.innerHTML = t.ax.toFixed(4)
-                window.aY.innerHTML = t.ay.toFixed(4)
-                window.aZ.innerHTML = t.az.toFixed(4)
+                window.aX.innerHTML = (prenorm.ax || 0).toFixed(3);
+                window.aY.innerHTML = (prenorm.ay || 0).toFixed(3);
+                window.aZ.innerHTML = (prenorm.az || 0).toFixed(3);
 
-                window.gX.innerHTML = t.gx.toFixed(4)
-                window.gY.innerHTML = t.gy.toFixed(4)
-                window.gZ.innerHTML = t.gz.toFixed(4)
+                window.gX.innerHTML = (prenorm.gx || 0).toFixed(1);
+                window.gY.innerHTML = (prenorm.gy || 0).toFixed(1);
+                window.gZ.innerHTML = (prenorm.gz || 0).toFixed(1);
 
-                window.cubeA.style = `transform: rotateX(${360 * t.ax}deg) rotateY(${360 * t.ay}deg) rotateZ(${360 * t.az}deg);`
-                window.cubeG.style = `transform: rotateX(${360 * t.gx}deg) rotateY(${360 * t.gy}deg) rotateZ(${360 * t.gz}deg);`
-                window.cubeM.style = `transform: rotateX(${360 * t.mx}deg) rotateY(${360 * t.my}deg) rotateZ(${360 * t.mz}deg);`
+                // ===== PROPER CUBE VISUALIZATION =====
+                // Calculate time delta for AHRS
+                const now = Date.now();
+                const dt = lastTimestamp ? (now - lastTimestamp) / 1000 : 0.05; // Default 50ms
+                lastTimestamp = now;
+
+                // --- ACCELEROMETER CUBE: Tilt from gravity ---
+                // Calculate roll and pitch from accelerometer (gravity vector)
+                // This shows device orientation relative to gravity
+                const ax = prenorm.ax || 0;
+                const ay = prenorm.ay || 0;
+                const az = prenorm.az || 0;
                 
+                // Roll: rotation around X-axis (tilting left/right)
+                // Pitch: rotation around Y-axis (tilting forward/back)
+                const accRoll = Math.atan2(ay, az) * (180 / Math.PI);
+                const accPitch = Math.atan2(-ax, Math.sqrt(ay * ay + az * az)) * (180 / Math.PI);
+                
+                // Apply low-pass filter for smooth display
+                const filteredAccRoll = cubeFilters.acc.x.filter(accRoll);
+                const filteredAccPitch = cubeFilters.acc.y.filter(accPitch);
+                
+                window.cubeA.style = `transform: rotateX(${filteredAccPitch}deg) rotateY(${filteredAccRoll}deg) rotateZ(0deg);`;
+
+                // --- GYROSCOPE CUBE: Fused orientation using Madgwick AHRS ---
+                // This combines accelerometer (gravity) with gyroscope (rotation rate)
+                // for drift-free orientation estimation
+                const gx = prenorm.gx || 0;
+                const gy = prenorm.gy || 0;
+                const gz = prenorm.gz || 0;
+                
+                // Update AHRS with acc + gyro data
+                // Gyro values from Puck.js are in degrees/second
+                ahrs.update(ax, ay, az, gx, gy, gz, dt, true);
+                
+                // Get Euler angles from AHRS
+                const euler = ahrs.getEulerAngles();
+                
+                // Apply low-pass filter for smooth display
+                const filteredGyroRoll = cubeFilters.gyro.x.filter(euler.roll);
+                const filteredGyroPitch = cubeFilters.gyro.y.filter(euler.pitch);
+                const filteredGyroYaw = cubeFilters.gyro.z.filter(euler.yaw);
+                
+                window.cubeG.style = `transform: rotateX(${filteredGyroPitch}deg) rotateY(${filteredGyroRoll}deg) rotateZ(${filteredGyroYaw}deg);`;
+
+                // --- MAGNETOMETER CUBE: Heading from magnetic field ---
+                // Calculate heading (compass direction) from magnetometer
+                // Also show tilt based on magnetic field vector direction
+                const mx = prenorm.mx || 0;
+                const my = prenorm.my || 0;
+                const mz = prenorm.mz || 0;
+                
+                // Magnetic heading (yaw) - compass direction
+                // Note: This is uncorrected for tilt, but gives a visual indication
+                const magHeading = Math.atan2(my, mx) * (180 / Math.PI);
+                
+                // Magnetic inclination (dip angle) - how much field points down
+                const magHorizontal = Math.sqrt(mx * mx + my * my);
+                const magInclination = Math.atan2(mz, magHorizontal) * (180 / Math.PI);
+                
+                // Apply low-pass filter for smooth display
+                const filteredMagHeading = cubeFilters.mag.z.filter(magHeading);
+                const filteredMagInclination = cubeFilters.mag.x.filter(magInclination);
+                
+                window.cubeM.style = `transform: rotateX(${filteredMagInclination}deg) rotateY(0deg) rotateZ(${-filteredMagHeading}deg);`;
             }
 
             var newlineRegex = /\n/g;
@@ -602,26 +718,7 @@
 
             }
 
-            async function init() {
-                
-                if (!Puck.isConnected()) await Puck.write("console.log('Connected from GAMBIT/web')")
-                var con = Puck.getConnection()
-                updateConnectionStatus( !!con, con);
-
-                console.log(con)
-
-                var buf = "";
-                con && con.on("data", function(d) {
-                    buf += d;
-                    var i = buf.indexOf("\n");
-                    while (i>=0) {
-                        onLine(buf.substr(0,i));
-                        buf = buf.substr(i+1);
-                        i = buf.indexOf("\n");
-                    }
-                });
-            }
-
+            // Load GitHub token from localStorage
             try {
                 const t = localStorage.getItem("ghToken")
                 if (t) {
@@ -633,8 +730,25 @@
                 console.log("Error getting token from localStorage")
             }
 
-            window.connect.onclick = function() {
-                 init()
+            // ===== Connect Button - Uses GambitClient =====
+            window.connect.onclick = async function() {
+                if (gambitClient.isConnected()) {
+                    // Disconnect
+                    console.log('[GAMBIT] Disconnecting...');
+                    if (isStreaming) {
+                        await gambitClient.stopStreaming();
+                    }
+                    gambitClient.disconnect();
+                } else {
+                    // Connect using GambitClient (handles frame-based protocol)
+                    console.log('[GAMBIT] Connecting via GambitClient...');
+                    try {
+                        const fw = await gambitClient.connect();
+                        console.log('[GAMBIT] Connected, firmware:', fw);
+                    } catch (err) {
+                        console.error('[GAMBIT] Connection failed:', err);
+                    }
+                }
             }
 
             window.token.addEventListener('change', function(e){
@@ -643,12 +757,30 @@
                 localStorage.setItem("ghToken", ghToken)
             })
 
-            window.getdata.onclick = function() {
-                const startTime = Date.now()
-                Puck.eval("getData()", function(d) {
-                    console.log(`getData() eval response time: ${(Date.now() - startTime)}ms`)
-                    console.log(d)
-                })
+            // ===== Get Data Button - Uses GambitClient Streaming =====
+            window.getdata.onclick = async function() {
+                if (!gambitClient.isConnected()) {
+                    console.warn('[GAMBIT] Not connected');
+                    return;
+                }
+
+                if (isStreaming) {
+                    // Stop streaming
+                    console.log('[GAMBIT] Stopping stream...');
+                    await gambitClient.stopStreaming();
+                    isStreaming = false;
+                    window.getdata.innerHTML = "Get data";
+                } else {
+                    // Start streaming (uses frame-based protocol)
+                    console.log('[GAMBIT] Starting stream via GambitClient...');
+                    try {
+                        await gambitClient.startStreaming();
+                        isStreaming = true;
+                        window.getdata.innerHTML = "Stop";
+                    } catch (err) {
+                        console.error('[GAMBIT] Failed to start streaming:', err);
+                    }
+                }
             }
 
             // ===== Gesture Inference =====
