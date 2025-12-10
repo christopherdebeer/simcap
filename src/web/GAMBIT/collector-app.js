@@ -13,7 +13,7 @@ import {
 } from './modules/calibration-ui.js';
 import { onTelemetry, setDependencies as setTelemetryDeps, resetIMU } from './modules/telemetry-handler.js';
 import { setCallbacks as setConnectionCallbacks, initConnectionUI } from './modules/connection-manager.js';
-import { setCallbacks as setRecordingCallbacks, initRecordingUI } from './modules/recording-controls.js';
+import { setCallbacks as setRecordingCallbacks, initRecordingUI, startRecording } from './modules/recording-controls.js';
 
 // Export state for global access (used by inline functions in HTML)
 window.appState = state;
@@ -531,10 +531,208 @@ function startWizard() {
         return;
     }
 
+    // Initialize wizard state
+    wizard.active = true;
+    wizard.mode = 'data_collection';
+    wizard.currentStep = 0;
+    wizard.steps = [
+        {
+            id: 'intro',
+            title: 'Data Collection Wizard',
+            instruction: 'Welcome to guided data collection',
+            description: 'This wizard will guide you through collecting labeled training data for hand pose recognition.'
+        },
+        {
+            id: 'rest_pose',
+            title: 'Collect: Rest Pose',
+            instruction: 'Hold your hand in a relaxed rest position',
+            description: 'Keep your hand still for 3 seconds while we collect baseline data.',
+            duration: 3000,
+            labels: { pose: 'rest', motion: 'static' }
+        },
+        {
+            id: 'fist_pose',
+            title: 'Collect: Fist',
+            instruction: 'Make a fist',
+            description: 'Close your hand into a fist and hold steady for 3 seconds.',
+            duration: 3000,
+            labels: { pose: 'fist', motion: 'static' }
+        },
+        {
+            id: 'open_pose',
+            title: 'Collect: Open Hand',
+            instruction: 'Open your hand with fingers extended',
+            description: 'Spread your fingers wide and hold for 3 seconds.',
+            duration: 3000,
+            labels: { pose: 'open_palm', motion: 'static' }
+        },
+        {
+            id: 'complete',
+            title: 'Collection Complete!',
+            instruction: '✅ Data collection finished',
+            description: 'You have successfully collected training data for 3 hand poses.'
+        }
+    ];
+
     log('Data collection wizard started');
-    alert('Data Collection Wizard\n\nThis feature helps guide you through structured data collection.\n\nComing soon: Interactive wizard for collecting labeled training data.');
-    // TODO: Implement full wizard workflow
+    showWizardModal();
+    renderWizardStep();
 }
+
+/**
+ * Show wizard modal
+ */
+function showWizardModal() {
+    const overlay = $('wizardOverlay');
+    if (overlay) {
+        overlay.classList.add('active');
+    }
+}
+
+/**
+ * Close wizard modal
+ */
+function closeWizard() {
+    wizard.active = false;
+    wizard.currentStep = 0;
+    wizard.phase = null;
+
+    const overlay = $('wizardOverlay');
+    if (overlay) {
+        overlay.classList.remove('active');
+    }
+
+    log('Wizard closed');
+}
+
+/**
+ * Render current wizard step
+ */
+function renderWizardStep() {
+    const step = wizard.steps[wizard.currentStep];
+    if (!step) return;
+
+    const title = $('wizardTitle');
+    const phase = $('wizardPhase');
+    const content = $('wizardContent');
+    const progressFill = $('wizardProgressFill');
+    const stepText = $('wizardStepText');
+    const timeText = $('wizardTimeText');
+    const samplesText = $('wizardSamples');
+    const labelsText = $('wizardLabels');
+
+    if (title) title.textContent = step.title;
+    if (phase) phase.textContent = `Step ${wizard.currentStep + 1} of ${wizard.steps.length}`;
+
+    const progress = ((wizard.currentStep) / wizard.steps.length) * 100;
+    if (progressFill) progressFill.style.width = `${progress}%`;
+    if (stepText) stepText.textContent = `Step ${wizard.currentStep + 1} of ${wizard.steps.length}`;
+    if (timeText) timeText.textContent = step.duration ? `~${step.duration / 1000}s` : '';
+
+    if (samplesText) samplesText.textContent = state.sessionData.length;
+    if (labelsText) labelsText.textContent = state.labels.length;
+
+    // Render step content
+    if (content) {
+        let html = `
+            <div class="wizard-instruction">${step.instruction}</div>
+            <div class="wizard-description">${step.description}</div>
+        `;
+
+        if (step.id === 'intro') {
+            html += `
+                <div class="wizard-controls">
+                    <button class="btn-primary" onclick="nextWizardStep()">Start Collection</button>
+                    <button class="btn-secondary" onclick="closeWizard()">Cancel</button>
+                </div>
+            `;
+        } else if (step.id === 'complete') {
+            html += `
+                <div class="wizard-complete">
+                    <div class="stats">
+                        ${state.sessionData.length} samples collected<br>
+                        ${state.labels.length} labels created
+                    </div>
+                </div>
+                <div class="wizard-controls">
+                    <button class="btn-success" onclick="closeWizard()">Done</button>
+                </div>
+            `;
+        } else {
+            // Collection step
+            html += `
+                <div class="wizard-controls">
+                    <button class="btn-success" onclick="startWizardCollection()">Ready - Start</button>
+                    <button class="btn-secondary" onclick="nextWizardStep()">Skip</button>
+                </div>
+            `;
+        }
+
+        content.innerHTML = html;
+    }
+}
+
+/**
+ * Start collection for current wizard step
+ */
+async function startWizardCollection() {
+    const step = wizard.steps[wizard.currentStep];
+    if (!step || !step.duration) return;
+
+    // Apply labels for this step
+    if (step.labels) {
+        if (step.labels.pose) state.currentLabels.pose = step.labels.pose;
+        if (step.labels.motion) state.currentLabels.motion = step.labels.motion;
+    }
+
+    // Start recording if not already
+    if (!state.recording) {
+        await startRecording();
+    }
+
+    // Show countdown
+    const content = $('wizardContent');
+    let remainingMs = step.duration;
+
+    const countdownInterval = setInterval(() => {
+        remainingMs -= 100;
+        const seconds = Math.ceil(remainingMs / 1000);
+
+        if (content) {
+            content.innerHTML = `
+                <div class="wizard-instruction">Hold steady...</div>
+                <div class="wizard-countdown">
+                    <div class="countdown-circle ${seconds <= 1 ? 'warning' : ''}">
+                        ${seconds}
+                    </div>
+                </div>
+            `;
+        }
+
+        if (remainingMs <= 0) {
+            clearInterval(countdownInterval);
+            nextWizardStep();
+        }
+    }, 100);
+}
+
+/**
+ * Move to next wizard step
+ */
+function nextWizardStep() {
+    wizard.currentStep++;
+
+    if (wizard.currentStep >= wizard.steps.length) {
+        closeWizard();
+    } else {
+        renderWizardStep();
+    }
+}
+
+// Export wizard functions to window for onclick handlers
+window.closeWizard = closeWizard;
+window.nextWizardStep = nextWizardStep;
+window.startWizardCollection = startWizardCollection;
 
 /**
  * Initialize pose estimation functionality
