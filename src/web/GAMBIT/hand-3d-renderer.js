@@ -200,6 +200,13 @@ class Hand3DRenderer {
         }
     }
 
+    /**
+     * Public resize method - call when canvas becomes visible
+     */
+    resize() {
+        this._resize();
+    }
+
     // Math helpers
     _rad(d) { return d * Math.PI / 180; }
 
