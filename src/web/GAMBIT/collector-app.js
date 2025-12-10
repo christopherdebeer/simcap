@@ -231,7 +231,7 @@ function updateActiveLabelsDisplay() {
     const tags = [];
 
     if (state.currentLabels.pose) {
-        tags.push(`<span class="label-tag pose">${state.currentLabels.pose}</span>`);
+        tags.push(`<span class="active-label-chip" onclick="removeActiveLabel('pose')" style="cursor: pointer;" title="Click to remove">${state.currentLabels.pose} ×</span>`);
     }
 
     const fingerStates = ['thumb', 'index', 'middle', 'ring', 'pinky']
@@ -243,22 +243,71 @@ function updateActiveLabelsDisplay() {
             return '?';
         }).join('');
     if (fingerStates !== '?????') {
-        tags.push(`<span class="label-tag finger">${fingerStates}</span>`);
+        tags.push(`<span class="active-label-chip" onclick="clearFingerStates()" style="cursor: pointer;" title="Click to clear">${fingerStates} ×</span>`);
     }
 
     if (state.currentLabels.motion !== 'static') {
-        tags.push(`<span class="label-tag motion">${state.currentLabels.motion}</span>`);
+        tags.push(`<span class="active-label-chip" onclick="removeActiveLabel('motion')" style="cursor: pointer;" title="Click to remove">${state.currentLabels.motion} ×</span>`);
     }
 
     if (state.currentLabels.calibration !== 'none') {
-        tags.push(`<span class="label-tag calibration">${state.currentLabels.calibration}</span>`);
+        tags.push(`<span class="active-label-chip" onclick="removeActiveLabel('calibration')" style="cursor: pointer;" title="Click to remove">${state.currentLabels.calibration} ×</span>`);
     }
 
     (state.currentLabels.custom || []).forEach(c => {
-        tags.push(`<span class="label-tag custom">${c}</span>`);
+        tags.push(`<span class="active-label-chip" onclick="removeCustomLabel('${c}')" style="cursor: pointer;" title="Click to remove">${c} ×</span>`);
     });
 
     display.innerHTML = tags.length > 0 ? tags.join('') : '<span style="color: #666;">No labels active</span>';
+}
+
+/**
+ * Remove active label
+ */
+function removeActiveLabel(type) {
+    if (type === 'pose') {
+        state.currentLabels.pose = null;
+        document.querySelectorAll('[data-pose]').forEach(b => b.classList.remove('active'));
+        log('Pose cleared');
+    } else if (type === 'motion') {
+        state.currentLabels.motion = 'static';
+        document.querySelectorAll('[data-motion]').forEach(b => b.classList.remove('active'));
+        document.querySelector('[data-motion="static"]')?.classList.add('active');
+        log('Motion reset to static');
+    } else if (type === 'calibration') {
+        state.currentLabels.calibration = 'none';
+        document.querySelectorAll('[data-calibration]').forEach(b => b.classList.remove('active'));
+        log('Calibration cleared');
+    }
+    onLabelsChanged();
+}
+
+/**
+ * Clear all finger states
+ */
+function clearFingerStates() {
+    state.currentLabels.fingers = {
+        thumb: null,
+        index: null,
+        middle: null,
+        ring: null,
+        pinky: null
+    };
+    document.querySelectorAll('.finger-state-btn').forEach(b => b.classList.remove('active'));
+    log('Finger states cleared');
+    onLabelsChanged();
+}
+
+/**
+ * Remove custom label
+ */
+function removeCustomLabel(label) {
+    const index = state.currentLabels.custom.indexOf(label);
+    if (index !== -1) {
+        state.currentLabels.custom.splice(index, 1);
+        log(`Custom label removed: ${label}`);
+        onLabelsChanged();
+    }
 }
 
 /**
@@ -394,6 +443,30 @@ function addCustomLabel() {
 }
 
 /**
+ * Add preset labels
+ */
+function addPresetLabels(preset) {
+    const presets = {
+        phase1: ['warmup', 'baseline', 'initial'],
+        phase2: ['calibrated', 'training', 'validation'],
+        quality: ['good', 'noisy', 'drift'],
+        transitions: ['entering', 'holding', 'exiting']
+    };
+
+    const labels = presets[preset] || [];
+    labels.forEach(label => {
+        if (!state.currentLabels.custom.includes(label)) {
+            state.currentLabels.custom.push(label);
+        }
+    });
+    
+    if (labels.length > 0) {
+        onLabelsChanged();
+        log(`Added ${labels.length} preset labels: ${labels.join(', ')}`);
+    }
+}
+
+/**
  * Load custom labels from localStorage
  */
 function loadCustomLabels() {
@@ -504,3 +577,8 @@ if (document.readyState === 'loading') {
 window.appState = state;
 window.log = log;
 window.updateUI = updateUI;
+window.addCustomLabel = addCustomLabel;
+window.addPresetLabels = addPresetLabels;
+window.removeActiveLabel = removeActiveLabel;
+window.clearFingerStates = clearFingerStates;
+window.removeCustomLabel = removeCustomLabel;
