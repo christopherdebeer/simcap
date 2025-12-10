@@ -308,7 +308,7 @@ class EnvironmentalCalibration {
         // Quality: 1.0 if deviation is very small, decreases with larger deviation
         // Typical good reading has <5% deviation
         const quality = Math.max(0, Math.min(1, 1 - (avgDeviation / this.earthFieldMagnitude) * 10));
-
+        console.log(`Earth field calibration details:`, {quality, avgDeviation, variance, earthField: this.earthField, earthFieldMagnitude: this.earthFieldMagnitude}, this)
         this.earthFieldCalibrated = true;
 
         return {
