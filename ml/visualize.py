@@ -1497,6 +1497,10 @@ class HTMLGenerator:
                     <span class="number" id="total-duration">0</span>
                     <span class="label">Total Duration (s)</span>
                 </div>
+                <div class="stat-box" style="cursor: pointer;" onclick="openModal('snr_analysis_report.png')">
+                    <span class="number">📊</span>
+                    <span class="label">SNR Report</span>
+                </div>
             </div>
         </header>
 
