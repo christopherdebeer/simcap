@@ -582,6 +582,76 @@
         }
 
         /**
+         * Collect exact number of samples at specified Hz
+         * Guaranteed sample count for calibration - no keepalive needed
+         * 
+         * @param {number} count - Number of samples to collect
+         * @param {number} hz - Sample rate in Hz (default: 50)
+         * @returns {Promise<Object>} Collection result with count, duration, actual Hz
+         */
+        collectSamples(count, hz = 50) {
+            return new Promise((resolve, reject) => {
+                if (!this.isConnected()) {
+                    reject(new Error('Not connected'));
+                    return;
+                }
+
+                if (!count || count < 1) {
+                    reject(new Error('Invalid sample count'));
+                    return;
+                }
+
+                if (!hz || hz < 1 || hz > 100) {
+                    reject(new Error('Invalid sample rate (1-100 Hz)'));
+                    return;
+                }
+
+                const intervalMs = Math.floor(1000 / hz);
+                const expectedDurationMs = Math.ceil((count / hz) * 1000);
+                
+                this._log(`Collecting ${count} samples @ ${hz}Hz (${expectedDurationMs}ms expected)...`);
+
+                const timeout = setTimeout(() => {
+                    this.frameParser.off('COLLECTION_COMPLETE', completeHandler);
+                    this.frameParser.off('COLLECTION_ERROR', errorHandler);
+                    reject(new Error(`Collection timeout after ${expectedDurationMs + 5000}ms`));
+                }, expectedDurationMs + 5000);
+
+                const completeHandler = (data) => {
+                    clearTimeout(timeout);
+                    this.frameParser.off('COLLECTION_COMPLETE', completeHandler);
+                    this.frameParser.off('COLLECTION_ERROR', errorHandler);
+                    this._log(`Collection complete: ${data.collectedCount} samples in ${data.durationMs}ms (${data.actualHz}Hz)`);
+                    this.emit('collectionComplete', data);
+                    resolve(data);
+                };
+
+                const errorHandler = (data) => {
+                    clearTimeout(timeout);
+                    this.frameParser.off('COLLECTION_COMPLETE', completeHandler);
+                    this.frameParser.off('COLLECTION_ERROR', errorHandler);
+                    this._log(`Collection error: ${data.error}`);
+                    reject(new Error(data.error || 'Collection failed'));
+                };
+
+                this.frameParser.on('COLLECTION_COMPLETE', completeHandler);
+                this.frameParser.on('COLLECTION_ERROR', errorHandler);
+                this.frameParser.on('COLLECTION_START', (data) => {
+                    this._log(`Collection started: ${data.requestedCount} samples @ ${data.hz}Hz`);
+                    this.emit('collectionStart', data);
+                });
+
+                this.write(`\x10if(typeof collectSamples==="function")collectSamples(${count}, ${intervalMs});\n`)
+                    .catch((err) => {
+                        clearTimeout(timeout);
+                        this.frameParser.off('COLLECTION_COMPLETE', completeHandler);
+                        this.frameParser.off('COLLECTION_ERROR', errorHandler);
+                        reject(err);
+                    });
+            });
+        }
+
+        /**
          * Get battery percentage
          * @returns {Promise<number>}
          */
