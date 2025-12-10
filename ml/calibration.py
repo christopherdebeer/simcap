@@ -199,25 +199,70 @@ class EnvironmentalCalibration:
         return self.calibrations.get(cal_type, False)
 
     def save(self, filepath: str):
-        """Save calibration to JSON file."""
+        """
+        Save calibration to JSON file.
+
+        Uses a format compatible with both JS (web) and Python (ML) pipelines.
+        The format uses camelCase keys for JS compatibility, but arrays for values.
+        """
+        # Flatten 3x3 matrix to 9-element array for JS Matrix3.fromArray()
+        matrix_flat = self.soft_iron_matrix.flatten().tolist()
+
         data = {
-            'calibrations': self.calibrations,
-            'earth_field': self.earth_field.tolist(),
-            'hard_iron_offset': self.hard_iron_offset.tolist(),
-            'soft_iron_matrix': self.soft_iron_matrix.tolist()
+            # camelCase for JS compatibility
+            'hardIronOffset': {'x': float(self.hard_iron_offset[0]),
+                              'y': float(self.hard_iron_offset[1]),
+                              'z': float(self.hard_iron_offset[2])},
+            'softIronMatrix': matrix_flat,
+            'earthField': {'x': float(self.earth_field[0]),
+                          'y': float(self.earth_field[1]),
+                          'z': float(self.earth_field[2])},
+            'earthFieldMagnitude': float(np.linalg.norm(self.earth_field)),
+            'hardIronCalibrated': self.calibrations.get('hard_iron', False),
+            'softIronCalibrated': self.calibrations.get('soft_iron', False),
+            'earthFieldCalibrated': self.calibrations.get('earth_field', False),
         }
         with open(filepath, 'w') as f:
             json.dump(data, f, indent=2)
 
     def load(self, filepath: str):
-        """Load calibration from JSON file."""
+        """
+        Load calibration from JSON file.
+
+        Supports both formats:
+        - JS format (camelCase): {hardIronOffset: {x,y,z}, softIronMatrix: [...], ...}
+        - Python format (snake_case): {hard_iron_offset: [...], soft_iron_matrix: [[...]], ...}
+        """
         with open(filepath, 'r') as f:
             data = json.load(f)
 
-        self.calibrations = data['calibrations']
-        self.earth_field = np.array(data['earth_field'])
-        self.hard_iron_offset = np.array(data['hard_iron_offset'])
-        self.soft_iron_matrix = np.array(data['soft_iron_matrix'])
+        # Detect format by checking for camelCase or snake_case keys
+        if 'hardIronOffset' in data:
+            # JS format (camelCase)
+            offset = data['hardIronOffset']
+            self.hard_iron_offset = np.array([offset['x'], offset['y'], offset['z']])
+
+            field = data.get('earthField', {'x': 0, 'y': 0, 'z': 0})
+            self.earth_field = np.array([field['x'], field['y'], field['z']])
+
+            matrix_data = data.get('softIronMatrix', [1,0,0,0,1,0,0,0,1])
+            if len(matrix_data) == 9:
+                self.soft_iron_matrix = np.array(matrix_data).reshape(3, 3)
+            else:
+                self.soft_iron_matrix = np.eye(3)
+
+            # Load calibration flags
+            self.calibrations = {
+                'earth_field': data.get('earthFieldCalibrated', False),
+                'hard_iron': data.get('hardIronCalibrated', False),
+                'soft_iron': data.get('softIronCalibrated', False)
+            }
+        else:
+            # Python format (snake_case) - legacy support
+            self.calibrations = data.get('calibrations', {})
+            self.earth_field = np.array(data.get('earth_field', [0, 0, 0]))
+            self.hard_iron_offset = np.array(data.get('hard_iron_offset', [0, 0, 0]))
+            self.soft_iron_matrix = np.array(data.get('soft_iron_matrix', np.eye(3).tolist()))
 
 
 def decorate_telemetry_with_calibration(telemetry_data: List[Dict],
