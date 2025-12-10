@@ -169,7 +169,9 @@ export function initCalibrationUI() {
     const $ = (id) => document.getElementById(id);
 
     // Earth Field Calibration
-    $('startEarthCal').addEventListener('click', () => {
+    const startEarthCal = $('startEarthCal');
+    if (startEarthCal) {
+        startEarthCal.addEventListener('click', () => {
         runCalibrationStep('earth', 5000,
             (result) => {
                 const quality = result.quality > 0.9 ? 'Excellent' : result.quality > 0.7 ? 'Good' : 'Poor';
@@ -187,10 +189,13 @@ export function initCalibrationUI() {
                 return calibrationInstance.runEarthFieldCalibration(samples);
             }
         );
-    });
+        });
+    }
 
     // Hard Iron Calibration
-    $('startHardIronCal').addEventListener('click', () => {
+    const startHardIronCal = $('startHardIronCal');
+    if (startHardIronCal) {
+        startHardIronCal.addEventListener('click', () => {
         runCalibrationStep('hardIron', 10000,
             (result) => {
                 const quality = result.quality > 0.9 ? 'Excellent' : result.quality > 0.7 ? 'Good' : 'Poor';
@@ -208,10 +213,13 @@ export function initCalibrationUI() {
                 return calibrationInstance.runHardIronCalibration(samples);
             }
         );
-    });
+        });
+    }
 
     // Soft Iron Calibration
-    $('startSoftIronCal').addEventListener('click', () => {
+    const startSoftIronCal = $('startSoftIronCal');
+    if (startSoftIronCal) {
+        startSoftIronCal.addEventListener('click', () => {
         runCalibrationStep('softIron', 10000,
             (result) => {
                 const quality = result.quality > 0.9 ? 'Excellent' : result.quality > 0.7 ? 'Good' : 'Poor';
@@ -230,10 +238,13 @@ export function initCalibrationUI() {
                 return calibrationInstance.runSoftIronCalibration(samples);
             }
         );
-    });
+        });
+    }
 
     // Save Calibration to File
-    $('saveCalibration').addEventListener('click', () => {
+    const saveCalibration = $('saveCalibration');
+    if (saveCalibration) {
+        saveCalibration.addEventListener('click', () => {
         // Use the class's toJSON method for consistent format
         const calData = {
             ...calibrationInstance.toJSON(),
@@ -249,10 +260,13 @@ export function initCalibrationUI() {
         URL.revokeObjectURL(url);
 
         log('Calibration file downloaded');
-    });
+        });
+    }
 
     // Load Calibration from File
-    $('loadCalibration').addEventListener('click', () => {
+    const loadCalibration = $('loadCalibration');
+    if (loadCalibration) {
+        loadCalibration.addEventListener('click', () => {
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = 'application/json';
@@ -275,15 +289,19 @@ export function initCalibrationUI() {
             }
         };
         input.click();
-    });
+        });
+    }
 
-    // Clear Calibration
-    $('clearCalibration').addEventListener('click', () => {
-        if (confirm('Clear all calibration data? This cannot be undone.')) {
-            calibrationInstance = initCalibration(); // Reset to fresh instance
-            localStorage.removeItem('gambit_calibration');
-            log('Calibration cleared');
-            updateCalibrationStatus();
-        }
-    });
+    // Reset Calibration
+    const resetCalibration = $('resetCalibration');
+    if (resetCalibration) {
+        resetCalibration.addEventListener('click', () => {
+            if (confirm('Clear all calibration data? This cannot be undone.')) {
+                calibrationInstance = initCalibration(); // Reset to fresh instance
+                localStorage.removeItem('gambit_calibration');
+                log('Calibration cleared');
+                updateCalibrationStatus();
+            }
+        });
+    }
 }
