@@ -172,7 +172,7 @@ export function initCalibrationUI() {
     const startEarthCal = $('startEarthCal');
     if (startEarthCal) {
         startEarthCal.addEventListener('click', () => {
-        runCalibrationStep('earth', 5000,
+        runCalibrationStep('earth', 10000,
             (result) => {
                 const quality = result.quality > 0.9 ? 'Excellent' : result.quality > 0.7 ? 'Good' : 'Poor';
                 const emoji = result.quality > 0.9 ? '✅' : result.quality > 0.7 ? '⚠️' : '❌';
