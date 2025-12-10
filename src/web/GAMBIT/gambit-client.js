@@ -583,13 +583,14 @@
 
         /**
          * Collect exact number of samples at specified Hz
-         * Guaranteed sample count for calibration - no keepalive needed
+         * Uses progress-based timeout - only fails if samples stop arriving
          * 
          * @param {number} count - Number of samples to collect
          * @param {number} hz - Sample rate in Hz (default: 50)
+         * @param {Object} options - { progressTimeoutMs: 5000 } - timeout if no samples for N ms
          * @returns {Promise<Object>} Collection result with count, duration, actual Hz
          */
-        collectSamples(count, hz = 50) {
+        collectSamples(count, hz = 50, options = {}) {
             return new Promise((resolve, reject) => {
                 if (!this.isConnected()) {
                     reject(new Error('Not connected'));
@@ -608,44 +609,78 @@
 
                 const intervalMs = Math.floor(1000 / hz);
                 const expectedDurationMs = Math.ceil((count / hz) * 1000);
+                const progressTimeoutMs = options.progressTimeoutMs || 5000;
                 
-                this._log(`Collecting ${count} samples @ ${hz}Hz (${expectedDurationMs}ms expected)...`);
+                this._log(`Collecting ${count} samples @ ${hz}Hz (~${(expectedDurationMs/1000).toFixed(1)}s expected, ${(progressTimeoutMs/1000).toFixed(1)}s progress timeout)...`);
 
-                const timeout = setTimeout(() => {
+                let sampleCount = 0;
+                let startTime = null;
+                let progressTimeout = null;
+
+                const resetProgressTimeout = () => {
+                    if (progressTimeout) clearTimeout(progressTimeout);
+                    progressTimeout = setTimeout(() => {
+                        cleanup();
+                        const elapsed = Date.now() - startTime;
+                        reject(new Error(`Collection stalled - no samples received for ${progressTimeoutMs}ms (${sampleCount}/${count} samples in ${elapsed}ms)`));
+                    }, progressTimeoutMs);
+                };
+
+                const cleanup = () => {
+                    if (progressTimeout) clearTimeout(progressTimeout);
+                    this.off('data', dataHandler);
                     this.frameParser.off('COLLECTION_COMPLETE', completeHandler);
                     this.frameParser.off('COLLECTION_ERROR', errorHandler);
-                    reject(new Error(`Collection timeout after ${expectedDurationMs + 5000}ms`));
-                }, expectedDurationMs + 5000);
+                };
+
+                const dataHandler = () => {
+                    if (!startTime) startTime = Date.now();
+                    sampleCount++;
+                    resetProgressTimeout();
+                    
+                    if (sampleCount >= count) {
+                        const duration = Date.now() - startTime;
+                        const actualHz = Math.round((sampleCount / duration) * 1000);
+                        cleanup();
+                        this._log(`Collection complete: ${sampleCount} samples in ${duration}ms (${actualHz}Hz)`);
+                        resolve({
+                            collectedCount: sampleCount,
+                            requestedCount: count,
+                            durationMs: duration,
+                            requestedHz: hz,
+                            actualHz: actualHz
+                        });
+                    }
+                };
 
                 const completeHandler = (data) => {
-                    clearTimeout(timeout);
-                    this.frameParser.off('COLLECTION_COMPLETE', completeHandler);
-                    this.frameParser.off('COLLECTION_ERROR', errorHandler);
-                    this._log(`Collection complete: ${data.collectedCount} samples in ${data.durationMs}ms (${data.actualHz}Hz)`);
+                    cleanup();
+                    this._log(`Collection complete (firmware): ${data.collectedCount} samples in ${data.durationMs}ms (${data.actualHz}Hz)`);
                     this.emit('collectionComplete', data);
                     resolve(data);
                 };
 
                 const errorHandler = (data) => {
-                    clearTimeout(timeout);
-                    this.frameParser.off('COLLECTION_COMPLETE', completeHandler);
-                    this.frameParser.off('COLLECTION_ERROR', errorHandler);
+                    cleanup();
                     this._log(`Collection error: ${data.error}`);
                     reject(new Error(data.error || 'Collection failed'));
                 };
 
+                this.on('data', dataHandler);
                 this.frameParser.on('COLLECTION_COMPLETE', completeHandler);
                 this.frameParser.on('COLLECTION_ERROR', errorHandler);
                 this.frameParser.on('COLLECTION_START', (data) => {
+                    startTime = Date.now();
+                    resetProgressTimeout();
                     this._log(`Collection started: ${data.requestedCount} samples @ ${data.hz}Hz`);
                     this.emit('collectionStart', data);
                 });
 
+                resetProgressTimeout();
+
                 this.write(`\x10if(typeof collectSamples==="function")collectSamples(${count}, ${intervalMs});\n`)
                     .catch((err) => {
-                        clearTimeout(timeout);
-                        this.frameParser.off('COLLECTION_COMPLETE', completeHandler);
-                        this.frameParser.off('COLLECTION_ERROR', errorHandler);
+                        cleanup();
                         reject(err);
                     });
             });
