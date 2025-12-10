@@ -5,6 +5,7 @@
 
 import { state } from './state.js';
 import { log } from './logger.js';
+import { CALIBRATION_CONFIG, validateSampleCount } from '../calibration-config.js';
 
 // Single calibration instance used for both wizard and real-time correction
 export let calibrationInstance = null;
@@ -73,92 +74,79 @@ export function updateCalibrationStatus() {
 }
 
 /**
- * Run a calibration step with automatic streaming management
- * FIXED: Now ensures data streaming is active before collecting samples
+ * Run a calibration step using guaranteed sample collection
+ * Uses collectSamples() for exact sample counts
  *
- * @param {string} stepName - Name of calibration step (e.g., 'earth', 'hardIron')
- * @param {number} durationMs - Duration to collect data in milliseconds
+ * @param {string} stepName - Name of calibration step (e.g., 'EARTH_FIELD', 'HARD_IRON')
  * @param {Function} sampleHandler - Handler called with calibration result
  * @param {Function} completionHandler - Handler to process collected samples
  */
-export async function runCalibrationStep(stepName, durationMs, sampleHandler, completionHandler) {
+export async function runCalibrationStep(stepName, sampleHandler, completionHandler) {
     if (!state.gambitClient || !state.connected) {
         log('Error: Not connected');
         return;
     }
 
     const $ = (id) => document.getElementById(id);
+    const config = CALIBRATION_CONFIG[stepName];
+    
+    const elementName = stepName.toLowerCase().replace('_field', '').replace('_iron', 'Iron');
+    const progressDiv = $(`${elementName}Progress`);
+    const qualityDiv = $(`${elementName}Quality`);
     const buffer = [];
-    const startTime = Date.now();
-    const progressDiv = $(`${stepName}Progress`);
-    const qualityDiv = $(`${stepName}Quality`);
 
-    // FIX: Track whether we started streaming (so we can stop it after)
-    let streamingStartedByUs = false;
+    if (!config) {
+        log(`Error: Unknown calibration step: ${stepName}`);
+        return;
+    }
 
-    log(`Starting ${stepName} calibration (${durationMs/1000}s)...`);
+    const { sampleCount, sampleRate, minSamples } = config;
+    const expectedDuration = Math.ceil((sampleCount / sampleRate) * 1000);
+
+    log(`Starting ${stepName} calibration: ${sampleCount} samples @ ${sampleRate}Hz (~${(expectedDuration/1000).toFixed(1)}s)...`);
+    progressDiv.textContent = 'Starting...';
 
     try {
-        // FIX: Ensure streaming is active before collecting data
-        if (!state.recording) {
-            log(`Starting data streaming for calibration...`);
-            await state.gambitClient.startStreaming();
-            streamingStartedByUs = true;
-        }
-
         const dataHandler = (sample) => {
             buffer.push(sample);
-            const elapsed = Date.now() - startTime;
-            const progress = Math.min(100, (elapsed / durationMs) * 100);
-            progressDiv.textContent = `${progress.toFixed(0)}%`;
+            const progress = Math.min(100, (buffer.length / sampleCount) * 100);
+            progressDiv.textContent = `${buffer.length}/${sampleCount} (${progress.toFixed(0)}%)`;
         };
 
         state.gambitClient.on('data', dataHandler);
 
-        // Wait for data collection to complete
-        await new Promise((resolve) => {
-            setTimeout(() => {
-                state.gambitClient.off('data', dataHandler);
-                progressDiv.textContent = 'Done';
+        const result = await state.gambitClient.collectSamples(sampleCount, sampleRate);
+        
+        state.gambitClient.off('data', dataHandler);
+        progressDiv.textContent = `✓ ${result.collectedCount} samples in ${(result.durationMs/1000).toFixed(1)}s`;
 
-                // FIX: Stop streaming if we started it (and not recording)
-                if (streamingStartedByUs && !state.recording) {
-                    state.gambitClient.stopStreaming()
-                        .then(() => log('Data streaming stopped'))
-                        .catch((e) => console.warn('Failed to stop streaming:', e));
-                }
+        const validation = validateSampleCount(stepName, buffer.length);
+        if (!validation.valid) {
+            log(`Error: Insufficient samples (${validation.actualCount}/${validation.minSamples} minimum)`);
+            qualityDiv.textContent = `❌ Failed: only ${validation.actualCount} samples (need ${validation.minSamples}+)`;
+            qualityDiv.style.color = 'var(--danger)';
+            return;
+        }
 
-                if (buffer.length < 10) {
-                    log(`Error: Insufficient samples (${buffer.length})`);
-                    qualityDiv.textContent = '❌ Failed: insufficient data';
-                    qualityDiv.style.color = 'var(--danger)';
-                    resolve();
-                    return;
-                }
+        if (validation.percentage < 95) {
+            log(`Warning: Lower sample count than expected (${validation.actualCount}/${validation.expectedSamples}, ${validation.percentage}%)`);
+        }
 
-                try {
-                    const result = completionHandler(buffer);
-                    sampleHandler(result);
-                    log(`${stepName} complete: ${buffer.length} samples`);
-                } catch (error) {
-                    log(`Error: ${error.message}`);
-                    qualityDiv.textContent = `❌ Failed: ${error.message}`;
-                    qualityDiv.style.color = 'var(--danger)';
-                }
-
-                resolve();
-            }, durationMs);
-        });
+        try {
+            const calibResult = completionHandler(buffer);
+            sampleHandler(calibResult);
+            log(`${stepName} complete: ${buffer.length} samples, quality=${calibResult.quality?.toFixed(2) || 'N/A'}`);
+        } catch (error) {
+            log(`Error: ${error.message}`);
+            qualityDiv.textContent = `❌ Failed: ${error.message}`;
+            qualityDiv.style.color = 'var(--danger)';
+        }
 
     } catch (error) {
-        log(`Error starting calibration: ${error.message}`);
-        qualityDiv.textContent = '❌ Failed: could not start streaming';
+        log(`Error during calibration: ${error.message}`);
+        qualityDiv.textContent = `❌ Failed: ${error.message}`;
         qualityDiv.style.color = 'var(--danger)';
-
-        // Clean up streaming if we started it
-        if (streamingStartedByUs && !state.recording) {
-            state.gambitClient.stopStreaming().catch(() => {});
-        }
+        progressDiv.textContent = 'Failed';
     }
 }
 
@@ -172,19 +160,18 @@ export function initCalibrationUI() {
     const startEarthCal = $('startEarthCal');
     if (startEarthCal) {
         startEarthCal.addEventListener('click', () => {
-        runCalibrationStep('earth', 10000,
+        runCalibrationStep('EARTH_FIELD',
             (result) => {
-                const quality = result.quality > 0.9 ? 'Excellent' : result.quality > 0.7 ? 'Good' : 'Poor';
-                const emoji = result.quality > 0.9 ? '✅' : result.quality > 0.7 ? '⚠️' : '❌';
+                const thresholds = CALIBRATION_CONFIG.EARTH_FIELD.qualityThresholds;
+                const quality = result.quality > thresholds.excellent ? 'Excellent' : result.quality > thresholds.good ? 'Good' : 'Poor';
+                const emoji = result.quality > thresholds.excellent ? '✅' : result.quality > thresholds.good ? '⚠️' : '❌';
                 $('earthQuality').textContent = `${emoji} ${quality} (quality: ${result.quality.toFixed(2)})`;
-                $('earthQuality').style.color = result.quality > 0.7 ? 'var(--success)' : 'var(--danger)';
+                $('earthQuality').style.color = result.quality > thresholds.good ? 'var(--success)' : 'var(--danger)';
 
-                // Save after each step
                 calibrationInstance.save('gambit_calibration');
                 updateCalibrationStatus();
             },
             (buffer) => {
-                // Convert buffer to samples format expected by the class
                 const samples = buffer.map(s => ({x: s.mx, y: s.my, z: s.mz}));
                 return calibrationInstance.runEarthFieldCalibration(samples);
             }
@@ -196,19 +183,18 @@ export function initCalibrationUI() {
     const startHardIronCal = $('startHardIronCal');
     if (startHardIronCal) {
         startHardIronCal.addEventListener('click', () => {
-        runCalibrationStep('hardIron', 20000,
+        runCalibrationStep('HARD_IRON',
             (result) => {
-                const quality = result.quality > 0.9 ? 'Excellent' : result.quality > 0.7 ? 'Good' : 'Poor';
-                const emoji = result.quality > 0.9 ? '✅' : result.quality > 0.7 ? '⚠️' : '❌';
+                const thresholds = CALIBRATION_CONFIG.HARD_IRON.qualityThresholds;
+                const quality = result.quality > thresholds.excellent ? 'Excellent' : result.quality > thresholds.good ? 'Good' : 'Poor';
+                const emoji = result.quality > thresholds.excellent ? '✅' : result.quality > thresholds.good ? '⚠️' : '❌';
                 $('hardIronQuality').textContent = `${emoji} ${quality} (sphericity: ${result.quality.toFixed(2)})`;
-                $('hardIronQuality').style.color = result.quality > 0.7 ? 'var(--success)' : 'var(--danger)';
+                $('hardIronQuality').style.color = result.quality > thresholds.good ? 'var(--success)' : 'var(--danger)';
 
-                // Save after each step
                 calibrationInstance.save('gambit_calibration');
                 updateCalibrationStatus();
             },
             (buffer) => {
-                // Convert buffer to samples format expected by the class
                 const samples = buffer.map(s => ({x: s.mx, y: s.my, z: s.mz}));
                 return calibrationInstance.runHardIronCalibration(samples);
             }
@@ -220,20 +206,19 @@ export function initCalibrationUI() {
     const startSoftIronCal = $('startSoftIronCal');
     if (startSoftIronCal) {
         startSoftIronCal.addEventListener('click', () => {
-        runCalibrationStep('softIron', 20000,
+        runCalibrationStep('SOFT_IRON',
             (result) => {
-                const quality = result.quality > 0.9 ? 'Excellent' : result.quality > 0.7 ? 'Good' : 'Poor';
-                const emoji = result.quality > 0.9 ? '✅' : result.quality > 0.7 ? '⚠️' : '❌';
+                const thresholds = CALIBRATION_CONFIG.SOFT_IRON.qualityThresholds;
+                const quality = result.quality > thresholds.excellent ? 'Excellent' : result.quality > thresholds.good ? 'Good' : 'Poor';
+                const emoji = result.quality > thresholds.excellent ? '✅' : result.quality > thresholds.good ? '⚠️' : '❌';
                 $('softIronQuality').textContent = `${emoji} ${quality} (quality: ${result.quality.toFixed(2)})`;
-                $('softIronQuality').style.color = result.quality > 0.7 ? 'var(--success)' : 'var(--danger)';
+                $('softIronQuality').style.color = result.quality > thresholds.good ? 'var(--success)' : 'var(--danger)';
 
-                // Save complete calibration
                 calibrationInstance.save('gambit_calibration');
                 updateCalibrationStatus();
                 log('Calibration saved to localStorage');
             },
             (buffer) => {
-                // Convert buffer to samples format expected by the class
                 const samples = buffer.map(s => ({x: s.mx, y: s.my, z: s.mz}));
                 return calibrationInstance.runSoftIronCalibration(samples);
             }

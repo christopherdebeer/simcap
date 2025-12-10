@@ -2,7 +2,7 @@
 var FIRMWARE_INFO = {
     id: "GAMBIT",
     name: "GAMBIT IMU Telemetry",
-    version: "0.2.0",
+    version: "0.2.1",
     features: ["imu", "magnetometer", "environmental", "streaming", "logging", "framing"],
     author: "SIMCAP"
 };
@@ -252,6 +252,60 @@ function stopData() {
         clearTimeout(streamTimeout);
         streamTimeout = null;
     }
+}
+
+// Guaranteed sample collection for calibration
+// Collects exact number of samples at specified Hz
+var collectionInterval = null;
+function collectSamples(count, intervalMs) {
+    if (!count || count < 1) {
+        logError('Invalid sample count: ' + count);
+        sendFrame('COLLECTION_ERROR', {error: 'Invalid sample count', count: count});
+        return;
+    }
+    if (!intervalMs || intervalMs < 10) {
+        logError('Invalid interval: ' + intervalMs + 'ms (min 10ms)');
+        sendFrame('COLLECTION_ERROR', {error: 'Invalid interval', intervalMs: intervalMs});
+        return;
+    }
+
+    if (collectionInterval) {
+        logWarn('Collection already in progress');
+        sendFrame('COLLECTION_ERROR', {error: 'Collection already in progress'});
+        return;
+    }
+
+    var collected = 0;
+    var startTime = Date.now();
+    var hz = Math.round(1000 / intervalMs);
+    
+    logInfo('Collecting ' + count + ' samples @ ' + hz + 'Hz (' + intervalMs + 'ms)');
+    sendFrame('COLLECTION_START', {
+        requestedCount: count,
+        intervalMs: intervalMs,
+        hz: hz
+    });
+
+    collectionInterval = setInterval(function() {
+        emit();
+        collected++;
+        
+        if (collected >= count) {
+            clearInterval(collectionInterval);
+            collectionInterval = null;
+            var duration = Date.now() - startTime;
+            var actualHz = Math.round((collected / duration) * 1000);
+            
+            logInfo('Collection complete: ' + collected + '/' + count + ' samples in ' + duration + 'ms (' + actualHz + 'Hz)');
+            sendFrame('COLLECTION_COMPLETE', {
+                collectedCount: collected,
+                requestedCount: count,
+                durationMs: duration,
+                requestedHz: hz,
+                actualHz: actualHz
+            });
+        }
+    }, intervalMs);
 }
 
 
