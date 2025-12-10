@@ -129,7 +129,7 @@ async function init() {
  * Update UI state
  */
 function updateUI() {
-    const statusIndicator = $('status');
+    const statusIndicator = $('statusIndicator');
     const connectBtn = $('connectBtn');
     const startBtn = $('startBtn');
     const stopBtn = $('stopBtn');
@@ -141,23 +141,25 @@ function updateUI() {
     const labelsList = $('labelsList');
 
     // Status indicator
-    if (state.recording) {
-        statusIndicator.className = 'status recording';
-        statusIndicator.textContent = 'Recording...';
-    } else if (state.connected) {
-        statusIndicator.className = 'status connected';
-        statusIndicator.textContent = 'Connected';
-    } else {
-        statusIndicator.className = 'status disconnected';
-        statusIndicator.textContent = 'Disconnected';
+    if (statusIndicator) {
+        if (state.recording) {
+            statusIndicator.className = 'status recording';
+            statusIndicator.textContent = 'Recording...';
+        } else if (state.connected) {
+            statusIndicator.className = 'status connected';
+            statusIndicator.textContent = 'Connected';
+        } else {
+            statusIndicator.className = 'status disconnected';
+            statusIndicator.textContent = 'Disconnected';
+        }
     }
 
     // Buttons
-    connectBtn.textContent = state.connected ? 'Disconnect' : 'Connect Device';
-    startBtn.disabled = !state.connected || state.recording;
-    stopBtn.disabled = !state.recording;
-    clearBtn.disabled = state.sessionData.length === 0 || state.recording;
-    exportBtn.disabled = state.sessionData.length === 0 || state.recording;
+    if (connectBtn) connectBtn.textContent = state.connected ? 'Disconnect' : 'Connect Device';
+    if (startBtn) startBtn.disabled = !state.connected || state.recording;
+    if (stopBtn) stopBtn.disabled = !state.recording;
+    if (clearBtn) clearBtn.disabled = state.sessionData.length === 0 || state.recording;
+    if (exportBtn) exportBtn.disabled = state.sessionData.length === 0 || state.recording;
 
     // Upload button
     const uploadBtn = $('uploadBtn');
