@@ -889,7 +889,7 @@
             <button id="uploadBtn" class="btn-success" disabled>Upload to GitHub</button>
         </div>
         <div class="row">
-            <button id="wizardBtn" class="btn-warning" disabled>🧙 Calibration Wizard</button>
+            <button id="wizardBtn" class="btn-warning" disabled>📋 Data Collection Wizard</button>
         </div>
         <div class="row">
             <button id="poseEstimationBtn" class="btn-secondary" disabled>🎯 Enable Pose Tracking</button>
@@ -1059,14 +1059,31 @@
     };
 
     // ===== Calibration and Filtering =====
-    // Initialize calibration instance (loads previous calibration if available)
-    const calibration = new EnvironmentalCalibration();
-    try {
-        calibration.load('gambit_calibration');
-        console.log('[Calibration] Loaded previous calibration from localStorage');
-    } catch (e) {
-        console.log('[Calibration] No previous calibration found, will calibrate during wizard');
+    // Single calibration instance used for both wizard and real-time correction
+    let calibrationInstance = null;
+    let calibrationInterval = null;
+
+    function initCalibration() {
+        if (typeof EnvironmentalCalibration === 'undefined') {
+            console.error('Error: calibration.js not loaded');
+            return null;
+        }
+        calibrationInstance = new EnvironmentalCalibration();
+
+        // Try to load from localStorage using the class method
+        try {
+            const loaded = calibrationInstance.load('gambit_calibration');
+            if (loaded) {
+                console.log('[Calibration] Loaded from localStorage');
+            }
+        } catch (e) {
+            console.log('[Calibration] No previous calibration found');
+        }
+        return calibrationInstance;
     }
+
+    // Initialize calibration early so it's available for data processing
+    calibrationInstance = initCalibration();
 
     // Initialize 3D Kalman filter for magnetometer smoothing
     const magFilter = new KalmanFilter3D({
@@ -1201,11 +1218,8 @@
         }
     }
 
-    // Calibration sample buffers for wizard steps
+    // Sample buffers for wizard data collection steps
     const calibrationBuffers = {
-        earth_field: [],
-        hard_iron: [],
-        soft_iron: [],
         reference_pose: [],
         magnet_baseline: []
     };
@@ -1585,11 +1599,12 @@
         const decoratedTelemetry = {...telemetry};
 
         // Apply calibration correction if available (adds calibrated_ fields)
-        if (calibration.hasCalibration('earth_field') &&
-            calibration.hasCalibration('hard_iron') &&
-            calibration.hasCalibration('soft_iron')) {
+        if (calibrationInstance &&
+            calibrationInstance.earthFieldCalibrated &&
+            calibrationInstance.hardIronCalibrated &&
+            calibrationInstance.softIronCalibrated) {
             try {
-                const corrected = calibration.correct({
+                const corrected = calibrationInstance.correct({
                     x: telemetry.mx,
                     y: telemetry.my,
                     z: telemetry.mz
@@ -1722,33 +1737,7 @@
         }
     });
 
-    // ===== Calibration Wizard =====
-    let calibrationInstance = null;
-    let calibrationInterval = null;
-
-    function initCalibration() {
-        if (typeof EnvironmentalCalibration === 'undefined') {
-            log('Error: calibration.js not loaded');
-            return null;
-        }
-        calibrationInstance = new EnvironmentalCalibration();
-        
-        const saved = localStorage.getItem('gambit_calibration');
-        if (saved) {
-            try {
-                const data = JSON.parse(saved);
-                calibrationInstance.earth_field = data.earth_field || null;
-                calibrationInstance.hard_iron_offset = data.hard_iron_offset || null;
-                calibrationInstance.soft_iron_matrix = data.soft_iron_matrix || null;
-                updateCalibrationStatus();
-                log('Loaded calibration from localStorage');
-            } catch (e) {
-                console.error('Failed to load calibration:', e);
-            }
-        }
-        return calibrationInstance;
-    }
-
+    // ===== Calibration Wizard UI =====
     function updateCalibrationStatus() {
         const statusText = $('calStatusText');
         const detailsText = $('calDetails');
@@ -1761,13 +1750,14 @@
             return;
         }
 
-        const hasEarth = calibrationInstance.earth_field !== null;
-        const hasHardIron = calibrationInstance.hard_iron_offset !== null;
-        const hasSoftIron = calibrationInstance.soft_iron_matrix !== null;
+        // Use the class's calibration flags (set by the calibration methods)
+        const hasEarth = calibrationInstance.earthFieldCalibrated;
+        const hasHardIron = calibrationInstance.hardIronCalibrated;
+        const hasSoftIron = calibrationInstance.softIronCalibrated;
         const complete = hasEarth && hasHardIron && hasSoftIron;
 
-        statusText.textContent = complete ? 'Calibrated' : 'Partial';
-        statusText.style.color = complete ? 'var(--success)' : 'var(--warning)';
+        statusText.textContent = complete ? 'Calibrated' : (hasEarth || hasHardIron || hasSoftIron) ? 'Partial' : 'Not Calibrated';
+        statusText.style.color = complete ? 'var(--success)' : (hasEarth || hasHardIron || hasSoftIron) ? 'var(--warning)' : 'var(--fg-muted)';
 
         const steps = [];
         if (hasEarth) steps.push('Earth');
@@ -1823,34 +1813,21 @@
     }
 
     $('startEarthCal').addEventListener('click', () => {
-        runCalibrationStep('earth', 5000, 
+        runCalibrationStep('earth', 5000,
             (result) => {
-                calibrationInstance.earth_field = result.mean;
-                calibrationInstance.earth_field_std = result.std;
-                
-                const quality = result.std < 1.0 ? 'Excellent' : result.std < 3.0 ? 'Good' : 'Poor';
-                const emoji = result.std < 1.0 ? '✅' : result.std < 3.0 ? '⚠️' : '❌';
-                $('earthQuality').textContent = `${emoji} ${quality} (std: ${result.std.toFixed(2)} μT)`;
-                $('earthQuality').style.color = result.std < 3.0 ? 'var(--success)' : 'var(--danger)';
-                
+                const quality = result.quality > 0.9 ? 'Excellent' : result.quality > 0.7 ? 'Good' : 'Poor';
+                const emoji = result.quality > 0.9 ? '✅' : result.quality > 0.7 ? '⚠️' : '❌';
+                $('earthQuality').textContent = `${emoji} ${quality} (quality: ${result.quality.toFixed(2)})`;
+                $('earthQuality').style.color = result.quality > 0.7 ? 'var(--success)' : 'var(--danger)';
+
+                // Save after each step
+                calibrationInstance.save('gambit_calibration');
                 updateCalibrationStatus();
             },
             (buffer) => {
-                const mx = buffer.map(s => s.mx);
-                const my = buffer.map(s => s.my);
-                const mz = buffer.map(s => s.mz);
-                return {
-                    mean: {
-                        x: mx.reduce((a,b)=>a+b,0) / mx.length,
-                        y: my.reduce((a,b)=>a+b,0) / my.length,
-                        z: mz.reduce((a,b)=>a+b,0) / mz.length
-                    },
-                    std: Math.sqrt(
-                        (mx.reduce((a,b)=>a+Math.pow(b-mx.reduce((c,d)=>c+d,0)/mx.length,2),0)/mx.length +
-                         my.reduce((a,b)=>a+Math.pow(b-my.reduce((c,d)=>c+d,0)/my.length,2),0)/my.length +
-                         mz.reduce((a,b)=>a+Math.pow(b-mz.reduce((c,d)=>c+d,0)/mz.length,2),0)/mz.length) / 3
-                    )
-                };
+                // Convert buffer to samples format expected by the class
+                const samples = buffer.map(s => ({x: s.mx, y: s.my, z: s.mz}));
+                return calibrationInstance.runEarthFieldCalibration(samples);
             }
         );
     });
@@ -1858,27 +1835,19 @@
     $('startHardIronCal').addEventListener('click', () => {
         runCalibrationStep('hardIron', 10000,
             (result) => {
-                calibrationInstance.hard_iron_offset = result.offset;
-                
-                const quality = result.sphericity > 0.9 ? 'Excellent' : result.sphericity > 0.7 ? 'Good' : 'Poor';
-                const emoji = result.sphericity > 0.9 ? '✅' : result.sphericity > 0.7 ? '⚠️' : '❌';
-                $('hardIronQuality').textContent = `${emoji} ${quality} (sphericity: ${result.sphericity.toFixed(2)})`;
-                $('hardIronQuality').style.color = result.sphericity > 0.7 ? 'var(--success)' : 'var(--danger)';
-                
+                const quality = result.quality > 0.9 ? 'Excellent' : result.quality > 0.7 ? 'Good' : 'Poor';
+                const emoji = result.quality > 0.9 ? '✅' : result.quality > 0.7 ? '⚠️' : '❌';
+                $('hardIronQuality').textContent = `${emoji} ${quality} (sphericity: ${result.quality.toFixed(2)})`;
+                $('hardIronQuality').style.color = result.quality > 0.7 ? 'var(--success)' : 'var(--danger)';
+
+                // Save after each step
+                calibrationInstance.save('gambit_calibration');
                 updateCalibrationStatus();
             },
             (buffer) => {
-                const mx = buffer.map(s => s.mx);
-                const my = buffer.map(s => s.my);
-                const mz = buffer.map(s => s.mz);
-                return {
-                    offset: {
-                        x: (Math.max(...mx) + Math.min(...mx)) / 2,
-                        y: (Math.max(...my) + Math.min(...my)) / 2,
-                        z: (Math.max(...mz) + Math.min(...mz)) / 2
-                    },
-                    sphericity: 1.0 - Math.abs((Math.max(...mx)-Math.min(...mx)) - (Math.max(...my)-Math.min(...my))) / (Math.max(...mx)-Math.min(...mx))
-                };
+                // Convert buffer to samples format expected by the class
+                const samples = buffer.map(s => ({x: s.mx, y: s.my, z: s.mz}));
+                return calibrationInstance.runHardIronCalibration(samples);
             }
         );
     });
@@ -1886,41 +1855,31 @@
     $('startSoftIronCal').addEventListener('click', () => {
         runCalibrationStep('softIron', 10000,
             (result) => {
-                calibrationInstance.soft_iron_matrix = result.matrix;
-                
-                const emoji = '✅';
-                $('softIronQuality').textContent = `${emoji} Calibration complete`;
-                $('softIronQuality').style.color = 'var(--success)';
-                
+                const quality = result.quality > 0.9 ? 'Excellent' : result.quality > 0.7 ? 'Good' : 'Poor';
+                const emoji = result.quality > 0.9 ? '✅' : result.quality > 0.7 ? '⚠️' : '❌';
+                $('softIronQuality').textContent = `${emoji} ${quality} (quality: ${result.quality.toFixed(2)})`;
+                $('softIronQuality').style.color = result.quality > 0.7 ? 'var(--success)' : 'var(--danger)';
+
+                // Save complete calibration
+                calibrationInstance.save('gambit_calibration');
                 updateCalibrationStatus();
-                
-                const calData = {
-                    timestamp: new Date().toISOString(),
-                    earth_field: calibrationInstance.earth_field,
-                    hard_iron_offset: calibrationInstance.hard_iron_offset,
-                    soft_iron_matrix: calibrationInstance.soft_iron_matrix,
-                    earth_field_std: calibrationInstance.earth_field_std
-                };
-                localStorage.setItem('gambit_calibration', JSON.stringify(calData));
                 log('Calibration saved to localStorage');
             },
             (buffer) => {
-                return {
-                    matrix: [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
-                };
+                // Convert buffer to samples format expected by the class
+                const samples = buffer.map(s => ({x: s.mx, y: s.my, z: s.mz}));
+                return calibrationInstance.runSoftIronCalibration(samples);
             }
         );
     });
 
     $('saveCalibration').addEventListener('click', () => {
+        // Use the class's toJSON method for consistent format
         const calData = {
-            timestamp: new Date().toISOString(),
-            earth_field: calibrationInstance.earth_field,
-            hard_iron_offset: calibrationInstance.hard_iron_offset,
-            soft_iron_matrix: calibrationInstance.soft_iron_matrix,
-            earth_field_std: calibrationInstance.earth_field_std
+            ...calibrationInstance.toJSON(),
+            timestamp: new Date().toISOString()
         };
-        
+
         const blob = new Blob([JSON.stringify(calData, null, 2)], {type: 'application/json'});
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -1928,7 +1887,7 @@
         a.download = 'gambit_calibration.json';
         a.click();
         URL.revokeObjectURL(url);
-        
+
         log('Calibration exported to file');
     });
 
@@ -1939,17 +1898,15 @@
         input.onchange = (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            
+
             const reader = new FileReader();
             reader.onload = (evt) => {
                 try {
                     const data = JSON.parse(evt.target.result);
-                    calibrationInstance.earth_field = data.earth_field;
-                    calibrationInstance.hard_iron_offset = data.hard_iron_offset;
-                    calibrationInstance.soft_iron_matrix = data.soft_iron_matrix;
-                    calibrationInstance.earth_field_std = data.earth_field_std;
-                    
-                    localStorage.setItem('gambit_calibration', JSON.stringify(data));
+                    // Use the class's fromJSON method
+                    calibrationInstance = EnvironmentalCalibration.fromJSON(data);
+                    // Also save to localStorage
+                    calibrationInstance.save('gambit_calibration');
                     updateCalibrationStatus();
                     log(`Loaded calibration from ${file.name}`);
                 } catch (err) {
@@ -1963,10 +1920,8 @@
 
     $('resetCalibration').addEventListener('click', () => {
         if (confirm('Reset all calibration data?')) {
-            calibrationInstance.earth_field = null;
-            calibrationInstance.hard_iron_offset = null;
-            calibrationInstance.soft_iron_matrix = null;
-            calibrationInstance.earth_field_std = null;
+            // Create fresh instance with default values
+            calibrationInstance = new EnvironmentalCalibration();
             localStorage.removeItem('gambit_calibration');
             updateCalibrationStatus();
             $('earthQuality').textContent = '';
@@ -1976,8 +1931,7 @@
         }
     });
 
-    // Initialize calibration on page load
-    calibrationInstance = initCalibration();
+    // Update calibration status UI (calibrationInstance already initialized earlier)
     updateCalibrationStatus();
 
     // ===== Recording Controls =====
@@ -2295,10 +2249,8 @@
     const HOLD_TIME = 3; // seconds of labeled hold
 
     const WIZARD_STEPS = {
-        calibration: [
-            { id: 'earth_field', label: 'Earth Field', icon: '🌍', transition: TRANSITION_TIME, hold: 5, desc: 'Hold device still, away from magnets. Captures ambient magnetic field.' },
-            { id: 'hard_iron', label: 'Hard Iron', icon: '🧲', transition: TRANSITION_TIME, hold: 8, desc: 'Slowly rotate device in all directions (figure-8 pattern).' },
-            { id: 'soft_iron', label: 'Soft Iron', icon: '🔄', transition: TRANSITION_TIME, hold: 8, desc: 'Continue rotating to capture soft iron distortions.' },
+        // Reference poses for data collection (calibration is handled separately by manual wizard)
+        reference: [
             { id: 'reference_pose', label: 'Reference Pose', icon: '✋', transition: TRANSITION_TIME, hold: 5, desc: 'Hold hand flat, palm down, fingers together.' },
             { id: 'magnet_baseline', label: 'Magnet Baseline', icon: '📍', transition: TRANSITION_TIME, hold: 5, desc: 'Keep hand in reference pose with magnets attached.' }
         ],
@@ -2355,26 +2307,29 @@
     };
 
     function showWizardModeSelection() {
-        $('wizardTitle').textContent = 'Calibration Wizard';
-        $('wizardPhase').textContent = 'Select calibration mode';
+        $('wizardTitle').textContent = 'Data Collection Wizard';
+        $('wizardPhase').textContent = 'Select collection mode';
         $('wizardProgressFill').style.width = '0%';
         $('wizardStepText').textContent = 'Step 0 of 0';
         $('wizardTimeText').textContent = '';
         $('wizardStats').style.display = 'none';
 
         $('wizardContent').innerHTML = `
-            <div class="wizard-instruction">Choose a calibration mode</div>
+            <div class="wizard-instruction">Choose a data collection mode</div>
             <div class="wizard-start-options">
                 <div class="wizard-option" onclick="startWizard('quick')">
-                    <h4>⚡ Quick Calibration</h4>
-                    <p>Sensor calibration + finger isolation only</p>
-                    <div class="duration">~95 seconds • 10 steps</div>
+                    <h4>⚡ Quick Collection</h4>
+                    <p>Reference poses + finger isolation only</p>
+                    <div class="duration">~50 seconds • 7 steps</div>
                 </div>
                 <div class="wizard-option" onclick="startWizard('full')">
-                    <h4>📚 Full Calibration</h4>
+                    <h4>📚 Full Collection</h4>
                     <p>Includes ASL alphabet (A-Z) + common gestures</p>
-                    <div class="duration">~255 seconds • 42 steps</div>
+                    <div class="duration">~210 seconds • 39 steps</div>
                 </div>
+            </div>
+            <div style="margin-top: 15px; padding: 10px; background: var(--bg); border-radius: 4px; font-size: 11px; color: var(--fg-muted);">
+                <strong>Note:</strong> Magnetometer calibration is now handled separately via the Calibration Wizard section above. Complete calibration before collecting data for best results.
             </div>
         `;
     }
@@ -2384,9 +2339,9 @@
         wizard.currentStep = 0;
         wizard.paused = false;
 
-        // Build step list based on mode
+        // Build step list based on mode (reference poses + fingers for quick, + ASL/gestures for full)
         wizard.steps = [
-            ...WIZARD_STEPS.calibration,
+            ...WIZARD_STEPS.reference,
             ...WIZARD_STEPS.fingers
         ];
 
@@ -2434,7 +2389,7 @@
         $('wizardTimeText').textContent = `~${remainingTime}s remaining`;
 
         // Determine phase label
-        let phaseLabel = 'Calibration';
+        let phaseLabel = 'Reference Poses';
         if (step.id.startsWith('finger_isolation')) phaseLabel = 'Finger Isolation';
         else if (step.id.startsWith('asl:')) phaseLabel = 'ASL Alphabet';
         else if (step.id.startsWith('pose:')) phaseLabel = 'Common Gestures';
@@ -2572,28 +2527,9 @@
                 state.currentLabels.calibration = 'none';
                 updateActiveLabelsDisplay();
 
-                // Process calibration data if this was a calibration step
+                // Log reference pose data collection (if applicable)
                 if (calibrationBuffers[step.id] && calibrationBuffers[step.id].length > 0) {
-                    const samples = calibrationBuffers[step.id].map(s => ({x: s.mx, y: s.my, z: s.mz}));
-
-                    try {
-                        if (step.id === 'earth_field') {
-                            const result = calibration.runEarthFieldCalibration(samples);
-                            log(`Earth field calibration: ${samples.length} samples, quality=${result.quality.toFixed(2)}`);
-                        } else if (step.id === 'hard_iron') {
-                            const result = calibration.runHardIronCalibration(samples);
-                            log(`Hard iron calibration: offset=[${result.offset.x.toFixed(1)}, ${result.offset.y.toFixed(1)}, ${result.offset.z.toFixed(1)}], quality=${result.quality.toFixed(2)}`);
-                        } else if (step.id === 'soft_iron') {
-                            const result = calibration.runSoftIronCalibration(samples);
-                            log(`Soft iron calibration: ${samples.length} samples, quality=${result.quality.toFixed(2)}`);
-                        }
-
-                        // Save calibration to localStorage after each step
-                        calibration.save('gambit_calibration');
-                    } catch (e) {
-                        log(`Calibration failed for ${step.id}: ${e.message}`);
-                    }
-
+                    log(`${step.label}: collected ${calibrationBuffers[step.id].length} samples`);
                     // Clear buffer for next run
                     calibrationBuffers[step.id] = [];
                 }
@@ -2898,12 +2834,13 @@
     updateUI();
 
     // Log calibration status
-    if (calibration.hasCalibration('earth_field') &&
-        calibration.hasCalibration('hard_iron') &&
-        calibration.hasCalibration('soft_iron')) {
+    if (calibrationInstance &&
+        calibrationInstance.earthFieldCalibrated &&
+        calibrationInstance.hardIronCalibrated &&
+        calibrationInstance.softIronCalibrated) {
         log('Ready. Calibration loaded. Connect device to start.');
     } else {
-        log('Ready. No calibration found - run wizard after connecting.');
+        log('Ready. No calibration found - use Calibration Wizard after connecting.');
     }
     </script>
 </body>
