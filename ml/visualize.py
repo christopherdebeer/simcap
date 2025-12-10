@@ -969,9 +969,19 @@ Magnetometer:
         ax_stats = fig.add_subplot(gs[:, 1])
         ax_stats.axis('off')
 
-        # Compute statistics for each stage
+        # Compute statistics for each stage including SNR metrics
         def compute_stats(mx, my, mz):
             mag = np.sqrt(mx**2 + my**2 + mz**2)
+            # Basic stats
+            mean_mag = np.mean(mag)
+            std_mag = np.std(mag)
+            # SNR = mean / std (signal-to-noise ratio)
+            snr = mean_mag / std_mag if std_mag > 0 else float('inf')
+            snr_db = 20 * np.log10(snr) if snr > 0 and snr != float('inf') else 0
+            # Drift = max cumulative deviation from mean
+            drift = np.max(np.abs(np.cumsum(mag - mean_mag))) / len(mag) if len(mag) > 0 else 0
+            # Noise floor = std during the session (proxy for rest noise)
+            noise_floor = std_mag
             return {
                 'mean_x': np.mean(mx),
                 'mean_y': np.mean(my),
@@ -979,9 +989,35 @@ Magnetometer:
                 'std_x': np.std(mx),
                 'std_y': np.std(my),
                 'std_z': np.std(mz),
-                'mean_mag': np.mean(mag),
-                'std_mag': np.std(mag),
+                'mean_mag': mean_mag,
+                'std_mag': std_mag,
+                'snr': snr,
+                'snr_db': snr_db,
+                'drift': drift,
+                'noise_floor': noise_floor,
             }
+
+        def snr_quality(snr_db):
+            """Return quality indicator for SNR in dB"""
+            if snr_db >= 20:
+                return '✓ EXCELLENT'
+            elif snr_db >= 10:
+                return '✓ GOOD'
+            elif snr_db >= 6:
+                return '⚠ MARGINAL'
+            else:
+                return '✗ POOR'
+
+        def noise_quality(noise):
+            """Return quality indicator for noise floor in μT"""
+            if noise < 1.0:
+                return '✓ EXCELLENT'
+            elif noise < 3.0:
+                return '✓ GOOD'
+            elif noise < 5.0:
+                return '⚠ MARGINAL'
+            else:
+                return '✗ HIGH'
 
         raw_stats = compute_stats(sensors['mx'], sensors['my'], sensors['mz'])
 
@@ -1022,6 +1058,43 @@ CALIBRATION STAGE STATISTICS
   Magnitude: {filtered_stats['mean_mag']:.1f} ± {filtered_stats['std_mag']:.1f} μT
 """
 
+        # Add Signal Quality Metrics section
+        stats_text += f"""
+{'='*40}
+SIGNAL QUALITY METRICS
+{'='*40}
+"""
+        # Determine best available stage for quality metrics
+        if has_filtered:
+            best_stats = filtered_stats
+            best_name = 'Filtered'
+        elif has_fused:
+            best_stats = fused_stats
+            best_name = 'Fused'
+        elif has_calibrated:
+            best_stats = iron_stats
+            best_name = 'Iron'
+        else:
+            best_stats = raw_stats
+            best_name = 'Raw'
+
+        stats_text += f"""
+Using: {best_name} data
+
+  SNR:         {best_stats['snr']:.1f}:1 ({best_stats['snr_db']:.1f} dB)
+               {snr_quality(best_stats['snr_db'])}
+
+  Noise Floor: {best_stats['noise_floor']:.2f} μT
+               {noise_quality(best_stats['noise_floor'])}
+
+  Drift:       {best_stats['drift']:.2f} μT/sample
+"""
+        # Compare stages if multiple available
+        if has_filtered and has_calibrated:
+            improvement = ((raw_stats['std_mag'] - filtered_stats['std_mag']) / raw_stats['std_mag'] * 100) if raw_stats['std_mag'] > 0 else 0
+            stats_text += f"""
+  Noise Reduction: {improvement:.1f}% (raw→filtered)
+"""
         stats_text += f"""
 {'='*40}
 COLOR LEGEND:
