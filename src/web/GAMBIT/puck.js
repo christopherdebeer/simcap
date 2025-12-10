@@ -51,24 +51,28 @@ Or more advanced usage with control of the connection
 ChangeLog:
 
 ...
-1v00 : Added Promises to write/eval
-1v01 : Raise default Chunk Size to 20
-       Auto-adjust chunk size up if we receive >20 bytes in a packet
+1.02: Puck.write/eval now wait until they have received data with a newline in (if requested)
+      and return the LAST received line, rather than the first (as before)
+      Added configurable timeouts for write/etc
+1.01: Raise default Chunk Size to 20
+      Auto-adjust chunk size up if we receive >20 bytes in a packet
+1.00: Added Promises to write/eval
 
 */
 (function (root, factory) {
-    if (typeof define === 'function' && define.amd) {
-        // AMD. Register as an anonymous module.
-        define([], factory);
-    } else if (typeof module === 'object' && module.exports) {
-        // Node. Does not work with strict CommonJS, but
-        // only CommonJS-like environments that support module.exports,
-        // like Node.
-        module.exports = factory();
-    } else {
-        // Browser globals (root is window)
-        root.Puck = factory();
-    }
+  /* global define */
+  if (typeof define === 'function' && define.amd) {
+    // AMD. Register as an anonymous module.
+    define([], factory);
+  } else if (typeof module === 'object' && module.exports) {
+    // Node. Does not work with strict CommonJS, but
+    // only CommonJS-like environments that support module.exports,
+    // like Node.
+    module.exports = factory();
+  } else {
+    // Browser globals (root is window)
+    root.Puck = factory();
+  }
 }(typeof self !== 'undefined' ? self : this, function () {
 
   if (typeof navigator == "undefined") return;
@@ -143,7 +147,6 @@ ChangeLog:
     };
     var btServer = undefined;
     var btService;
-    var connectionDisconnectCallback;
     var txCharacteristic;
     var rxCharacteristic;
     var txDataQueue = [];
@@ -213,11 +216,11 @@ ChangeLog:
         filters:[
           { namePrefix: 'Puck.js' },
           { namePrefix: 'Pixl.js' },
+          { namePrefix: 'Jolt.js' },
           { namePrefix: 'MDBT42Q' },
-          { namePrefix: 'RuuviTag' },
-          { namePrefix: 'iTracker' },
-          { namePrefix: 'Thingy' },
+          { namePrefix: 'Bangle.js' },
           { namePrefix: 'Espruino' },
+          { namePrefix: 'SIMCAP' },
           { services: [ NORDIC_SERVICE ] }
         ], optionalServices: [ NORDIC_SERVICE ]}).then(function(device) {
       log(1, 'Device Name:       ' + device.name);
@@ -236,35 +239,14 @@ ChangeLog:
     });
 
     connection.reconnect = function(callback) {
-      log(1, "Attempting GATT connect...");
-      
-      // Helper to add timeout to promises
-      function withTimeout(promise, ms, name) {
-        return new Promise(function(resolve, reject) {
-          var timeoutId = setTimeout(function() {
-            log(1, "TIMEOUT: " + name + " took longer than " + ms + "ms");
-            reject(new Error("Timeout: " + name));
-          }, ms);
-          promise.then(function(result) {
-            clearTimeout(timeoutId);
-            resolve(result);
-          }).catch(function(err) {
-            clearTimeout(timeoutId);
-            reject(err);
-          });
-        });
-      }
-      
       connection.device.gatt.connect().then(function(server) {
         log(1, "Connected");
-        log(1, "Getting primary service...");
         btServer = server;
-        return withTimeout(server.getPrimaryService(NORDIC_SERVICE), 10000, "getPrimaryService");
+        return server.getPrimaryService(NORDIC_SERVICE);
       }).then(function(service) {
-        log(1, "Got service");
+        log(2, "Got service");
         btService = service;
-        log(1, "Getting RX characteristic...");
-        return withTimeout(btService.getCharacteristic(NORDIC_RX), 10000, "getCharacteristic(RX)");
+        return btService.getCharacteristic(NORDIC_RX);
       }).then(function (characteristic) {
         rxCharacteristic = characteristic;
         log(2, "RX characteristic:"+JSON.stringify(rxCharacteristic));
@@ -298,11 +280,10 @@ ChangeLog:
         });
         return rxCharacteristic.startNotifications();
       }).then(function() {
-        log(1, "RX notifications started, getting TX characteristic...");
-        return withTimeout(btService.getCharacteristic(NORDIC_TX), 10000, "getCharacteristic(TX)");
+        return btService.getCharacteristic(NORDIC_TX);
       }).then(function (characteristic) {
         txCharacteristic = characteristic;
-        log(1, "TX characteristic ready");
+        log(2, "TX characteristic:"+JSON.stringify(txCharacteristic));
       }).then(function() {
         connection.txInProgress = false;
         connection.isOpen = true;
@@ -320,7 +301,7 @@ ChangeLog:
     };
 
     return connection;
-  };
+  }
 
   // ----------------------------------------------------------
   var connection;
@@ -351,31 +332,37 @@ ChangeLog:
     function onWritten() {
       if (callbackNewline) {
         connection.cb = function(d) {
-          var newLineIdx = connection.received.indexOf("\n");
-          if (newLineIdx>=0) {
-            var l = connection.received.substr(0,newLineIdx);
-            connection.received = connection.received.substr(newLineIdx+1);
-            connection.cb = undefined;
-            if (cbTimeout) clearTimeout(cbTimeout);
-            cbTimeout = undefined;
-            if (callback)
-              callback(l);
-            isBusy = false;
-            handleQueue();
-          }
+          // if we hadn't got a newline this time (even if we had one before)
+          // then ignore it (https://github.com/espruino/BangleApps/issues/3771)
+          if (!d.includes("\n")) return;
+          // now return the LAST received non-empty line
+          var lines = connection.received.split("\n");
+          var idx = lines.length-1;
+          while (lines[idx].trim().length==0 && idx>0) idx--; // skip over empty lines
+          var line = lines.splice(idx,1)[0]; // get the non-empty line
+          connection.received = lines.join("\n"); // put back other lines
+          // remove handler and return
+          connection.cb = undefined;
+          if (cbTimeout) clearTimeout(cbTimeout);
+          cbTimeout = undefined;
+          if (callback)
+            callback(line);
+          isBusy = false;
+          handleQueue();
         };
       }
       // wait for any received data if we have a callback...
-      var maxTime = 300; // 30 sec - Max time we wait in total, even if getting data
-      var dataWaitTime = callbackNewline ? 100/*10 sec if waiting for newline*/ : 3/*300ms*/;
+      var maxTime = puck.timeoutMax; // Max time we wait in total, even if getting data
+      var dataWaitTime = callbackNewline ? puck.timeoutNewline : puck.timeoutNormal;
       var maxDataTime = dataWaitTime; // max time we wait after having received data
+      const POLLINTERVAL = 100;
       cbTimeout = setTimeout(function timeout() {
         cbTimeout = undefined;
-        if (maxTime) maxTime--;
-        if (maxDataTime) maxDataTime--;
+        if (maxTime>0) maxTime-=POLLINTERVAL;
+        if (maxDataTime>0) maxDataTime-=POLLINTERVAL;
         if (connection.hadData) maxDataTime=dataWaitTime;
-        if (maxDataTime && maxTime) {
-          cbTimeout = setTimeout(timeout, 100);
+        if (maxDataTime>0 && maxTime>0) {
+          cbTimeout = setTimeout(timeout, POLLINTERVAL);
         } else {
           connection.cb = undefined;
           if (callback)
@@ -385,7 +372,7 @@ ChangeLog:
           connection.received = "";
         }
         connection.hadData = false;
-      }, 100);
+      }, POLLINTERVAL);
     }
 
     if (connection && (connection.isOpen || connection.isOpening)) {
@@ -420,6 +407,7 @@ ChangeLog:
   // ----------------------------------------------------------
 
   var puck = {
+    version : "1.02",
     /// Are we writing debug information? 0 is no, 1 is some, 2 is more, 3 is all.
     debug : 3,
     /** When we receive more than 20 bytes, should we increase the chunk size we use
@@ -428,6 +416,12 @@ ChangeLog:
     increaseMTU : true,
     /// Should we use flow control? Default is true
     flowControl : true,
+    /// timeout (in ms) in .write when waiting for any data to return
+    timeoutNormal : 300,
+    /// timeout (in ms) in .write/.eval when waiting for a newline
+    timeoutNewline : 10000,
+    /// timeout (in ms) to wait at most
+    timeoutMax : 30000,
     /// Used internally to write log information - you can replace this with your own function
     log : function(level, s) { if (level <= this.debug) console.log("<BLE> "+s)},
     /// Called with the current send progress or undefined when done - you can replace this with your own function
@@ -441,7 +435,6 @@ ChangeLog:
     write : write,
     /// Evaluate an expression and call cb with the result. Creates a connection if it doesn't exist
     eval : function(expr, cb) {
-
       const response = write('\x10Bluetooth.println(JSON.stringify(' + expr + '))\n', true)
         .then(function (d) {
           try {
@@ -451,8 +444,6 @@ ChangeLog:
             return Promise.reject(d);
           }
         });
-
-
       if (cb) {
         return void response.then(cb, (err) => cb(null, err));
       } else {
