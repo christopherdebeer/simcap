@@ -21,6 +21,37 @@ from typing import Dict, List, Any, Optional
 import numpy as np
 
 from .data_loader import GambitDataset, load_session_data, load_session_metadata
+
+
+def detect_calibration_status(raw_data: list) -> dict:
+    """Detect which calibration stages are present in session data."""
+    if not raw_data or len(raw_data) == 0:
+        return {'has_calibrated': False, 'has_fused': False, 'has_filtered': False, 'has_orientation': False, 'status': 'none'}
+
+    sample = raw_data[0]
+
+    has_calibrated = 'calibrated_mx' in sample
+    has_fused = 'fused_mx' in sample
+    has_filtered = 'filtered_mx' in sample
+    has_orientation = 'orientation_w' in sample
+
+    # Determine overall status
+    if has_fused:
+        status = 'full'  # Full calibration (iron + Earth field)
+    elif has_calibrated:
+        status = 'partial'  # Partial (iron only)
+    else:
+        status = 'none'  # No calibration
+
+    return {
+        'has_calibrated': has_calibrated,
+        'has_fused': has_fused,
+        'has_filtered': has_filtered,
+        'has_orientation': has_orientation,
+        'status': status
+    }
+
+
 from .schema import Gesture
 
 # Try to import clustering (optional)
@@ -221,12 +252,14 @@ def build_unified_data(
         # Get visualization data if available
         viz = viz_data.get(filename, {})
         
-        # Load raw data for duration
+        # Load raw data for duration and calibration status
         try:
             raw_data = load_session_data(json_path)
             duration = len(raw_data) / 50.0  # Assuming 50Hz
+            calib_status = detect_calibration_status(raw_data)
         except:
             duration = viz.get('duration', 0)
+            calib_status = {'has_calibrated': False, 'has_fused': False, 'has_filtered': False, 'has_orientation': False, 'status': 'none'}
         
         # Get metadata if available
         meta = load_session_metadata(json_path)
@@ -280,7 +313,15 @@ def build_unified_data(
                     'confidence': seg.confidence
                 }
                 for seg in (meta.labels if meta else [])
-            ]
+            ],
+            # Calibration status
+            'calibration': {
+                'status': calib_status['status'],
+                'has_calibrated': calib_status['has_calibrated'],
+                'has_fused': calib_status['has_fused'],
+                'has_filtered': calib_status['has_filtered'],
+                'has_orientation': calib_status['has_orientation']
+            }
         }
         
         sessions.append(session)
@@ -557,9 +598,12 @@ def generate_html(data: Dict[str, Any], output_path: Path):
             font-size: 0.75em;
             font-weight: bold;
         }}
-        
+
         .badge.labeled {{ background: #4daf4a; }}
         .badge.unlabeled {{ background: #ff7f00; }}
+        .badge.calib-full {{ background: #4daf4a; }}
+        .badge.calib-partial {{ background: #ff7f00; }}
+        .badge.calib-none {{ background: #e41a1c; }}
         
         .expand-icon {{
             font-size: 1.3em;
@@ -990,6 +1034,10 @@ def generate_html(data: Dict[str, Any], output_path: Path):
                     <span class="number" id="stat-labeled">{sum(1 for s in data['sessions'] if s['labeled'])}</span>
                     <span class="label">Labeled</span>
                 </div>
+                <div class="stat-box">
+                    <span class="number" id="stat-calibrated">{sum(1 for s in data['sessions'] if s.get('calibration', {}).get('status') in ('full', 'partial'))}</span>
+                    <span class="label">Calibrated</span>
+                </div>
             </div>
         </header>
         
@@ -1026,6 +1074,12 @@ def generate_html(data: Dict[str, Any], output_path: Path):
                         <input type="text" id="searchBox" placeholder="Search sessions..." style="flex: 1; min-width: 200px;">
                         <select id="clusterFilter">
                             <option value="all">All Clusters</option>
+                        </select>
+                        <select id="calibFilter">
+                            <option value="all">All Calibration</option>
+                            <option value="full">Full Calib Only</option>
+                            <option value="partial">Iron Only</option>
+                            <option value="none">No Calib</option>
                         </select>
                         <select id="sortSelect">
                             <option value="timestamp-desc">Newest First</option>
@@ -1270,23 +1324,31 @@ def generate_html(data: Dict[str, Any], output_path: Path):
                 applyFilters();
                 if (window.redrawCanvas) window.redrawCanvas();
             }});
+            document.getElementById('calibFilter').addEventListener('change', applyFilters);
             document.getElementById('sortSelect').addEventListener('change', applyFilters);
         }}
         
         function applyFilters() {{
             const search = document.getElementById('searchBox').value.toLowerCase();
             const sort = document.getElementById('sortSelect').value;
-            
+            const calibFilter = document.getElementById('calibFilter').value;
+
             filteredSessions = explorerData.sessions.filter(s => {{
                 // Search filter
                 if (search && !s.filename.toLowerCase().includes(search)) return false;
-                
+
                 // Cluster filter
                 if (selectedCluster !== null) {{
                     const hasCluster = s.windows.some(w => w.cluster_id === selectedCluster);
                     if (!hasCluster) return false;
                 }}
-                
+
+                // Calibration filter
+                if (calibFilter !== 'all') {{
+                    const sessionCalib = s.calibration?.status || 'none';
+                    if (sessionCalib !== calibFilter) return false;
+                }}
+
                 return true;
             }});
             
@@ -1323,6 +1385,7 @@ def generate_html(data: Dict[str, Any], output_path: Path):
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <div class="session-badges">
                                 <span class="badge ${{s.labeled ? 'labeled' : 'unlabeled'}}">${{s.labeled ? 'Labeled' : 'Unlabeled'}}</span>
+                                <span class="badge calib-${{s.calibration?.status || 'none'}}">${{getCalibrationLabel(s.calibration?.status)}}</span>
                             </div>
                             <span class="expand-icon">▼</span>
                         </div>
@@ -1421,6 +1484,14 @@ def generate_html(data: Dict[str, Any], output_path: Path):
         function formatTimestamp(ts) {{
             try {{ return new Date(ts).toLocaleString(); }}
             catch {{ return ts; }}
+        }}
+
+        function getCalibrationLabel(status) {{
+            switch(status) {{
+                case 'full': return 'Full Calib';
+                case 'partial': return 'Iron Only';
+                default: return 'No Calib';
+            }}
         }}
         
         // Modal

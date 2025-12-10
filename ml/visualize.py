@@ -82,10 +82,11 @@ class SensorDataProcessor:
         print(f"\nTotal sessions loaded: {len(self.sessions)}")
 
     def extract_sensor_arrays(self, data: List[Dict]) -> Dict[str, np.ndarray]:
-        """Extract sensor data into numpy arrays."""
+        """Extract sensor data into numpy arrays, including calibrated/fused/filtered fields."""
         # Initialize arrays
         n_samples = len(data)
         sensors = {
+            # Raw IMU data
             'ax': np.zeros(n_samples),
             'ay': np.zeros(n_samples),
             'az': np.zeros(n_samples),
@@ -95,12 +96,41 @@ class SensorDataProcessor:
             'mx': np.zeros(n_samples),
             'my': np.zeros(n_samples),
             'mz': np.zeros(n_samples),
+            # Calibrated magnetometer (iron correction only)
+            'calibrated_mx': np.zeros(n_samples),
+            'calibrated_my': np.zeros(n_samples),
+            'calibrated_mz': np.zeros(n_samples),
+            # Fused magnetometer (iron + Earth field subtraction)
+            'fused_mx': np.zeros(n_samples),
+            'fused_my': np.zeros(n_samples),
+            'fused_mz': np.zeros(n_samples),
+            # Filtered magnetometer (Kalman smoothed)
+            'filtered_mx': np.zeros(n_samples),
+            'filtered_my': np.zeros(n_samples),
+            'filtered_mz': np.zeros(n_samples),
+            # Device orientation quaternion
+            'orientation_w': np.zeros(n_samples),
+            'orientation_x': np.zeros(n_samples),
+            'orientation_y': np.zeros(n_samples),
+            'orientation_z': np.zeros(n_samples),
+            # Device orientation euler angles (degrees)
+            'euler_roll': np.zeros(n_samples),
+            'euler_pitch': np.zeros(n_samples),
+            'euler_yaw': np.zeros(n_samples),
+            # Auxiliary sensors
             'light': np.zeros(n_samples),
             'temp': np.zeros(n_samples),
             'capacitive': np.zeros(n_samples),
         }
 
+        # Track which decorated fields are present
+        has_calibrated = False
+        has_fused = False
+        has_filtered = False
+        has_orientation = False
+
         for i, sample in enumerate(data):
+            # Raw IMU
             sensors['ax'][i] = sample.get('ax', 0)
             sensors['ay'][i] = sample.get('ay', 0)
             sensors['az'][i] = sample.get('az', 0)
@@ -110,17 +140,74 @@ class SensorDataProcessor:
             sensors['mx'][i] = sample.get('mx', 0)
             sensors['my'][i] = sample.get('my', 0)
             sensors['mz'][i] = sample.get('mz', 0)
+
+            # Calibrated (iron corrected)
+            if 'calibrated_mx' in sample:
+                has_calibrated = True
+                sensors['calibrated_mx'][i] = sample.get('calibrated_mx', 0)
+                sensors['calibrated_my'][i] = sample.get('calibrated_my', 0)
+                sensors['calibrated_mz'][i] = sample.get('calibrated_mz', 0)
+
+            # Fused (Earth field subtracted)
+            if 'fused_mx' in sample:
+                has_fused = True
+                sensors['fused_mx'][i] = sample.get('fused_mx', 0)
+                sensors['fused_my'][i] = sample.get('fused_my', 0)
+                sensors['fused_mz'][i] = sample.get('fused_mz', 0)
+
+            # Filtered (Kalman smoothed)
+            if 'filtered_mx' in sample:
+                has_filtered = True
+                sensors['filtered_mx'][i] = sample.get('filtered_mx', 0)
+                sensors['filtered_my'][i] = sample.get('filtered_my', 0)
+                sensors['filtered_mz'][i] = sample.get('filtered_mz', 0)
+
+            # Orientation quaternion
+            if 'orientation_w' in sample:
+                has_orientation = True
+                sensors['orientation_w'][i] = sample.get('orientation_w', 1)
+                sensors['orientation_x'][i] = sample.get('orientation_x', 0)
+                sensors['orientation_y'][i] = sample.get('orientation_y', 0)
+                sensors['orientation_z'][i] = sample.get('orientation_z', 0)
+
+            # Euler angles
+            if 'euler_roll' in sample:
+                sensors['euler_roll'][i] = sample.get('euler_roll', 0)
+                sensors['euler_pitch'][i] = sample.get('euler_pitch', 0)
+                sensors['euler_yaw'][i] = sample.get('euler_yaw', 0)
+
+            # Auxiliary
             sensors['light'][i] = sample.get('l', 0)
             sensors['temp'][i] = sample.get('t', 0)
             sensors['capacitive'][i] = sample.get('c', 0)
 
-        # Compute magnitudes
+        # Compute magnitudes for raw magnetometer
         sensors['accel_mag'] = np.sqrt(sensors['ax']**2 + sensors['ay']**2 + sensors['az']**2)
         sensors['gyro_mag'] = np.sqrt(sensors['gx']**2 + sensors['gy']**2 + sensors['gz']**2)
         sensors['mag_mag'] = np.sqrt(sensors['mx']**2 + sensors['my']**2 + sensors['mz']**2)
 
+        # Compute magnitudes for decorated magnetometer fields
+        if has_calibrated:
+            sensors['calibrated_mag'] = np.sqrt(
+                sensors['calibrated_mx']**2 + sensors['calibrated_my']**2 + sensors['calibrated_mz']**2
+            )
+        if has_fused:
+            sensors['fused_mag'] = np.sqrt(
+                sensors['fused_mx']**2 + sensors['fused_my']**2 + sensors['fused_mz']**2
+            )
+        if has_filtered:
+            sensors['filtered_mag'] = np.sqrt(
+                sensors['filtered_mx']**2 + sensors['filtered_my']**2 + sensors['filtered_mz']**2
+            )
+
         # Time axis
         sensors['time'] = np.arange(n_samples) / 50.0  # 50Hz sampling
+
+        # Store calibration status flags
+        sensors['_has_calibrated'] = has_calibrated
+        sensors['_has_fused'] = has_fused
+        sensors['_has_filtered'] = has_filtered
+        sensors['_has_orientation'] = has_orientation
 
         return sensors
 
@@ -241,50 +328,113 @@ class SessionVisualizer:
         ax2.legend(loc='upper right')
         ax2.grid(True, alpha=0.3)
 
-        # 3. Magnetometer 3-axis time series
+        # 3. Magnetometer 3-axis time series with calibration stages
         ax3 = fig.add_subplot(gs[2, :])
-        ax3.plot(sensors['time'], sensors['mx'], label='X', alpha=0.7, linewidth=1)
-        ax3.plot(sensors['time'], sensors['my'], label='Y', alpha=0.7, linewidth=1)
-        ax3.plot(sensors['time'], sensors['mz'], label='Z', alpha=0.7, linewidth=1)
-        ax3.set_title('Magnetometer (3-axis)', fontweight='bold')
+
+        # Determine calibration status for title
+        has_calibrated = sensors.get('_has_calibrated', False)
+        has_fused = sensors.get('_has_fused', False)
+        has_filtered = sensors.get('_has_filtered', False)
+
+        if has_fused:
+            calib_status = 'Full (Iron + Earth Field)'
+            status_color = '#4daf4a'  # Green
+        elif has_calibrated:
+            calib_status = 'Partial (Iron Only)'
+            status_color = '#ff7f00'  # Orange
+        else:
+            calib_status = 'None (Raw)'
+            status_color = '#e41a1c'  # Red
+
+        # Plot raw magnetometer (gray, dashed for comparison)
+        ax3.plot(sensors['time'], sensors['mx'], 'gray', alpha=0.4, linewidth=1, linestyle='--', label='Raw X')
+        ax3.plot(sensors['time'], sensors['my'], 'gray', alpha=0.4, linewidth=1, linestyle='--', label='Raw Y')
+        ax3.plot(sensors['time'], sensors['mz'], 'gray', alpha=0.4, linewidth=1, linestyle='--', label='Raw Z')
+
+        # Plot best available calibration stage
+        if has_fused:
+            # Fused (Earth field subtracted) - primary display
+            ax3.plot(sensors['time'], sensors['fused_mx'], 'r-', alpha=0.8, linewidth=1.2, label='Fused X')
+            ax3.plot(sensors['time'], sensors['fused_my'], 'g-', alpha=0.8, linewidth=1.2, label='Fused Y')
+            ax3.plot(sensors['time'], sensors['fused_mz'], 'b-', alpha=0.8, linewidth=1.2, label='Fused Z')
+        elif has_calibrated:
+            # Calibrated (iron corrected) - fallback
+            ax3.plot(sensors['time'], sensors['calibrated_mx'], 'r-', alpha=0.8, linewidth=1.2, label='Calibrated X')
+            ax3.plot(sensors['time'], sensors['calibrated_my'], 'g-', alpha=0.8, linewidth=1.2, label='Calibrated Y')
+            ax3.plot(sensors['time'], sensors['calibrated_mz'], 'b-', alpha=0.8, linewidth=1.2, label='Calibrated Z')
+        else:
+            # Raw only - replot with color
+            ax3.plot(sensors['time'], sensors['mx'], 'r-', alpha=0.8, linewidth=1.2, label='X')
+            ax3.plot(sensors['time'], sensors['my'], 'g-', alpha=0.8, linewidth=1.2, label='Y')
+            ax3.plot(sensors['time'], sensors['mz'], 'b-', alpha=0.8, linewidth=1.2, label='Z')
+
+        ax3.set_title(f'Magnetometer (3-axis) | Calibration: {calib_status}', fontweight='bold', color=status_color)
         ax3.set_xlabel('Time (s)')
-        ax3.set_ylabel('Value (raw ADC)')
-        ax3.legend(loc='upper right')
+        ax3.set_ylabel('Value (uT)')
+        ax3.legend(loc='upper right', fontsize=8, ncol=2)
         ax3.grid(True, alpha=0.3)
 
-        # 4. Magnitudes comparison
+        # 4. Magnitudes comparison (with calibration stages)
         ax4 = fig.add_subplot(gs[3, 0])
         ax4.plot(sensors['time'], sensors['accel_mag'], label='Accel', alpha=0.8)
         ax4.plot(sensors['time'], sensors['gyro_mag'], label='Gyro', alpha=0.8)
-        ax4.plot(sensors['time'], sensors['mag_mag'], label='Mag', alpha=0.8)
+
+        # Plot magnetometer magnitudes based on calibration state
+        ax4.plot(sensors['time'], sensors['mag_mag'], 'gray', alpha=0.4, linestyle='--', label='Mag (Raw)')
+        if has_fused and 'fused_mag' in sensors:
+            ax4.plot(sensors['time'], sensors['fused_mag'], 'g-', alpha=0.8, linewidth=1.5, label='Mag (Fused)')
+        elif has_calibrated and 'calibrated_mag' in sensors:
+            ax4.plot(sensors['time'], sensors['calibrated_mag'], 'orange', alpha=0.8, linewidth=1.5, label='Mag (Calibrated)')
+
         ax4.set_title('Magnitude Comparison', fontweight='bold')
         ax4.set_xlabel('Time (s)')
         ax4.set_ylabel('Magnitude')
-        ax4.legend()
+        ax4.legend(fontsize=8)
         ax4.grid(True, alpha=0.3)
 
-        # 5. Auxiliary sensors
+        # 5. Auxiliary sensors OR Orientation (if available)
         ax5 = fig.add_subplot(gs[3, 1])
-        ax5_twin = ax5.twinx()
-        line1 = ax5.plot(sensors['time'], sensors['light'], 'g-', label='Light', alpha=0.7)
-        line2 = ax5_twin.plot(sensors['time'], sensors['capacitive'], 'orange', label='Capacitive', alpha=0.7)
-        ax5.set_title('Auxiliary Sensors', fontweight='bold')
-        ax5.set_xlabel('Time (s)')
-        ax5.set_ylabel('Light Level', color='g')
-        ax5_twin.set_ylabel('Capacitive Value', color='orange')
-        ax5.tick_params(axis='y', labelcolor='g')
-        ax5_twin.tick_params(axis='y', labelcolor='orange')
-        lines = line1 + line2
-        labels = [l.get_label() for l in lines]
-        ax5.legend(lines, labels, loc='upper right')
-        ax5.grid(True, alpha=0.3)
+        has_orientation = sensors.get('_has_orientation', False)
 
-        # 6. Spectral signature (visual fingerprint)
+        if has_orientation and np.any(sensors['euler_roll'] != 0):
+            # Show device orientation (Euler angles)
+            ax5.plot(sensors['time'], sensors['euler_roll'], 'r-', label='Roll', alpha=0.8, linewidth=1)
+            ax5.plot(sensors['time'], sensors['euler_pitch'], 'g-', label='Pitch', alpha=0.8, linewidth=1)
+            ax5.plot(sensors['time'], sensors['euler_yaw'], 'b-', label='Yaw', alpha=0.8, linewidth=1)
+            ax5.set_title('Device Orientation (Euler)', fontweight='bold')
+            ax5.set_xlabel('Time (s)')
+            ax5.set_ylabel('Angle (degrees)')
+            ax5.legend(loc='upper right', fontsize=8)
+            ax5.grid(True, alpha=0.3)
+        else:
+            # Show auxiliary sensors
+            ax5_twin = ax5.twinx()
+            line1 = ax5.plot(sensors['time'], sensors['light'], 'g-', label='Light', alpha=0.7)
+            line2 = ax5_twin.plot(sensors['time'], sensors['capacitive'], 'orange', label='Capacitive', alpha=0.7)
+            ax5.set_title('Auxiliary Sensors', fontweight='bold')
+            ax5.set_xlabel('Time (s)')
+            ax5.set_ylabel('Light Level', color='g')
+            ax5_twin.set_ylabel('Capacitive Value', color='orange')
+            ax5.tick_params(axis='y', labelcolor='g')
+            ax5_twin.tick_params(axis='y', labelcolor='orange')
+            lines = line1 + line2
+            labels = [l.get_label() for l in lines]
+            ax5.legend(lines, labels, loc='upper right')
+            ax5.grid(True, alpha=0.3)
+
+        # 6. Spectral signature (visual fingerprint) with calibration status badge
         ax6 = fig.add_subplot(gs[3, 2])
         signature = self.distinction_engine.create_signature_pattern(sensors, 0, len(data))
         ax6.imshow(signature)
         ax6.set_title('Spectral Signature', fontweight='bold')
         ax6.axis('off')
+
+        # Add calibration status badge
+        badge_colors = {'Full (Iron + Earth Field)': '#4daf4a', 'Partial (Iron Only)': '#ff7f00', 'None (Raw)': '#e41a1c'}
+        ax6.text(0.05, 0.95, f'Calibration: {calib_status}',
+                transform=ax6.transAxes, fontsize=8, fontweight='bold',
+                color='white', verticalalignment='top',
+                bbox=dict(boxstyle='round,pad=0.3', facecolor=status_color, alpha=0.8))
 
         # Save composite image
         output_file = self.output_dir / f"composite_{session['timestamp']}.png"
@@ -522,6 +672,11 @@ Magnetometer:
         sensors = processor.extract_sensor_arrays(data)
         output_files = []
 
+        # Calibration status
+        has_calibrated = sensors.get('_has_calibrated', False)
+        has_fused = sensors.get('_has_fused', False)
+        has_orientation = sensors.get('_has_orientation', False)
+
         # 1. Comprehensive Axis View
         fig, axes = plt.subplots(3, 3, figsize=(18, 12))
         fig.suptitle(f'Raw Axis Data: {session["filename"]}', fontsize=16, fontweight='bold')
@@ -554,21 +709,36 @@ Magnetometer:
         axes[1, 2].set_title('Gyroscope Z', fontweight='bold')
         axes[1, 2].grid(True, alpha=0.3)
 
-        # Magnetometer
-        axes[2, 0].plot(sensors['time'], sensors['mx'], 'r-', linewidth=1)
+        # Magnetometer (with calibration overlay)
+        axes[2, 0].plot(sensors['time'], sensors['mx'], 'gray', alpha=0.5, linewidth=1, label='Raw')
+        if has_fused:
+            axes[2, 0].plot(sensors['time'], sensors['fused_mx'], 'r-', linewidth=1, label='Fused')
+        elif has_calibrated:
+            axes[2, 0].plot(sensors['time'], sensors['calibrated_mx'], 'r-', linewidth=1, label='Calibrated')
         axes[2, 0].set_title('Magnetometer X', fontweight='bold')
         axes[2, 0].set_xlabel('Time (s)')
-        axes[2, 0].set_ylabel('Value (raw)')
+        axes[2, 0].set_ylabel('Value (uT)')
+        axes[2, 0].legend(fontsize=7)
         axes[2, 0].grid(True, alpha=0.3)
 
-        axes[2, 1].plot(sensors['time'], sensors['my'], 'g-', linewidth=1)
+        axes[2, 1].plot(sensors['time'], sensors['my'], 'gray', alpha=0.5, linewidth=1, label='Raw')
+        if has_fused:
+            axes[2, 1].plot(sensors['time'], sensors['fused_my'], 'g-', linewidth=1, label='Fused')
+        elif has_calibrated:
+            axes[2, 1].plot(sensors['time'], sensors['calibrated_my'], 'g-', linewidth=1, label='Calibrated')
         axes[2, 1].set_title('Magnetometer Y', fontweight='bold')
         axes[2, 1].set_xlabel('Time (s)')
+        axes[2, 1].legend(fontsize=7)
         axes[2, 1].grid(True, alpha=0.3)
 
-        axes[2, 2].plot(sensors['time'], sensors['mz'], 'b-', linewidth=1)
+        axes[2, 2].plot(sensors['time'], sensors['mz'], 'gray', alpha=0.5, linewidth=1, label='Raw')
+        if has_fused:
+            axes[2, 2].plot(sensors['time'], sensors['fused_mz'], 'b-', linewidth=1, label='Fused')
+        elif has_calibrated:
+            axes[2, 2].plot(sensors['time'], sensors['calibrated_mz'], 'b-', linewidth=1, label='Calibrated')
         axes[2, 2].set_title('Magnetometer Z', fontweight='bold')
         axes[2, 2].set_xlabel('Time (s)')
+        axes[2, 2].legend(fontsize=7)
         axes[2, 2].grid(True, alpha=0.3)
 
         plt.tight_layout()
@@ -617,6 +787,55 @@ Magnetometer:
         plt.savefig(output_file, dpi=150, bbox_inches='tight')
         plt.close(fig)
         output_files.append(output_file)
+
+        # 3. Orientation Track (if orientation data is available)
+        if has_orientation and np.any(sensors['euler_roll'] != 0):
+            fig = plt.figure(figsize=(18, 8))
+            gs = GridSpec(2, 2, figure=fig, hspace=0.3, wspace=0.3)
+
+            # Euler angles time series
+            ax1 = fig.add_subplot(gs[0, :])
+            ax1.plot(sensors['time'], sensors['euler_roll'], 'r-', label='Roll', linewidth=1)
+            ax1.plot(sensors['time'], sensors['euler_pitch'], 'g-', label='Pitch', linewidth=1)
+            ax1.plot(sensors['time'], sensors['euler_yaw'], 'b-', label='Yaw', linewidth=1)
+            ax1.set_title('Device Orientation (Euler Angles)', fontweight='bold')
+            ax1.set_xlabel('Time (s)')
+            ax1.set_ylabel('Angle (degrees)')
+            ax1.legend(loc='upper right')
+            ax1.grid(True, alpha=0.3)
+
+            # Roll vs Pitch scatter
+            ax2 = fig.add_subplot(gs[1, 0])
+            scatter = ax2.scatter(sensors['euler_roll'], sensors['euler_pitch'],
+                                 c=sensors['time'], cmap='viridis', s=5, alpha=0.6)
+            ax2.set_title('Roll vs Pitch', fontweight='bold')
+            ax2.set_xlabel('Roll (degrees)')
+            ax2.set_ylabel('Pitch (degrees)')
+            plt.colorbar(scatter, ax=ax2, label='Time (s)')
+            ax2.grid(True, alpha=0.3)
+
+            # Magnetometer raw vs fused comparison (if fused available)
+            ax3 = fig.add_subplot(gs[1, 1])
+            if has_fused:
+                ax3.plot(sensors['time'], sensors['mag_mag'], 'gray', alpha=0.6, linewidth=1, label='Raw Magnitude')
+                ax3.plot(sensors['time'], sensors['fused_mag'], 'g-', linewidth=1.2, label='Fused Magnitude')
+                ax3.set_title('Magnetometer: Raw vs Fused', fontweight='bold')
+                ax3.set_ylabel('Magnitude (uT)')
+                ax3.legend(loc='upper right')
+            else:
+                ax3.plot(sensors['time'], sensors['mag_mag'], 'b-', linewidth=1)
+                ax3.set_title('Magnetometer Magnitude', fontweight='bold')
+                ax3.set_ylabel('Magnitude (uT)')
+            ax3.set_xlabel('Time (s)')
+            ax3.grid(True, alpha=0.3)
+
+            fig.suptitle(f'Orientation Analysis: {session["filename"]}', fontsize=14, fontweight='bold')
+            plt.tight_layout()
+
+            output_file = self.output_dir / f"orientation_track_{session['timestamp']}.png"
+            plt.savefig(output_file, dpi=150, bbox_inches='tight')
+            plt.close(fig)
+            output_files.append(output_file)
 
         print(f"  Created raw axis images: {len(output_files)} files")
         return output_files
