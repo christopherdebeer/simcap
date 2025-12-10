@@ -461,26 +461,33 @@ function exportData() {
  * Initialize collapsible sections
  */
 function initCollapsibleSections() {
-    document.querySelectorAll('.section-header').forEach(header => {
+    document.querySelectorAll('.collapsible').forEach(header => {
         header.addEventListener('click', () => {
+            header.classList.toggle('collapsed');
+            
             const section = header.parentElement;
-            section.classList.toggle('collapsed');
-
-            // Save collapsed state
+            const contents = section.querySelectorAll('.collapse-content');
+            contents.forEach(content => {
+                content.classList.toggle('hidden');
+            });
+            
             const sectionId = section.id;
             if (sectionId) {
-                const isCollapsed = section.classList.contains('collapsed');
+                const isCollapsed = header.classList.contains('collapsed');
                 localStorage.setItem(`section_${sectionId}_collapsed`, isCollapsed);
             }
         });
 
-        // Restore collapsed state
         const section = header.parentElement;
         const sectionId = section.id;
         if (sectionId) {
             const savedState = localStorage.getItem(`section_${sectionId}_collapsed`);
             if (savedState === 'true') {
-                section.classList.add('collapsed');
+                header.classList.add('collapsed');
+                const contents = section.querySelectorAll('.collapse-content');
+                contents.forEach(content => {
+                    content.classList.add('hidden');
+                });
             }
         }
     });
