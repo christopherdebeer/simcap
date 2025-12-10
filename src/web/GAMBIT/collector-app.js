@@ -66,7 +66,9 @@ const magnetConfig = {
 
 // Hand visualization
 let handVisualizer = null;
+let hand3DRenderer = null;
 let handPreviewMode = 'labels'; // 'labels' or 'predictions'
+let handViewMode = '2d'; // '2d' or '3d'
 
 // Pose estimation options
 const poseEstimationOptions = {
@@ -1100,20 +1102,28 @@ function updatePoseEstimationDisplay() {
  * Initialize hand visualization
  */
 function initHandVisualization() {
-    const canvas = $('handCanvas');
-    if (!canvas || typeof HandVisualizer2D === 'undefined') {
-        console.warn('Hand visualization not available');
-        return;
+    // Initialize 2D visualizer
+    const canvas2D = $('handCanvas');
+    if (canvas2D && typeof HandVisualizer2D !== 'undefined') {
+        handVisualizer = new HandVisualizer2D(canvas2D, {
+            showLabels: true,
+            backgroundColor: 'var(--bg)'
+        });
+        handVisualizer.startAnimation();
+    } else {
+        console.warn('2D hand visualization not available');
     }
 
-    // Create visualizer
-    handVisualizer = new HandVisualizer2D(canvas, {
-        showLabels: true,
-        backgroundColor: 'var(--bg)'
-    });
-
-    // Start animation loop
-    handVisualizer.startAnimation();
+    // Initialize 3D renderer
+    const canvas3D = $('handCanvas3D');
+    if (canvas3D && typeof Hand3DRenderer !== 'undefined') {
+        hand3DRenderer = new Hand3DRenderer(canvas3D, {
+            backgroundColor: '#1a1a2e'
+        });
+        hand3DRenderer.startAnimation();
+    } else {
+        console.warn('3D hand renderer not available');
+    }
 
     // Initial update
     updateHandVisualization();
@@ -1150,23 +1160,68 @@ function setHandPreviewMode(mode) {
 }
 
 /**
+ * Set hand view mode (2D or 3D)
+ */
+function setHandViewMode(mode) {
+    handViewMode = mode;
+
+    // Update button states
+    const btn2D = $('handView2D');
+    const btn3D = $('handView3D');
+    const canvas2D = $('handCanvas');
+    const canvas3D = $('handCanvas3D');
+
+    if (btn2D && btn3D) {
+        if (mode === '2d') {
+            btn2D.className = 'btn-primary btn-small';
+            btn3D.className = 'btn-secondary btn-small';
+            if (canvas2D) canvas2D.style.display = 'block';
+            if (canvas3D) canvas3D.style.display = 'none';
+        } else {
+            btn2D.className = 'btn-secondary btn-small';
+            btn3D.className = 'btn-primary btn-small';
+            if (canvas2D) canvas2D.style.display = 'none';
+            if (canvas3D) canvas3D.style.display = 'block';
+        }
+    }
+
+    updateHandVisualization();
+    log(`Hand view mode: ${mode}`);
+}
+
+/**
  * Update hand visualization based on current mode
  */
 function updateHandVisualization() {
-    if (!handVisualizer) return;
-
+    // Determine finger states based on preview mode
+    let fingerStates;
     if (handPreviewMode === 'labels') {
         // Show manual labels
-        const fingerStates = convertFingerLabelsToStates(state.currentLabels.fingers);
-        handVisualizer.setFingerStates(fingerStates);
+        fingerStates = convertFingerLabelsToStates(state.currentLabels.fingers);
     } else {
         // Show predictions (if available)
         if (poseState.enabled && poseState.currentPose) {
-            handVisualizer.setFingerStates(poseState.currentPose);
+            fingerStates = poseState.currentPose;
         } else {
             // No predictions available - show neutral
-            handVisualizer.setFingerStates({
+            fingerStates = {
                 thumb: 0, index: 0, middle: 0, ring: 0, pinky: 0
+            };
+        }
+    }
+
+    // Update active renderer based on view mode
+    if (handViewMode === '2d' && handVisualizer) {
+        handVisualizer.setFingerStates(fingerStates);
+    } else if (handViewMode === '3d' && hand3DRenderer) {
+        hand3DRenderer.setFingerPoses(fingerStates);
+
+        // Update orientation from IMU if available
+        if (poseState.orientation) {
+            hand3DRenderer.setOrientation({
+                pitch: poseState.orientation.pitch,
+                yaw: poseState.orientation.yaw,
+                roll: poseState.orientation.roll
             });
         }
     }
@@ -1197,6 +1252,7 @@ function convertFingerLabelsToStates(fingerLabels) {
 
 // Export for HTML onclick handlers
 window.setHandPreviewMode = setHandPreviewMode;
+window.setHandViewMode = setHandViewMode;
 
 /**
  * Initialize export functionality
