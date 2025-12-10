@@ -204,8 +204,9 @@ class EnvironmentalCalibration {
             sphericity,
             coverage,
             sampleCount: samples.length,
-            quality: sphericity > 0.9 && coverage > 0.7 ? 'good' :
-                     sphericity > 0.7 && coverage > 0.5 ? 'acceptable' : 'poor'
+            quality: sphericity, // Numeric quality metric (0.0 to 1.0)
+            qualityLevel: sphericity > 0.9 && coverage > 0.7 ? 'good' :
+                          sphericity > 0.7 && coverage > 0.5 ? 'acceptable' : 'poor'
         };
     }
 
@@ -247,10 +248,16 @@ class EnvironmentalCalibration {
 
         this.softIronCalibrated = true;
 
+        // Calculate quality based on how uniform the scaling is (1.0 = perfect sphere)
+        const minScale = Math.min(scaleX, scaleY, scaleZ);
+        const maxScale = Math.max(scaleX, scaleY, scaleZ);
+        const quality = minScale / maxScale; // 1.0 = perfect sphere, lower = more distortion
+
         return {
             matrix: this.softIronMatrix.toArray(),
             scales: { x: scaleX, y: scaleY, z: scaleZ },
-            correction: { x: avgScale / scaleX, y: avgScale / scaleY, z: avgScale / scaleZ }
+            correction: { x: avgScale / scaleX, y: avgScale / scaleY, z: avgScale / scaleZ },
+            quality: quality // Numeric quality metric (0.0 to 1.0)
         };
     }
 
@@ -289,13 +296,28 @@ class EnvironmentalCalibration {
             this.earthField.z ** 2
         );
 
+        // Calculate quality based on stability/variance of readings
+        let variance = 0;
+        for (const s of corrected) {
+            const dx = s.x - this.earthField.x;
+            const dy = s.y - this.earthField.y;
+            const dz = s.z - this.earthField.z;
+            variance += Math.sqrt(dx*dx + dy*dy + dz*dz);
+        }
+        const avgDeviation = variance / corrected.length;
+        // Quality: 1.0 if deviation is very small, decreases with larger deviation
+        // Typical good reading has <5% deviation
+        const quality = Math.max(0, Math.min(1, 1 - (avgDeviation / this.earthFieldMagnitude) * 10));
+
         this.earthFieldCalibrated = true;
 
         return {
             field: { ...this.earthField },
             magnitude: this.earthFieldMagnitude,
             // Convert to μT using scale factor
-            magnitudeUT: this.earthFieldMagnitude * this.scaleFactorLSBToUT
+            magnitudeUT: this.earthFieldMagnitude * this.scaleFactorLSBToUT,
+            quality: quality, // Numeric quality metric (0.0 to 1.0)
+            avgDeviation: avgDeviation
         };
     }
 
