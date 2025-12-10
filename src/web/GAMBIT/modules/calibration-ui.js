@@ -196,7 +196,7 @@ export function initCalibrationUI() {
     const startHardIronCal = $('startHardIronCal');
     if (startHardIronCal) {
         startHardIronCal.addEventListener('click', () => {
-        runCalibrationStep('hardIron', 10000,
+        runCalibrationStep('hardIron', 20000,
             (result) => {
                 const quality = result.quality > 0.9 ? 'Excellent' : result.quality > 0.7 ? 'Good' : 'Poor';
                 const emoji = result.quality > 0.9 ? '✅' : result.quality > 0.7 ? '⚠️' : '❌';
@@ -220,7 +220,7 @@ export function initCalibrationUI() {
     const startSoftIronCal = $('startSoftIronCal');
     if (startSoftIronCal) {
         startSoftIronCal.addEventListener('click', () => {
-        runCalibrationStep('softIron', 10000,
+        runCalibrationStep('softIron', 20000,
             (result) => {
                 const quality = result.quality > 0.9 ? 'Excellent' : result.quality > 0.7 ? 'Good' : 'Poor';
                 const emoji = result.quality > 0.9 ? '✅' : result.quality > 0.7 ? '⚠️' : '❌';
