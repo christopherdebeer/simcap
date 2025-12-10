@@ -41,6 +41,29 @@ const poseState = {
     updateCount: 0
 };
 
+// Particle filter for pose estimation
+let poseFilter = null;
+let poseEstimationEnabled = false;
+
+// Default reference pose (palm-down, fingers extended, typical geometry)
+// Positions in mm relative to sensor (at origin)
+const defaultReferencePose = {
+    thumb:  {x: -30, y: 40, z: 10},   // Left side, forward
+    index:  {x: -15, y: 60, z: 10},   // Slightly left, far forward
+    middle: {x: 0,   y: 65, z: 10},   // Center, farthest forward
+    ring:   {x: 15,  y: 60, z: 10},   // Slightly right, forward
+    pinky:  {x: 30,  y: 50, z: 10}    // Right side, less forward
+};
+
+// Magnet configuration (default N52 3mm x 2mm cylindrical magnets)
+const magnetConfig = {
+    thumb:  {moment: {x: 0, y: 0, z: 0.01}},
+    index:  {moment: {x: 0, y: 0, z: 0.01}},
+    middle: {moment: {x: 0, y: 0, z: 0.01}},
+    ring:   {moment: {x: 0, y: 0, z: 0.01}},
+    pinky:  {moment: {x: 0, y: 0, z: 0.01}}
+};
+
 // Hand visualization
 let handVisualizer = null;
 let handPreviewMode = 'labels'; // 'labels' or 'predictions'
@@ -49,7 +72,8 @@ let handPreviewMode = 'labels'; // 'labels' or 'predictions'
 const poseEstimationOptions = {
     useCalibration: true,  // Use calibrated magnetic field data
     useOrientation: true,  // Use IMU orientation for context
-    show3DOrientation: false  // Show 3D orientation cube
+    show3DOrientation: false,  // Show 3D orientation cube
+    useParticleFilter: false  // Use ParticleFilter vs threshold-based estimation
 };
 
 // Wizard and calibration buffers (for wizard functionality)
@@ -537,8 +561,49 @@ function initWizard() {
     }
 }
 
+// Wizard step definitions
+const TRANSITION_TIME = 5; // seconds of unlabeled transition
+const HOLD_TIME = 3; // seconds of labeled hold
+const HOLD_TIME_MED = 6;
+const HOLD_TIME_LONG = 10;
+
+const WIZARD_STEPS = {
+    reference: [
+        { id: 'reference_pose', label: 'Reference Pose', icon: '✋', transition: TRANSITION_TIME, hold: HOLD_TIME_LONG, desc: 'Hold hand flat, palm down, fingers together.' },
+        { id: 'magnet_baseline', label: 'Magnet Baseline', icon: '📍', transition: TRANSITION_TIME, hold: HOLD_TIME_LONG, desc: 'Keep hand in reference pose with magnets attached.' }
+    ],
+    fingers: [
+        { id: 'finger_isolation:thumb', label: 'Thumb Isolation', icon: '👍', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Move only your thumb through full range of motion.' },
+        { id: 'finger_isolation:index', label: 'Index Isolation', icon: '☝️', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Move only your index finger through full range.' },
+        { id: 'finger_isolation:middle', label: 'Middle Isolation', icon: '🖕', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Move only your middle finger through full range.' },
+        { id: 'finger_isolation:ring', label: 'Ring Isolation', icon: '💍', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Move only your ring finger through full range.' },
+        { id: 'finger_isolation:pinky', label: 'Pinky Isolation', icon: '🤙', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Move only your pinky finger through full range.' }
+    ],
+    fingerTracking5Mag: [
+        { id: 'ft5:reference', label: 'Reference (5 mag)', icon: '✋', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Palm down, all fingers extended. All 5 magnets attached.' },
+        { id: 'ft5:all_extended', label: 'All Extended', icon: '🖐️', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Spread all fingers wide, fully extended.' },
+        { id: 'ft5:all_flexed', label: 'All Flexed (Fist)', icon: '✊', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Make a tight fist, all fingers flexed.' },
+        { id: 'ft5:thumb_flex', label: 'Thumb Flex Only', icon: '👍', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex only thumb, others extended.' },
+        { id: 'ft5:index_flex', label: 'Index Flex Only', icon: '☝️', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex only index finger, others extended.' },
+        { id: 'ft5:middle_flex', label: 'Middle Flex Only', icon: '🖕', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex only middle finger, others extended.' },
+        { id: 'ft5:ring_flex', label: 'Ring Flex Only', icon: '💍', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex only ring finger, others extended.' },
+        { id: 'ft5:pinky_flex', label: 'Pinky Flex Only', icon: '🤙', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex only pinky finger, others extended.' },
+        { id: 'ft5:thumb_index', label: 'Thumb+Index Flex', icon: '🤏', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex thumb and index only.' },
+        { id: 'ft5:ring_pinky', label: 'Ring+Pinky Flex', icon: '🤟', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex ring and pinky only.' },
+        { id: 'ft5:middle_ring_pinky', label: 'Mid+Ring+Pinky Flex', icon: '✌️', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex middle, ring, pinky (peace sign).' }
+    ],
+    gestures: [
+        { id: 'pose:fist', label: 'Fist', icon: '✊', transition: TRANSITION_TIME, hold: HOLD_TIME, desc: 'Make a tight fist.' },
+        { id: 'pose:open_palm', label: 'Open Palm', icon: '🖐️', transition: TRANSITION_TIME, hold: HOLD_TIME, desc: 'Spread all fingers wide.' },
+        { id: 'pose:pinch', label: 'Pinch', icon: '🤏', transition: TRANSITION_TIME, hold: HOLD_TIME, desc: 'Touch thumb and index fingertips.' },
+        { id: 'pose:point', label: 'Point', icon: '👆', transition: TRANSITION_TIME, hold: HOLD_TIME, desc: 'Point with index finger, others closed.' },
+        { id: 'pose:thumbs_up', label: 'Thumbs Up', icon: '👍', transition: TRANSITION_TIME, hold: HOLD_TIME, desc: 'Classic thumbs up gesture.' },
+        { id: 'pose:ok', label: 'OK Sign', icon: '👌', transition: TRANSITION_TIME, hold: HOLD_TIME, desc: 'Form OK sign with thumb and index.' }
+    ]
+};
+
 /**
- * Start data collection wizard
+ * Start data collection wizard - shows mode selection
  */
 function startWizard() {
     if (!state.connected) {
@@ -546,52 +611,63 @@ function startWizard() {
         return;
     }
 
-    // Initialize wizard state
     wizard.active = true;
-    wizard.mode = 'data_collection';
-    wizard.currentStep = 0;
-    wizard.steps = [
-        {
-            id: 'intro',
-            title: 'Data Collection Wizard',
-            instruction: 'Welcome to guided data collection',
-            description: 'This wizard will guide you through collecting labeled training data for hand pose recognition.'
-        },
-        {
-            id: 'rest_pose',
-            title: 'Collect: Rest Pose',
-            instruction: 'Hold your hand in a relaxed rest position',
-            description: 'Keep your hand still for 3 seconds while we collect baseline data.',
-            duration: 3000,
-            labels: { pose: 'rest', motion: 'static' }
-        },
-        {
-            id: 'fist_pose',
-            title: 'Collect: Fist',
-            instruction: 'Make a fist',
-            description: 'Close your hand into a fist and hold steady for 3 seconds.',
-            duration: 3000,
-            labels: { pose: 'fist', motion: 'static' }
-        },
-        {
-            id: 'open_pose',
-            title: 'Collect: Open Hand',
-            instruction: 'Open your hand with fingers extended',
-            description: 'Spread your fingers wide and hold for 3 seconds.',
-            duration: 3000,
-            labels: { pose: 'open_palm', motion: 'static' }
-        },
-        {
-            id: 'complete',
-            title: 'Collection Complete!',
-            instruction: '✅ Data collection finished',
-            description: 'You have successfully collected training data for 3 hand poses.'
-        }
-    ];
-
     log('Data collection wizard started');
     showWizardModal();
-    renderWizardStep();
+    showWizardModeSelection();
+}
+
+/**
+ * Show wizard mode selection screen
+ */
+function showWizardModeSelection() {
+    const title = $('wizardTitle');
+    const phase = $('wizardPhase');
+    const content = $('wizardContent');
+    const progressFill = $('wizardProgressFill');
+    const stepText = $('wizardStepText');
+    const timeText = $('wizardTimeText');
+    const stats = $('wizardStats');
+
+    if (title) title.textContent = 'Data Collection Wizard';
+    if (phase) phase.textContent = 'Select collection mode';
+    if (progressFill) progressFill.style.width = '0%';
+    if (stepText) stepText.textContent = 'Step 0 of 0';
+    if (timeText) timeText.textContent = '';
+    if (stats) stats.style.display = 'none';
+
+    if (content) {
+        content.innerHTML = `
+            <div class="wizard-instruction">Choose a data collection mode</div>
+
+            <div style="font-size: 11px; color: var(--accent); margin: 10px 0 5px; font-weight: 500;">General Collection</div>
+            <div class="wizard-start-options">
+                <div class="wizard-option" onclick="window.startWizardMode('quick')">
+                    <h4>⚡ Quick Collection</h4>
+                    <p>Reference poses + finger isolation</p>
+                    <div class="duration">~50 seconds • 7 steps</div>
+                </div>
+                <div class="wizard-option" onclick="window.startWizardMode('full')">
+                    <h4>📚 Full Collection</h4>
+                    <p>Quick + common gestures</p>
+                    <div class="duration">~80 seconds • 13 steps</div>
+                </div>
+            </div>
+
+            <div style="font-size: 11px; color: var(--accent); margin: 15px 0 5px; font-weight: 500;">Magnetic Finger Tracking</div>
+            <div class="wizard-start-options">
+                <div class="wizard-option" onclick="window.startWizardMode('ft5mag')" style="border-color: var(--success);">
+                    <h4>🧲 5 Magnets (Standard)</h4>
+                    <p>All fingers with magnets - full tracking data</p>
+                    <div class="duration">~85 seconds • 11 steps</div>
+                </div>
+            </div>
+
+            <div style="margin-top: 15px; padding: 10px; background: var(--bg); border-radius: 4px; font-size: 11px; color: var(--fg-muted);">
+                <strong>Note:</strong> Complete magnetometer calibration before collecting finger tracking data. Calibration removes environmental interference to isolate magnet signals.
+            </div>
+        `;
+    }
 }
 
 /**
