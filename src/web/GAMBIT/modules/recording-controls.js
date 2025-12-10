@@ -92,6 +92,8 @@ export function clearSession(confirm = true) {
  * @param {Object} buttons - Button elements {start, stop, clear}
  */
 export function initRecordingUI(buttons) {
+    if (!buttons) return;
+
     if (buttons.start) {
         buttons.start.addEventListener('click', startRecording);
     }
