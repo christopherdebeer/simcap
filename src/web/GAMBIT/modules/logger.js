@@ -19,7 +19,7 @@ export function initLogger(element) {
  */
 export function log(msg) {
     if (!logElement) {
-        console.warn('Logger not initialized');
+        console.log(`[LOG] ${msg}`);
         return;
     }
 

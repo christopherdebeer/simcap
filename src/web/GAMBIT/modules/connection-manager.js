@@ -83,7 +83,7 @@ export async function connect() {
 
     } catch (e) {
         console.error('[GAMBIT] Connection error:', e);
-        log(`Connection failed: ${e.message}`);
+        log(`Connection failed: ${e.message || e.toString() || 'Unknown error'}`);
         if (state.gambitClient) {
             state.gambitClient.disconnect();
             state.gambitClient = null;
@@ -125,5 +125,7 @@ export async function toggleConnection() {
  * @param {HTMLElement} connectButton - Connect/disconnect button element
  */
 export function initConnectionUI(connectButton) {
-    connectButton.addEventListener('click', toggleConnection);
+    if (connectButton) {
+        connectButton.addEventListener('click', toggleConnection);
+    }
 }
