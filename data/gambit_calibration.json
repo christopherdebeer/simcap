@@ -1,0 +1,28 @@
+{
+  "hardIronOffset": {
+    "x": 4.5,
+    "y": 520.5,
+    "z": -482
+  },
+  "softIronMatrix": [
+    1.0292649366564603,
+    0,
+    0,
+    0,
+    1.1650969628014471,
+    0,
+    0,
+    0,
+    0.8546021091789999
+  ],
+  "earthField": {
+    "x": 18.11,
+    "y": 368.8,
+    "z": -284.52
+  },
+  "earthFieldMagnitude": 466.147018117675,
+  "hardIronCalibrated": true,
+  "softIronCalibrated": true,
+  "earthFieldCalibrated": true,
+  "timestamp": "2025-12-11T13:21:12.134Z"
+}
