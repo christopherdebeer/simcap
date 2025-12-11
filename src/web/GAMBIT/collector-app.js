@@ -36,7 +36,7 @@ const magFilter = new KalmanFilter3D({
 
 const imuFusion = new MadgwickAHRS({
     sampleFreq: 50,
-    beta: 0.1
+    beta: 0.02  // Reduced from 0.1 to 0.02 for stable orientation (matches index.html cube stability)
 });
 
 // Pose estimation state
@@ -84,7 +84,7 @@ const poseEstimationOptions = {
     // 3D Hand orientation options
     enableHandOrientation: true,  // Apply sensor fusion to 3D hand orientation
     smoothHandOrientation: true,  // Apply low-pass filtering to hand orientation
-    handOrientationAlpha: 0.15    // Smoothing factor (0-1, lower = smoother)
+    handOrientationAlpha: 0.1     // Smoothing factor (0-1, lower = smoother) - reduced from 0.15 for stability
 };
 
 // GitHub token (for upload functionality)
