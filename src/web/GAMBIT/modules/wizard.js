@@ -203,6 +203,91 @@ function closeWizard() {
 }
 
 /**
+ * Parse step ID to extract labels
+ * @param {string} id - Step ID like 'pose:fist', 'finger_isolation:thumb', 'ft5:all_flexed'
+ * @returns {Object} Labels object with pose, fingers, custom, etc.
+ */
+function parseStepLabels(id) {
+    const labels = {
+        pose: null,
+        fingers: { thumb: null, index: null, middle: null, ring: null, pinky: null },
+        motion: 'static',
+        custom: []
+    };
+
+    if (!id) return labels;
+
+    // Parse pose labels (e.g., 'pose:fist', 'pose:open_palm')
+    if (id.startsWith('pose:')) {
+        labels.pose = id.replace('pose:', '');
+        return labels;
+    }
+
+    // Parse finger isolation labels (e.g., 'finger_isolation:thumb')
+    if (id.startsWith('finger_isolation:')) {
+        const finger = id.replace('finger_isolation:', '');
+        labels.custom.push(`isolation_${finger}`);
+        labels.motion = 'dynamic';
+        return labels;
+    }
+
+    // Parse 5-magnet finger tracking labels (e.g., 'ft5:all_flexed', 'ft5:thumb_flex')
+    if (id.startsWith('ft5:')) {
+        const pose = id.replace('ft5:', '');
+        labels.custom.push('ft5mag');
+        
+        // Set finger states based on pose
+        switch (pose) {
+            case 'reference':
+            case 'all_extended':
+                labels.fingers = { thumb: 'extended', index: 'extended', middle: 'extended', ring: 'extended', pinky: 'extended' };
+                break;
+            case 'all_flexed':
+                labels.fingers = { thumb: 'flexed', index: 'flexed', middle: 'flexed', ring: 'flexed', pinky: 'flexed' };
+                labels.pose = 'fist';
+                break;
+            case 'thumb_flex':
+                labels.fingers = { thumb: 'flexed', index: 'extended', middle: 'extended', ring: 'extended', pinky: 'extended' };
+                break;
+            case 'index_flex':
+                labels.fingers = { thumb: 'extended', index: 'flexed', middle: 'extended', ring: 'extended', pinky: 'extended' };
+                break;
+            case 'middle_flex':
+                labels.fingers = { thumb: 'extended', index: 'extended', middle: 'flexed', ring: 'extended', pinky: 'extended' };
+                break;
+            case 'ring_flex':
+                labels.fingers = { thumb: 'extended', index: 'extended', middle: 'extended', ring: 'flexed', pinky: 'extended' };
+                break;
+            case 'pinky_flex':
+                labels.fingers = { thumb: 'extended', index: 'extended', middle: 'extended', ring: 'extended', pinky: 'flexed' };
+                break;
+            case 'thumb_index':
+                labels.fingers = { thumb: 'flexed', index: 'flexed', middle: 'extended', ring: 'extended', pinky: 'extended' };
+                labels.pose = 'pinch';
+                break;
+            case 'ring_pinky':
+                labels.fingers = { thumb: 'extended', index: 'extended', middle: 'extended', ring: 'flexed', pinky: 'flexed' };
+                break;
+            case 'middle_ring_pinky':
+                labels.fingers = { thumb: 'extended', index: 'extended', middle: 'flexed', ring: 'flexed', pinky: 'flexed' };
+                labels.pose = 'peace';
+                break;
+        }
+        labels.custom.push(pose);
+        return labels;
+    }
+
+    // Parse reference poses
+    if (id === 'reference_pose' || id === 'magnet_baseline') {
+        labels.custom.push(id);
+        labels.fingers = { thumb: 'extended', index: 'extended', middle: 'extended', ring: 'extended', pinky: 'extended' };
+        return labels;
+    }
+
+    return labels;
+}
+
+/**
  * Render current wizard step
  */
 function renderWizardStep() {
@@ -218,13 +303,19 @@ function renderWizardStep() {
     const samplesText = deps.$('wizardSamples');
     const labelsText = deps.$('wizardLabels');
 
-    if (title) title.textContent = step.title;
+    // Use label as title, desc as description (matching WIZARD_STEPS structure)
+    const stepTitle = step.label || step.title || 'Step';
+    const stepInstruction = `${step.icon || '📍'} ${stepTitle}`;
+    const stepDescription = step.desc || step.description || '';
+    const totalDuration = (step.transition || 0) + (step.hold || 0);
+
+    if (title) title.textContent = stepTitle;
     if (phase) phase.textContent = `Step ${wizard.currentStep + 1} of ${wizard.steps.length}`;
 
     const progress = ((wizard.currentStep) / wizard.steps.length) * 100;
     if (progressFill) progressFill.style.width = `${progress}%`;
     if (stepText) stepText.textContent = `Step ${wizard.currentStep + 1} of ${wizard.steps.length}`;
-    if (timeText) timeText.textContent = step.duration ? `~${step.duration / 1000}s` : '';
+    if (timeText) timeText.textContent = totalDuration ? `~${totalDuration}s` : '';
 
     if (samplesText) samplesText.textContent = deps.state.sessionData.length;
     if (labelsText) labelsText.textContent = deps.state.labels.length;
@@ -232,8 +323,8 @@ function renderWizardStep() {
     // Render step content
     if (content) {
         let html = `
-            <div class="wizard-instruction">${step.instruction}</div>
-            <div class="wizard-description">${step.description}</div>
+            <div class="wizard-instruction">${stepInstruction}</div>
+            <div class="wizard-description">${stepDescription}</div>
         `;
 
         if (step.id === 'intro') {
@@ -256,8 +347,11 @@ function renderWizardStep() {
                 </div>
             `;
         } else {
-            // Collection step
+            // Collection step - show transition and hold times
             html += `
+                <div style="font-size: 11px; color: var(--fg-muted); margin: 10px 0;">
+                    ${step.transition}s transition → ${step.hold}s labeled hold
+                </div>
                 <div class="wizard-controls">
                     <button class="btn-success" onclick="startWizardCollection()">Ready - Start</button>
                     <button class="btn-secondary" onclick="nextWizardStep()">Skip</button>
@@ -270,47 +364,165 @@ function renderWizardStep() {
 }
 
 /**
+ * Apply labels to state from parsed labels object
+ * @param {Object} labels - Labels object from parseStepLabels
+ */
+function applyLabels(labels) {
+    if (labels.pose) {
+        deps.state.currentLabels.pose = labels.pose;
+    }
+    if (labels.fingers) {
+        deps.state.currentLabels.fingers = { ...labels.fingers };
+    }
+    if (labels.motion) {
+        deps.state.currentLabels.motion = labels.motion;
+    }
+    if (labels.custom && labels.custom.length > 0) {
+        // Add custom labels without duplicates
+        labels.custom.forEach(c => {
+            if (!deps.state.currentLabels.custom.includes(c)) {
+                deps.state.currentLabels.custom.push(c);
+            }
+        });
+    }
+}
+
+/**
+ * Clear labels from state
+ */
+function clearLabels() {
+    deps.state.currentLabels.pose = null;
+    deps.state.currentLabels.fingers = { thumb: null, index: null, middle: null, ring: null, pinky: null };
+    deps.state.currentLabels.motion = 'static';
+    deps.state.currentLabels.custom = [];
+}
+
+/**
+ * Close current label segment and start a new one
+ */
+function closeAndStartNewLabel() {
+    // Close current label segment if recording
+    if (deps.state.recording && deps.state.currentLabelStart !== null && deps.state.sessionData.length > deps.state.currentLabelStart) {
+        const segment = {
+            start_sample: deps.state.currentLabelStart,
+            end_sample: deps.state.sessionData.length - 1,
+            labels: JSON.parse(JSON.stringify(deps.state.currentLabels))
+        };
+        deps.state.labels.push(segment);
+        deps.log(`Label: ${segment.start_sample}-${segment.end_sample}`);
+    }
+    // Start new label segment
+    deps.state.currentLabelStart = deps.state.sessionData.length;
+}
+
+/**
  * Start collection for current wizard step
+ * Implements two-phase approach: transition (unlabeled) → hold (labeled)
  */
 async function startWizardCollection() {
     const step = wizard.steps[wizard.currentStep];
-    if (!step || !step.duration) return;
+    if (!step) return;
 
-    // Apply labels for this step
-    if (step.labels) {
-        if (step.labels.pose) deps.state.currentLabels.pose = step.labels.pose;
-        if (step.labels.motion) deps.state.currentLabels.motion = step.labels.motion;
-    }
+    const transitionTime = (step.transition || TRANSITION_TIME) * 1000; // ms
+    const holdTime = (step.hold || HOLD_TIME) * 1000; // ms
+    const stepLabels = parseStepLabels(step.id);
 
     // Start recording if not already
     if (!deps.state.recording) {
         await deps.startRecording();
     }
 
-    // Show countdown
     const content = deps.$('wizardContent');
-    let remainingMs = step.duration;
+    const stepTitle = step.label || 'Step';
+    const stepIcon = step.icon || '📍';
 
-    const countdownInterval = setInterval(() => {
-        remainingMs -= 100;
-        const seconds = Math.ceil(remainingMs / 1000);
+    // Phase 1: Transition (unlabeled) - user moves to position
+    wizard.phase = 'transition';
+    wizard.phaseStart = Date.now();
+    
+    // Clear labels during transition
+    clearLabels();
+    closeAndStartNewLabel();
 
-        if (content) {
-            content.innerHTML = `
-                <div class="wizard-instruction">Hold steady...</div>
-                <div class="wizard-countdown">
-                    <div class="countdown-circle ${seconds <= 1 ? 'warning' : ''}">
-                        ${seconds}
+    await runCountdown(content, transitionTime, {
+        title: `${stepIcon} Get Ready`,
+        subtitle: `Move to: ${stepTitle}`,
+        phaseLabel: 'TRANSITION',
+        phaseColor: 'var(--warning)'
+    });
+
+    // Phase 2: Hold (labeled) - user holds position, data is labeled
+    wizard.phase = 'hold';
+    wizard.phaseStart = Date.now();
+    
+    // Apply labels for hold phase
+    applyLabels(stepLabels);
+    closeAndStartNewLabel();
+
+    await runCountdown(content, holdTime, {
+        title: `${stepIcon} HOLD: ${stepTitle}`,
+        subtitle: step.desc || 'Hold this position steady',
+        phaseLabel: 'RECORDING',
+        phaseColor: 'var(--success)'
+    });
+
+    // Close the labeled segment
+    closeAndStartNewLabel();
+    clearLabels();
+
+    // Move to next step
+    wizard.phase = null;
+    nextWizardStep();
+}
+
+/**
+ * Run a countdown timer with UI updates
+ * @param {HTMLElement} content - Content element to update
+ * @param {number} durationMs - Duration in milliseconds
+ * @param {Object} options - Display options {title, subtitle, phaseLabel, phaseColor}
+ * @returns {Promise} Resolves when countdown completes
+ */
+function runCountdown(content, durationMs, options) {
+    return new Promise((resolve) => {
+        let remainingMs = durationMs;
+        const startTime = Date.now();
+
+        const updateDisplay = () => {
+            const seconds = Math.ceil(remainingMs / 1000);
+            const progress = ((durationMs - remainingMs) / durationMs) * 100;
+
+            if (content) {
+                content.innerHTML = `
+                    <div class="wizard-phase-indicator" style="color: ${options.phaseColor}; font-weight: bold; font-size: 12px; margin-bottom: 5px;">
+                        ${options.phaseLabel}
                     </div>
-                </div>
-            `;
-        }
+                    <div class="wizard-instruction">${options.title}</div>
+                    <div class="wizard-description">${options.subtitle}</div>
+                    <div class="wizard-countdown">
+                        <div class="countdown-circle ${seconds <= 2 ? 'warning' : ''}" style="border-color: ${options.phaseColor};">
+                            ${seconds}
+                        </div>
+                    </div>
+                    <div class="wizard-progress-bar" style="margin-top: 15px; height: 4px; background: var(--border); border-radius: 2px;">
+                        <div style="width: ${progress}%; height: 100%; background: ${options.phaseColor}; border-radius: 2px; transition: width 0.1s;"></div>
+                    </div>
+                `;
+            }
+        };
 
-        if (remainingMs <= 0) {
-            clearInterval(countdownInterval);
-            nextWizardStep();
-        }
-    }, 100);
+        updateDisplay();
+
+        const countdownInterval = setInterval(() => {
+            remainingMs = durationMs - (Date.now() - startTime);
+
+            if (remainingMs <= 0) {
+                clearInterval(countdownInterval);
+                resolve();
+            } else {
+                updateDisplay();
+            }
+        }, 100);
+    });
 }
 
 /**
