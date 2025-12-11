@@ -2,7 +2,7 @@
 var FIRMWARE_INFO = {
     id: "GAMBIT",
     name: "GAMBIT IMU Telemetry",
-    version: "0.3.4",
+    version: "0.3.5",
     features: ["imu", "magnetometer", "environmental", "streaming", "logging", "framing"],
     author: "SIMCAP"
 };
@@ -224,9 +224,9 @@ function getData(count, intervalMs) {
     if (!intervalMs || intervalMs < 10) {
         intervalMs = 50;
     }
-    
+
     var hz = Math.round(1000 / intervalMs);
-    
+
     // If already streaming, this acts as keepalive
     if (interval) {
         // Keepalive - refresh timeout for unlimited streaming, don't log
@@ -240,18 +240,24 @@ function getData(count, intervalMs) {
         }
         return; // Don't restart streaming or emit extra sample
     }
-    
+
     // Starting new stream - log before enabling streaming flag
     if (count && count > 0) {
         logInfo('Stream: ' + count + ' @ ' + hz + 'Hz');
     } else {
         logInfo('Stream: ' + hz + 'Hz (30s timeout)');
     }
-    
+
     sampleCount = 0;
     streamCount = (count && count > 0) ? count : null;
     streamStartTime = Date.now();
     streamingActive = true;  // Suppress console.log during streaming
+
+    // CRITICAL: Keep accelerometer/gyroscope ON for stable readings
+    // Without this, each Puck.accel() call turns sensor on/off, causing
+    // the gyroscope to never settle and produce extremely noisy readings.
+    // See: https://forum.espruino.com/conversations/351978/
+    Puck.accelOn(hz);  // Keep sensor on at our sampling rate
 
     // Only set timeout for unlimited streaming (no count specified)
     // Fixed-count collection auto-stops when complete, no timeout needed
@@ -260,7 +266,7 @@ function getData(count, intervalMs) {
         if (streamTimeout) {
             clearTimeout(streamTimeout);
         }
-        
+
         // BATTERY OPTIMIZATION: Auto-stop after 30 seconds to prevent accidental battery drain
         // Only for unlimited streaming - fixed-count collection doesn't need this
         streamTimeout = setTimeout(function(){
@@ -271,7 +277,7 @@ function getData(count, intervalMs) {
     // Start streaming
     interval = setInterval(function() {
         emit();
-        
+
         // Auto-stop if we've reached the target count
         if (streamCount && sampleCount >= streamCount) {
             stopData();  // stopData re-enables logging, then logs
@@ -288,6 +294,9 @@ function stopData() {
         logInfo('Stream stopped - ' + sampleCount + ' samples');
         clearInterval(interval);
         interval = null;
+
+        // Turn off accelerometer/gyroscope to save power
+        Puck.accelOff();
     }
     if (streamTimeout) {
         clearTimeout(streamTimeout);
