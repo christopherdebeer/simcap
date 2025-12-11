@@ -36,7 +36,7 @@ export async function connect() {
     try {
         state.gambitClient = new GambitClient({
             debug: true,
-            autoKeepalive: false
+            autoKeepalive: true  // Enable keepalive to prevent 30s firmware timeout during recording
         });
 
         // Register data handler
