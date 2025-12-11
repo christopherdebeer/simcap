@@ -1,8 +1,38 @@
 /**
  * 3D Hand Renderer
  * Real-time 3D hand visualization with joint-level control
- * Supports pose labels and orientation from IMU
+ * Supports pose labels and orientation from IMU sensor fusion
+ *
+ * The sensor is positioned in the palm (face up), so orientation from
+ * the IMU is used to rotate the hand model in 3D space.
  */
+
+/**
+ * Simple low-pass filter for smooth value transitions
+ */
+class LowPassFilter {
+    constructor(alpha = 0.3) {
+        this.alpha = alpha;  // 0-1, lower = smoother but more lag
+        this.value = null;
+    }
+
+    filter(newValue) {
+        if (this.value === null) {
+            this.value = newValue;
+        } else {
+            this.value = this.alpha * newValue + (1 - this.alpha) * this.value;
+        }
+        return this.value;
+    }
+
+    reset() {
+        this.value = null;
+    }
+
+    setValue(value) {
+        this.value = value;
+    }
+}
 
 class Hand3DRenderer {
     constructor(canvas, options = {}) {
@@ -25,10 +55,35 @@ class Hand3DRenderer {
         this.joints = this.fingers.map(() => [0, 0, 0, 0]);
 
         // Hand orientation (degrees) - face-on static view
+        // When sensor fusion is active, this is updated from IMU Euler angles
         this.orientation = {
             pitch: 0,
             yaw: 0,
             roll: 0
+        };
+
+        // Target orientation for smooth interpolation
+        this._targetOrientation = { pitch: 0, yaw: 0, roll: 0 };
+
+        // Low-pass filter state for smooth orientation transitions
+        this._orientationFilters = {
+            pitch: new LowPassFilter(options.orientationAlpha || 0.15),
+            yaw: new LowPassFilter(options.orientationAlpha || 0.15),
+            roll: new LowPassFilter(options.orientationAlpha || 0.15)
+        };
+
+        // Orientation mode: 'static' or 'sensor_fusion'
+        this.orientationMode = options.orientationMode || 'static';
+
+        // Orientation filtering enabled
+        this.orientationFilteringEnabled = options.orientationFiltering !== false;
+
+        // Base orientation offset (to align hand model with sensor orientation)
+        // Sensor is in palm facing up, so we need to offset to match
+        this.orientationOffset = {
+            pitch: options.pitchOffset || 0,    // Tilt forward/back
+            yaw: options.yawOffset || 0,        // Rotation around vertical
+            roll: options.rollOffset || 0       // Tilt left/right
         };
 
         // Colors
@@ -70,13 +125,123 @@ class Hand3DRenderer {
     }
 
     /**
-     * Set hand orientation from IMU
-     * @param {Object} orientation - {pitch, yaw, roll} in degrees
+     * Set hand orientation from IMU sensor fusion (Euler angles)
+     * Applies low-pass filtering when enabled for smooth transitions
+     * @param {Object} orientation - {pitch, yaw, roll} in degrees (from Madgwick AHRS)
+     * @param {boolean} immediate - If true, skip filtering and apply immediately
      */
-    setOrientation(orientation) {
-        if (orientation.pitch !== undefined) this.orientation.pitch = orientation.pitch;
-        if (orientation.yaw !== undefined) this.orientation.yaw = orientation.yaw;
-        if (orientation.roll !== undefined) this.orientation.roll = orientation.roll;
+    setOrientation(orientation, immediate = false) {
+        // Store target orientation
+        if (orientation.pitch !== undefined) this._targetOrientation.pitch = orientation.pitch;
+        if (orientation.yaw !== undefined) this._targetOrientation.yaw = orientation.yaw;
+        if (orientation.roll !== undefined) this._targetOrientation.roll = orientation.roll;
+
+        // Apply filtering if enabled and not immediate
+        if (this.orientationFilteringEnabled && !immediate) {
+            this.orientation.pitch = this._orientationFilters.pitch.filter(this._targetOrientation.pitch);
+            this.orientation.yaw = this._orientationFilters.yaw.filter(this._targetOrientation.yaw);
+            this.orientation.roll = this._orientationFilters.roll.filter(this._targetOrientation.roll);
+        } else {
+            // Direct assignment without filtering
+            this.orientation.pitch = this._targetOrientation.pitch;
+            this.orientation.yaw = this._targetOrientation.yaw;
+            this.orientation.roll = this._targetOrientation.roll;
+        }
+    }
+
+    /**
+     * Set orientation mode
+     * @param {string} mode - 'static' or 'sensor_fusion'
+     */
+    setOrientationMode(mode) {
+        this.orientationMode = mode;
+        if (mode === 'static') {
+            // Reset to face-on view
+            this.resetOrientation();
+        }
+    }
+
+    /**
+     * Reset orientation to default face-on view
+     */
+    resetOrientation() {
+        this.orientation = { pitch: 0, yaw: 0, roll: 0 };
+        this._targetOrientation = { pitch: 0, yaw: 0, roll: 0 };
+        this._orientationFilters.pitch.reset();
+        this._orientationFilters.yaw.reset();
+        this._orientationFilters.roll.reset();
+    }
+
+    /**
+     * Update orientation from sensor fusion (IMU Euler angles)
+     * Maps IMU orientation to hand model orientation
+     * Sensor is in palm facing up, so we apply appropriate transformations
+     * @param {Object} euler - {roll, pitch, yaw} in degrees from Madgwick AHRS
+     */
+    updateFromSensorFusion(euler) {
+        if (this.orientationMode !== 'sensor_fusion') return;
+        if (!euler) return;
+
+        // Map IMU Euler angles to hand model orientation
+        // The sensor is in the palm, facing up:
+        // - IMU roll -> hand pitch (tilting forward/back)
+        // - IMU pitch -> hand roll (tilting left/right)
+        // - IMU yaw -> hand yaw (rotating around vertical axis)
+        const mappedOrientation = {
+            pitch: -euler.pitch + this.orientationOffset.pitch,  // Invert pitch for natural feel
+            yaw: euler.yaw + this.orientationOffset.yaw,
+            roll: euler.roll + this.orientationOffset.roll
+        };
+
+        this.setOrientation(mappedOrientation);
+    }
+
+    /**
+     * Enable/disable orientation filtering
+     * @param {boolean} enabled
+     */
+    setOrientationFiltering(enabled) {
+        this.orientationFilteringEnabled = enabled;
+        if (!enabled) {
+            // Reset filters when disabled
+            this._orientationFilters.pitch.reset();
+            this._orientationFilters.yaw.reset();
+            this._orientationFilters.roll.reset();
+        }
+    }
+
+    /**
+     * Set orientation filter alpha (smoothing factor)
+     * @param {number} alpha - 0-1, lower = smoother but more lag
+     */
+    setOrientationFilterAlpha(alpha) {
+        this._orientationFilters.pitch.alpha = alpha;
+        this._orientationFilters.yaw.alpha = alpha;
+        this._orientationFilters.roll.alpha = alpha;
+    }
+
+    /**
+     * Set orientation offset (to align hand model with sensor)
+     * @param {Object} offset - {pitch, yaw, roll} offset in degrees
+     */
+    setOrientationOffset(offset) {
+        if (offset.pitch !== undefined) this.orientationOffset.pitch = offset.pitch;
+        if (offset.yaw !== undefined) this.orientationOffset.yaw = offset.yaw;
+        if (offset.roll !== undefined) this.orientationOffset.roll = offset.roll;
+    }
+
+    /**
+     * Get current orientation state
+     * @returns {Object} Current orientation, mode, and filter settings
+     */
+    getOrientationState() {
+        return {
+            orientation: { ...this.orientation },
+            targetOrientation: { ...this._targetOrientation },
+            mode: this.orientationMode,
+            filteringEnabled: this.orientationFilteringEnabled,
+            offset: { ...this.orientationOffset }
+        };
     }
 
     /**

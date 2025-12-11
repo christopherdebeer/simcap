@@ -76,10 +76,15 @@ let handPreviewMode = 'labels'; // 'labels' or 'predictions'
 
 // Pose estimation options
 const poseEstimationOptions = {
-    useCalibration: true,  // Use calibrated magnetic field data
-    useOrientation: true,  // Use IMU orientation for context
+    useCalibration: true,      // Use calibrated magnetic field data
+    useFiltering: true,        // Use Kalman filtering on magnetic data
+    useOrientation: true,      // Use IMU orientation for pose context
     show3DOrientation: false,  // Show 3D orientation cube
-    useParticleFilter: false  // Use ParticleFilter vs threshold-based estimation
+    useParticleFilter: false,  // Use ParticleFilter vs threshold-based estimation
+    // 3D Hand orientation options
+    enableHandOrientation: true,  // Apply sensor fusion to 3D hand orientation
+    smoothHandOrientation: true,  // Apply low-pass filtering to hand orientation
+    handOrientationAlpha: 0.15    // Smoothing factor (0-1, lower = smoother)
 };
 
 // GitHub token (for upload functionality)
@@ -583,6 +588,14 @@ function togglePoseEstimation() {
         }
         renderPoseEstimationOptions();
         updatePoseEstimationDisplay();
+
+        // Enable sensor fusion on 3D hand if option is set
+        if (hand3DRenderer && poseEstimationOptions.enableHandOrientation) {
+            hand3DRenderer.setOrientationMode('sensor_fusion');
+            hand3DRenderer.setOrientationFiltering(poseEstimationOptions.smoothHandOrientation);
+            hand3DRenderer.setOrientationFilterAlpha(poseEstimationOptions.handOrientationAlpha);
+            log('3D hand sensor fusion enabled');
+        }
     } else {
         log('Pose tracking disabled');
         // Hide pose estimation status section
@@ -594,6 +607,19 @@ function togglePoseEstimation() {
         poseState.currentPose = null;
         poseState.confidence = 0;
         poseState.updateCount = 0;
+        poseState.orientation = null;
+
+        // Reset 3D hand to static orientation
+        if (hand3DRenderer) {
+            hand3DRenderer.setOrientationMode('static');
+            log('3D hand reset to static orientation');
+        }
+
+        // Hide orientation display
+        const orientationInfo = $('handOrientationInfo');
+        if (orientationInfo) {
+            orientationInfo.style.display = 'none';
+        }
     }
 
     updateUI();
@@ -611,18 +637,48 @@ function renderPoseEstimationOptions() {
 
     const optionsHTML = `
         <div id="poseOptionsPanel" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);">
-            <div style="font-size: 11px; color: var(--fg-muted); margin-bottom: 8px;">Estimation Options:</div>
-            <div style="display: flex; flex-direction: column; gap: 6px; font-size: 11px;">
+            <div style="font-size: 11px; color: var(--fg-muted); margin-bottom: 8px;">Data Processing:</div>
+            <div style="display: flex; flex-direction: column; gap: 6px; font-size: 11px; margin-bottom: 12px;">
                 <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
                     <input type="checkbox" id="useCalibrationToggle" ${poseEstimationOptions.useCalibration ? 'checked' : ''}
                            onchange="togglePoseOption('useCalibration')" />
-                    <span>Use Calibration (when available)</span>
+                    <span>Use Calibration (iron + earth field correction)</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" id="useFilteringToggle" ${poseEstimationOptions.useFiltering ? 'checked' : ''}
+                           onchange="togglePoseOption('useFiltering')" />
+                    <span>Use Kalman Filtering (noise reduction)</span>
                 </label>
                 <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
                     <input type="checkbox" id="useOrientationToggle" ${poseEstimationOptions.useOrientation ? 'checked' : ''}
                            onchange="togglePoseOption('useOrientation')" />
-                    <span>Use IMU Orientation (sensor fusion)</span>
+                    <span>Use IMU Orientation (sensor fusion context)</span>
                 </label>
+            </div>
+
+            <div style="font-size: 11px; color: var(--fg-muted); margin-bottom: 8px;">3D Hand Orientation:</div>
+            <div style="display: flex; flex-direction: column; gap: 6px; font-size: 11px; margin-bottom: 12px;">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" id="enableHandOrientationToggle" ${poseEstimationOptions.enableHandOrientation ? 'checked' : ''}
+                           onchange="togglePoseOption('enableHandOrientation')" />
+                    <span>Enable Sensor Fusion (orient hand from IMU)</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" id="smoothHandOrientationToggle" ${poseEstimationOptions.smoothHandOrientation ? 'checked' : ''}
+                           onchange="togglePoseOption('smoothHandOrientation')" />
+                    <span>Smooth Orientation (low-pass filtering)</span>
+                </label>
+                <div style="display: flex; align-items: center; gap: 8px; padding-left: 22px;">
+                    <span style="color: var(--fg-muted);">Smoothing:</span>
+                    <input type="range" id="handOrientationAlphaSlider" min="5" max="50" value="${poseEstimationOptions.handOrientationAlpha * 100}"
+                           style="flex: 1; max-width: 100px;"
+                           onchange="updateHandOrientationAlpha(this.value)" />
+                    <span id="handOrientationAlphaValue" style="width: 30px; text-align: right;">${(poseEstimationOptions.handOrientationAlpha * 100).toFixed(0)}%</span>
+                </div>
+            </div>
+
+            <div style="font-size: 11px; color: var(--fg-muted); margin-bottom: 8px;">Debug:</div>
+            <div style="display: flex; flex-direction: column; gap: 6px; font-size: 11px;">
                 <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
                     <input type="checkbox" id="show3DOrientationToggle" ${poseEstimationOptions.show3DOrientation ? 'checked' : ''}
                            onchange="togglePoseOption('show3DOrientation')" />
@@ -652,19 +708,56 @@ function renderPoseEstimationOptions() {
 function togglePoseOption(option) {
     poseEstimationOptions[option] = !poseEstimationOptions[option];
 
-    // Show/hide 3D cube
-    if (option === 'show3DOrientation') {
-        const cube = $('orientation3DCube');
-        if (cube) {
-            cube.style.display = poseEstimationOptions.show3DOrientation ? 'block' : 'none';
-        }
+    // Handle specific option changes
+    switch (option) {
+        case 'show3DOrientation':
+            const cube = $('orientation3DCube');
+            if (cube) {
+                cube.style.display = poseEstimationOptions.show3DOrientation ? 'block' : 'none';
+            }
+            break;
+
+        case 'enableHandOrientation':
+            if (hand3DRenderer) {
+                if (poseEstimationOptions.enableHandOrientation) {
+                    hand3DRenderer.setOrientationMode('sensor_fusion');
+                } else {
+                    hand3DRenderer.setOrientationMode('static');
+                }
+            }
+            break;
+
+        case 'smoothHandOrientation':
+            if (hand3DRenderer) {
+                hand3DRenderer.setOrientationFiltering(poseEstimationOptions.smoothHandOrientation);
+            }
+            break;
     }
 
     log(`Pose option ${option}: ${poseEstimationOptions[option]}`);
 }
 
+/**
+ * Update hand orientation smoothing alpha
+ */
+function updateHandOrientationAlpha(value) {
+    const alpha = value / 100;
+    poseEstimationOptions.handOrientationAlpha = alpha;
+
+    if (hand3DRenderer) {
+        hand3DRenderer.setOrientationFilterAlpha(alpha);
+    }
+
+    // Update display
+    const valueDisplay = $('handOrientationAlphaValue');
+    if (valueDisplay) {
+        valueDisplay.textContent = `${value}%`;
+    }
+}
+
 // Export for HTML onclick
 window.togglePoseOption = togglePoseOption;
+window.updateHandOrientationAlpha = updateHandOrientationAlpha;
 
 /**
  * Update pose estimation from magnetic field data
@@ -677,21 +770,29 @@ function updatePoseEstimationFromMag(data) {
     const { magField, orientation, euler, sample } = data;
     poseState.updateCount++;
 
-    // Get magnetic field data - use calibrated if option enabled and available
+    // Get magnetic field data - use calibrated/filtered if options enabled
     let mx = magField.x;
     let my = magField.y;
     let mz = magField.z;
 
-    if (poseEstimationOptions.useCalibration && sample) {
-        // Prefer fused (calibrated + earth field removed) > calibrated (iron corrected) > raw
-        if (sample.fused_mx !== undefined) {
-            mx = sample.fused_mx;
-            my = sample.fused_my;
-            mz = sample.fused_mz;
-        } else if (sample.calibrated_mx !== undefined) {
-            mx = sample.calibrated_mx;
-            my = sample.calibrated_my;
-            mz = sample.calibrated_mz;
+    if (sample) {
+        // Select best available data based on options
+        if (poseEstimationOptions.useFiltering && sample.filtered_mx !== undefined) {
+            // Use Kalman filtered data
+            mx = sample.filtered_mx;
+            my = sample.filtered_my;
+            mz = sample.filtered_mz;
+        } else if (poseEstimationOptions.useCalibration) {
+            // Prefer fused (calibrated + earth field removed) > calibrated (iron corrected) > raw
+            if (sample.fused_mx !== undefined) {
+                mx = sample.fused_mx;
+                my = sample.fused_my;
+                mz = sample.fused_mz;
+            } else if (sample.calibrated_mx !== undefined) {
+                mx = sample.calibrated_mx;
+                my = sample.calibrated_my;
+                mz = sample.calibrated_mz;
+            }
         }
     }
 
@@ -732,6 +833,11 @@ function updatePoseEstimationFromMag(data) {
         poseState.currentPose = { thumb: fingerState, index: fingerState, middle: fingerState, ring: fingerState, pinky: fingerState };
     }
 
+    // Update 3D hand orientation from sensor fusion (every sample for smooth motion)
+    if (poseEstimationOptions.enableHandOrientation && euler && hand3DRenderer) {
+        hand3DRenderer.updateFromSensorFusion(euler);
+    }
+
     // Update display every 10 samples to avoid excessive DOM updates
     if (poseState.updateCount % 10 === 0) {
         updatePoseEstimationDisplay();
@@ -741,6 +847,27 @@ function updatePoseEstimationFromMag(data) {
         if (poseEstimationOptions.show3DOrientation && poseState.orientation) {
             update3DOrientationCube(poseState.orientation);
         }
+
+        // Update hand orientation display
+        updateHandOrientationDisplay(euler);
+    }
+}
+
+/**
+ * Update hand orientation display
+ */
+function updateHandOrientationDisplay(euler) {
+    const orientationInfo = $('handOrientationInfo');
+    const anglesDisplay = $('handOrientationAngles');
+
+    if (!orientationInfo || !anglesDisplay) return;
+
+    // Show/hide based on sensor fusion state
+    if (poseState.enabled && poseEstimationOptions.enableHandOrientation && euler) {
+        orientationInfo.style.display = 'block';
+        anglesDisplay.textContent = `Roll: ${euler.roll.toFixed(1)}° | Pitch: ${euler.pitch.toFixed(1)}° | Yaw: ${euler.yaw.toFixed(1)}°`;
+    } else {
+        orientationInfo.style.display = 'none';
     }
 }
 
@@ -786,13 +913,23 @@ function updatePoseEstimationDisplay() {
  * Initialize hand visualization
  */
 function initHandVisualization() {
-    // Initialize 3D renderer
+    // Initialize 3D renderer with sensor fusion options
     const canvas3D = $('handCanvas3D');
     if (canvas3D && typeof Hand3DRenderer !== 'undefined') {
         hand3DRenderer = new Hand3DRenderer(canvas3D, {
-            backgroundColor: '#ffffff'
+            backgroundColor: '#ffffff',
+            // Sensor fusion options
+            orientationMode: 'static',  // Start static, switch to sensor_fusion when pose tracking enabled
+            orientationFiltering: poseEstimationOptions.smoothHandOrientation,
+            orientationAlpha: poseEstimationOptions.handOrientationAlpha,
+            // Orientation offset to align sensor (in palm, face up) with hand model
+            // These values may need tuning based on actual sensor orientation
+            pitchOffset: 0,
+            yawOffset: 0,
+            rollOffset: 0
         });
         hand3DRenderer.startAnimation();
+        log('3D hand renderer initialized');
     } else {
         console.warn('3D hand renderer not available');
     }
@@ -812,6 +949,7 @@ function setHandPreviewMode(mode) {
     const predictionsBtn = $('handModePredictions');
     const indicator = $('handModeIndicator');
     const description = $('handPreviewDescription');
+    const predictionInfo = $('handPredictionInfo');
 
     if (labelsBtn && predictionsBtn) {
         if (mode === 'labels') {
@@ -819,11 +957,20 @@ function setHandPreviewMode(mode) {
             predictionsBtn.className = 'btn-secondary btn-small';
             if (indicator) indicator.innerHTML = '📋 Showing: Manual Labels';
             if (description) description.textContent = 'Visual representation of manually selected finger states';
+            if (predictionInfo) predictionInfo.style.display = 'none';
         } else {
             labelsBtn.className = 'btn-secondary btn-small';
             predictionsBtn.className = 'btn-primary btn-small';
             if (indicator) indicator.innerHTML = '🎯 Showing: Pose Predictions';
-            if (description) description.textContent = 'Real-time pose estimation from magnetic field data';
+
+            // Update description based on sensor fusion state
+            if (poseEstimationOptions.enableHandOrientation && poseState.enabled) {
+                if (description) description.textContent = 'Real-time pose estimation with 3D sensor fusion orientation';
+            } else {
+                if (description) description.textContent = 'Real-time pose estimation from magnetic field data';
+            }
+
+            if (predictionInfo) predictionInfo.style.display = 'block';
         }
     }
 
