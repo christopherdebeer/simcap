@@ -48,29 +48,6 @@ const poseState = {
     updateCount: 0
 };
 
-// Particle filter for pose estimation
-let poseFilter = null;
-let poseEstimationEnabled = false;
-
-// Default reference pose (palm-down, fingers extended, typical geometry)
-// Positions in mm relative to sensor (at origin)
-const defaultReferencePose = {
-    thumb:  {x: -30, y: 40, z: 10},   // Left side, forward
-    index:  {x: -15, y: 60, z: 10},   // Slightly left, far forward
-    middle: {x: 0,   y: 65, z: 10},   // Center, farthest forward
-    ring:   {x: 15,  y: 60, z: 10},   // Slightly right, forward
-    pinky:  {x: 30,  y: 50, z: 10}    // Right side, less forward
-};
-
-// Magnet configuration (default N52 3mm x 2mm cylindrical magnets)
-const magnetConfig = {
-    thumb:  {moment: {x: 0, y: 0, z: 0.01}},
-    index:  {moment: {x: 0, y: 0, z: 0.01}},
-    middle: {moment: {x: 0, y: 0, z: 0.01}},
-    ring:   {moment: {x: 0, y: 0, z: 0.01}},
-    pinky:  {moment: {x: 0, y: 0, z: 0.01}}
-};
-
 // Hand visualization
 let hand3DRenderer = null;
 let handPreviewMode = 'labels'; // 'labels' or 'predictions'
@@ -648,37 +625,37 @@ function renderPoseEstimationOptions() {
     const optionsHTML = `
         <div id="poseOptionsPanel" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);">
             <div style="font-size: 11px; color: var(--fg-muted); margin-bottom: 8px;">Data Processing:</div>
-            <div style="display: flex; flex-direction: column; gap: 6px; font-size: 11px; margin-bottom: 12px;">
-                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                    <input type="checkbox" id="useCalibrationToggle" ${poseEstimationOptions.useCalibration ? 'checked' : ''}
+            <div style="display: flex; gap: 6px; font-size: 11px; margin-bottom: 12px;">
+                <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input style="flex-basis: 0;" type="checkbox" id="useCalibrationToggle" ${poseEstimationOptions.useCalibration ? 'checked' : ''}
                            onchange="togglePoseOption('useCalibration')" />
                     <span>Use Calibration (iron + earth field correction)</span>
                 </label>
-                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                    <input type="checkbox" id="useFilteringToggle" ${poseEstimationOptions.useFiltering ? 'checked' : ''}
+                <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input style="flex-basis: 0;" type="checkbox" id="useFilteringToggle" ${poseEstimationOptions.useFiltering ? 'checked' : ''}
                            onchange="togglePoseOption('useFiltering')" />
                     <span>Use Kalman Filtering (noise reduction)</span>
                 </label>
-                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                    <input type="checkbox" id="useOrientationToggle" ${poseEstimationOptions.useOrientation ? 'checked' : ''}
+                <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input style="flex-basis: 0;" type="checkbox" id="useOrientationToggle" ${poseEstimationOptions.useOrientation ? 'checked' : ''}
                            onchange="togglePoseOption('useOrientation')" />
                     <span>Use IMU Orientation (sensor fusion context)</span>
                 </label>
             </div>
 
             <div style="font-size: 11px; color: var(--fg-muted); margin-bottom: 8px;">3D Hand Orientation:</div>
-            <div style="display: flex; flex-direction: column; gap: 6px; font-size: 11px; margin-bottom: 12px;">
-                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                    <input type="checkbox" id="enableHandOrientationToggle" ${poseEstimationOptions.enableHandOrientation ? 'checked' : ''}
+            <div style="display: inline-flex; gap: 6px; font-size: 11px; margin-bottom: 12px;">
+                <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input style="flex-basis: 0;" type="checkbox" id="enableHandOrientationToggle" ${poseEstimationOptions.enableHandOrientation ? 'checked' : ''}
                            onchange="togglePoseOption('enableHandOrientation')" />
                     <span>Enable Sensor Fusion (orient hand from IMU)</span>
                 </label>
-                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                    <input type="checkbox" id="smoothHandOrientationToggle" ${poseEstimationOptions.smoothHandOrientation ? 'checked' : ''}
+                <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input style="flex-basis: 0;" type="checkbox" id="smoothHandOrientationToggle" ${poseEstimationOptions.smoothHandOrientation ? 'checked' : ''}
                            onchange="togglePoseOption('smoothHandOrientation')" />
                     <span>Smooth Orientation (low-pass filtering)</span>
                 </label>
-                <div style="display: flex; align-items: center; gap: 8px; padding-left: 22px;">
+                <div style="display: inline-flex; flex-direction: column;  align-items: center; gap: 8px; padding-left: 22px;">
                     <span style="color: var(--fg-muted);">Smoothing:</span>
                     <input type="range" id="handOrientationAlphaSlider" min="5" max="50" value="${poseEstimationOptions.handOrientationAlpha * 100}"
                            style="flex: 1; max-width: 100px;"
@@ -688,14 +665,14 @@ function renderPoseEstimationOptions() {
             </div>
 
             <div style="font-size: 11px; color: var(--fg-muted); margin-bottom: 8px;">Debug:</div>
-            <div style="display: flex; flex-direction: column; gap: 6px; font-size: 11px;">
-                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                    <input type="checkbox" id="show3DOrientationToggle" ${poseEstimationOptions.show3DOrientation ? 'checked' : ''}
+            <div style="display: inline-flex; gap: 6px; font-size: 11px;">
+                <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input style="flex-basis: 0;" type="checkbox" id="show3DOrientationToggle" ${poseEstimationOptions.show3DOrientation ? 'checked' : ''}
                            onchange="togglePoseOption('show3DOrientation')" />
                     <span>Show 3D Orientation Cube</span>
                 </label>
             </div>
-            <div id="orientation3DCube" style="display: none; margin-top: 12px; perspective: 500px; height: 120px;">
+            <div id="orientation3DCube" style="display: none; margin-top: 12px; perspective: 500px; height: 80px;">
                 <div id="orientationCube" class="cube" style="margin: 0 auto; width: 60px; height: 60px; transform-style: preserve-3d; transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg);">
                     <div class="face front" style="background: rgba(90,90,90,.7); width: 100%; height: 100%; position: absolute; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; transform: translateZ(30px);">F</div>
                     <div class="face back" style="background: rgba(0,210,0,.7); width: 100%; height: 100%; position: absolute; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; transform: rotateY(180deg) translateZ(30px);">B</div>
