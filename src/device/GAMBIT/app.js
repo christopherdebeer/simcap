@@ -2,7 +2,7 @@
 var FIRMWARE_INFO = {
     id: "GAMBIT",
     name: "GAMBIT IMU Telemetry",
-    version: "0.3.3",
+    version: "0.3.4",
     features: ["imu", "magnetometer", "environmental", "streaming", "logging", "framing"],
     author: "SIMCAP"
 };
