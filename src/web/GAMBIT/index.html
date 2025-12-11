@@ -557,13 +557,19 @@
                 beta: 0.1       // Moderate filter gain - balance responsiveness and stability
             });
 
+            // ===== Sensor Unit Conversion =====
+            // Puck.js returns RAW LSB values from the LSM6DS3 sensor
+            // We need to convert to physical units for AHRS filter
+            // See: https://learn.adafruit.com/adafruit-sensorlab-gyroscope-calibration
+            const ACCEL_SCALE = 8192;    // LSB per g (±2g range, 16-bit)
+            const GYRO_SCALE = 114.28;   // LSB per deg/s (245dps range)
+
             // Motion detector for gyroscope bias calibration
             // When device is stationary, we can estimate and correct gyro bias
-            // Puck.js accel is in g's (~1.0 at rest), gyro is in deg/s
-            // MotionDetector uses magnitude std dev, so thresholds are in same units
+            // MotionDetector uses std dev of magnitude in RAW LSB units
             const motionDetector = new MotionDetector({
-                accelThreshold: 0.02,  // g units - std dev of accel magnitude when stationary
-                gyroThreshold: 3,      // deg/s - std dev of gyro magnitude when stationary
+                accelThreshold: 500,   // LSB - std dev when stationary (~0.06g)
+                gyroThreshold: 1000,   // LSB - std dev when stationary (~9 deg/s)
                 windowSize: 10         // samples to consider (~0.5s at 20Hz)
             });
 
@@ -795,12 +801,24 @@
                 // --- GYROSCOPE CUBE: Fused orientation using Madgwick AHRS ---
                 // This combines accelerometer (gravity) with gyroscope (rotation rate)
                 // for drift-free orientation estimation
-                const gx = prenorm.gx || 0;
-                const gy = prenorm.gy || 0;
-                const gz = prenorm.gz || 0;
 
-                // Update motion detector to determine if device is stationary
-                const motionState = motionDetector.update(ax, ay, az, gx, gy, gz);
+                // Raw gyro values (LSB) - used for motion detection
+                const gx_raw = prenorm.gx || 0;
+                const gy_raw = prenorm.gy || 0;
+                const gz_raw = prenorm.gz || 0;
+
+                // Convert to physical units for AHRS filter
+                // Accel: LSB -> g's (divide by 8192)
+                // Gyro: LSB -> deg/s (divide by 114.28)
+                const ax_g = ax / ACCEL_SCALE;
+                const ay_g = ay / ACCEL_SCALE;
+                const az_g = az / ACCEL_SCALE;
+                const gx_dps = gx_raw / GYRO_SCALE;
+                const gy_dps = gy_raw / GYRO_SCALE;
+                const gz_dps = gz_raw / GYRO_SCALE;
+
+                // Update motion detector with RAW LSB values (it expects LSB thresholds)
+                const motionState = motionDetector.update(ax, ay, az, gx_raw, gy_raw, gz_raw);
 
                 // Calibrate gyroscope bias when device is stationary
                 // This removes sensor offset that causes drift
@@ -809,7 +827,8 @@
 
                     // After being stationary for a while, update gyro bias
                     if (stationaryCount > STATIONARY_SAMPLES_FOR_CALIBRATION) {
-                        ahrs.updateGyroBias(gx, gy, gz, true); // true = gyro in degrees
+                        // Pass deg/s values for bias estimation
+                        ahrs.updateGyroBias(gx_dps, gy_dps, gz_dps, true); // true = gyro in degrees
 
                         if (!gyroBiasCalibrated) {
                             console.log('[AHRS] Gyroscope bias calibration complete');
@@ -827,9 +846,8 @@
                     stationaryCount = 0;
                 }
 
-                // Update AHRS with acc + gyro data
-                // Gyro values from Puck.js are in degrees/second
-                ahrs.update(ax, ay, az, gx, gy, gz, dt, true);
+                // Update AHRS with converted values (g's and deg/s)
+                ahrs.update(ax_g, ay_g, az_g, gx_dps, gy_dps, gz_dps, dt, true);
                 
                 // Get Euler angles from AHRS
                 const euler = ahrs.getEulerAngles();
