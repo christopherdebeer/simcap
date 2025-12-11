@@ -454,7 +454,12 @@ class SessionVisualizer:
         return output_file
 
     def create_window_images(self, session: Dict, processor: SensorDataProcessor) -> List[Dict]:
-        """Create individual images for each 1-second window in the session."""
+        """Create individual images for each 1-second window in the session.
+        
+        Generates both:
+        1. Composite window image (backward compatible)
+        2. Individual figure images (new: timeseries, trajectories, signature, stats, trajectory_comparison)
+        """
         data = session['data']
         sensors = processor.extract_sensor_arrays(data)
 
@@ -468,6 +473,11 @@ class SessionVisualizer:
         session_dir = self.output_dir / f"windows_{session['timestamp']}"
         session_dir.mkdir(parents=True, exist_ok=True)
 
+        # Check calibration status
+        has_calibrated = sensors.get('_has_calibrated', False)
+        has_fused = sensors.get('_has_fused', False)
+        has_filtered = sensors.get('_has_filtered', False)
+
         for i in range(n_windows):
             start_idx = i * window_size
             end_idx = start_idx + window_size
@@ -475,18 +485,200 @@ class SessionVisualizer:
             if end_idx > n_samples:
                 break
 
-            # Create figure with expanded layout for 3 3D plots
+            window_time_start = start_idx / 50.0
+            window_time_end = end_idx / 50.0
+            time_window = sensors['time'][start_idx:end_idx]
+
+            # Create per-window subdirectory for individual images
+            window_subdir = session_dir / f"window_{i+1:03d}"
+            window_subdir.mkdir(parents=True, exist_ok=True)
+
+            # Dictionary to store individual image paths
+            individual_images = {}
+
+            # ============================================================
+            # Generate Individual Images
+            # ============================================================
+
+            # 1. Timeseries - Accelerometer
+            fig_ts_accel, ax = plt.subplots(figsize=(8, 4))
+            ax.plot(time_window, sensors['ax'][start_idx:end_idx], label='X', linewidth=2)
+            ax.plot(time_window, sensors['ay'][start_idx:end_idx], label='Y', linewidth=2)
+            ax.plot(time_window, sensors['az'][start_idx:end_idx], label='Z', linewidth=2)
+            ax.set_title(f'Accelerometer | Window {i+1} ({window_time_start:.1f}s - {window_time_end:.1f}s)', fontweight='bold')
+            ax.set_xlabel('Time (s)')
+            ax.set_ylabel('Value (raw)')
+            ax.legend(loc='upper right')
+            ax.grid(True, alpha=0.3)
+            ts_accel_path = window_subdir / 'timeseries_accel.png'
+            plt.savefig(ts_accel_path, dpi=100, bbox_inches='tight')
+            plt.close(fig_ts_accel)
+            individual_images['timeseries_accel'] = str(ts_accel_path.relative_to(self.output_dir))
+
+            # 2. Timeseries - Gyroscope
+            fig_ts_gyro, ax = plt.subplots(figsize=(8, 4))
+            ax.plot(time_window, sensors['gx'][start_idx:end_idx], label='X', linewidth=2)
+            ax.plot(time_window, sensors['gy'][start_idx:end_idx], label='Y', linewidth=2)
+            ax.plot(time_window, sensors['gz'][start_idx:end_idx], label='Z', linewidth=2)
+            ax.set_title(f'Gyroscope | Window {i+1} ({window_time_start:.1f}s - {window_time_end:.1f}s)', fontweight='bold')
+            ax.set_xlabel('Time (s)')
+            ax.set_ylabel('Value (raw)')
+            ax.legend(loc='upper right')
+            ax.grid(True, alpha=0.3)
+            ts_gyro_path = window_subdir / 'timeseries_gyro.png'
+            plt.savefig(ts_gyro_path, dpi=100, bbox_inches='tight')
+            plt.close(fig_ts_gyro)
+            individual_images['timeseries_gyro'] = str(ts_gyro_path.relative_to(self.output_dir))
+
+            # 3. Timeseries - Magnetometer (all calibration stages)
+            fig_ts_mag, ax = plt.subplots(figsize=(8, 4))
+            ax.plot(time_window, sensors['mx'][start_idx:end_idx], color='gray', alpha=0.4, linestyle='--', label='Raw X')
+            ax.plot(time_window, sensors['my'][start_idx:end_idx], color='gray', alpha=0.4, linestyle='-.', label='Raw Y')
+            ax.plot(time_window, sensors['mz'][start_idx:end_idx], color='gray', alpha=0.4, linestyle=':', label='Raw Z')
+            if has_filtered:
+                ax.plot(time_window, sensors['filtered_mx'][start_idx:end_idx], color='#d62728', linewidth=2, label='Filtered X')
+                ax.plot(time_window, sensors['filtered_my'][start_idx:end_idx], color='#ff9896', linewidth=2, label='Filtered Y')
+                ax.plot(time_window, sensors['filtered_mz'][start_idx:end_idx], color='#8b0000', linewidth=2, label='Filtered Z')
+            elif has_fused:
+                ax.plot(time_window, sensors['fused_mx'][start_idx:end_idx], color='#2ca02c', linewidth=2, label='Fused X')
+                ax.plot(time_window, sensors['fused_my'][start_idx:end_idx], color='#98df8a', linewidth=2, label='Fused Y')
+                ax.plot(time_window, sensors['fused_mz'][start_idx:end_idx], color='#006400', linewidth=2, label='Fused Z')
+            ax.set_title(f'Magnetometer | Window {i+1} ({window_time_start:.1f}s - {window_time_end:.1f}s)', fontweight='bold')
+            ax.set_xlabel('Time (s)')
+            ax.set_ylabel('Value (μT)')
+            ax.legend(loc='upper right', fontsize=7, ncol=2)
+            ax.grid(True, alpha=0.3)
+            ts_mag_path = window_subdir / 'timeseries_mag.png'
+            plt.savefig(ts_mag_path, dpi=100, bbox_inches='tight')
+            plt.close(fig_ts_mag)
+            individual_images['timeseries_mag'] = str(ts_mag_path.relative_to(self.output_dir))
+
+            # 4. 3D Trajectory - Accelerometer
+            fig_traj_accel = plt.figure(figsize=(6, 6))
+            ax = fig_traj_accel.add_subplot(111, projection='3d')
+            ax.plot(sensors['ax'][start_idx:end_idx], sensors['ay'][start_idx:end_idx], sensors['az'][start_idx:end_idx],
+                   linewidth=2, alpha=0.7, color='tab:blue')
+            ax.scatter(sensors['ax'][start_idx], sensors['ay'][start_idx], sensors['az'][start_idx], c='green', s=50, label='Start')
+            ax.scatter(sensors['ax'][end_idx-1], sensors['ay'][end_idx-1], sensors['az'][end_idx-1], c='red', s=50, label='End')
+            ax.set_title(f'Accel 3D | Window {i+1}', fontweight='bold')
+            ax.set_xlabel('X'); ax.set_ylabel('Y'); ax.set_zlabel('Z')
+            ax.legend(fontsize=7)
+            traj_accel_path = window_subdir / 'trajectory_accel_3d.png'
+            plt.savefig(traj_accel_path, dpi=100, bbox_inches='tight')
+            plt.close(fig_traj_accel)
+            individual_images['trajectory_accel_3d'] = str(traj_accel_path.relative_to(self.output_dir))
+
+            # 5. 3D Trajectory - Gyroscope
+            fig_traj_gyro = plt.figure(figsize=(6, 6))
+            ax = fig_traj_gyro.add_subplot(111, projection='3d')
+            ax.plot(sensors['gx'][start_idx:end_idx], sensors['gy'][start_idx:end_idx], sensors['gz'][start_idx:end_idx],
+                   linewidth=2, alpha=0.7, color='tab:orange')
+            ax.scatter(sensors['gx'][start_idx], sensors['gy'][start_idx], sensors['gz'][start_idx], c='green', s=50, label='Start')
+            ax.scatter(sensors['gx'][end_idx-1], sensors['gy'][end_idx-1], sensors['gz'][end_idx-1], c='red', s=50, label='End')
+            ax.set_title(f'Gyro 3D | Window {i+1}', fontweight='bold')
+            ax.set_xlabel('X'); ax.set_ylabel('Y'); ax.set_zlabel('Z')
+            ax.legend(fontsize=7)
+            traj_gyro_path = window_subdir / 'trajectory_gyro_3d.png'
+            plt.savefig(traj_gyro_path, dpi=100, bbox_inches='tight')
+            plt.close(fig_traj_gyro)
+            individual_images['trajectory_gyro_3d'] = str(traj_gyro_path.relative_to(self.output_dir))
+
+            # 6. 3D Trajectory - Magnetometer
+            fig_traj_mag = plt.figure(figsize=(6, 6))
+            ax = fig_traj_mag.add_subplot(111, projection='3d')
+            ax.plot(sensors['mx'][start_idx:end_idx], sensors['my'][start_idx:end_idx], sensors['mz'][start_idx:end_idx],
+                   linewidth=2, alpha=0.7, color='tab:green')
+            ax.scatter(sensors['mx'][start_idx], sensors['my'][start_idx], sensors['mz'][start_idx], c='green', s=50, label='Start')
+            ax.scatter(sensors['mx'][end_idx-1], sensors['my'][end_idx-1], sensors['mz'][end_idx-1], c='red', s=50, label='End')
+            ax.set_title(f'Mag 3D | Window {i+1}', fontweight='bold')
+            ax.set_xlabel('X'); ax.set_ylabel('Y'); ax.set_zlabel('Z')
+            ax.legend(fontsize=7)
+            traj_mag_path = window_subdir / 'trajectory_mag_3d.png'
+            plt.savefig(traj_mag_path, dpi=100, bbox_inches='tight')
+            plt.close(fig_traj_mag)
+            individual_images['trajectory_mag_3d'] = str(traj_mag_path.relative_to(self.output_dir))
+
+            # 7. Visual Signature
+            fig_sig, ax = plt.subplots(figsize=(4, 4))
+            signature = self.distinction_engine.create_signature_pattern(sensors, start_idx, end_idx, size=128)
+            ax.imshow(signature)
+            ax.set_title(f'Signature | Window {i+1}', fontweight='bold')
+            ax.axis('off')
+            sig_path = window_subdir / 'signature.png'
+            plt.savefig(sig_path, dpi=100, bbox_inches='tight')
+            plt.close(fig_sig)
+            individual_images['signature'] = str(sig_path.relative_to(self.output_dir))
+
+            # 8. Statistics Panel
+            fig_stats, ax = plt.subplots(figsize=(6, 6))
+            ax.axis('off')
+            stats_text = f"""
+Window {i+1} Statistics
+Time: {window_time_start:.2f}s - {window_time_end:.2f}s
+
+Accelerometer:
+  Mean: [{sensors['ax'][start_idx:end_idx].mean():.0f}, {sensors['ay'][start_idx:end_idx].mean():.0f}, {sensors['az'][start_idx:end_idx].mean():.0f}]
+  Std:  [{sensors['ax'][start_idx:end_idx].std():.0f}, {sensors['ay'][start_idx:end_idx].std():.0f}, {sensors['az'][start_idx:end_idx].std():.0f}]
+  Mag:  {sensors['accel_mag'][start_idx:end_idx].mean():.0f} ± {sensors['accel_mag'][start_idx:end_idx].std():.0f}
+
+Gyroscope:
+  Mean: [{sensors['gx'][start_idx:end_idx].mean():.0f}, {sensors['gy'][start_idx:end_idx].mean():.0f}, {sensors['gz'][start_idx:end_idx].mean():.0f}]
+  Std:  [{sensors['gx'][start_idx:end_idx].std():.0f}, {sensors['gy'][start_idx:end_idx].std():.0f}, {sensors['gz'][start_idx:end_idx].std():.0f}]
+  Mag:  {sensors['gyro_mag'][start_idx:end_idx].mean():.0f} ± {sensors['gyro_mag'][start_idx:end_idx].std():.0f}
+
+Magnetometer:
+  Mean: [{sensors['mx'][start_idx:end_idx].mean():.0f}, {sensors['my'][start_idx:end_idx].mean():.0f}, {sensors['mz'][start_idx:end_idx].mean():.0f}]
+  Std:  [{sensors['mx'][start_idx:end_idx].std():.0f}, {sensors['my'][start_idx:end_idx].std():.0f}, {sensors['mz'][start_idx:end_idx].std():.0f}]
+  Mag:  {sensors['mag_mag'][start_idx:end_idx].mean():.0f} ± {sensors['mag_mag'][start_idx:end_idx].std():.0f}
+            """.strip()
+            ax.text(0.05, 0.95, stats_text, transform=ax.transAxes, fontsize=10, verticalalignment='top',
+                   fontfamily='monospace', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.3))
+            stats_path = window_subdir / 'stats.png'
+            plt.savefig(stats_path, dpi=100, bbox_inches='tight')
+            plt.close(fig_stats)
+            individual_images['stats'] = str(stats_path.relative_to(self.output_dir))
+
+            # 9. Per-Window Trajectory Comparison (if calibration data available)
+            if has_calibrated or has_fused or has_filtered:
+                traj_comp_path = self._create_window_trajectory_comparison(
+                    sensors, start_idx, end_idx, i+1, n_windows, window_subdir,
+                    has_calibrated, has_fused, has_filtered
+                )
+                if traj_comp_path:
+                    individual_images['trajectory_comparison'] = str(traj_comp_path.relative_to(self.output_dir))
+
+            # 10. Combined 3D Trajectory
+            fig_combined = plt.figure(figsize=(8, 8))
+            ax = fig_combined.add_subplot(111, projection='3d')
+            # Normalize each sensor
+            ax_norm = (sensors['ax'][start_idx:end_idx] - sensors['ax'][start_idx:end_idx].mean()) / (sensors['ax'][start_idx:end_idx].std() + 1e-6)
+            ay_norm = (sensors['ay'][start_idx:end_idx] - sensors['ay'][start_idx:end_idx].mean()) / (sensors['ay'][start_idx:end_idx].std() + 1e-6)
+            az_norm = (sensors['az'][start_idx:end_idx] - sensors['az'][start_idx:end_idx].mean()) / (sensors['az'][start_idx:end_idx].std() + 1e-6)
+            gx_norm = (sensors['gx'][start_idx:end_idx] - sensors['gx'][start_idx:end_idx].mean()) / (sensors['gx'][start_idx:end_idx].std() + 1e-6)
+            gy_norm = (sensors['gy'][start_idx:end_idx] - sensors['gy'][start_idx:end_idx].mean()) / (sensors['gy'][start_idx:end_idx].std() + 1e-6)
+            gz_norm = (sensors['gz'][start_idx:end_idx] - sensors['gz'][start_idx:end_idx].mean()) / (sensors['gz'][start_idx:end_idx].std() + 1e-6)
+            mx_norm = (sensors['mx'][start_idx:end_idx] - sensors['mx'][start_idx:end_idx].mean()) / (sensors['mx'][start_idx:end_idx].std() + 1e-6)
+            my_norm = (sensors['my'][start_idx:end_idx] - sensors['my'][start_idx:end_idx].mean()) / (sensors['my'][start_idx:end_idx].std() + 1e-6)
+            mz_norm = (sensors['mz'][start_idx:end_idx] - sensors['mz'][start_idx:end_idx].mean()) / (sensors['mz'][start_idx:end_idx].std() + 1e-6)
+            ax.plot(ax_norm, ay_norm, az_norm, color='blue', linewidth=1.5, alpha=0.8, label='Accel')
+            ax.plot(gx_norm, gy_norm, gz_norm, color='orange', linewidth=1.5, alpha=0.8, label='Gyro')
+            ax.plot(mx_norm, my_norm, mz_norm, color='green', linewidth=1.5, alpha=0.8, label='Mag')
+            ax.set_title(f'Combined 3D | Window {i+1}', fontweight='bold')
+            ax.set_xlabel('X (norm)'); ax.set_ylabel('Y (norm)'); ax.set_zlabel('Z (norm)')
+            ax.legend(fontsize=8)
+            combined_path = window_subdir / 'trajectory_combined_3d.png'
+            plt.savefig(combined_path, dpi=100, bbox_inches='tight')
+            plt.close(fig_combined)
+            individual_images['trajectory_combined_3d'] = str(combined_path.relative_to(self.output_dir))
+
+            # ============================================================
+            # Generate Composite Image (backward compatible)
+            # ============================================================
             fig = plt.figure(figsize=(16, 12))
             gs = GridSpec(3, 3, figure=fig, hspace=0.35, wspace=0.3)
 
-            window_time_start = start_idx / 50.0
-            window_time_end = end_idx / 50.0
-
             fig.suptitle(f'Window {i+1}/{n_windows} | Time: {window_time_start:.1f}s - {window_time_end:.1f}s',
                         fontsize=14, fontweight='bold')
-
-            # Extract window data
-            time_window = sensors['time'][start_idx:end_idx]
 
             # 1. Accelerometer time series
             ax1 = fig.add_subplot(gs[0, 0])
@@ -670,10 +862,175 @@ Magnetometer:
                 'color': color_hex,
                 'accel_mag_mean': float(sensors['accel_mag'][start_idx:end_idx].mean()),
                 'gyro_mag_mean': float(sensors['gyro_mag'][start_idx:end_idx].mean()),
+                'images': individual_images,  # New: individual image paths
             })
 
-        print(f"  Created {len(window_info)} window images in {session_dir.name}/")
+        print(f"  Created {len(window_info)} window images in {session_dir.name}/ (with individual figures)")
         return window_info
+
+    def _create_window_trajectory_comparison(self, sensors: Dict, start_idx: int, end_idx: int, 
+                                              window_num: int, n_windows: int, window_subdir: Path,
+                                              has_calibrated: bool, has_fused: bool, has_filtered: bool) -> Optional[Path]:
+        """Create a per-window trajectory comparison image showing all calibration stages.
+        
+        Full comparison including 3D plots and statistics panel.
+        """
+        # Create figure with 2 rows: individual trajectories + combined overlay + stats
+        fig = plt.figure(figsize=(16, 12))
+        gs = GridSpec(2, 4, figure=fig, hspace=0.25, wspace=0.2, height_ratios=[1.2, 1])
+
+        fig.suptitle(f'Window {window_num}/{n_windows} Trajectory Comparison\n'
+                     f'Time: {start_idx/50.0:.2f}s - {end_idx/50.0:.2f}s',
+                     fontsize=14, fontweight='bold')
+
+        # Color scheme
+        colors = {
+            'raw': 'gray',
+            'iron': '#1f77b4',
+            'fused': '#2ca02c',
+            'filtered': '#d62728'
+        }
+
+        n_samples = end_idx - start_idx
+        time_colors = np.linspace(0, 1, n_samples)
+
+        # Helper function to plot 3D trajectory
+        def plot_trajectory(ax, mx, my, mz, title, color, cmap_name):
+            for j in range(len(mx) - 1):
+                ax.plot([mx[j], mx[j+1]], [my[j], my[j+1]], [mz[j], mz[j+1]],
+                       color=plt.cm.get_cmap(cmap_name)(time_colors[j]), linewidth=1.5, alpha=0.8)
+            ax.scatter([mx[0]], [my[0]], [mz[0]], c='green', s=60, marker='o', label='Start', zorder=10)
+            ax.scatter([mx[-1]], [my[-1]], [mz[-1]], c='red', s=60, marker='s', label='End', zorder=10)
+            ax.set_title(title, fontweight='bold', fontsize=10, color=color)
+            ax.set_xlabel('X', fontsize=8)
+            ax.set_ylabel('Y', fontsize=8)
+            ax.set_zlabel('Z', fontsize=8)
+            ax.legend(fontsize=6, loc='upper left')
+            ax.tick_params(axis='both', which='major', labelsize=6)
+
+        # Plot individual trajectories
+        col = 0
+
+        # 1. Raw trajectory
+        ax_raw = fig.add_subplot(gs[0, col], projection='3d')
+        plot_trajectory(ax_raw, sensors['mx'][start_idx:end_idx], sensors['my'][start_idx:end_idx], 
+                       sensors['mz'][start_idx:end_idx], 'Raw', colors['raw'], 'Greys')
+        col += 1
+
+        # 2. Iron corrected (if available)
+        if has_calibrated:
+            ax_iron = fig.add_subplot(gs[0, col], projection='3d')
+            plot_trajectory(ax_iron, sensors['calibrated_mx'][start_idx:end_idx], 
+                           sensors['calibrated_my'][start_idx:end_idx], 
+                           sensors['calibrated_mz'][start_idx:end_idx], 'Iron', colors['iron'], 'Blues')
+            col += 1
+
+        # 3. Fused (if available)
+        if has_fused:
+            ax_fused = fig.add_subplot(gs[0, col], projection='3d')
+            plot_trajectory(ax_fused, sensors['fused_mx'][start_idx:end_idx], 
+                           sensors['fused_my'][start_idx:end_idx], 
+                           sensors['fused_mz'][start_idx:end_idx], 'Fused', colors['fused'], 'Greens')
+            col += 1
+
+        # 4. Filtered (if available)
+        if has_filtered:
+            ax_filtered = fig.add_subplot(gs[0, col], projection='3d')
+            plot_trajectory(ax_filtered, sensors['filtered_mx'][start_idx:end_idx], 
+                           sensors['filtered_my'][start_idx:end_idx], 
+                           sensors['filtered_mz'][start_idx:end_idx], 'Filtered', colors['filtered'], 'Reds')
+            col += 1
+
+        # Row 2: Combined overlay trajectory
+        ax_combined = fig.add_subplot(gs[1, :2], projection='3d')
+        ax_combined.plot(sensors['mx'][start_idx:end_idx], sensors['my'][start_idx:end_idx], 
+                        sensors['mz'][start_idx:end_idx], color=colors['raw'], alpha=0.3, 
+                        linewidth=0.8, linestyle='--', label='Raw')
+        if has_calibrated:
+            ax_combined.plot(sensors['calibrated_mx'][start_idx:end_idx], 
+                            sensors['calibrated_my'][start_idx:end_idx], 
+                            sensors['calibrated_mz'][start_idx:end_idx],
+                            color=colors['iron'], alpha=0.5, linewidth=1, label='Iron')
+        if has_fused:
+            ax_combined.plot(sensors['fused_mx'][start_idx:end_idx], 
+                            sensors['fused_my'][start_idx:end_idx], 
+                            sensors['fused_mz'][start_idx:end_idx],
+                            color=colors['fused'], alpha=0.7, linewidth=1.2, label='Fused')
+        if has_filtered:
+            ax_combined.plot(sensors['filtered_mx'][start_idx:end_idx], 
+                            sensors['filtered_my'][start_idx:end_idx], 
+                            sensors['filtered_mz'][start_idx:end_idx],
+                            color=colors['filtered'], alpha=0.9, linewidth=1.5, label='Filtered')
+        ax_combined.set_title('Combined Overlay', fontweight='bold', fontsize=10)
+        ax_combined.set_xlabel('X', fontsize=8)
+        ax_combined.set_ylabel('Y', fontsize=8)
+        ax_combined.set_zlabel('Z', fontsize=8)
+        ax_combined.legend(fontsize=7, loc='upper left')
+
+        # Row 2: Statistics panel
+        ax_stats = fig.add_subplot(gs[1, 2:])
+        ax_stats.axis('off')
+
+        # Compute trajectory statistics for this window
+        def compute_traj_stats(mx, my, mz):
+            spread = np.sqrt(np.std(mx)**2 + np.std(my)**2 + np.std(mz)**2)
+            dx, dy, dz = np.diff(mx), np.diff(my), np.diff(mz)
+            path_length = np.sum(np.sqrt(dx**2 + dy**2 + dz**2))
+            center = (np.mean(mx), np.mean(my), np.mean(mz))
+            return {'spread': spread, 'path_length': path_length, 'center': center}
+
+        raw_stats = compute_traj_stats(sensors['mx'][start_idx:end_idx], 
+                                       sensors['my'][start_idx:end_idx], 
+                                       sensors['mz'][start_idx:end_idx])
+
+        stats_text = f"""
+WINDOW {window_num} TRAJECTORY STATS
+{'='*35}
+
+◆ RAW
+  Spread: {raw_stats['spread']:.2f} μT
+  Path: {raw_stats['path_length']:.2f} μT
+  Center: ({raw_stats['center'][0]:.1f}, {raw_stats['center'][1]:.1f}, {raw_stats['center'][2]:.1f})
+"""
+        if has_calibrated:
+            iron_stats = compute_traj_stats(sensors['calibrated_mx'][start_idx:end_idx],
+                                           sensors['calibrated_my'][start_idx:end_idx],
+                                           sensors['calibrated_mz'][start_idx:end_idx])
+            stats_text += f"""
+◆ IRON
+  Spread: {iron_stats['spread']:.2f} μT ({(iron_stats['spread']/raw_stats['spread']*100):.0f}%)
+  Path: {iron_stats['path_length']:.2f} μT
+"""
+        if has_fused:
+            fused_stats = compute_traj_stats(sensors['fused_mx'][start_idx:end_idx],
+                                            sensors['fused_my'][start_idx:end_idx],
+                                            sensors['fused_mz'][start_idx:end_idx])
+            stats_text += f"""
+◆ FUSED
+  Spread: {fused_stats['spread']:.2f} μT ({(fused_stats['spread']/raw_stats['spread']*100):.0f}%)
+  Path: {fused_stats['path_length']:.2f} μT
+  Center: ({fused_stats['center'][0]:.1f}, {fused_stats['center'][1]:.1f}, {fused_stats['center'][2]:.1f})
+"""
+        if has_filtered:
+            filtered_stats = compute_traj_stats(sensors['filtered_mx'][start_idx:end_idx],
+                                               sensors['filtered_my'][start_idx:end_idx],
+                                               sensors['filtered_mz'][start_idx:end_idx])
+            stats_text += f"""
+◆ FILTERED
+  Spread: {filtered_stats['spread']:.2f} μT ({(filtered_stats['spread']/raw_stats['spread']*100):.0f}%)
+  Path: {filtered_stats['path_length']:.2f} μT
+"""
+
+        ax_stats.text(0.02, 0.98, stats_text.strip(), transform=ax_stats.transAxes,
+                     fontsize=9, verticalalignment='top', fontfamily='monospace',
+                     bbox=dict(boxstyle='round,pad=0.5', facecolor='#f8f9fa', alpha=0.9, edgecolor='#dee2e6'))
+
+        # Save
+        output_file = window_subdir / 'trajectory_comparison.png'
+        plt.savefig(output_file, dpi=100, bbox_inches='tight')
+        plt.close(fig)
+
+        return output_file
 
     def create_raw_axis_images(self, session: Dict, processor: SensorDataProcessor) -> List[Path]:
         """Create detailed raw axis/orientation visualization images."""
@@ -1702,6 +2059,36 @@ class HTMLGenerator:
             display: flex;
             gap: 10px;
         }
+
+        .window-filter-bar {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            background: #f0f4ff;
+            border-radius: 8px;
+            border: 1px solid #d0d8f0;
+        }
+
+        .window-filter-bar .filter-label {
+            font-size: 0.9em;
+        }
+
+        .window-view-select {
+            padding: 8px 12px;
+            border: 2px solid #667eea;
+            border-radius: 6px;
+            background: white;
+            color: #333;
+            font-size: 0.9em;
+            cursor: pointer;
+        }
+
+        .window-view-select:focus {
+            outline: none;
+            border-color: #764ba2;
+        }
     </style>
 </head>
 <body>
@@ -1857,11 +2244,27 @@ class HTMLGenerator:
 
                         <div class="image-section windows-section ${viewSettings.showWindows ? '' : 'hidden'}">
                             <h3 class="section-title">🔍 Per-Second Windows (${session.windows.length})</h3>
-                            <div class="windows-grid">
+                            <div class="window-filter-bar">
+                                <span class="filter-label">View:</span>
+                                <select class="window-view-select" onchange="updateWindowView(${idx}, this.value)">
+                                    <option value="composite">Composite</option>
+                                    <option value="timeseries_accel">Accel Timeseries</option>
+                                    <option value="timeseries_gyro">Gyro Timeseries</option>
+                                    <option value="timeseries_mag">Mag Timeseries</option>
+                                    <option value="trajectory_accel_3d">Accel 3D</option>
+                                    <option value="trajectory_gyro_3d">Gyro 3D</option>
+                                    <option value="trajectory_mag_3d">Mag 3D</option>
+                                    <option value="trajectory_combined_3d">Combined 3D</option>
+                                    <option value="trajectory_comparison">Trajectory Comparison</option>
+                                    <option value="signature">Signature</option>
+                                    <option value="stats">Statistics</option>
+                                </select>
+                            </div>
+                            <div class="windows-grid" id="windows-grid-${idx}">
                                 ${session.windows.map(w => `
-                                    <div class="window-card" onclick="openModal('${w.filepath}')">
+                                    <div class="window-card" onclick="openWindowModal(${idx}, ${w.window_num - 1})">
                                         <div class="window-color-bar" style="background-color: ${w.color}"></div>
-                                        <img src="${w.filepath}" class="window-preview" alt="Window ${w.window_num}">
+                                        <img src="${w.filepath}" class="window-preview" data-composite="${w.filepath}" ${w.images ? Object.entries(w.images).map(([k,v]) => `data-${k}="${v}"`).join(' ') : ''} alt="Window ${w.window_num}">
                                         <div class="window-info">
                                             <div class="window-title">Window ${w.window_num}</div>
                                             <div class="window-time">${w.time_start.toFixed(2)}s - ${w.time_end.toFixed(2)}s</div>
@@ -2012,6 +2415,51 @@ class HTMLGenerator:
                     closeModal();
                 }
             });
+        }
+
+        // Update window view based on dropdown selection
+        function updateWindowView(sessionIdx, viewType) {
+            const grid = document.getElementById(`windows-grid-${sessionIdx}`);
+            if (!grid) return;
+
+            const images = grid.querySelectorAll('.window-preview');
+            images.forEach(img => {
+                let newSrc;
+                if (viewType === 'composite') {
+                    newSrc = img.dataset.composite;
+                } else {
+                    // Try to get the specific view type from data attributes
+                    const dataKey = viewType.replace(/_/g, '-');
+                    newSrc = img.dataset[viewType] || img.dataset[dataKey];
+                }
+                
+                if (newSrc) {
+                    img.src = newSrc;
+                }
+            });
+        }
+
+        // Open modal for a specific window with navigation
+        function openWindowModal(sessionIdx, windowIdx) {
+            const session = filteredSessions[sessionIdx];
+            if (!session || !session.windows[windowIdx]) return;
+            
+            const window = session.windows[windowIdx];
+            
+            // Get the current view type from the dropdown
+            const dropdown = document.querySelector(`#session-${sessionIdx} .window-view-select`);
+            const viewType = dropdown ? dropdown.value : 'composite';
+            
+            let imageSrc;
+            if (viewType === 'composite') {
+                imageSrc = window.filepath;
+            } else if (window.images && window.images[viewType]) {
+                imageSrc = window.images[viewType];
+            } else {
+                imageSrc = window.filepath;
+            }
+            
+            openModal(imageSrc);
         }
 
         // Initialize on page load
