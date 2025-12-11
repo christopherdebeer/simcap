@@ -10,7 +10,7 @@
         <link rel="stylesheet" href="../../simcap.css">
         <!-- Eruda Dev Console for debugging -->
         <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-        <script>eruda.init();</script>
+        <script>if (typeof eruda !== 'undefined') eruda.init();</script>
         <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
         <script src="puck.js"></script>
         <script src="gambit-client.js"></script>
@@ -611,24 +611,8 @@
                 }
             }
 
-            // Low-pass filter for smoothing cube rotations
-            class LowPassFilter {
-                constructor(alpha = 0.3) {
-                    this.alpha = alpha;  // 0-1, lower = smoother but more lag
-                    this.value = null;
-                }
-                filter(newValue) {
-                    if (this.value === null) {
-                        this.value = newValue;
-                    } else {
-                        this.value = this.alpha * newValue + (1 - this.alpha) * this.value;
-                    }
-                    return this.value;
-                }
-                reset() {
-                    this.value = null;
-                }
-            }
+            // LowPassFilter class is already defined in hand-3d-renderer.js
+            // Reuse it for cube smoothing
 
             // Filters for each cube axis (smooth display)
             // Lower alpha = smoother but more lag
