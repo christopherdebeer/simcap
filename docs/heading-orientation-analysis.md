@@ -136,8 +136,53 @@ Sessions with zeroed calibration should use the checked-in `gambit_calibration.j
 python3 ml/heading_informed_compensation.py
 ```
 
+## Critical Discovery: Spatial vs Rotational Data
+
+### The Problem with Multi-Environment Sessions
+
+Analysis of all sessions revealed a critical distinction:
+
+| Session | Mag Span (LSB) | Center Drift | Type |
+|---------|---------------|--------------|------|
+| T13_26_33 | 218-384 | ~200 | Mixed |
+| T16_16_16 | 1369-1828 | **675** | **Spatial movement** |
+| T18_34_21 | 1187-2052 | ~500 | **Spatial movement** |
+| T18_41_08 | 48-77 | **28** | **Pure rotation** |
+
+**Key insight**: Session T18_41_08 has magnetometer spans of only ~50-77 LSB per axis (device rotated in place), while other sessions have spans of 1000-2000 LSB (device moved through different magnetic environments).
+
+### Why Session-Specific Calibration Works for Pure Rotation
+
+For session T18_41_08 (pure rotation):
+- Device stayed in one consistent magnetic environment
+- Min/max method gives valid hard iron estimate
+- **Fused |B| = 17.31 ± 5.86 LSB** (near zero!)
+
+For sessions with spatial movement:
+- Device moved through regions with different background fields
+- The "center" of the data is meaningless
+- No orientation-based compensation can fix spatial variation
+
+### Validation Results
+
+With **session-specific** calibration + corrected R.T earth field subtraction:
+
+| Session | Raw |B| Range | Fused |B| | Notes |
+|---------|-----------------|----------|-------|
+| T18_41_08 | 650-692 | **17.3 ± 5.9** | Pure rotation - WORKS! |
+| T16_16_16 | 437-2278 | ~730 | Spatial movement - cannot fix |
+| T18_34_21 | ~1500-2000 | ~200 | Spatial movement - cannot fix |
+
 ## Conclusion
 
 **YES**, heading/orientation CAN and SHOULD inform the interference compensation. The current implementation has the right idea but wrong math. Fixing the rotation direction (`R.T` instead of `R`) and storing earth field in world frame will provide stable, orientation-independent readings.
 
 The 94% reduction in coefficient of variation demonstrates that proper heading-informed compensation dramatically improves stability.
+
+**Important caveat**: Orientation-based compensation only works when the device is rotating in a **consistent magnetic environment**. Sessions where the device moved through different magnetic environments (spatial variation) cannot be compensated using orientation alone.
+
+### Recommendations for Data Collection
+
+1. For calibration: Rotate device in place, don't move it spatially
+2. For validation sessions: Keep device in consistent magnetic environment
+3. Consider adding spatial consistency checks to detect when compensation will fail
