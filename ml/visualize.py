@@ -865,6 +865,231 @@ Magnetometer:
         print(f"  Created raw axis images: {len(output_files)} files")
         return output_files
 
+    def create_trajectory_comparison_image(self, session: Dict, processor: SensorDataProcessor) -> Optional[Path]:
+        """Create a dedicated 3D trajectory comparison visualization for all calibration stages.
+
+        Shows magnetometer trajectories in 3D space for:
+        - Raw (gray)
+        - Iron Corrected (blue)
+        - Fused (green)
+        - Filtered (red)
+
+        This helps visualize how calibration affects the magnetic field trajectory
+        and is crucial for understanding finger tracking signal quality.
+        """
+        data = session['data']
+        sensors = processor.extract_sensor_arrays(data)
+
+        has_calibrated = sensors.get('_has_calibrated', False)
+        has_fused = sensors.get('_has_fused', False)
+        has_filtered = sensors.get('_has_filtered', False)
+
+        # Only create if we have calibration data
+        if not (has_calibrated or has_fused or has_filtered):
+            return None
+
+        # Determine number of stages to show
+        n_stages = 1  # Raw always
+        if has_calibrated:
+            n_stages += 1
+        if has_fused:
+            n_stages += 1
+        if has_filtered:
+            n_stages += 1
+
+        # Create figure with 2 rows: individual trajectories + combined overlay
+        fig = plt.figure(figsize=(20, 14))
+
+        # Row 1: Individual 3D trajectories (up to 4)
+        # Row 2: Combined overlay + statistics
+        gs = GridSpec(2, 4, figure=fig, hspace=0.25, wspace=0.2, height_ratios=[1.2, 1])
+
+        fig.suptitle(f'Magnetometer 3D Trajectory Comparison: {session["filename"]}\n'
+                     f'Duration: {session["duration"]:.1f}s | Samples: {len(data)}',
+                     fontsize=16, fontweight='bold')
+
+        # Color scheme
+        colors = {
+            'raw': 'gray',
+            'iron': '#1f77b4',
+            'fused': '#2ca02c',
+            'filtered': '#d62728'
+        }
+
+        # Time-based coloring for trajectories
+        n_samples = len(data)
+        time_colors = np.linspace(0, 1, n_samples)
+
+        # Helper function to plot 3D trajectory with time coloring
+        def plot_trajectory(ax, mx, my, mz, title, color, cmap_name):
+            # Plot trajectory with time-based coloring
+            for i in range(len(mx) - 1):
+                ax.plot([mx[i], mx[i+1]], [my[i], my[i+1]], [mz[i], mz[i+1]],
+                       color=plt.cm.get_cmap(cmap_name)(time_colors[i]), linewidth=1, alpha=0.7)
+
+            # Start/end markers
+            ax.scatter([mx[0]], [my[0]], [mz[0]], c='green', s=80, marker='o', label='Start', zorder=10)
+            ax.scatter([mx[-1]], [my[-1]], [mz[-1]], c='red', s=80, marker='s', label='End', zorder=10)
+
+            ax.set_title(title, fontweight='bold', fontsize=11, color=color)
+            ax.set_xlabel('X (μT)', fontsize=9)
+            ax.set_ylabel('Y (μT)', fontsize=9)
+            ax.set_zlabel('Z (μT)', fontsize=9)
+            ax.legend(fontsize=7, loc='upper left')
+            ax.tick_params(axis='both', which='major', labelsize=7)
+
+        # Plot individual trajectories
+        col = 0
+
+        # 1. Raw trajectory
+        ax_raw = fig.add_subplot(gs[0, col], projection='3d')
+        plot_trajectory(ax_raw, sensors['mx'], sensors['my'], sensors['mz'],
+                       'Raw Magnetometer', colors['raw'], 'Greys')
+        col += 1
+
+        # 2. Iron corrected (if available)
+        if has_calibrated:
+            ax_iron = fig.add_subplot(gs[0, col], projection='3d')
+            plot_trajectory(ax_iron, sensors['calibrated_mx'], sensors['calibrated_my'], sensors['calibrated_mz'],
+                           'Iron Corrected', colors['iron'], 'Blues')
+            col += 1
+
+        # 3. Fused (if available)
+        if has_fused:
+            ax_fused = fig.add_subplot(gs[0, col], projection='3d')
+            plot_trajectory(ax_fused, sensors['fused_mx'], sensors['fused_my'], sensors['fused_mz'],
+                           'Fused (Earth Subtracted)', colors['fused'], 'Greens')
+            col += 1
+
+        # 4. Filtered (if available)
+        if has_filtered:
+            ax_filtered = fig.add_subplot(gs[0, col], projection='3d')
+            plot_trajectory(ax_filtered, sensors['filtered_mx'], sensors['filtered_my'], sensors['filtered_mz'],
+                           'Filtered (Kalman)', colors['filtered'], 'Reds')
+            col += 1
+
+        # Row 2: Combined overlay trajectory
+        ax_combined = fig.add_subplot(gs[1, :2], projection='3d')
+
+        # Plot all stages overlaid with distinct colors
+        ax_combined.plot(sensors['mx'], sensors['my'], sensors['mz'],
+                        color=colors['raw'], alpha=0.3, linewidth=0.8, linestyle='--', label='Raw')
+        if has_calibrated:
+            ax_combined.plot(sensors['calibrated_mx'], sensors['calibrated_my'], sensors['calibrated_mz'],
+                            color=colors['iron'], alpha=0.5, linewidth=1, label='Iron')
+        if has_fused:
+            ax_combined.plot(sensors['fused_mx'], sensors['fused_my'], sensors['fused_mz'],
+                            color=colors['fused'], alpha=0.7, linewidth=1.2, label='Fused')
+        if has_filtered:
+            ax_combined.plot(sensors['filtered_mx'], sensors['filtered_my'], sensors['filtered_mz'],
+                            color=colors['filtered'], alpha=0.9, linewidth=1.5, label='Filtered')
+
+        ax_combined.set_title('Combined Trajectory Overlay', fontweight='bold', fontsize=12)
+        ax_combined.set_xlabel('X (μT)', fontsize=9)
+        ax_combined.set_ylabel('Y (μT)', fontsize=9)
+        ax_combined.set_zlabel('Z (μT)', fontsize=9)
+        ax_combined.legend(fontsize=9, loc='upper left')
+
+        # Row 2: Statistics panel
+        ax_stats = fig.add_subplot(gs[1, 2:])
+        ax_stats.axis('off')
+
+        # Compute trajectory statistics
+        def compute_traj_stats(mx, my, mz):
+            # Trajectory spread (standard deviation of positions)
+            spread_x = np.std(mx)
+            spread_y = np.std(my)
+            spread_z = np.std(mz)
+            total_spread = np.sqrt(spread_x**2 + spread_y**2 + spread_z**2)
+
+            # Trajectory length (total path distance)
+            dx = np.diff(mx)
+            dy = np.diff(my)
+            dz = np.diff(mz)
+            path_length = np.sum(np.sqrt(dx**2 + dy**2 + dz**2))
+
+            # Bounding box
+            bbox_x = np.max(mx) - np.min(mx)
+            bbox_y = np.max(my) - np.min(my)
+            bbox_z = np.max(mz) - np.min(mz)
+            bbox_vol = bbox_x * bbox_y * bbox_z
+
+            # Center of mass
+            com = (np.mean(mx), np.mean(my), np.mean(mz))
+
+            return {
+                'spread': total_spread,
+                'spread_xyz': (spread_x, spread_y, spread_z),
+                'path_length': path_length,
+                'bbox': (bbox_x, bbox_y, bbox_z),
+                'bbox_vol': bbox_vol,
+                'center': com
+            }
+
+        raw_stats = compute_traj_stats(sensors['mx'], sensors['my'], sensors['mz'])
+
+        stats_text = f"""
+TRAJECTORY STATISTICS
+{'='*45}
+
+◆ RAW MAGNETOMETER
+  Spread: {raw_stats['spread']:.1f} μT
+    (X: {raw_stats['spread_xyz'][0]:.1f}, Y: {raw_stats['spread_xyz'][1]:.1f}, Z: {raw_stats['spread_xyz'][2]:.1f})
+  Path Length: {raw_stats['path_length']:.1f} μT
+  Bounding Box: {raw_stats['bbox'][0]:.1f} × {raw_stats['bbox'][1]:.1f} × {raw_stats['bbox'][2]:.1f} μT
+  Center: ({raw_stats['center'][0]:.1f}, {raw_stats['center'][1]:.1f}, {raw_stats['center'][2]:.1f})
+"""
+
+        if has_calibrated:
+            iron_stats = compute_traj_stats(sensors['calibrated_mx'], sensors['calibrated_my'], sensors['calibrated_mz'])
+            stats_text += f"""
+◆ IRON CORRECTED
+  Spread: {iron_stats['spread']:.1f} μT ({(iron_stats['spread']/raw_stats['spread']*100):.0f}% of raw)
+  Path Length: {iron_stats['path_length']:.1f} μT
+  Center: ({iron_stats['center'][0]:.1f}, {iron_stats['center'][1]:.1f}, {iron_stats['center'][2]:.1f})
+"""
+
+        if has_fused:
+            fused_stats = compute_traj_stats(sensors['fused_mx'], sensors['fused_my'], sensors['fused_mz'])
+            stats_text += f"""
+◆ FUSED (Earth Subtracted)
+  Spread: {fused_stats['spread']:.1f} μT ({(fused_stats['spread']/raw_stats['spread']*100):.0f}% of raw)
+  Path Length: {fused_stats['path_length']:.1f} μT
+  Center: ({fused_stats['center'][0]:.1f}, {fused_stats['center'][1]:.1f}, {fused_stats['center'][2]:.1f})
+  ↳ Center near origin indicates good Earth field removal
+"""
+
+        if has_filtered:
+            filtered_stats = compute_traj_stats(sensors['filtered_mx'], sensors['filtered_my'], sensors['filtered_mz'])
+            stats_text += f"""
+◆ FILTERED (Kalman)
+  Spread: {filtered_stats['spread']:.1f} μT ({(filtered_stats['spread']/raw_stats['spread']*100):.0f}% of raw)
+  Path Length: {filtered_stats['path_length']:.1f} μT
+  Center: ({filtered_stats['center'][0]:.1f}, {filtered_stats['center'][1]:.1f}, {filtered_stats['center'][2]:.1f})
+  ↳ Shorter path = smoother trajectory (less noise)
+"""
+
+        stats_text += f"""
+{'='*45}
+INTERPRETATION GUIDE:
+• Spread: Lower = more concentrated signal
+• Path Length: Lower = smoother trajectory
+• Center near (0,0,0): Good Earth field removal
+• Fused trajectory shows finger magnet signal only
+"""
+
+        ax_stats.text(0.02, 0.98, stats_text.strip(), transform=ax_stats.transAxes,
+                     fontsize=9, verticalalignment='top', fontfamily='monospace',
+                     bbox=dict(boxstyle='round,pad=0.5', facecolor='#f8f9fa', alpha=0.9, edgecolor='#dee2e6'))
+
+        # Save
+        output_file = self.output_dir / f"trajectory_comparison_{session['timestamp']}.png"
+        plt.savefig(output_file, dpi=150, bbox_inches='tight')
+        plt.close(fig)
+
+        print(f"  Created trajectory comparison image: {output_file.name}")
+        return output_file
+
     def create_calibration_stages_image(self, session: Dict, processor: SensorDataProcessor) -> Optional[Path]:
         """Create a dedicated multi-stage magnetometer calibration comparison visualization.
 
@@ -1543,6 +1768,10 @@ class HTMLGenerator:
                         <input type="checkbox" id="show-raw" checked>
                         📐 Raw Axis
                     </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-trajectory" checked>
+                        🌀 3D Trajectory
+                    </label>
                 </div>
             </div>
 
@@ -1576,7 +1805,8 @@ class HTMLGenerator:
             showComposite: true,
             showCalibration: true,
             showWindows: true,
-            showRaw: true
+            showRaw: true,
+            showTrajectory: true
         };
 
         function initializePage() {
@@ -1652,6 +1882,13 @@ class HTMLGenerator:
                                 `).join('')}
                             </div>
                         </div>
+
+                        ${session.trajectory_comparison_image ? `
+                        <div class="image-section trajectory-section ${viewSettings.showTrajectory ? '' : 'hidden'}">
+                            <h3 class="section-title">🌀 3D Trajectory Comparison (Raw → Iron → Fused → Filtered)</h3>
+                            <img src="${session.trajectory_comparison_image}" class="composite-image" onclick="openModal(this.src)" alt="3D trajectory comparison">
+                        </div>
+                        ` : ''}
                     </div>
                 </div>
             `).join('');
@@ -1681,6 +1918,7 @@ class HTMLGenerator:
             viewSettings.showCalibration = document.getElementById('show-calibration').checked;
             viewSettings.showWindows = document.getElementById('show-windows').checked;
             viewSettings.showRaw = document.getElementById('show-raw').checked;
+            viewSettings.showTrajectory = document.getElementById('show-trajectory').checked;
 
             // Update visibility of sections
             document.querySelectorAll('.composite-section').forEach(el => {
@@ -1694,6 +1932,9 @@ class HTMLGenerator:
             });
             document.querySelectorAll('.raw-section').forEach(el => {
                 el.classList.toggle('hidden', !viewSettings.showRaw);
+            });
+            document.querySelectorAll('.trajectory-section').forEach(el => {
+                el.classList.toggle('hidden', !viewSettings.showTrajectory);
             });
         }
 
@@ -1756,6 +1997,7 @@ class HTMLGenerator:
             document.getElementById('show-calibration').addEventListener('change', updateViewSettings);
             document.getElementById('show-windows').addEventListener('change', updateViewSettings);
             document.getElementById('show-raw').addEventListener('change', updateViewSettings);
+            document.getElementById('show-trajectory').addEventListener('change', updateViewSettings);
 
             // Close modal on click outside
             document.getElementById('image-modal').addEventListener('click', (e) => {
@@ -1843,6 +2085,9 @@ def main():
             # Generate calibration stages comparison image (if calibration data available)
             calibration_stages_path = visualizer.create_calibration_stages_image(session, processor)
 
+            # Generate 3D trajectory comparison image (if calibration data available)
+            trajectory_comparison_path = visualizer.create_trajectory_comparison_image(session, processor)
+
             # Store session data for HTML generation
             session_entry = {
                 'filename': session['filename'],
@@ -1856,6 +2101,10 @@ def main():
             # Include calibration stages image if it was created
             if calibration_stages_path:
                 session_entry['calibration_stages_image'] = str(calibration_stages_path.relative_to(output_dir))
+
+            # Include trajectory comparison image if it was created
+            if trajectory_comparison_path:
+                session_entry['trajectory_comparison_image'] = str(trajectory_comparison_path.relative_to(output_dir))
 
             sessions_data.append(session_entry)
 

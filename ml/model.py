@@ -316,6 +316,51 @@ def save_model_for_inference(
         except Exception as e:
             print(f"TFLite conversion failed: {e}")
 
+        # Convert to TensorFlow.js for web deployment
+        try:
+            import subprocess
+            import shutil
+            
+            # Save as SavedModel format first (required for tfjs conversion)
+            saved_model_path = output_dir / f'{model_name}_saved_model'
+            model.save(saved_model_path, save_format='tf')
+            
+            # Convert to TensorFlow.js using tensorflowjs_converter
+            tfjs_path = output_dir / f'{model_name}_tfjs'
+            result = subprocess.run([
+                'tensorflowjs_converter',
+                '--input_format=tf_saved_model',
+                '--output_format=tfjs_graph_model',
+                str(saved_model_path),
+                str(tfjs_path)
+            ], capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                saved_paths['tfjs'] = str(tfjs_path)
+                print(f"TensorFlow.js model saved to: {tfjs_path}")
+            else:
+                print(f"TensorFlow.js conversion failed: {result.stderr}")
+                # Fallback: save model config for manual conversion
+                config_path = output_dir / f'{model_name}_config.json'
+                import json
+                with open(config_path, 'w') as f:
+                    json.dump({
+                        'model_type': 'finger_tracking' if len(model.outputs) > 1 else 'gesture',
+                        'input_shape': list(model.input_shape),
+                        'output_names': [o.name for o in model.outputs],
+                        'conversion_command': f'tensorflowjs_converter --input_format=tf_saved_model --output_format=tfjs_graph_model {saved_model_path} {tfjs_path}'
+                    }, f, indent=2)
+                saved_paths['config'] = str(config_path)
+                
+            # Clean up SavedModel if tfjs conversion succeeded
+            if 'tfjs' in saved_paths:
+                shutil.rmtree(saved_model_path, ignore_errors=True)
+                
+        except FileNotFoundError:
+            print("tensorflowjs_converter not found. Install with: pip install tensorflowjs")
+        except Exception as e:
+            print(f"TensorFlow.js conversion failed: {e}")
+
     elif HAS_TORCH and isinstance(model, nn.Module):
         # Save PyTorch model
         torch_path = output_dir / f'{model_name}.pt'

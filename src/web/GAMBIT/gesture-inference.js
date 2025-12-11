@@ -329,6 +329,389 @@ const GESTURE_MODELS = {
 };
 
 /**
+ * Finger Tracking Inference Class
+ * 
+ * Multi-output model for per-finger state prediction
+ * Outputs: 5 fingers × 3 states (extended, partial, flexed)
+ */
+class FingerTrackingInference {
+    constructor(options = {}) {
+        this.modelPath = options.modelPath || 'models/finger_v1/model.json';
+        this.windowSize = options.windowSize || 50;  // 1 second at 50Hz
+        this.stride = options.stride || 10;  // More frequent updates for finger tracking
+        this.confidenceThreshold = options.confidenceThreshold || 0.5;
+
+        this.model = null;
+        this.isReady = false;
+        this.buffer = [];
+
+        // Normalization stats (same as gesture model by default)
+        this.stats = {
+            mean: [-1106.31, -3629.05, -2285.71, 2740.34, -14231.48, -19574.75, 509.62, 909.94, -558.86],
+            std: [3468.31, 5655.28, 4552.77, 1781.28, 3627.35, 1845.62, 380.11, 318.77, 409.51]
+        };
+
+        // Finger and state labels
+        this.fingerNames = ['thumb', 'index', 'middle', 'ring', 'pinky'];
+        this.stateNames = ['extended', 'partial', 'flexed'];
+
+        // Callbacks
+        this.onPrediction = options.onPrediction || null;
+        this.onReady = options.onReady || null;
+        this.onError = options.onError || null;
+
+        // Performance tracking
+        this.lastInferenceTime = 0;
+        this.inferenceCount = 0;
+        
+        // Smoothing for stable predictions
+        this.smoothingAlpha = options.smoothingAlpha || 0.3;
+        this.lastPrediction = null;
+
+        console.log('[FingerTracking] Initialized with config:', {
+            modelPath: this.modelPath,
+            windowSize: this.windowSize,
+            stride: this.stride,
+            fingerNames: this.fingerNames,
+            stateNames: this.stateNames
+        });
+    }
+
+    /**
+     * Load the TensorFlow.js model
+     */
+    async load() {
+        try {
+            console.log('[FingerTracking] Checking TensorFlow.js availability...');
+            if (typeof tf === 'undefined') {
+                throw new Error('TensorFlow.js not loaded');
+            }
+            console.log('[FingerTracking] TensorFlow.js version:', tf.version);
+
+            const absoluteUrl = new URL(this.modelPath, window.location.href).href;
+            console.log(`[FingerTracking] Loading model from: ${absoluteUrl}`);
+
+            // Try loading as layers model first (multi-output Keras model)
+            try {
+                this.model = await tf.loadLayersModel(this.modelPath);
+                console.log('[FingerTracking] ✓ Loaded as layers model');
+            } catch (e) {
+                console.warn('[FingerTracking] Layers model failed, trying graph model...');
+                this.model = await tf.loadGraphModel(this.modelPath);
+                console.log('[FingerTracking] ✓ Loaded as graph model');
+            }
+
+            // Warm up
+            console.log('[FingerTracking] Warming up model...');
+            const dummyInput = tf.zeros([1, this.windowSize, 9]);
+            const warmup = this.model.predict(dummyInput);
+            
+            // Handle multi-output model
+            if (Array.isArray(warmup)) {
+                console.log('[FingerTracking] Multi-output model detected, outputs:', warmup.length);
+                warmup.forEach(t => t.dispose());
+            } else {
+                console.log('[FingerTracking] Single output model, shape:', warmup.shape);
+                warmup.dispose();
+            }
+            dummyInput.dispose();
+
+            this.isReady = true;
+            console.log('[FingerTracking] ✓ Model ready for inference');
+
+            if (this.onReady) {
+                this.onReady();
+            }
+
+            return true;
+        } catch (error) {
+            console.error('[FingerTracking] ✗ Failed to load model:', error);
+            if (this.onError) {
+                this.onError(error);
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Add a sensor sample to the buffer
+     */
+    addSample(sample) {
+        const features = [
+            sample.ax, sample.ay, sample.az,
+            sample.gx, sample.gy, sample.gz,
+            sample.mx, sample.my, sample.mz
+        ];
+
+        this.buffer.push(features);
+
+        if (this.buffer.length > this.windowSize) {
+            this.buffer.shift();
+        }
+
+        if (this.buffer.length === this.windowSize && this.isReady) {
+            this.inferenceCount++;
+            if (this.inferenceCount % this.stride === 0) {
+                this.runInference();
+            }
+        }
+    }
+
+    /**
+     * Normalize a window of data
+     */
+    normalize(window) {
+        return window.map(sample => {
+            return sample.map((val, i) => {
+                return (val - this.stats.mean[i]) / this.stats.std[i];
+            });
+        });
+    }
+
+    /**
+     * Run inference on the current buffer
+     */
+    async runInference() {
+        if (!this.isReady || this.buffer.length < this.windowSize) {
+            return null;
+        }
+
+        const startTime = performance.now();
+
+        try {
+            const normalizedWindow = this.normalize(this.buffer);
+            const inputTensor = tf.tensor3d([normalizedWindow]);
+            const outputs = this.model.predict(inputTensor);
+
+            // Parse outputs
+            const prediction = await this.parseOutputs(outputs);
+            prediction.inferenceTime = performance.now() - startTime;
+
+            // Clean up
+            inputTensor.dispose();
+            if (Array.isArray(outputs)) {
+                outputs.forEach(t => t.dispose());
+            } else {
+                outputs.dispose();
+            }
+
+            // Apply smoothing
+            const smoothed = this.smoothPrediction(prediction);
+            this.lastPrediction = smoothed;
+            this.lastInferenceTime = smoothed.inferenceTime;
+
+            if (this.onPrediction) {
+                this.onPrediction(smoothed);
+            }
+
+            return smoothed;
+        } catch (error) {
+            console.error('[FingerTracking] Inference error:', error);
+            if (this.onError) {
+                this.onError(error);
+            }
+            return null;
+        }
+    }
+
+    /**
+     * Parse model outputs into finger states
+     */
+    async parseOutputs(outputs) {
+        const prediction = {
+            fingers: {},
+            states: {},
+            confidences: {},
+            probabilities: {},
+            timestamp: Date.now()
+        };
+
+        if (Array.isArray(outputs)) {
+            // Multi-output model: array of tensors (one per finger)
+            for (let i = 0; i < this.fingerNames.length; i++) {
+                const finger = this.fingerNames[i];
+                const probs = await outputs[i].data();
+                
+                const state = this.argmax(probs);
+                prediction.fingers[finger] = this.stateNames[state];
+                prediction.states[finger] = state;
+                prediction.confidences[finger] = probs[state];
+                prediction.probabilities[finger] = Array.from(probs);
+            }
+        } else {
+            // Single output tensor: assume shape [1, 5, 3] or [1, 15]
+            const data = await outputs.data();
+            
+            for (let i = 0; i < this.fingerNames.length; i++) {
+                const finger = this.fingerNames[i];
+                const probs = data.slice(i * 3, (i + 1) * 3);
+                
+                const state = this.argmax(probs);
+                prediction.fingers[finger] = this.stateNames[state];
+                prediction.states[finger] = state;
+                prediction.confidences[finger] = probs[state];
+                prediction.probabilities[finger] = Array.from(probs);
+            }
+        }
+
+        // Overall confidence
+        const confidences = Object.values(prediction.confidences);
+        prediction.overallConfidence = confidences.reduce((a, b) => a + b, 0) / confidences.length;
+
+        // Binary string for hand renderer compatibility
+        prediction.binaryString = this.fingerNames.map(f => prediction.states[f]).join('');
+
+        return prediction;
+    }
+
+    argmax(arr) {
+        let maxIdx = 0;
+        let maxVal = arr[0];
+        for (let i = 1; i < arr.length; i++) {
+            if (arr[i] > maxVal) {
+                maxVal = arr[i];
+                maxIdx = i;
+            }
+        }
+        return maxIdx;
+    }
+
+    /**
+     * Apply exponential smoothing
+     */
+    smoothPrediction(prediction) {
+        if (!this.lastPrediction) {
+            return prediction;
+        }
+
+        const smoothed = { ...prediction };
+        smoothed.states = { ...prediction.states };
+        smoothed.confidences = { ...prediction.confidences };
+        smoothed.fingers = { ...prediction.fingers };
+
+        for (const finger of this.fingerNames) {
+            const newConf = prediction.confidences[finger];
+            const oldConf = this.lastPrediction.confidences[finger] || newConf;
+            smoothed.confidences[finger] = this.smoothingAlpha * newConf + (1 - this.smoothingAlpha) * oldConf;
+
+            // Keep state if confidence is high enough
+            if (smoothed.confidences[finger] > this.confidenceThreshold) {
+                smoothed.states[finger] = prediction.states[finger];
+                smoothed.fingers[finger] = prediction.fingers[finger];
+            } else if (this.lastPrediction.states[finger] !== undefined) {
+                smoothed.states[finger] = this.lastPrediction.states[finger];
+                smoothed.fingers[finger] = this.lastPrediction.fingers[finger];
+            }
+        }
+
+        smoothed.binaryString = this.fingerNames.map(f => smoothed.states[f]).join('');
+        return smoothed;
+    }
+
+    /**
+     * Get current prediction
+     */
+    getCurrentPrediction() {
+        return this.lastPrediction;
+    }
+
+    /**
+     * Convert to pose format for hand renderer
+     */
+    toPoseFormat(prediction = null) {
+        const pred = prediction || this.lastPrediction;
+        if (!pred) {
+            return { thumb: 0, index: 0, middle: 0, ring: 0, pinky: 0 };
+        }
+        return {
+            thumb: pred.states.thumb,
+            index: pred.states.index,
+            middle: pred.states.middle,
+            ring: pred.states.ring,
+            pinky: pred.states.pinky
+        };
+    }
+
+    /**
+     * Clear buffer
+     */
+    clearBuffer() {
+        this.buffer = [];
+        this.inferenceCount = 0;
+        this.lastPrediction = null;
+    }
+
+    /**
+     * Set normalization stats
+     */
+    setStats(mean, std) {
+        this.stats.mean = mean;
+        this.stats.std = std;
+    }
+
+    /**
+     * Get model info
+     */
+    getInfo() {
+        return {
+            modelPath: this.modelPath,
+            isReady: this.isReady,
+            windowSize: this.windowSize,
+            stride: this.stride,
+            fingerNames: this.fingerNames,
+            stateNames: this.stateNames,
+            bufferSize: this.buffer.length,
+            lastInferenceTime: this.lastInferenceTime
+        };
+    }
+
+    /**
+     * Dispose model
+     */
+    dispose() {
+        if (this.model) {
+            this.model.dispose();
+            this.model = null;
+        }
+        this.isReady = false;
+        this.buffer = [];
+        this.lastPrediction = null;
+    }
+}
+
+// Finger tracking model registry
+const FINGER_MODELS = {
+    'v1': {
+        path: 'models/finger_v1/model.json',
+        stats: {
+            mean: [-1106.31, -3629.05, -2285.71, 2740.34, -14231.48, -19574.75, 509.62, 909.94, -558.86],
+            std: [3468.31, 5655.28, 4552.77, 1781.28, 3627.35, 1845.62, 380.11, 318.77, 409.51]
+        },
+        description: 'Multi-output finger tracking model (5 fingers × 3 states)',
+        date: '2025-01-12'
+    }
+};
+
+/**
+ * Create a finger tracking inference instance
+ */
+function createFingerTrackingInference(version = 'v1', options = {}) {
+    const modelConfig = FINGER_MODELS[version];
+    if (!modelConfig) {
+        throw new Error(`Unknown finger model version: ${version}. Available: ${Object.keys(FINGER_MODELS).join(', ')}`);
+    }
+    
+    const inference = new FingerTrackingInference({
+        modelPath: modelConfig.path,
+        ...options
+    });
+    
+    inference.setStats(modelConfig.stats.mean, modelConfig.stats.std);
+    
+    return inference;
+}
+
+/**
  * Create a gesture inference instance with a specific model version
  */
 function createGestureInference(version = 'v1', options = {}) {
@@ -350,5 +733,12 @@ function createGestureInference(version = 'v1', options = {}) {
 
 // Export for module systems
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { GestureInference, GESTURE_MODELS, createGestureInference };
+    module.exports = { 
+        GestureInference, 
+        GESTURE_MODELS, 
+        createGestureInference,
+        FingerTrackingInference,
+        FINGER_MODELS,
+        createFingerTrackingInference
+    };
 }
