@@ -18,6 +18,7 @@
         <script src="calibration.js"></script>
         <script src="filters.js"></script>
         <script src="gesture-inference.js"></script>
+        <script src="hand-3d-renderer.js"></script>
         <style>
             /* Page-specific styles */
             body {
@@ -337,6 +338,40 @@
             #playbackCard.playing {
                 border-color: var(--success);
             }
+
+            /* Hand visualization */
+            .hand-canvas-container {
+                display: flex;
+                justify-content: center;
+                padding: var(--space-sm);
+            }
+
+            #handCanvas3D {
+                border: 1px solid var(--border);
+                border-radius: var(--radius);
+                background: #1a1a2e;
+                max-width: 100%;
+                height: auto;
+            }
+
+            .hand-mode-toggle {
+                display: flex;
+                align-items: center;
+                gap: var(--space-xs);
+                font-size: 0.75rem;
+                font-weight: normal;
+                cursor: pointer;
+            }
+
+            .hand-mode-toggle input {
+                margin: 0;
+            }
+
+            #handCard .card-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
         </style>
     </head>
     <body>
@@ -426,6 +461,19 @@
                 <div class="face bottom">gyro 6</div>
             </div>
         </section>
+
+        <div class="card" id="handCard">
+            <div class="card-header">
+                Hand Orientation
+                <label class="hand-mode-toggle">
+                    <input type="checkbox" id="handOrientationToggle" checked>
+                    <span>Track IMU</span>
+                </label>
+            </div>
+            <div class="hand-canvas-container">
+                <canvas id="handCanvas3D" width="300" height="300"></canvas>
+            </div>
+        </div>
 
         <div class="card" id="playbackCard">
             <div class="card-header">Session Playback</div>
@@ -523,6 +571,45 @@
             let gyroBiasCalibrated = false;
             let stationaryCount = 0;
             const STATIONARY_SAMPLES_FOR_CALIBRATION = 20; // ~1 second at 20Hz
+
+            // ===== Hand 3D Renderer =====
+            let hand3DRenderer = null;
+            let handOrientationEnabled = true;
+
+            function initHandRenderer() {
+                const canvas = document.getElementById('handCanvas3D');
+                if (!canvas || typeof Hand3DRenderer === 'undefined') {
+                    console.warn('[Hand3D] Hand3DRenderer not available');
+                    return;
+                }
+
+                hand3DRenderer = new Hand3DRenderer(canvas, {
+                    backgroundColor: '#1a1a2e',
+                    orientationMode: 'sensor_fusion',
+                    orientationFiltering: true,
+                    orientationAlpha: 0.15,
+                    pitchOffset: 0,
+                    yawOffset: 0,
+                    rollOffset: 0
+                });
+
+                hand3DRenderer.startAnimation();
+                console.log('[Hand3D] Renderer initialized');
+
+                // Toggle handler
+                const toggle = document.getElementById('handOrientationToggle');
+                if (toggle) {
+                    toggle.addEventListener('change', (e) => {
+                        handOrientationEnabled = e.target.checked;
+                        if (hand3DRenderer) {
+                            hand3DRenderer.setOrientationMode(
+                                handOrientationEnabled ? 'sensor_fusion' : 'static'
+                            );
+                        }
+                        console.log('[Hand3D] IMU tracking:', handOrientationEnabled ? 'ON' : 'OFF');
+                    });
+                }
+            }
 
             // Low-pass filter for smoothing cube rotations
             class LowPassFilter {
@@ -762,13 +849,24 @@
                 
                 // Get Euler angles from AHRS
                 const euler = ahrs.getEulerAngles();
-                
+
                 // Apply low-pass filter for smooth display
                 const filteredGyroRoll = cubeFilters.gyro.x.filter(euler.roll);
                 const filteredGyroPitch = cubeFilters.gyro.y.filter(euler.pitch);
                 const filteredGyroYaw = cubeFilters.gyro.z.filter(euler.yaw);
-                
+
                 window.cubeG.style = `transform: rotateX(${filteredGyroPitch}deg) rotateY(${filteredGyroRoll}deg) rotateZ(${filteredGyroYaw}deg);`;
+
+                // Update hand 3D renderer with orientation
+                // Use stored orientation from playback if available, otherwise use live AHRS
+                if (hand3DRenderer && handOrientationEnabled) {
+                    const handEuler = {
+                        roll: prenorm.euler_roll !== undefined ? prenorm.euler_roll : euler.roll,
+                        pitch: prenorm.euler_pitch !== undefined ? prenorm.euler_pitch : euler.pitch,
+                        yaw: prenorm.euler_yaw !== undefined ? prenorm.euler_yaw : euler.yaw
+                    };
+                    hand3DRenderer.updateFromSensorFusion(handEuler);
+                }
 
                 // --- MAGNETOMETER CUBE: Shows magnetic field vector direction ---
                 // The cube rotates to point toward the magnetic field vector
@@ -1104,6 +1202,7 @@
 
             // Initialize on page load
             initGestureInference();
+            initHandRenderer();
 
             // ===== Session Playback System =====
             const MANIFEST_URL = '../../../data/GAMBIT/manifest.json';
