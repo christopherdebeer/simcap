@@ -22,7 +22,7 @@ class KalmanFilter3D:
     """
 
     def __init__(self,
-                 process_noise: float = 0.1,
+                 process_noise: float = 1.0,
                  measurement_noise: float = 1.0,
                  initial_covariance: float = 100.0,
                  dt: float = 0.02):
@@ -30,7 +30,7 @@ class KalmanFilter3D:
         Initialize 3D Kalman filter.
 
         Args:
-            process_noise: Process noise covariance (Q)
+            process_noise: Process noise covariance (Q) - increased from 0.1 to 1.0 for better responsiveness
             measurement_noise: Measurement noise covariance (R)
             initial_covariance: Initial state uncertainty (P0)
             dt: Time step in seconds (default 0.02 = 50Hz)

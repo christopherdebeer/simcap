@@ -331,6 +331,108 @@ class ComplementaryFilter {
 }
 
 /**
+ * Motion Detector
+ *
+ * Detects device motion state based on IMU sensor readings.
+ * Uses accelerometer and gyroscope variance over a sliding window.
+ */
+class MotionDetector {
+    constructor(options = {}) {
+        const {
+            accelThreshold = 2000,    // LSB units (sensor-specific)
+            gyroThreshold = 500,       // LSB units (sensor-specific)
+            windowSize = 10           // Number of samples in moving window
+        } = options;
+
+        this.accelThreshold = accelThreshold;
+        this.gyroThreshold = gyroThreshold;
+        this.windowSize = windowSize;
+
+        this.recentAccel = [];
+        this.recentGyro = [];
+
+        this.isMoving = false;
+        this.accelStd = 0;
+        this.gyroStd = 0;
+    }
+
+    /**
+     * Update motion state with new IMU reading
+     *
+     * @param {number} ax - Accelerometer X
+     * @param {number} ay - Accelerometer Y
+     * @param {number} az - Accelerometer Z
+     * @param {number} gx - Gyroscope X
+     * @param {number} gy - Gyroscope Y
+     * @param {number} gz - Gyroscope Z
+     * @returns {Object} Motion state {isMoving, accelStd, gyroStd}
+     */
+    update(ax, ay, az, gx, gy, gz) {
+        // Compute magnitudes
+        const accelMag = Math.sqrt(ax*ax + ay*ay + az*az);
+        const gyroMag = Math.sqrt(gx*gx + gy*gy + gz*gz);
+
+        // Add to history
+        this.recentAccel.push(accelMag);
+        this.recentGyro.push(gyroMag);
+
+        // Maintain window size
+        if (this.recentAccel.length > this.windowSize) {
+            this.recentAccel.shift();
+            this.recentGyro.shift();
+        }
+
+        // Need minimum samples for valid detection
+        if (this.recentAccel.length < this.windowSize / 2) {
+            return this.getState();
+        }
+
+        // Compute standard deviation as motion indicator
+        this.accelStd = this._std(this.recentAccel);
+        this.gyroStd = this._std(this.recentGyro);
+
+        // Detect motion: high variance in either sensor
+        this.isMoving = (this.accelStd > this.accelThreshold) ||
+                       (this.gyroStd > this.gyroThreshold);
+
+        return this.getState();
+    }
+
+    /**
+     * Get current motion state
+     */
+    getState() {
+        return {
+            isMoving: this.isMoving,
+            accelStd: this.accelStd,
+            gyroStd: this.gyroStd
+        };
+    }
+
+    /**
+     * Reset motion detector state
+     */
+    reset() {
+        this.recentAccel = [];
+        this.recentGyro = [];
+        this.isMoving = false;
+        this.accelStd = 0;
+        this.gyroStd = 0;
+    }
+
+    /**
+     * Compute standard deviation of array
+     * @private
+     */
+    _std(arr) {
+        if (arr.length === 0) return 0;
+        const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+        const variance = arr.reduce((a, b) => a + (b - mean) * (b - mean), 0) / arr.length;
+        return Math.sqrt(variance);
+    }
+}
+
+/**
  * Multi-dimensional Kalman Filter
  *
  * Tracks state vector with position and velocity for each dimension.
@@ -339,7 +441,7 @@ class ComplementaryFilter {
 class KalmanFilter3D {
     constructor(options = {}) {
         const {
-            processNoise = 0.1,      // Q - process noise
+            processNoise = 1.0,      // Q - process noise (increased from 0.1 for better responsiveness)
             measurementNoise = 1.0,  // R - measurement noise
             initialCovariance = 100  // P0 - initial uncertainty
         } = options;
@@ -996,6 +1098,7 @@ if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         MadgwickAHRS,
         ComplementaryFilter,
+        MotionDetector,
         KalmanFilter3D,
         MultiFingerKalmanFilter,
         ParticleFilter,
