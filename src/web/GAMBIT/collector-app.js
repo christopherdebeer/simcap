@@ -804,7 +804,7 @@ function initHandVisualization() {
     const canvas3D = $('handCanvas3D');
     if (canvas3D && typeof Hand3DRenderer !== 'undefined') {
         hand3DRenderer = new Hand3DRenderer(canvas3D, {
-            backgroundColor: 'var(--bg-surface)'
+            backgroundColor: '#ffffff'
         });
         hand3DRenderer.startAnimation();
     } else {
