@@ -1017,6 +1017,13 @@
                 <div style="font-size: 11px; color: var(--fg-muted);">Prediction Confidence</div>
                 <div id="handPredictionConfidence" style="font-size: 16px; font-weight: bold; color: var(--accent);">--</div>
             </div>
+            <!-- Orientation display (only shown when sensor fusion is active) -->
+            <div id="handOrientationInfo" style="display: none; text-align: center; margin-top: 10px; padding: 8px; background: var(--bg); border-radius: 4px;">
+                <div style="font-size: 11px; color: var(--fg-muted);">Hand Orientation (Sensor Fusion)</div>
+                <div id="handOrientationAngles" style="font-size: 12px; font-family: var(--font-mono); color: var(--accent); margin-top: 4px;">
+                    Roll: 0° | Pitch: 0° | Yaw: 0°
+                </div>
+            </div>
         </div>
     </section>
 
