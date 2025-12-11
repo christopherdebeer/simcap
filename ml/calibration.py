@@ -11,7 +11,35 @@ Python equivalent of calibration.js for ML pipeline consistency.
 
 import numpy as np
 import json
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Union
+
+
+def quaternion_to_rotation_matrix(q: Union[Dict, np.ndarray]) -> np.ndarray:
+    """
+    Convert quaternion to 3x3 rotation matrix.
+
+    Args:
+        q: Quaternion as dict with keys 'w', 'x', 'y', 'z' or numpy array [w, x, y, z]
+
+    Returns:
+        3x3 rotation matrix as numpy array
+
+    Reference:
+        https://en.wikipedia.org/wiki/Quaternions_and_spatial_rotation
+    """
+    if isinstance(q, dict):
+        w, x, y, z = q['w'], q['x'], q['y'], q['z']
+    else:
+        w, x, y, z = q[0], q[1], q[2], q[3]
+
+    # Rotation matrix from quaternion
+    R = np.array([
+        [1 - 2*(y*y + z*z),     2*(x*y - w*z),     2*(x*z + w*y)],
+        [    2*(x*y + w*z), 1 - 2*(x*x + z*z),     2*(y*z - w*x)],
+        [    2*(x*z - w*y),     2*(y*z + w*x), 1 - 2*(x*x + y*y)]
+    ])
+
+    return R
 
 
 class EnvironmentalCalibration:
@@ -170,15 +198,23 @@ class EnvironmentalCalibration:
             'quality': float(quality)
         }
 
-    def correct(self, measurement: Dict[str, float]) -> Dict[str, float]:
+    def correct(self, measurement: Dict[str, float], orientation: Optional[Union[Dict, np.ndarray]] = None) -> Dict[str, float]:
         """
         Apply all calibrations to a magnetometer reading.
 
         Args:
             measurement: {x, y, z} magnetometer reading
+            orientation: Optional orientation quaternion (dict with w, x, y, z keys or array [w, x, y, z])
+                        If provided, Earth field will be rotated to sensor frame before subtraction.
+                        This is CRITICAL for accurate Earth field removal during device movement.
 
         Returns:
-            Corrected {x, y, z} reading
+            Corrected {x, y, z} reading with iron correction and Earth field subtraction
+
+        Note:
+            Without orientation, this uses static Earth field subtraction which is only
+            valid if device orientation hasn't changed since calibration. For dynamic
+            tracking, always provide orientation.
         """
         # Convert to numpy vector
         m = np.array([measurement['x'], measurement['y'], measurement['z']])
@@ -189,8 +225,43 @@ class EnvironmentalCalibration:
         # 2. Apply soft iron correction
         m = self.soft_iron_matrix @ m
 
-        # 3. Remove earth field
-        m = m - self.earth_field
+        # 3. Remove Earth field (with orientation compensation if available)
+        if orientation is not None:
+            # Rotate Earth field from world frame to sensor frame
+            # The quaternion represents sensor orientation in world frame
+            # To transform a vector from world to sensor, use R^T (transpose)
+            R = quaternion_to_rotation_matrix(orientation)
+            earth_rotated = R.T @ self.earth_field
+            m = m - earth_rotated
+        else:
+            # Fall back to static subtraction (only valid if orientation unchanged)
+            m = m - self.earth_field
+
+        return {'x': float(m[0]), 'y': float(m[1]), 'z': float(m[2])}
+
+    def correct_iron_only(self, measurement: Dict[str, float]) -> Dict[str, float]:
+        """
+        Apply only hard and soft iron corrections, no Earth field subtraction.
+
+        Use this when:
+        - Orientation is not available
+        - You want to see iron-corrected signal before Earth compensation
+        - Generating calibrated_ fields (iron only)
+
+        Args:
+            measurement: {x, y, z} magnetometer reading
+
+        Returns:
+            Iron-corrected {x, y, z} reading (Earth field still present)
+        """
+        # Convert to numpy vector
+        m = np.array([measurement['x'], measurement['y'], measurement['z']])
+
+        # 1. Remove hard iron offset
+        m = m - self.hard_iron_offset
+
+        # 2. Apply soft iron correction
+        m = self.soft_iron_matrix @ m
 
         return {'x': float(m[0]), 'y': float(m[1]), 'z': float(m[2])}
 
@@ -266,18 +337,33 @@ class EnvironmentalCalibration:
 
 
 def decorate_telemetry_with_calibration(telemetry_data: List[Dict],
-                                       calibration: EnvironmentalCalibration) -> List[Dict]:
+                                       calibration: EnvironmentalCalibration,
+                                       use_orientation: bool = True) -> List[Dict]:
     """
-    Decorate telemetry data with calibrated magnetometer fields.
+    Decorate telemetry data with calibrated and fused magnetometer fields.
 
-    IMPORTANT: Preserves raw data, only adds calibrated_ fields.
+    IMPORTANT: Preserves raw data, only adds decorated fields.
+
+    This function reproduces the same calibration stages as the real-time JavaScript
+    pipeline, allowing validation and post-processing of data even if real-time
+    decoration wasn't applied.
 
     Args:
         telemetry_data: List of telemetry dictionaries with mx, my, mz fields
         calibration: EnvironmentalCalibration instance
+        use_orientation: If True and orientation fields present, apply orientation-based
+                        Earth subtraction. If False, use static subtraction (legacy).
 
     Returns:
-        List of telemetry dictionaries with added calibrated_mx, calibrated_my, calibrated_mz fields
+        List of telemetry dictionaries with added fields:
+        - calibrated_mx/my/mz: Iron corrected only (hard + soft iron)
+        - fused_mx/my/mz: Iron + orientation-compensated Earth field subtraction
+                          (only if Earth calibration and orientation available)
+
+    Note:
+        This allows the Python backend to reproduce calibration stages from raw data
+        + calibration file, enabling validation even if JavaScript real-time processing
+        didn't persist the decorated fields.
     """
     decorated = []
 
@@ -285,22 +371,48 @@ def decorate_telemetry_with_calibration(telemetry_data: List[Dict],
         # Create decorated copy
         decorated_sample = sample.copy()
 
-        # Apply calibration if available
-        if (calibration.has_calibration('earth_field') and
-            calibration.has_calibration('hard_iron') and
-            calibration.has_calibration('soft_iron')):
+        # Check if we have iron calibration (minimum requirement)
+        has_iron_cal = (calibration.has_calibration('hard_iron') and
+                       calibration.has_calibration('soft_iron'))
+        has_earth_cal = calibration.has_calibration('earth_field')
 
+        if has_iron_cal:
             try:
-                corrected = calibration.correct({
+                # Stage 1: Iron correction only (calibrated_ fields)
+                iron_corrected = calibration.correct_iron_only({
                     'x': sample['mx'],
                     'y': sample['my'],
                     'z': sample['mz']
                 })
-                decorated_sample['calibrated_mx'] = corrected['x']
-                decorated_sample['calibrated_my'] = corrected['y']
-                decorated_sample['calibrated_mz'] = corrected['z']
+                decorated_sample['calibrated_mx'] = iron_corrected['x']
+                decorated_sample['calibrated_my'] = iron_corrected['y']
+                decorated_sample['calibrated_mz'] = iron_corrected['z']
+
+                # Stage 2: Fused (iron + Earth subtraction with orientation if available)
+                if has_earth_cal:
+                    orientation = None
+                    if use_orientation and 'orientation_w' in sample:
+                        # Extract orientation quaternion from sample
+                        orientation = {
+                            'w': sample['orientation_w'],
+                            'x': sample['orientation_x'],
+                            'y': sample['orientation_y'],
+                            'z': sample['orientation_z']
+                        }
+
+                    # Apply full correction (iron + Earth field)
+                    fused = calibration.correct({
+                        'x': sample['mx'],
+                        'y': sample['my'],
+                        'z': sample['mz']
+                    }, orientation=orientation)
+
+                    decorated_sample['fused_mx'] = fused['x']
+                    decorated_sample['fused_my'] = fused['y']
+                    decorated_sample['fused_mz'] = fused['z']
+
             except Exception as e:
-                # Calibration failed, skip decoration
+                # Calibration failed, skip decoration for this sample
                 pass
 
         decorated.append(decorated_sample)
