@@ -303,6 +303,7 @@
                     <span id="gX">0</span>
                     <span id="gY">0</span>
                     <span id="gZ">0</span>
+                    <span id="gyroStatus" style="font-size: 0.7em; color: var(--warning);">⏳</span>
                 </div>
             </div>
         </div>
@@ -382,11 +383,26 @@
 
             // ===== Proper Orientation Estimation for Cube Visualization =====
             // Use Madgwick AHRS for fused acc+gyro orientation (for gyro cube)
-            // Lower beta = more stable but slower response (0.01-0.1 typical range)
+            // Beta controls gyro vs accel weighting: higher = more responsive, lower = more stable
             const ahrs = new MadgwickAHRS({
                 sampleFreq: 20,  // 20Hz (firmware default)
-                beta: 0.02      // Very low filter gain for stability at rest
+                beta: 0.1       // Moderate filter gain - balance responsiveness and stability
             });
+
+            // Motion detector for gyroscope bias calibration
+            // When device is stationary, we can estimate and correct gyro bias
+            // Puck.js accel is in g's (~1.0 at rest), gyro is in deg/s
+            // MotionDetector uses magnitude std dev, so thresholds are in same units
+            const motionDetector = new MotionDetector({
+                accelThreshold: 0.02,  // g units - std dev of accel magnitude when stationary
+                gyroThreshold: 3,      // deg/s - std dev of gyro magnitude when stationary
+                windowSize: 10         // samples to consider (~0.5s at 20Hz)
+            });
+
+            // Track gyroscope bias estimation state
+            let gyroBiasCalibrated = false;
+            let stationaryCount = 0;
+            const STATIONARY_SAMPLES_FOR_CALIBRATION = 20; // ~1 second at 20Hz
 
             // Low-pass filter for smoothing cube rotations
             class LowPassFilter {
@@ -591,7 +607,35 @@
                 const gx = prenorm.gx || 0;
                 const gy = prenorm.gy || 0;
                 const gz = prenorm.gz || 0;
-                
+
+                // Update motion detector to determine if device is stationary
+                const motionState = motionDetector.update(ax, ay, az, gx, gy, gz);
+
+                // Calibrate gyroscope bias when device is stationary
+                // This removes sensor offset that causes drift
+                if (!motionState.isMoving) {
+                    stationaryCount++;
+
+                    // After being stationary for a while, update gyro bias
+                    if (stationaryCount > STATIONARY_SAMPLES_FOR_CALIBRATION) {
+                        ahrs.updateGyroBias(gx, gy, gz, true); // true = gyro in degrees
+
+                        if (!gyroBiasCalibrated) {
+                            console.log('[AHRS] Gyroscope bias calibration complete');
+                            gyroBiasCalibrated = true;
+                            // Update visual indicator
+                            const gyroStatus = document.getElementById('gyroStatus');
+                            if (gyroStatus) {
+                                gyroStatus.textContent = '✓';
+                                gyroStatus.style.color = 'var(--success)';
+                                gyroStatus.title = 'Gyroscope bias calibrated';
+                            }
+                        }
+                    }
+                } else {
+                    stationaryCount = 0;
+                }
+
                 // Update AHRS with acc + gyro data
                 // Gyro values from Puck.js are in degrees/second
                 ahrs.update(ax, ay, az, gx, gy, gz, dt, true);
