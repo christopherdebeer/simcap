@@ -155,7 +155,7 @@
             this.firmwareInfo = null;
             this.keepaliveInterval = null;
             this.autoKeepalive = options.autoKeepalive !== false;
-            this.keepaliveIntervalMs = options.keepaliveInterval || 25000; // 25s keepalive
+            this.keepaliveIntervalMs = options.keepaliveInterval || 20000; // 20s keepalive (firmware timeout is 30s)
 
             // Wire up frame parser events to client events
             this.frameParser.on('FW', (data) => this._handleFirmware(data));
