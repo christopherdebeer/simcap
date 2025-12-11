@@ -283,7 +283,7 @@ class Hand3DRenderer {
         // Sensor indicator circle on palm surface
         // Position in center of palm, on the palm-facing side (positive Z)
         const sensorPos = this._matApply(handM, [0, 0.15, 0.12]);
-        const sensorColor = '#9b59b6'; // Purple to stand out
+        const sensorColor = 'grey'; 
 
         // Fingers
         this.fingers.forEach((f, fi) => {
@@ -369,16 +369,16 @@ class Hand3DRenderer {
         }
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(sensorPr[0], sensorPr[1], 20, 0, Math.PI * 2);
+        ctx.arc(sensorPr[0], sensorPr[1], 30, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
         
-        // Draw "S" label on sensor
+        // Draw "Brand" label on sensor
         ctx.fillStyle = '#fff';
-        ctx.font = 'bold 10px Arial';
+        ctx.font = '8px Monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('S', sensorPr[0], sensorPr[1]);
+        ctx.fillText('SIMCAP ®', sensorPr[0], sensorPr[1]);
     }
 
     /**
