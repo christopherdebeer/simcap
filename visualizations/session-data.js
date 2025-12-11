@@ -23,8 +23,14 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-09T15_23_14.877Z/window_001/trajectory_mag_3d.png",
           "signature": "windows_2025-12-09T15_23_14.877Z/window_001/signature.png",
           "stats": "windows_2025-12-09T15_23_14.877Z/window_001/stats.png",
-          "trajectory_comparison": "windows_2025-12-09T15_23_14.877Z/window_001/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-09T15_23_14.877Z/window_001/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-09T15_23_14.877Z/window_001/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-09T15_23_14.877Z/window_001/trajectory_raw.png",
+          "filtered": "windows_2025-12-09T15_23_14.877Z/window_001/trajectory_filtered.png",
+          "combined": "windows_2025-12-09T15_23_14.877Z/window_001/trajectory_combined.png",
+          "statistics": "windows_2025-12-09T15_23_14.877Z/window_001/trajectory_stats.png"
         }
       },
       {
@@ -45,8 +51,14 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-09T15_23_14.877Z/window_002/trajectory_mag_3d.png",
           "signature": "windows_2025-12-09T15_23_14.877Z/window_002/signature.png",
           "stats": "windows_2025-12-09T15_23_14.877Z/window_002/stats.png",
-          "trajectory_comparison": "windows_2025-12-09T15_23_14.877Z/window_002/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-09T15_23_14.877Z/window_002/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-09T15_23_14.877Z/window_002/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-09T15_23_14.877Z/window_002/trajectory_raw.png",
+          "filtered": "windows_2025-12-09T15_23_14.877Z/window_002/trajectory_filtered.png",
+          "combined": "windows_2025-12-09T15_23_14.877Z/window_002/trajectory_combined.png",
+          "statistics": "windows_2025-12-09T15_23_14.877Z/window_002/trajectory_stats.png"
         }
       },
       {
@@ -67,8 +79,14 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-09T15_23_14.877Z/window_003/trajectory_mag_3d.png",
           "signature": "windows_2025-12-09T15_23_14.877Z/window_003/signature.png",
           "stats": "windows_2025-12-09T15_23_14.877Z/window_003/stats.png",
-          "trajectory_comparison": "windows_2025-12-09T15_23_14.877Z/window_003/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-09T15_23_14.877Z/window_003/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-09T15_23_14.877Z/window_003/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-09T15_23_14.877Z/window_003/trajectory_raw.png",
+          "filtered": "windows_2025-12-09T15_23_14.877Z/window_003/trajectory_filtered.png",
+          "combined": "windows_2025-12-09T15_23_14.877Z/window_003/trajectory_combined.png",
+          "statistics": "windows_2025-12-09T15_23_14.877Z/window_003/trajectory_stats.png"
         }
       },
       {
@@ -89,8 +107,14 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-09T15_23_14.877Z/window_004/trajectory_mag_3d.png",
           "signature": "windows_2025-12-09T15_23_14.877Z/window_004/signature.png",
           "stats": "windows_2025-12-09T15_23_14.877Z/window_004/stats.png",
-          "trajectory_comparison": "windows_2025-12-09T15_23_14.877Z/window_004/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-09T15_23_14.877Z/window_004/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-09T15_23_14.877Z/window_004/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-09T15_23_14.877Z/window_004/trajectory_raw.png",
+          "filtered": "windows_2025-12-09T15_23_14.877Z/window_004/trajectory_filtered.png",
+          "combined": "windows_2025-12-09T15_23_14.877Z/window_004/trajectory_combined.png",
+          "statistics": "windows_2025-12-09T15_23_14.877Z/window_004/trajectory_stats.png"
         }
       },
       {
@@ -111,8 +135,14 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-09T15_23_14.877Z/window_005/trajectory_mag_3d.png",
           "signature": "windows_2025-12-09T15_23_14.877Z/window_005/signature.png",
           "stats": "windows_2025-12-09T15_23_14.877Z/window_005/stats.png",
-          "trajectory_comparison": "windows_2025-12-09T15_23_14.877Z/window_005/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-09T15_23_14.877Z/window_005/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-09T15_23_14.877Z/window_005/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-09T15_23_14.877Z/window_005/trajectory_raw.png",
+          "filtered": "windows_2025-12-09T15_23_14.877Z/window_005/trajectory_filtered.png",
+          "combined": "windows_2025-12-09T15_23_14.877Z/window_005/trajectory_combined.png",
+          "statistics": "windows_2025-12-09T15_23_14.877Z/window_005/trajectory_stats.png"
         }
       },
       {
@@ -133,8 +163,14 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-09T15_23_14.877Z/window_006/trajectory_mag_3d.png",
           "signature": "windows_2025-12-09T15_23_14.877Z/window_006/signature.png",
           "stats": "windows_2025-12-09T15_23_14.877Z/window_006/stats.png",
-          "trajectory_comparison": "windows_2025-12-09T15_23_14.877Z/window_006/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-09T15_23_14.877Z/window_006/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-09T15_23_14.877Z/window_006/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-09T15_23_14.877Z/window_006/trajectory_raw.png",
+          "filtered": "windows_2025-12-09T15_23_14.877Z/window_006/trajectory_filtered.png",
+          "combined": "windows_2025-12-09T15_23_14.877Z/window_006/trajectory_combined.png",
+          "statistics": "windows_2025-12-09T15_23_14.877Z/window_006/trajectory_stats.png"
         }
       },
       {
@@ -155,8 +191,14 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-09T15_23_14.877Z/window_007/trajectory_mag_3d.png",
           "signature": "windows_2025-12-09T15_23_14.877Z/window_007/signature.png",
           "stats": "windows_2025-12-09T15_23_14.877Z/window_007/stats.png",
-          "trajectory_comparison": "windows_2025-12-09T15_23_14.877Z/window_007/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-09T15_23_14.877Z/window_007/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-09T15_23_14.877Z/window_007/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-09T15_23_14.877Z/window_007/trajectory_raw.png",
+          "filtered": "windows_2025-12-09T15_23_14.877Z/window_007/trajectory_filtered.png",
+          "combined": "windows_2025-12-09T15_23_14.877Z/window_007/trajectory_combined.png",
+          "statistics": "windows_2025-12-09T15_23_14.877Z/window_007/trajectory_stats.png"
         }
       },
       {
@@ -177,8 +219,14 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-09T15_23_14.877Z/window_008/trajectory_mag_3d.png",
           "signature": "windows_2025-12-09T15_23_14.877Z/window_008/signature.png",
           "stats": "windows_2025-12-09T15_23_14.877Z/window_008/stats.png",
-          "trajectory_comparison": "windows_2025-12-09T15_23_14.877Z/window_008/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-09T15_23_14.877Z/window_008/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-09T15_23_14.877Z/window_008/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-09T15_23_14.877Z/window_008/trajectory_raw.png",
+          "filtered": "windows_2025-12-09T15_23_14.877Z/window_008/trajectory_filtered.png",
+          "combined": "windows_2025-12-09T15_23_14.877Z/window_008/trajectory_combined.png",
+          "statistics": "windows_2025-12-09T15_23_14.877Z/window_008/trajectory_stats.png"
         }
       },
       {
@@ -199,8 +247,14 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-09T15_23_14.877Z/window_009/trajectory_mag_3d.png",
           "signature": "windows_2025-12-09T15_23_14.877Z/window_009/signature.png",
           "stats": "windows_2025-12-09T15_23_14.877Z/window_009/stats.png",
-          "trajectory_comparison": "windows_2025-12-09T15_23_14.877Z/window_009/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-09T15_23_14.877Z/window_009/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-09T15_23_14.877Z/window_009/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-09T15_23_14.877Z/window_009/trajectory_raw.png",
+          "filtered": "windows_2025-12-09T15_23_14.877Z/window_009/trajectory_filtered.png",
+          "combined": "windows_2025-12-09T15_23_14.877Z/window_009/trajectory_combined.png",
+          "statistics": "windows_2025-12-09T15_23_14.877Z/window_009/trajectory_stats.png"
         }
       },
       {
@@ -221,8 +275,14 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-09T15_23_14.877Z/window_010/trajectory_mag_3d.png",
           "signature": "windows_2025-12-09T15_23_14.877Z/window_010/signature.png",
           "stats": "windows_2025-12-09T15_23_14.877Z/window_010/stats.png",
-          "trajectory_comparison": "windows_2025-12-09T15_23_14.877Z/window_010/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-09T15_23_14.877Z/window_010/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-09T15_23_14.877Z/window_010/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-09T15_23_14.877Z/window_010/trajectory_raw.png",
+          "filtered": "windows_2025-12-09T15_23_14.877Z/window_010/trajectory_filtered.png",
+          "combined": "windows_2025-12-09T15_23_14.877Z/window_010/trajectory_combined.png",
+          "statistics": "windows_2025-12-09T15_23_14.877Z/window_010/trajectory_stats.png"
         }
       },
       {
@@ -243,8 +303,14 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-09T15_23_14.877Z/window_011/trajectory_mag_3d.png",
           "signature": "windows_2025-12-09T15_23_14.877Z/window_011/signature.png",
           "stats": "windows_2025-12-09T15_23_14.877Z/window_011/stats.png",
-          "trajectory_comparison": "windows_2025-12-09T15_23_14.877Z/window_011/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-09T15_23_14.877Z/window_011/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-09T15_23_14.877Z/window_011/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-09T15_23_14.877Z/window_011/trajectory_raw.png",
+          "filtered": "windows_2025-12-09T15_23_14.877Z/window_011/trajectory_filtered.png",
+          "combined": "windows_2025-12-09T15_23_14.877Z/window_011/trajectory_combined.png",
+          "statistics": "windows_2025-12-09T15_23_14.877Z/window_011/trajectory_stats.png"
         }
       }
     ],
@@ -253,7 +319,12 @@ const sessionsData = [
       "orientation_3d_2025-12-09T15_23_14.877Z.png"
     ],
     "calibration_stages_image": "calibration_stages_2025-12-09T15_23_14.877Z.png",
-    "trajectory_comparison_image": "trajectory_comparison_2025-12-09T15_23_14.877Z.png"
+    "trajectory_comparison_images": {
+      "raw": "trajectory_comparison_2025-12-09T15_23_14.877Z/raw_3d.png",
+      "filtered": "trajectory_comparison_2025-12-09T15_23_14.877Z/filtered_3d.png",
+      "combined": "trajectory_comparison_2025-12-09T15_23_14.877Z/combined_overlay.png",
+      "statistics": "trajectory_comparison_2025-12-09T15_23_14.877Z/statistics.png"
+    }
   },
   {
     "filename": "2025-12-11T13_26_33.209Z.json",
@@ -279,8 +350,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T13_26_33.209Z/window_001/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T13_26_33.209Z/window_001/signature.png",
           "stats": "windows_2025-12-11T13_26_33.209Z/window_001/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_001/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_001/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T13_26_33.209Z/window_001/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T13_26_33.209Z/window_001/trajectory_raw.png",
+          "iron": "windows_2025-12-11T13_26_33.209Z/window_001/trajectory_iron.png",
+          "fused": "windows_2025-12-11T13_26_33.209Z/window_001/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T13_26_33.209Z/window_001/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T13_26_33.209Z/window_001/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T13_26_33.209Z/window_001/trajectory_stats.png"
         }
       },
       {
@@ -301,8 +380,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T13_26_33.209Z/window_002/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T13_26_33.209Z/window_002/signature.png",
           "stats": "windows_2025-12-11T13_26_33.209Z/window_002/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_002/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_002/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T13_26_33.209Z/window_002/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T13_26_33.209Z/window_002/trajectory_raw.png",
+          "iron": "windows_2025-12-11T13_26_33.209Z/window_002/trajectory_iron.png",
+          "fused": "windows_2025-12-11T13_26_33.209Z/window_002/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T13_26_33.209Z/window_002/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T13_26_33.209Z/window_002/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T13_26_33.209Z/window_002/trajectory_stats.png"
         }
       },
       {
@@ -323,8 +410,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T13_26_33.209Z/window_003/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T13_26_33.209Z/window_003/signature.png",
           "stats": "windows_2025-12-11T13_26_33.209Z/window_003/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_003/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_003/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T13_26_33.209Z/window_003/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T13_26_33.209Z/window_003/trajectory_raw.png",
+          "iron": "windows_2025-12-11T13_26_33.209Z/window_003/trajectory_iron.png",
+          "fused": "windows_2025-12-11T13_26_33.209Z/window_003/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T13_26_33.209Z/window_003/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T13_26_33.209Z/window_003/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T13_26_33.209Z/window_003/trajectory_stats.png"
         }
       },
       {
@@ -345,8 +440,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T13_26_33.209Z/window_004/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T13_26_33.209Z/window_004/signature.png",
           "stats": "windows_2025-12-11T13_26_33.209Z/window_004/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_004/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_004/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T13_26_33.209Z/window_004/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T13_26_33.209Z/window_004/trajectory_raw.png",
+          "iron": "windows_2025-12-11T13_26_33.209Z/window_004/trajectory_iron.png",
+          "fused": "windows_2025-12-11T13_26_33.209Z/window_004/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T13_26_33.209Z/window_004/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T13_26_33.209Z/window_004/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T13_26_33.209Z/window_004/trajectory_stats.png"
         }
       },
       {
@@ -367,8 +470,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T13_26_33.209Z/window_005/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T13_26_33.209Z/window_005/signature.png",
           "stats": "windows_2025-12-11T13_26_33.209Z/window_005/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_005/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_005/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T13_26_33.209Z/window_005/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T13_26_33.209Z/window_005/trajectory_raw.png",
+          "iron": "windows_2025-12-11T13_26_33.209Z/window_005/trajectory_iron.png",
+          "fused": "windows_2025-12-11T13_26_33.209Z/window_005/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T13_26_33.209Z/window_005/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T13_26_33.209Z/window_005/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T13_26_33.209Z/window_005/trajectory_stats.png"
         }
       },
       {
@@ -389,8 +500,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T13_26_33.209Z/window_006/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T13_26_33.209Z/window_006/signature.png",
           "stats": "windows_2025-12-11T13_26_33.209Z/window_006/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_006/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_006/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T13_26_33.209Z/window_006/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T13_26_33.209Z/window_006/trajectory_raw.png",
+          "iron": "windows_2025-12-11T13_26_33.209Z/window_006/trajectory_iron.png",
+          "fused": "windows_2025-12-11T13_26_33.209Z/window_006/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T13_26_33.209Z/window_006/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T13_26_33.209Z/window_006/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T13_26_33.209Z/window_006/trajectory_stats.png"
         }
       },
       {
@@ -411,8 +530,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T13_26_33.209Z/window_007/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T13_26_33.209Z/window_007/signature.png",
           "stats": "windows_2025-12-11T13_26_33.209Z/window_007/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_007/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_007/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T13_26_33.209Z/window_007/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T13_26_33.209Z/window_007/trajectory_raw.png",
+          "iron": "windows_2025-12-11T13_26_33.209Z/window_007/trajectory_iron.png",
+          "fused": "windows_2025-12-11T13_26_33.209Z/window_007/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T13_26_33.209Z/window_007/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T13_26_33.209Z/window_007/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T13_26_33.209Z/window_007/trajectory_stats.png"
         }
       },
       {
@@ -433,8 +560,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T13_26_33.209Z/window_008/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T13_26_33.209Z/window_008/signature.png",
           "stats": "windows_2025-12-11T13_26_33.209Z/window_008/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_008/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_008/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T13_26_33.209Z/window_008/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T13_26_33.209Z/window_008/trajectory_raw.png",
+          "iron": "windows_2025-12-11T13_26_33.209Z/window_008/trajectory_iron.png",
+          "fused": "windows_2025-12-11T13_26_33.209Z/window_008/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T13_26_33.209Z/window_008/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T13_26_33.209Z/window_008/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T13_26_33.209Z/window_008/trajectory_stats.png"
         }
       },
       {
@@ -455,8 +590,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T13_26_33.209Z/window_009/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T13_26_33.209Z/window_009/signature.png",
           "stats": "windows_2025-12-11T13_26_33.209Z/window_009/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_009/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_009/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T13_26_33.209Z/window_009/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T13_26_33.209Z/window_009/trajectory_raw.png",
+          "iron": "windows_2025-12-11T13_26_33.209Z/window_009/trajectory_iron.png",
+          "fused": "windows_2025-12-11T13_26_33.209Z/window_009/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T13_26_33.209Z/window_009/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T13_26_33.209Z/window_009/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T13_26_33.209Z/window_009/trajectory_stats.png"
         }
       },
       {
@@ -477,8 +620,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T13_26_33.209Z/window_010/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T13_26_33.209Z/window_010/signature.png",
           "stats": "windows_2025-12-11T13_26_33.209Z/window_010/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_010/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_010/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T13_26_33.209Z/window_010/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T13_26_33.209Z/window_010/trajectory_raw.png",
+          "iron": "windows_2025-12-11T13_26_33.209Z/window_010/trajectory_iron.png",
+          "fused": "windows_2025-12-11T13_26_33.209Z/window_010/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T13_26_33.209Z/window_010/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T13_26_33.209Z/window_010/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T13_26_33.209Z/window_010/trajectory_stats.png"
         }
       },
       {
@@ -499,8 +650,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T13_26_33.209Z/window_011/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T13_26_33.209Z/window_011/signature.png",
           "stats": "windows_2025-12-11T13_26_33.209Z/window_011/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_011/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_011/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T13_26_33.209Z/window_011/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T13_26_33.209Z/window_011/trajectory_raw.png",
+          "iron": "windows_2025-12-11T13_26_33.209Z/window_011/trajectory_iron.png",
+          "fused": "windows_2025-12-11T13_26_33.209Z/window_011/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T13_26_33.209Z/window_011/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T13_26_33.209Z/window_011/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T13_26_33.209Z/window_011/trajectory_stats.png"
         }
       },
       {
@@ -521,8 +680,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T13_26_33.209Z/window_012/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T13_26_33.209Z/window_012/signature.png",
           "stats": "windows_2025-12-11T13_26_33.209Z/window_012/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_012/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_012/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T13_26_33.209Z/window_012/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T13_26_33.209Z/window_012/trajectory_raw.png",
+          "iron": "windows_2025-12-11T13_26_33.209Z/window_012/trajectory_iron.png",
+          "fused": "windows_2025-12-11T13_26_33.209Z/window_012/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T13_26_33.209Z/window_012/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T13_26_33.209Z/window_012/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T13_26_33.209Z/window_012/trajectory_stats.png"
         }
       },
       {
@@ -543,8 +710,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T13_26_33.209Z/window_013/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T13_26_33.209Z/window_013/signature.png",
           "stats": "windows_2025-12-11T13_26_33.209Z/window_013/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_013/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_013/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T13_26_33.209Z/window_013/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T13_26_33.209Z/window_013/trajectory_raw.png",
+          "iron": "windows_2025-12-11T13_26_33.209Z/window_013/trajectory_iron.png",
+          "fused": "windows_2025-12-11T13_26_33.209Z/window_013/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T13_26_33.209Z/window_013/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T13_26_33.209Z/window_013/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T13_26_33.209Z/window_013/trajectory_stats.png"
         }
       },
       {
@@ -565,8 +740,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T13_26_33.209Z/window_014/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T13_26_33.209Z/window_014/signature.png",
           "stats": "windows_2025-12-11T13_26_33.209Z/window_014/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_014/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T13_26_33.209Z/window_014/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T13_26_33.209Z/window_014/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T13_26_33.209Z/window_014/trajectory_raw.png",
+          "iron": "windows_2025-12-11T13_26_33.209Z/window_014/trajectory_iron.png",
+          "fused": "windows_2025-12-11T13_26_33.209Z/window_014/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T13_26_33.209Z/window_014/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T13_26_33.209Z/window_014/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T13_26_33.209Z/window_014/trajectory_stats.png"
         }
       }
     ],
@@ -576,7 +759,14 @@ const sessionsData = [
       "orientation_track_2025-12-11T13_26_33.209Z.png"
     ],
     "calibration_stages_image": "calibration_stages_2025-12-11T13_26_33.209Z.png",
-    "trajectory_comparison_image": "trajectory_comparison_2025-12-11T13_26_33.209Z.png"
+    "trajectory_comparison_images": {
+      "raw": "trajectory_comparison_2025-12-11T13_26_33.209Z/raw_3d.png",
+      "iron": "trajectory_comparison_2025-12-11T13_26_33.209Z/iron_3d.png",
+      "fused": "trajectory_comparison_2025-12-11T13_26_33.209Z/fused_3d.png",
+      "filtered": "trajectory_comparison_2025-12-11T13_26_33.209Z/filtered_3d.png",
+      "combined": "trajectory_comparison_2025-12-11T13_26_33.209Z/combined_overlay.png",
+      "statistics": "trajectory_comparison_2025-12-11T13_26_33.209Z/statistics.png"
+    }
   },
   {
     "filename": "2025-12-11T16_16_16.613Z.json",
@@ -602,8 +792,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T16_16_16.613Z/window_001/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T16_16_16.613Z/window_001/signature.png",
           "stats": "windows_2025-12-11T16_16_16.613Z/window_001/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_001/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_001/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T16_16_16.613Z/window_001/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T16_16_16.613Z/window_001/trajectory_raw.png",
+          "iron": "windows_2025-12-11T16_16_16.613Z/window_001/trajectory_iron.png",
+          "fused": "windows_2025-12-11T16_16_16.613Z/window_001/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T16_16_16.613Z/window_001/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T16_16_16.613Z/window_001/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T16_16_16.613Z/window_001/trajectory_stats.png"
         }
       },
       {
@@ -624,8 +822,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T16_16_16.613Z/window_002/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T16_16_16.613Z/window_002/signature.png",
           "stats": "windows_2025-12-11T16_16_16.613Z/window_002/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_002/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_002/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T16_16_16.613Z/window_002/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T16_16_16.613Z/window_002/trajectory_raw.png",
+          "iron": "windows_2025-12-11T16_16_16.613Z/window_002/trajectory_iron.png",
+          "fused": "windows_2025-12-11T16_16_16.613Z/window_002/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T16_16_16.613Z/window_002/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T16_16_16.613Z/window_002/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T16_16_16.613Z/window_002/trajectory_stats.png"
         }
       },
       {
@@ -646,8 +852,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T16_16_16.613Z/window_003/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T16_16_16.613Z/window_003/signature.png",
           "stats": "windows_2025-12-11T16_16_16.613Z/window_003/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_003/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_003/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T16_16_16.613Z/window_003/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T16_16_16.613Z/window_003/trajectory_raw.png",
+          "iron": "windows_2025-12-11T16_16_16.613Z/window_003/trajectory_iron.png",
+          "fused": "windows_2025-12-11T16_16_16.613Z/window_003/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T16_16_16.613Z/window_003/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T16_16_16.613Z/window_003/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T16_16_16.613Z/window_003/trajectory_stats.png"
         }
       },
       {
@@ -668,8 +882,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T16_16_16.613Z/window_004/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T16_16_16.613Z/window_004/signature.png",
           "stats": "windows_2025-12-11T16_16_16.613Z/window_004/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_004/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_004/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T16_16_16.613Z/window_004/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T16_16_16.613Z/window_004/trajectory_raw.png",
+          "iron": "windows_2025-12-11T16_16_16.613Z/window_004/trajectory_iron.png",
+          "fused": "windows_2025-12-11T16_16_16.613Z/window_004/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T16_16_16.613Z/window_004/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T16_16_16.613Z/window_004/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T16_16_16.613Z/window_004/trajectory_stats.png"
         }
       },
       {
@@ -690,8 +912,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T16_16_16.613Z/window_005/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T16_16_16.613Z/window_005/signature.png",
           "stats": "windows_2025-12-11T16_16_16.613Z/window_005/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_005/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_005/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T16_16_16.613Z/window_005/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T16_16_16.613Z/window_005/trajectory_raw.png",
+          "iron": "windows_2025-12-11T16_16_16.613Z/window_005/trajectory_iron.png",
+          "fused": "windows_2025-12-11T16_16_16.613Z/window_005/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T16_16_16.613Z/window_005/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T16_16_16.613Z/window_005/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T16_16_16.613Z/window_005/trajectory_stats.png"
         }
       },
       {
@@ -712,8 +942,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T16_16_16.613Z/window_006/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T16_16_16.613Z/window_006/signature.png",
           "stats": "windows_2025-12-11T16_16_16.613Z/window_006/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_006/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_006/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T16_16_16.613Z/window_006/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T16_16_16.613Z/window_006/trajectory_raw.png",
+          "iron": "windows_2025-12-11T16_16_16.613Z/window_006/trajectory_iron.png",
+          "fused": "windows_2025-12-11T16_16_16.613Z/window_006/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T16_16_16.613Z/window_006/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T16_16_16.613Z/window_006/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T16_16_16.613Z/window_006/trajectory_stats.png"
         }
       },
       {
@@ -734,8 +972,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T16_16_16.613Z/window_007/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T16_16_16.613Z/window_007/signature.png",
           "stats": "windows_2025-12-11T16_16_16.613Z/window_007/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_007/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_007/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T16_16_16.613Z/window_007/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T16_16_16.613Z/window_007/trajectory_raw.png",
+          "iron": "windows_2025-12-11T16_16_16.613Z/window_007/trajectory_iron.png",
+          "fused": "windows_2025-12-11T16_16_16.613Z/window_007/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T16_16_16.613Z/window_007/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T16_16_16.613Z/window_007/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T16_16_16.613Z/window_007/trajectory_stats.png"
         }
       },
       {
@@ -756,8 +1002,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T16_16_16.613Z/window_008/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T16_16_16.613Z/window_008/signature.png",
           "stats": "windows_2025-12-11T16_16_16.613Z/window_008/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_008/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_008/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T16_16_16.613Z/window_008/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T16_16_16.613Z/window_008/trajectory_raw.png",
+          "iron": "windows_2025-12-11T16_16_16.613Z/window_008/trajectory_iron.png",
+          "fused": "windows_2025-12-11T16_16_16.613Z/window_008/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T16_16_16.613Z/window_008/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T16_16_16.613Z/window_008/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T16_16_16.613Z/window_008/trajectory_stats.png"
         }
       },
       {
@@ -778,8 +1032,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T16_16_16.613Z/window_009/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T16_16_16.613Z/window_009/signature.png",
           "stats": "windows_2025-12-11T16_16_16.613Z/window_009/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_009/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_009/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T16_16_16.613Z/window_009/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T16_16_16.613Z/window_009/trajectory_raw.png",
+          "iron": "windows_2025-12-11T16_16_16.613Z/window_009/trajectory_iron.png",
+          "fused": "windows_2025-12-11T16_16_16.613Z/window_009/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T16_16_16.613Z/window_009/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T16_16_16.613Z/window_009/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T16_16_16.613Z/window_009/trajectory_stats.png"
         }
       },
       {
@@ -800,8 +1062,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T16_16_16.613Z/window_010/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T16_16_16.613Z/window_010/signature.png",
           "stats": "windows_2025-12-11T16_16_16.613Z/window_010/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_010/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_010/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T16_16_16.613Z/window_010/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T16_16_16.613Z/window_010/trajectory_raw.png",
+          "iron": "windows_2025-12-11T16_16_16.613Z/window_010/trajectory_iron.png",
+          "fused": "windows_2025-12-11T16_16_16.613Z/window_010/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T16_16_16.613Z/window_010/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T16_16_16.613Z/window_010/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T16_16_16.613Z/window_010/trajectory_stats.png"
         }
       },
       {
@@ -822,8 +1092,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T16_16_16.613Z/window_011/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T16_16_16.613Z/window_011/signature.png",
           "stats": "windows_2025-12-11T16_16_16.613Z/window_011/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_011/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_011/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T16_16_16.613Z/window_011/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T16_16_16.613Z/window_011/trajectory_raw.png",
+          "iron": "windows_2025-12-11T16_16_16.613Z/window_011/trajectory_iron.png",
+          "fused": "windows_2025-12-11T16_16_16.613Z/window_011/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T16_16_16.613Z/window_011/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T16_16_16.613Z/window_011/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T16_16_16.613Z/window_011/trajectory_stats.png"
         }
       },
       {
@@ -844,8 +1122,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T16_16_16.613Z/window_012/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T16_16_16.613Z/window_012/signature.png",
           "stats": "windows_2025-12-11T16_16_16.613Z/window_012/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_012/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_012/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T16_16_16.613Z/window_012/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T16_16_16.613Z/window_012/trajectory_raw.png",
+          "iron": "windows_2025-12-11T16_16_16.613Z/window_012/trajectory_iron.png",
+          "fused": "windows_2025-12-11T16_16_16.613Z/window_012/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T16_16_16.613Z/window_012/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T16_16_16.613Z/window_012/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T16_16_16.613Z/window_012/trajectory_stats.png"
         }
       },
       {
@@ -866,8 +1152,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T16_16_16.613Z/window_013/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T16_16_16.613Z/window_013/signature.png",
           "stats": "windows_2025-12-11T16_16_16.613Z/window_013/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_013/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_013/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T16_16_16.613Z/window_013/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T16_16_16.613Z/window_013/trajectory_raw.png",
+          "iron": "windows_2025-12-11T16_16_16.613Z/window_013/trajectory_iron.png",
+          "fused": "windows_2025-12-11T16_16_16.613Z/window_013/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T16_16_16.613Z/window_013/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T16_16_16.613Z/window_013/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T16_16_16.613Z/window_013/trajectory_stats.png"
         }
       },
       {
@@ -888,8 +1182,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T16_16_16.613Z/window_014/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T16_16_16.613Z/window_014/signature.png",
           "stats": "windows_2025-12-11T16_16_16.613Z/window_014/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_014/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_014/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T16_16_16.613Z/window_014/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T16_16_16.613Z/window_014/trajectory_raw.png",
+          "iron": "windows_2025-12-11T16_16_16.613Z/window_014/trajectory_iron.png",
+          "fused": "windows_2025-12-11T16_16_16.613Z/window_014/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T16_16_16.613Z/window_014/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T16_16_16.613Z/window_014/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T16_16_16.613Z/window_014/trajectory_stats.png"
         }
       },
       {
@@ -910,8 +1212,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T16_16_16.613Z/window_015/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T16_16_16.613Z/window_015/signature.png",
           "stats": "windows_2025-12-11T16_16_16.613Z/window_015/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_015/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_015/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T16_16_16.613Z/window_015/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T16_16_16.613Z/window_015/trajectory_raw.png",
+          "iron": "windows_2025-12-11T16_16_16.613Z/window_015/trajectory_iron.png",
+          "fused": "windows_2025-12-11T16_16_16.613Z/window_015/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T16_16_16.613Z/window_015/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T16_16_16.613Z/window_015/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T16_16_16.613Z/window_015/trajectory_stats.png"
         }
       },
       {
@@ -932,8 +1242,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T16_16_16.613Z/window_016/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T16_16_16.613Z/window_016/signature.png",
           "stats": "windows_2025-12-11T16_16_16.613Z/window_016/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_016/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_016/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T16_16_16.613Z/window_016/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T16_16_16.613Z/window_016/trajectory_raw.png",
+          "iron": "windows_2025-12-11T16_16_16.613Z/window_016/trajectory_iron.png",
+          "fused": "windows_2025-12-11T16_16_16.613Z/window_016/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T16_16_16.613Z/window_016/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T16_16_16.613Z/window_016/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T16_16_16.613Z/window_016/trajectory_stats.png"
         }
       },
       {
@@ -954,8 +1272,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T16_16_16.613Z/window_017/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T16_16_16.613Z/window_017/signature.png",
           "stats": "windows_2025-12-11T16_16_16.613Z/window_017/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_017/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_017/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T16_16_16.613Z/window_017/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T16_16_16.613Z/window_017/trajectory_raw.png",
+          "iron": "windows_2025-12-11T16_16_16.613Z/window_017/trajectory_iron.png",
+          "fused": "windows_2025-12-11T16_16_16.613Z/window_017/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T16_16_16.613Z/window_017/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T16_16_16.613Z/window_017/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T16_16_16.613Z/window_017/trajectory_stats.png"
         }
       },
       {
@@ -976,8 +1302,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T16_16_16.613Z/window_018/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T16_16_16.613Z/window_018/signature.png",
           "stats": "windows_2025-12-11T16_16_16.613Z/window_018/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_018/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_018/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T16_16_16.613Z/window_018/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T16_16_16.613Z/window_018/trajectory_raw.png",
+          "iron": "windows_2025-12-11T16_16_16.613Z/window_018/trajectory_iron.png",
+          "fused": "windows_2025-12-11T16_16_16.613Z/window_018/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T16_16_16.613Z/window_018/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T16_16_16.613Z/window_018/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T16_16_16.613Z/window_018/trajectory_stats.png"
         }
       },
       {
@@ -998,8 +1332,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T16_16_16.613Z/window_019/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T16_16_16.613Z/window_019/signature.png",
           "stats": "windows_2025-12-11T16_16_16.613Z/window_019/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_019/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_019/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T16_16_16.613Z/window_019/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T16_16_16.613Z/window_019/trajectory_raw.png",
+          "iron": "windows_2025-12-11T16_16_16.613Z/window_019/trajectory_iron.png",
+          "fused": "windows_2025-12-11T16_16_16.613Z/window_019/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T16_16_16.613Z/window_019/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T16_16_16.613Z/window_019/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T16_16_16.613Z/window_019/trajectory_stats.png"
         }
       },
       {
@@ -1020,8 +1362,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T16_16_16.613Z/window_020/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T16_16_16.613Z/window_020/signature.png",
           "stats": "windows_2025-12-11T16_16_16.613Z/window_020/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_020/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_020/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T16_16_16.613Z/window_020/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T16_16_16.613Z/window_020/trajectory_raw.png",
+          "iron": "windows_2025-12-11T16_16_16.613Z/window_020/trajectory_iron.png",
+          "fused": "windows_2025-12-11T16_16_16.613Z/window_020/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T16_16_16.613Z/window_020/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T16_16_16.613Z/window_020/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T16_16_16.613Z/window_020/trajectory_stats.png"
         }
       },
       {
@@ -1042,8 +1392,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T16_16_16.613Z/window_021/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T16_16_16.613Z/window_021/signature.png",
           "stats": "windows_2025-12-11T16_16_16.613Z/window_021/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_021/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_021/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T16_16_16.613Z/window_021/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T16_16_16.613Z/window_021/trajectory_raw.png",
+          "iron": "windows_2025-12-11T16_16_16.613Z/window_021/trajectory_iron.png",
+          "fused": "windows_2025-12-11T16_16_16.613Z/window_021/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T16_16_16.613Z/window_021/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T16_16_16.613Z/window_021/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T16_16_16.613Z/window_021/trajectory_stats.png"
         }
       },
       {
@@ -1064,8 +1422,16 @@ const sessionsData = [
           "trajectory_mag_3d": "windows_2025-12-11T16_16_16.613Z/window_022/trajectory_mag_3d.png",
           "signature": "windows_2025-12-11T16_16_16.613Z/window_022/signature.png",
           "stats": "windows_2025-12-11T16_16_16.613Z/window_022/stats.png",
-          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_022/trajectory_comparison.png",
+          "trajectory_comparison": "windows_2025-12-11T16_16_16.613Z/window_022/trajectory_combined.png",
           "trajectory_combined_3d": "windows_2025-12-11T16_16_16.613Z/window_022/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-11T16_16_16.613Z/window_022/trajectory_raw.png",
+          "iron": "windows_2025-12-11T16_16_16.613Z/window_022/trajectory_iron.png",
+          "fused": "windows_2025-12-11T16_16_16.613Z/window_022/trajectory_fused.png",
+          "filtered": "windows_2025-12-11T16_16_16.613Z/window_022/trajectory_filtered.png",
+          "combined": "windows_2025-12-11T16_16_16.613Z/window_022/trajectory_combined.png",
+          "statistics": "windows_2025-12-11T16_16_16.613Z/window_022/trajectory_stats.png"
         }
       }
     ],
@@ -1075,6 +1441,13 @@ const sessionsData = [
       "orientation_track_2025-12-11T16_16_16.613Z.png"
     ],
     "calibration_stages_image": "calibration_stages_2025-12-11T16_16_16.613Z.png",
-    "trajectory_comparison_image": "trajectory_comparison_2025-12-11T16_16_16.613Z.png"
+    "trajectory_comparison_images": {
+      "raw": "trajectory_comparison_2025-12-11T16_16_16.613Z/raw_3d.png",
+      "iron": "trajectory_comparison_2025-12-11T16_16_16.613Z/iron_3d.png",
+      "fused": "trajectory_comparison_2025-12-11T16_16_16.613Z/fused_3d.png",
+      "filtered": "trajectory_comparison_2025-12-11T16_16_16.613Z/filtered_3d.png",
+      "combined": "trajectory_comparison_2025-12-11T16_16_16.613Z/combined_overlay.png",
+      "statistics": "trajectory_comparison_2025-12-11T16_16_16.613Z/statistics.png"
+    }
   }
 ];

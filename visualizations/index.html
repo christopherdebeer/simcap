@@ -134,6 +134,47 @@
             border-color: var(--accent);
         }
 
+        .trajectory-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: var(--space-md);
+            margin-top: var(--space-md);
+        }
+
+        .trajectory-card {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            overflow: hidden;
+            transition: border-color 0.15s ease;
+            cursor: pointer;
+        }
+
+        .trajectory-card:hover {
+            border-color: var(--accent);
+        }
+
+        .trajectory-card.hidden {
+            display: none;
+        }
+
+        .trajectory-image {
+            width: 100%;
+            aspect-ratio: 4/3;
+            object-fit: contain;
+            background: var(--bg);
+            display: block;
+        }
+
+        .trajectory-label {
+            padding: var(--space-sm) var(--space-md);
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            text-align: center;
+            border-top: 1px solid var(--border);
+        }
+
         .windows-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -307,31 +348,6 @@
             gap: var(--space-sm);
         }
 
-        .window-filter-bar {
-            display: flex;
-            gap: var(--space-md);
-            align-items: center;
-            margin-bottom: var(--space-md);
-            padding: var(--space-md);
-            background: var(--bg-elevated);
-            border: 1px solid var(--border);
-        }
-
-        .window-view-select {
-            padding: var(--space-sm) var(--space-md);
-            border: 1px solid var(--border);
-            background: var(--bg);
-            color: var(--fg);
-            font-family: var(--font-mono);
-            font-size: 0.75rem;
-            cursor: pointer;
-        }
-
-        .window-view-select:focus {
-            outline: none;
-            border-color: var(--accent);
-        }
-
         .no-sessions {
             text-align: center;
             padding: var(--space-2xl);
@@ -412,9 +428,37 @@
                         <input type="checkbox" id="show-raw" checked>
                         Raw Axis
                     </label>
+                </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="filter-group">
+                <span class="filter-label">Trajectories:</span>
+                <div class="checkbox-group">
                     <label class="checkbox-label">
-                        <input type="checkbox" id="show-trajectory" checked>
-                        3D Trajectory
+                        <input type="checkbox" id="show-traj-raw" checked>
+                        Raw
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-traj-iron" checked>
+                        Iron
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-traj-fused" checked>
+                        Fused
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-traj-filtered" checked>
+                        Filtered
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-traj-combined" checked>
+                        Combined
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-traj-stats" checked>
+                        Statistics
                     </label>
                 </div>
             </div>
@@ -451,7 +495,12 @@
             showCalibration: true,
             showWindows: true,
             showRaw: true,
-            showTrajectory: true
+            showTrajRaw: true,
+            showTrajIron: true,
+            showTrajFused: true,
+            showTrajFiltered: true,
+            showTrajCombined: true,
+            showTrajStats: true
         };
 
         function initializePage() {
@@ -500,29 +549,108 @@
                         </div>
                         ` : ''}
 
+                        ${session.trajectory_comparison_images ? `
+                        <div class="image-section trajectory-section">
+                            <h3 class="section-title">3D Trajectory Comparison</h3>
+                            <div class="trajectory-grid">
+                                ${session.trajectory_comparison_images.raw ? `
+                                <div class="trajectory-card ${viewSettings.showTrajRaw ? '' : 'hidden'}" data-type="raw" onclick="openModal('${session.trajectory_comparison_images.raw}')">
+                                    <img src="${session.trajectory_comparison_images.raw}" class="trajectory-image" alt="Raw trajectory">
+                                    <div class="trajectory-label">Raw</div>
+                                </div>
+                                ` : ''}
+                                ${session.trajectory_comparison_images.iron ? `
+                                <div class="trajectory-card ${viewSettings.showTrajIron ? '' : 'hidden'}" data-type="iron" onclick="openModal('${session.trajectory_comparison_images.iron}')">
+                                    <img src="${session.trajectory_comparison_images.iron}" class="trajectory-image" alt="Iron corrected trajectory">
+                                    <div class="trajectory-label">Iron Corrected</div>
+                                </div>
+                                ` : ''}
+                                ${session.trajectory_comparison_images.fused ? `
+                                <div class="trajectory-card ${viewSettings.showTrajFused ? '' : 'hidden'}" data-type="fused" onclick="openModal('${session.trajectory_comparison_images.fused}')">
+                                    <img src="${session.trajectory_comparison_images.fused}" class="trajectory-image" alt="Fused trajectory">
+                                    <div class="trajectory-label">Fused</div>
+                                </div>
+                                ` : ''}
+                                ${session.trajectory_comparison_images.filtered ? `
+                                <div class="trajectory-card ${viewSettings.showTrajFiltered ? '' : 'hidden'}" data-type="filtered" onclick="openModal('${session.trajectory_comparison_images.filtered}')">
+                                    <img src="${session.trajectory_comparison_images.filtered}" class="trajectory-image" alt="Filtered trajectory">
+                                    <div class="trajectory-label">Filtered</div>
+                                </div>
+                                ` : ''}
+                                ${session.trajectory_comparison_images.combined ? `
+                                <div class="trajectory-card ${viewSettings.showTrajCombined ? '' : 'hidden'}" data-type="combined" onclick="openModal('${session.trajectory_comparison_images.combined}')">
+                                    <img src="${session.trajectory_comparison_images.combined}" class="trajectory-image" alt="Combined overlay">
+                                    <div class="trajectory-label">Combined Overlay</div>
+                                </div>
+                                ` : ''}
+                                ${session.trajectory_comparison_images.statistics ? `
+                                <div class="trajectory-card ${viewSettings.showTrajStats ? '' : 'hidden'}" data-type="statistics" onclick="openModal('${session.trajectory_comparison_images.statistics}')">
+                                    <img src="${session.trajectory_comparison_images.statistics}" class="trajectory-image" alt="Statistics">
+                                    <div class="trajectory-label">Statistics</div>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                        ` : ''}
+
+                        ${session.windows.some(w => w.trajectory_images) ? `
+                        <div class="image-section window-trajectories-section">
+                            <h3 class="section-title">Per-Window Trajectory Comparison (${session.windows.filter(w => w.trajectory_images).length} windows)</h3>
+                            ${session.windows.filter(w => w.trajectory_images).map(w => `
+                                <div style="margin-bottom: var(--space-xl); padding: var(--space-lg); background: var(--bg-elevated); border: 1px solid var(--border);">
+                                    <h4 style="margin: 0 0 var(--space-md) 0; font-size: 0.875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
+                                        Window ${w.window_num} | ${w.time_start.toFixed(2)}s - ${w.time_end.toFixed(2)}s
+                                    </h4>
+                                    <div class="trajectory-grid">
+                                        ${w.trajectory_images.raw ? `
+                                        <div class="trajectory-card ${viewSettings.showTrajRaw ? '' : 'hidden'}" data-type="raw" onclick="openModal('${w.trajectory_images.raw}')">
+                                            <img src="${w.trajectory_images.raw}" class="trajectory-image" alt="Raw trajectory">
+                                            <div class="trajectory-label">Raw</div>
+                                        </div>
+                                        ` : ''}
+                                        ${w.trajectory_images.iron ? `
+                                        <div class="trajectory-card ${viewSettings.showTrajIron ? '' : 'hidden'}" data-type="iron" onclick="openModal('${w.trajectory_images.iron}')">
+                                            <img src="${w.trajectory_images.iron}" class="trajectory-image" alt="Iron corrected">
+                                            <div class="trajectory-label">Iron</div>
+                                        </div>
+                                        ` : ''}
+                                        ${w.trajectory_images.fused ? `
+                                        <div class="trajectory-card ${viewSettings.showTrajFused ? '' : 'hidden'}" data-type="fused" onclick="openModal('${w.trajectory_images.fused}')">
+                                            <img src="${w.trajectory_images.fused}" class="trajectory-image" alt="Fused">
+                                            <div class="trajectory-label">Fused</div>
+                                        </div>
+                                        ` : ''}
+                                        ${w.trajectory_images.filtered ? `
+                                        <div class="trajectory-card ${viewSettings.showTrajFiltered ? '' : 'hidden'}" data-type="filtered" onclick="openModal('${w.trajectory_images.filtered}')">
+                                            <img src="${w.trajectory_images.filtered}" class="trajectory-image" alt="Filtered">
+                                            <div class="trajectory-label">Filtered</div>
+                                        </div>
+                                        ` : ''}
+                                        ${w.trajectory_images.combined ? `
+                                        <div class="trajectory-card ${viewSettings.showTrajCombined ? '' : 'hidden'}" data-type="combined" onclick="openModal('${w.trajectory_images.combined}')">
+                                            <img src="${w.trajectory_images.combined}" class="trajectory-image" alt="Combined">
+                                            <div class="trajectory-label">Combined</div>
+                                        </div>
+                                        ` : ''}
+                                        ${w.trajectory_images.statistics ? `
+                                        <div class="trajectory-card ${viewSettings.showTrajStats ? '' : 'hidden'}" data-type="statistics" onclick="openModal('${w.trajectory_images.statistics}')">
+                                            <img src="${w.trajectory_images.statistics}" class="trajectory-image" alt="Statistics">
+                                            <div class="trajectory-label">Statistics</div>
+                                        </div>
+                                        ` : ''}
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                        ` : ''}
+
                         <div class="image-section windows-section ${viewSettings.showWindows ? '' : 'hidden'}">
                             <h3 class="section-title">Per-Second Windows (${session.windows.length})</h3>
-                            <div class="window-filter-bar">
-                                <span class="filter-label">View:</span>
-                                <select class="window-view-select" onchange="updateWindowView(${idx}, this.value)">
-                                    <option value="composite">Composite</option>
-                                    <option value="timeseries_accel">Accel Timeseries</option>
-                                    <option value="timeseries_gyro">Gyro Timeseries</option>
-                                    <option value="timeseries_mag">Mag Timeseries</option>
-                                    <option value="trajectory_accel_3d">Accel 3D</option>
-                                    <option value="trajectory_gyro_3d">Gyro 3D</option>
-                                    <option value="trajectory_mag_3d">Mag 3D</option>
-                                    <option value="trajectory_combined_3d">Combined 3D</option>
-                                    <option value="trajectory_comparison">Trajectory Comparison</option>
-                                    <option value="signature">Signature</option>
-                                    <option value="stats">Statistics</option>
-                                </select>
-                            </div>
                             <div class="windows-grid" id="windows-grid-${idx}">
                                 ${session.windows.map(w => `
-                                    <div class="window-card" onclick="openWindowModal(${idx}, ${w.window_num - 1})">
+                                    <div class="window-card" onclick="openModal('${w.filepath}')">
                                         <div class="window-color-bar" style="background-color: ${w.color}"></div>
-                                        <img src="${w.filepath}" class="window-preview" data-composite="${w.filepath}" ${w.images ? Object.entries(w.images).map(([k,v]) => `data-${k}="${v}"`).join(' ') : ''} alt="Window ${w.window_num}">
+                                        <img src="${w.filepath}" class="window-preview" alt="Window ${w.window_num}">
                                         <div class="window-info">
                                             <div class="window-title">Window ${w.window_num}</div>
                                             <div class="window-time">${w.time_start.toFixed(2)}s - ${w.time_end.toFixed(2)}s</div>
@@ -543,13 +671,6 @@
                                 `).join('')}
                             </div>
                         </div>
-
-                        ${session.trajectory_comparison_image ? `
-                        <div class="image-section trajectory-section ${viewSettings.showTrajectory ? '' : 'hidden'}">
-                            <h3 class="section-title">3D Trajectory Comparison</h3>
-                            <img src="${session.trajectory_comparison_image}" class="composite-image" onclick="openModal(this.src)" alt="3D trajectory comparison">
-                        </div>
-                        ` : ''}
                     </div>
                 </div>
             `).join('');
@@ -579,7 +700,12 @@
             viewSettings.showCalibration = document.getElementById('show-calibration').checked;
             viewSettings.showWindows = document.getElementById('show-windows').checked;
             viewSettings.showRaw = document.getElementById('show-raw').checked;
-            viewSettings.showTrajectory = document.getElementById('show-trajectory').checked;
+            viewSettings.showTrajRaw = document.getElementById('show-traj-raw').checked;
+            viewSettings.showTrajIron = document.getElementById('show-traj-iron').checked;
+            viewSettings.showTrajFused = document.getElementById('show-traj-fused').checked;
+            viewSettings.showTrajFiltered = document.getElementById('show-traj-filtered').checked;
+            viewSettings.showTrajCombined = document.getElementById('show-traj-combined').checked;
+            viewSettings.showTrajStats = document.getElementById('show-traj-stats').checked;
 
             // Update visibility of sections
             document.querySelectorAll('.composite-section').forEach(el => {
@@ -594,8 +720,25 @@
             document.querySelectorAll('.raw-section').forEach(el => {
                 el.classList.toggle('hidden', !viewSettings.showRaw);
             });
-            document.querySelectorAll('.trajectory-section').forEach(el => {
-                el.classList.toggle('hidden', !viewSettings.showTrajectory);
+
+            // Update trajectory card visibility
+            document.querySelectorAll('.trajectory-card[data-type="raw"]').forEach(el => {
+                el.classList.toggle('hidden', !viewSettings.showTrajRaw);
+            });
+            document.querySelectorAll('.trajectory-card[data-type="iron"]').forEach(el => {
+                el.classList.toggle('hidden', !viewSettings.showTrajIron);
+            });
+            document.querySelectorAll('.trajectory-card[data-type="fused"]').forEach(el => {
+                el.classList.toggle('hidden', !viewSettings.showTrajFused);
+            });
+            document.querySelectorAll('.trajectory-card[data-type="filtered"]').forEach(el => {
+                el.classList.toggle('hidden', !viewSettings.showTrajFiltered);
+            });
+            document.querySelectorAll('.trajectory-card[data-type="combined"]').forEach(el => {
+                el.classList.toggle('hidden', !viewSettings.showTrajCombined);
+            });
+            document.querySelectorAll('.trajectory-card[data-type="statistics"]').forEach(el => {
+                el.classList.toggle('hidden', !viewSettings.showTrajStats);
             });
         }
 
@@ -658,7 +801,12 @@
             document.getElementById('show-calibration').addEventListener('change', updateViewSettings);
             document.getElementById('show-windows').addEventListener('change', updateViewSettings);
             document.getElementById('show-raw').addEventListener('change', updateViewSettings);
-            document.getElementById('show-trajectory').addEventListener('change', updateViewSettings);
+            document.getElementById('show-traj-raw').addEventListener('change', updateViewSettings);
+            document.getElementById('show-traj-iron').addEventListener('change', updateViewSettings);
+            document.getElementById('show-traj-fused').addEventListener('change', updateViewSettings);
+            document.getElementById('show-traj-filtered').addEventListener('change', updateViewSettings);
+            document.getElementById('show-traj-combined').addEventListener('change', updateViewSettings);
+            document.getElementById('show-traj-stats').addEventListener('change', updateViewSettings);
 
             // Close modal on click outside
             document.getElementById('image-modal').addEventListener('click', (e) => {
@@ -673,51 +821,6 @@
                     closeModal();
                 }
             });
-        }
-
-        // Update window view based on dropdown selection
-        function updateWindowView(sessionIdx, viewType) {
-            const grid = document.getElementById(`windows-grid-${sessionIdx}`);
-            if (!grid) return;
-
-            const images = grid.querySelectorAll('.window-preview');
-            images.forEach(img => {
-                let newSrc;
-                if (viewType === 'composite') {
-                    newSrc = img.dataset.composite;
-                } else {
-                    // Try to get the specific view type from data attributes
-                    const dataKey = viewType.replace(/_/g, '-');
-                    newSrc = img.dataset[viewType] || img.dataset[dataKey];
-                }
-                
-                if (newSrc) {
-                    img.src = newSrc;
-                }
-            });
-        }
-
-        // Open modal for a specific window with navigation
-        function openWindowModal(sessionIdx, windowIdx) {
-            const session = filteredSessions[sessionIdx];
-            if (!session || !session.windows[windowIdx]) return;
-            
-            const window = session.windows[windowIdx];
-            
-            // Get the current view type from the dropdown
-            const dropdown = document.querySelector(`#session-${sessionIdx} .window-view-select`);
-            const viewType = dropdown ? dropdown.value : 'composite';
-            
-            let imageSrc;
-            if (viewType === 'composite') {
-                imageSrc = window.filepath;
-            } else if (window.images && window.images[viewType]) {
-                imageSrc = window.images[viewType];
-            } else {
-                imageSrc = window.filepath;
-            }
-            
-            openModal(imageSrc);
         }
 
         // Initialize on page load
