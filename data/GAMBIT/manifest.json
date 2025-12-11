@@ -1,0 +1,52 @@
+{
+  "generated": "2025-12-11T23:01:02.048523Z",
+  "directory": "GAMBIT",
+  "sessionCount": 5,
+  "sessions": [
+    {
+      "filename": "2025-12-11T18_41_08.248Z.json",
+      "size": 1121823,
+      "modified": "2025-12-11T22:52:08.785162Z",
+      "timestamp": "2025-12-11T18:41:08.235Z",
+      "version": "2.0",
+      "sampleCount": 1616,
+      "durationSec": 80.8
+    },
+    {
+      "filename": "2025-12-11T18_34_21.070Z.json",
+      "size": 535544,
+      "modified": "2025-12-11T22:52:08.780162Z",
+      "timestamp": "2025-12-11T18:34:21.064Z",
+      "version": "2.0",
+      "sampleCount": 769,
+      "durationSec": 38.5
+    },
+    {
+      "filename": "2025-12-11T16_16_16.613Z.json",
+      "size": 1072074,
+      "modified": "2025-12-11T22:52:08.773162Z",
+      "timestamp": "2025-12-11T16:16:16.604Z",
+      "version": "2.0",
+      "sampleCount": 1138,
+      "durationSec": 56.9
+    },
+    {
+      "filename": "2025-12-11T13_26_33.209Z.json",
+      "size": 579987,
+      "modified": "2025-12-11T22:52:08.769162Z",
+      "timestamp": "2025-12-11T13:26:33.209000+00:00",
+      "version": "1.0",
+      "sampleCount": 743,
+      "durationSec": 37.1
+    },
+    {
+      "filename": "2025-12-09T15_23_14.877Z.json",
+      "size": 136641,
+      "modified": "2025-12-11T00:41:24Z",
+      "timestamp": "2025-12-09T15:23:14.877000+00:00",
+      "version": "1.0",
+      "sampleCount": 554,
+      "durationSec": 27.7
+    }
+  ]
+}
