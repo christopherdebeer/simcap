@@ -1201,8 +1201,17 @@
             };
 
             // Initialize on page load
-            initGestureInference();
-            initHandRenderer();
+            try {
+                initGestureInference();
+            } catch (e) {
+                console.error('[GAMBIT] Failed to init gesture inference:', e);
+            }
+
+            try {
+                initHandRenderer();
+            } catch (e) {
+                console.error('[GAMBIT] Failed to init hand renderer:', e);
+            }
 
             // ===== Session Playback System =====
             const MANIFEST_URL = '../../../data/GAMBIT/manifest.json';
@@ -1486,7 +1495,11 @@
             }
 
             // Initialize playback system
-            initPlayback();
+            try {
+                initPlayback();
+            } catch (e) {
+                console.error('[GAMBIT] Failed to init playback:', e);
+            }
 
         </script>
     </body>
