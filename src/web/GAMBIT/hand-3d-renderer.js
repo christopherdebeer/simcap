@@ -24,10 +24,10 @@ class Hand3DRenderer {
         // 0 = extended, higher values = more flexed
         this.joints = this.fingers.map(() => [0, 0, 0, 0]);
 
-        // Hand orientation (degrees)
+        // Hand orientation (degrees) - face-on static view
         this.orientation = {
-            pitch: 20,
-            yaw: 30,
+            pitch: 0,
+            yaw: 0,
             roll: 0
         };
 
@@ -135,8 +135,8 @@ class Hand3DRenderer {
 
             // Each segment (MCP, PIP, DIP)
             [mcp, pip, dip].forEach((angle, si) => {
-                // Flex around X axis (curl)
-                m = this._matMul(m, this._matRotX(this._rad(-angle)));
+                // Flex around X axis (curl toward palm)
+                m = this._matMul(m, this._matRotX(this._rad(angle)));
                 m = this._matMul(m, this._matTrans(0, lens[si], 0));
 
                 const newPos = this._matApply(m, [0,0,0]);
@@ -235,7 +235,7 @@ class Hand3DRenderer {
     }
 
     _project(p) {
-        const scale = 200, z = p[2] + 4;
+        const scale = 400, z = p[2] + 4;
         return [
             this.W/2 + p[0] * scale / z,
             this.H/2 - p[1] * scale / z,
