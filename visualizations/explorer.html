@@ -197,9 +197,12 @@
             font-size: 0.75em;
             font-weight: bold;
         }
-        
+
         .badge.labeled { background: #4daf4a; }
         .badge.unlabeled { background: #ff7f00; }
+        .badge.calib-full { background: #4daf4a; }
+        .badge.calib-partial { background: #ff7f00; }
+        .badge.calib-none { background: #e41a1c; }
         
         .expand-icon {
             font-size: 1.3em;
@@ -627,8 +630,12 @@
                     <span class="label">Clusters</span>
                 </div>
                 <div class="stat-box">
-                    <span class="number" id="stat-labeled">0</span>
+                    <span class="number" id="stat-labeled">24</span>
                     <span class="label">Labeled</span>
+                </div>
+                <div class="stat-box">
+                    <span class="number" id="stat-calibrated">0</span>
+                    <span class="label">Calibrated</span>
                 </div>
             </div>
         </header>
@@ -666,6 +673,12 @@
                         <input type="text" id="searchBox" placeholder="Search sessions..." style="flex: 1; min-width: 200px;">
                         <select id="clusterFilter">
                             <option value="all">All Clusters</option>
+                        </select>
+                        <select id="calibFilter">
+                            <option value="all">All Calibration</option>
+                            <option value="full">Full Calib Only</option>
+                            <option value="partial">Iron Only</option>
+                            <option value="none">No Calib</option>
                         </select>
                         <select id="sortSelect">
                             <option value="timestamp-desc">Newest First</option>
@@ -740,35 +753,33 @@
     <script>
         // Embedded data
         const explorerData = {
-  "generated_at": "2025-12-09T15:27:45.023002",
+  "generated_at": "2025-12-11T12:42:16.704566",
   "summary": {
     "total_sessions": 25,
-    "labeled_sessions": 1,
-    "unlabeled_sessions": 24,
-    "v1_sessions": 0,
-    "v2_sessions": 1,
+    "labeled_sessions": 24,
+    "unlabeled_sessions": 1,
+    "v1_sessions": 24,
+    "v2_sessions": 0,
     "total_samples": 4742,
     "gesture_counts": {
-      "REST": 0,
-      "FIST": 0,
-      "OPEN_PALM": 0,
-      "INDEX_UP": 0,
-      "PEACE": 0,
-      "THUMBS_UP": 0,
-      "OK_SIGN": 0,
-      "PINCH": 0,
-      "GRAB": 0,
+      "REST": 2850,
+      "FIST": 350,
+      "OPEN_PALM": 950,
+      "INDEX_UP": 700,
+      "PEACE": 700,
+      "THUMBS_UP": 450,
+      "OK_SIGN": 350,
+      "PINCH": 250,
+      "GRAB": 1100,
       "WAVE": 0
     },
     "finger_state_counts": {
-      "extended": 1138,
-      "partial": 569,
-      "flexed": 1138,
+      "extended": 0,
+      "partial": 0,
+      "flexed": 0,
       "unknown": 0
     },
-    "custom_labels": [
-      "finger_isolation:pinky"
-    ],
+    "custom_labels": [],
     "stats": {
       "mean": [
         -1106.3082275390625,
@@ -828,9 +839,41 @@
           "cluster_id": 5
         }
       ],
-      "labeled": false,
-      "split": null,
-      "labels": []
+      "labeled": true,
+      "split": "train",
+      "labels": [
+        {
+          "start_sample": 0,
+          "end_sample": 50,
+          "gesture": "INDEX_UP",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 25,
+          "end_sample": 75,
+          "gesture": "INDEX_UP",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 50,
+          "end_sample": 100,
+          "gesture": "INDEX_UP",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 75,
+          "end_sample": 125,
+          "gesture": "INDEX_UP",
+          "confidence": "medium"
+        }
+      ],
+      "calibration": {
+        "status": "none",
+        "has_calibrated": false,
+        "has_fused": false,
+        "has_filtered": false,
+        "has_orientation": false
+      }
     },
     {
       "filename": "2023-11-24T17:24:38.129Z.json",
@@ -876,9 +919,53 @@
           "cluster_id": 5
         }
       ],
-      "labeled": false,
-      "split": null,
-      "labels": []
+      "labeled": true,
+      "split": "train",
+      "labels": [
+        {
+          "start_sample": 0,
+          "end_sample": 50,
+          "gesture": "INDEX_UP",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 25,
+          "end_sample": 75,
+          "gesture": "INDEX_UP",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 50,
+          "end_sample": 100,
+          "gesture": "INDEX_UP",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 75,
+          "end_sample": 125,
+          "gesture": "INDEX_UP",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 100,
+          "end_sample": 150,
+          "gesture": "INDEX_UP",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 125,
+          "end_sample": 175,
+          "gesture": "INDEX_UP",
+          "confidence": "medium"
+        }
+      ],
+      "calibration": {
+        "status": "none",
+        "has_calibrated": false,
+        "has_fused": false,
+        "has_filtered": false,
+        "has_orientation": false
+      }
     },
     {
       "filename": "2023-11-24T17:27:20.364Z.json",
@@ -924,9 +1011,53 @@
           "cluster_id": 5
         }
       ],
-      "labeled": false,
-      "split": null,
-      "labels": []
+      "labeled": true,
+      "split": "train",
+      "labels": [
+        {
+          "start_sample": 50,
+          "end_sample": 100,
+          "gesture": "INDEX_UP",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 75,
+          "end_sample": 125,
+          "gesture": "INDEX_UP",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 100,
+          "end_sample": 150,
+          "gesture": "INDEX_UP",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 0,
+          "end_sample": 50,
+          "gesture": "GRAB",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 25,
+          "end_sample": 75,
+          "gesture": "GRAB",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 125,
+          "end_sample": 175,
+          "gesture": "GRAB",
+          "confidence": "medium"
+        }
+      ],
+      "calibration": {
+        "status": "none",
+        "has_calibrated": false,
+        "has_fused": false,
+        "has_filtered": false,
+        "has_orientation": false
+      }
     },
     {
       "filename": "2023-11-24T17:27:53.662Z.json",
@@ -972,9 +1103,53 @@
           "cluster_id": 9
         }
       ],
-      "labeled": false,
-      "split": null,
-      "labels": []
+      "labeled": true,
+      "split": "train",
+      "labels": [
+        {
+          "start_sample": 0,
+          "end_sample": 50,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 25,
+          "end_sample": 75,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 50,
+          "end_sample": 100,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 75,
+          "end_sample": 125,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 100,
+          "end_sample": 150,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 125,
+          "end_sample": 175,
+          "gesture": "REST",
+          "confidence": "medium"
+        }
+      ],
+      "calibration": {
+        "status": "none",
+        "has_calibrated": false,
+        "has_fused": false,
+        "has_filtered": false,
+        "has_orientation": false
+      }
     },
     {
       "filename": "2023-11-24T17:28:29.121Z.json",
@@ -1020,9 +1195,53 @@
           "cluster_id": 9
         }
       ],
-      "labeled": false,
-      "split": null,
-      "labels": []
+      "labeled": true,
+      "split": "train",
+      "labels": [
+        {
+          "start_sample": 25,
+          "end_sample": 75,
+          "gesture": "FIST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 50,
+          "end_sample": 100,
+          "gesture": "FIST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 0,
+          "end_sample": 50,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 75,
+          "end_sample": 125,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 100,
+          "end_sample": 150,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 125,
+          "end_sample": 175,
+          "gesture": "REST",
+          "confidence": "medium"
+        }
+      ],
+      "calibration": {
+        "status": "none",
+        "has_calibrated": false,
+        "has_fused": false,
+        "has_filtered": false,
+        "has_orientation": false
+      }
     },
     {
       "filename": "2023-11-24T17:29:02.123Z.json",
@@ -1068,9 +1287,53 @@
           "cluster_id": 9
         }
       ],
-      "labeled": false,
-      "split": null,
-      "labels": []
+      "labeled": true,
+      "split": "train",
+      "labels": [
+        {
+          "start_sample": 0,
+          "end_sample": 50,
+          "gesture": "GRAB",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 25,
+          "end_sample": 75,
+          "gesture": "GRAB",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 50,
+          "end_sample": 100,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 75,
+          "end_sample": 125,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 100,
+          "end_sample": 150,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 125,
+          "end_sample": 175,
+          "gesture": "REST",
+          "confidence": "medium"
+        }
+      ],
+      "calibration": {
+        "status": "none",
+        "has_calibrated": false,
+        "has_fused": false,
+        "has_filtered": false,
+        "has_orientation": false
+      }
     },
     {
       "filename": "2023-11-24T17:34:43.947Z.json",
@@ -1116,9 +1379,53 @@
           "cluster_id": 9
         }
       ],
-      "labeled": false,
-      "split": null,
-      "labels": []
+      "labeled": true,
+      "split": "train",
+      "labels": [
+        {
+          "start_sample": 0,
+          "end_sample": 50,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 25,
+          "end_sample": 75,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 50,
+          "end_sample": 100,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 75,
+          "end_sample": 125,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 100,
+          "end_sample": 150,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 125,
+          "end_sample": 175,
+          "gesture": "REST",
+          "confidence": "medium"
+        }
+      ],
+      "calibration": {
+        "status": "none",
+        "has_calibrated": false,
+        "has_fused": false,
+        "has_filtered": false,
+        "has_orientation": false
+      }
     },
     {
       "filename": "2023-11-24T17:35:21.240Z.json",
@@ -1164,9 +1471,53 @@
           "cluster_id": 6
         }
       ],
-      "labeled": false,
-      "split": null,
-      "labels": []
+      "labeled": true,
+      "split": "train",
+      "labels": [
+        {
+          "start_sample": 75,
+          "end_sample": 125,
+          "gesture": "GRAB",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 100,
+          "end_sample": 150,
+          "gesture": "GRAB",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 125,
+          "end_sample": 175,
+          "gesture": "GRAB",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 0,
+          "end_sample": 50,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 25,
+          "end_sample": 75,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 50,
+          "end_sample": 100,
+          "gesture": "REST",
+          "confidence": "medium"
+        }
+      ],
+      "calibration": {
+        "status": "none",
+        "has_calibrated": false,
+        "has_fused": false,
+        "has_filtered": false,
+        "has_orientation": false
+      }
     },
     {
       "filename": "2023-11-24T17:36:05.668Z.json",
@@ -1212,9 +1563,53 @@
           "cluster_id": 6
         }
       ],
-      "labeled": false,
-      "split": null,
-      "labels": []
+      "labeled": true,
+      "split": "train",
+      "labels": [
+        {
+          "start_sample": 25,
+          "end_sample": 75,
+          "gesture": "GRAB",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 50,
+          "end_sample": 100,
+          "gesture": "GRAB",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 75,
+          "end_sample": 125,
+          "gesture": "GRAB",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 100,
+          "end_sample": 150,
+          "gesture": "GRAB",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 125,
+          "end_sample": 175,
+          "gesture": "GRAB",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 0,
+          "end_sample": 50,
+          "gesture": "REST",
+          "confidence": "medium"
+        }
+      ],
+      "calibration": {
+        "status": "none",
+        "has_calibrated": false,
+        "has_fused": false,
+        "has_filtered": false,
+        "has_orientation": false
+      }
     },
     {
       "filename": "2023-11-24T17:36:42.659Z.json",
@@ -1260,9 +1655,53 @@
           "cluster_id": 9
         }
       ],
-      "labeled": false,
-      "split": null,
-      "labels": []
+      "labeled": true,
+      "split": "train",
+      "labels": [
+        {
+          "start_sample": 0,
+          "end_sample": 50,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 25,
+          "end_sample": 75,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 50,
+          "end_sample": 100,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 75,
+          "end_sample": 125,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 100,
+          "end_sample": 150,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 125,
+          "end_sample": 175,
+          "gesture": "REST",
+          "confidence": "medium"
+        }
+      ],
+      "calibration": {
+        "status": "none",
+        "has_calibrated": false,
+        "has_fused": false,
+        "has_filtered": false,
+        "has_orientation": false
+      }
     },
     {
       "filename": "2023-11-24T17:37:23.790Z.json",
@@ -1308,9 +1747,53 @@
           "cluster_id": 6
         }
       ],
-      "labeled": false,
-      "split": null,
-      "labels": []
+      "labeled": true,
+      "split": "train",
+      "labels": [
+        {
+          "start_sample": 75,
+          "end_sample": 125,
+          "gesture": "GRAB",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 100,
+          "end_sample": 150,
+          "gesture": "GRAB",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 0,
+          "end_sample": 50,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 25,
+          "end_sample": 75,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 50,
+          "end_sample": 100,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 125,
+          "end_sample": 175,
+          "gesture": "REST",
+          "confidence": "medium"
+        }
+      ],
+      "calibration": {
+        "status": "none",
+        "has_calibrated": false,
+        "has_fused": false,
+        "has_filtered": false,
+        "has_orientation": false
+      }
     },
     {
       "filename": "2023-11-24T17:44:59.523Z.json",
@@ -1356,9 +1839,53 @@
           "cluster_id": 6
         }
       ],
-      "labeled": false,
-      "split": null,
-      "labels": []
+      "labeled": true,
+      "split": "train",
+      "labels": [
+        {
+          "start_sample": 25,
+          "end_sample": 75,
+          "gesture": "PEACE",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 50,
+          "end_sample": 100,
+          "gesture": "PEACE",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 75,
+          "end_sample": 125,
+          "gesture": "PEACE",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 0,
+          "end_sample": 50,
+          "gesture": "OPEN_PALM",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 100,
+          "end_sample": 150,
+          "gesture": "GRAB",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 125,
+          "end_sample": 175,
+          "gesture": "GRAB",
+          "confidence": "medium"
+        }
+      ],
+      "calibration": {
+        "status": "none",
+        "has_calibrated": false,
+        "has_fused": false,
+        "has_filtered": false,
+        "has_orientation": false
+      }
     },
     {
       "filename": "2023-11-24T22:05:54.664Z.json",
@@ -1404,9 +1931,53 @@
           "cluster_id": 6
         }
       ],
-      "labeled": false,
-      "split": null,
-      "labels": []
+      "labeled": true,
+      "split": "train",
+      "labels": [
+        {
+          "start_sample": 0,
+          "end_sample": 50,
+          "gesture": "GRAB",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 25,
+          "end_sample": 75,
+          "gesture": "GRAB",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 100,
+          "end_sample": 150,
+          "gesture": "GRAB",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 125,
+          "end_sample": 175,
+          "gesture": "GRAB",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 50,
+          "end_sample": 100,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 75,
+          "end_sample": 125,
+          "gesture": "REST",
+          "confidence": "medium"
+        }
+      ],
+      "calibration": {
+        "status": "none",
+        "has_calibrated": false,
+        "has_fused": false,
+        "has_filtered": false,
+        "has_orientation": false
+      }
     },
     {
       "filename": "2023-11-24T22:18:26.063Z.json",
@@ -1420,7 +1991,14 @@
       "windows": [],
       "labeled": false,
       "split": null,
-      "labels": []
+      "labels": [],
+      "calibration": {
+        "status": "none",
+        "has_calibrated": false,
+        "has_fused": false,
+        "has_filtered": false,
+        "has_orientation": false
+      }
     },
     {
       "filename": "2023-11-24T22:19:05.698Z.json",
@@ -1466,9 +2044,53 @@
           "cluster_id": 2
         }
       ],
-      "labeled": false,
-      "split": null,
-      "labels": []
+      "labeled": true,
+      "split": "train",
+      "labels": [
+        {
+          "start_sample": 0,
+          "end_sample": 50,
+          "gesture": "PEACE",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 75,
+          "end_sample": 125,
+          "gesture": "PEACE",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 100,
+          "end_sample": 150,
+          "gesture": "PEACE",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 125,
+          "end_sample": 175,
+          "gesture": "PEACE",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 25,
+          "end_sample": 75,
+          "gesture": "OPEN_PALM",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 50,
+          "end_sample": 100,
+          "gesture": "OPEN_PALM",
+          "confidence": "medium"
+        }
+      ],
+      "calibration": {
+        "status": "none",
+        "has_calibrated": false,
+        "has_fused": false,
+        "has_filtered": false,
+        "has_orientation": false
+      }
     },
     {
       "filename": "2023-11-24T22:19:47.909Z.json",
@@ -1514,9 +2136,53 @@
           "cluster_id": 5
         }
       ],
-      "labeled": false,
-      "split": null,
-      "labels": []
+      "labeled": true,
+      "split": "train",
+      "labels": [
+        {
+          "start_sample": 0,
+          "end_sample": 50,
+          "gesture": "OPEN_PALM",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 25,
+          "end_sample": 75,
+          "gesture": "OPEN_PALM",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 50,
+          "end_sample": 100,
+          "gesture": "OPEN_PALM",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 75,
+          "end_sample": 125,
+          "gesture": "OPEN_PALM",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 125,
+          "end_sample": 175,
+          "gesture": "OPEN_PALM",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 100,
+          "end_sample": 150,
+          "gesture": "INDEX_UP",
+          "confidence": "medium"
+        }
+      ],
+      "calibration": {
+        "status": "none",
+        "has_calibrated": false,
+        "has_fused": false,
+        "has_filtered": false,
+        "has_orientation": false
+      }
     },
     {
       "filename": "2023-11-24T22:20:26.429Z.json",
@@ -1562,9 +2228,53 @@
           "cluster_id": 8
         }
       ],
-      "labeled": false,
-      "split": null,
-      "labels": []
+      "labeled": true,
+      "split": "train",
+      "labels": [
+        {
+          "start_sample": 50,
+          "end_sample": 100,
+          "gesture": "FIST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 0,
+          "end_sample": 50,
+          "gesture": "PINCH",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 25,
+          "end_sample": 75,
+          "gesture": "PINCH",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 75,
+          "end_sample": 125,
+          "gesture": "OK_SIGN",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 100,
+          "end_sample": 150,
+          "gesture": "OK_SIGN",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 125,
+          "end_sample": 175,
+          "gesture": "OK_SIGN",
+          "confidence": "medium"
+        }
+      ],
+      "calibration": {
+        "status": "none",
+        "has_calibrated": false,
+        "has_fused": false,
+        "has_filtered": false,
+        "has_orientation": false
+      }
     },
     {
       "filename": "2023-11-24T22:21:08.191Z.json",
@@ -1610,9 +2320,53 @@
           "cluster_id": 0
         }
       ],
-      "labeled": false,
-      "split": null,
-      "labels": []
+      "labeled": true,
+      "split": "validation",
+      "labels": [
+        {
+          "start_sample": 100,
+          "end_sample": 150,
+          "gesture": "FIST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 25,
+          "end_sample": 75,
+          "gesture": "PEACE",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 125,
+          "end_sample": 175,
+          "gesture": "PEACE",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 75,
+          "end_sample": 125,
+          "gesture": "OPEN_PALM",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 50,
+          "end_sample": 100,
+          "gesture": "GRAB",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 0,
+          "end_sample": 50,
+          "gesture": "OK_SIGN",
+          "confidence": "medium"
+        }
+      ],
+      "calibration": {
+        "status": "none",
+        "has_calibrated": false,
+        "has_fused": false,
+        "has_filtered": false,
+        "has_orientation": false
+      }
     },
     {
       "filename": "2023-11-24T22:25:19.216Z.json",
@@ -1658,9 +2412,53 @@
           "cluster_id": 0
         }
       ],
-      "labeled": false,
-      "split": null,
-      "labels": []
+      "labeled": true,
+      "split": "validation",
+      "labels": [
+        {
+          "start_sample": 0,
+          "end_sample": 50,
+          "gesture": "FIST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 100,
+          "end_sample": 150,
+          "gesture": "FIST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 125,
+          "end_sample": 175,
+          "gesture": "FIST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 25,
+          "end_sample": 75,
+          "gesture": "PINCH",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 50,
+          "end_sample": 100,
+          "gesture": "PINCH",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 75,
+          "end_sample": 125,
+          "gesture": "PINCH",
+          "confidence": "medium"
+        }
+      ],
+      "calibration": {
+        "status": "none",
+        "has_calibrated": false,
+        "has_fused": false,
+        "has_filtered": false,
+        "has_orientation": false
+      }
     },
     {
       "filename": "2023-11-24T22:25:51.821Z.json",
@@ -1706,9 +2504,53 @@
           "cluster_id": 8
         }
       ],
-      "labeled": false,
-      "split": null,
-      "labels": []
+      "labeled": true,
+      "split": "validation",
+      "labels": [
+        {
+          "start_sample": 25,
+          "end_sample": 75,
+          "gesture": "PEACE",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 50,
+          "end_sample": 100,
+          "gesture": "PEACE",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 0,
+          "end_sample": 50,
+          "gesture": "OPEN_PALM",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 75,
+          "end_sample": 125,
+          "gesture": "OK_SIGN",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 100,
+          "end_sample": 150,
+          "gesture": "OK_SIGN",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 125,
+          "end_sample": 175,
+          "gesture": "OK_SIGN",
+          "confidence": "medium"
+        }
+      ],
+      "calibration": {
+        "status": "none",
+        "has_calibrated": false,
+        "has_fused": false,
+        "has_filtered": false,
+        "has_orientation": false
+      }
     },
     {
       "filename": "2023-11-24T22:27:35.295Z.json",
@@ -1754,9 +2596,53 @@
           "cluster_id": 4
         }
       ],
-      "labeled": false,
-      "split": null,
-      "labels": []
+      "labeled": true,
+      "split": "test",
+      "labels": [
+        {
+          "start_sample": 0,
+          "end_sample": 50,
+          "gesture": "OPEN_PALM",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 25,
+          "end_sample": 75,
+          "gesture": "OPEN_PALM",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 50,
+          "end_sample": 100,
+          "gesture": "OPEN_PALM",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 75,
+          "end_sample": 125,
+          "gesture": "OPEN_PALM",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 100,
+          "end_sample": 150,
+          "gesture": "OPEN_PALM",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 125,
+          "end_sample": 175,
+          "gesture": "OPEN_PALM",
+          "confidence": "medium"
+        }
+      ],
+      "calibration": {
+        "status": "none",
+        "has_calibrated": false,
+        "has_fused": false,
+        "has_filtered": false,
+        "has_orientation": false
+      }
     },
     {
       "filename": "2023-11-24T22:33:46.427Z.json",
@@ -1802,9 +2688,53 @@
           "cluster_id": 2
         }
       ],
-      "labeled": false,
-      "split": null,
-      "labels": []
+      "labeled": true,
+      "split": "test",
+      "labels": [
+        {
+          "start_sample": 25,
+          "end_sample": 75,
+          "gesture": "PEACE",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 100,
+          "end_sample": 150,
+          "gesture": "PEACE",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 125,
+          "end_sample": 175,
+          "gesture": "PEACE",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 0,
+          "end_sample": 50,
+          "gesture": "OPEN_PALM",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 50,
+          "end_sample": 100,
+          "gesture": "OPEN_PALM",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 75,
+          "end_sample": 125,
+          "gesture": "OPEN_PALM",
+          "confidence": "medium"
+        }
+      ],
+      "calibration": {
+        "status": "none",
+        "has_calibrated": false,
+        "has_fused": false,
+        "has_filtered": false,
+        "has_orientation": false
+      }
     },
     {
       "filename": "2024-01-05T16:40:02.821Z.json",
@@ -1839,9 +2769,35 @@
           "cluster_id": 1
         }
       ],
-      "labeled": false,
-      "split": null,
-      "labels": []
+      "labeled": true,
+      "split": "train",
+      "labels": [
+        {
+          "start_sample": 0,
+          "end_sample": 50,
+          "gesture": "THUMBS_UP",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 25,
+          "end_sample": 75,
+          "gesture": "THUMBS_UP",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 50,
+          "end_sample": 100,
+          "gesture": "THUMBS_UP",
+          "confidence": "medium"
+        }
+      ],
+      "calibration": {
+        "status": "none",
+        "has_calibrated": false,
+        "has_fused": false,
+        "has_filtered": false,
+        "has_orientation": false
+      }
     },
     {
       "filename": "2024-01-05T16:41:20.581Z.json",
@@ -1887,9 +2843,53 @@
           "cluster_id": 1
         }
       ],
-      "labeled": false,
-      "split": null,
-      "labels": []
+      "labeled": true,
+      "split": "train",
+      "labels": [
+        {
+          "start_sample": 0,
+          "end_sample": 50,
+          "gesture": "THUMBS_UP",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 25,
+          "end_sample": 75,
+          "gesture": "THUMBS_UP",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 50,
+          "end_sample": 100,
+          "gesture": "THUMBS_UP",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 75,
+          "end_sample": 125,
+          "gesture": "THUMBS_UP",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 100,
+          "end_sample": 150,
+          "gesture": "THUMBS_UP",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 125,
+          "end_sample": 175,
+          "gesture": "THUMBS_UP",
+          "confidence": "medium"
+        }
+      ],
+      "calibration": {
+        "status": "none",
+        "has_calibrated": false,
+        "has_fused": false,
+        "has_filtered": false,
+        "has_orientation": false
+      }
     },
     {
       "filename": "2025-12-09T15_23_14.877Z.json",
@@ -2023,9 +3023,143 @@
           "cluster_id": 3
         }
       ],
-      "labeled": false,
+      "labeled": true,
       "split": "train",
-      "labels": []
+      "labels": [
+        {
+          "start_sample": 0,
+          "end_sample": 50,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 25,
+          "end_sample": 75,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 50,
+          "end_sample": 100,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 75,
+          "end_sample": 125,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 100,
+          "end_sample": 150,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 125,
+          "end_sample": 175,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 150,
+          "end_sample": 200,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 175,
+          "end_sample": 225,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 200,
+          "end_sample": 250,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 225,
+          "end_sample": 275,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 250,
+          "end_sample": 300,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 275,
+          "end_sample": 325,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 300,
+          "end_sample": 350,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 325,
+          "end_sample": 375,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 350,
+          "end_sample": 400,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 375,
+          "end_sample": 425,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 400,
+          "end_sample": 450,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 425,
+          "end_sample": 475,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 450,
+          "end_sample": 500,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 475,
+          "end_sample": 525,
+          "gesture": "REST",
+          "confidence": "medium"
+        },
+        {
+          "start_sample": 500,
+          "end_sample": 550,
+          "gesture": "REST",
+          "confidence": "medium"
+        }
+      ],
+      "calibration": {
+        "status": "none",
+        "has_calibrated": false,
+        "has_fused": false,
+        "has_filtered": false,
+        "has_orientation": false
+      }
     }
   ],
   "clustering": {
@@ -2162,1394 +3296,7 @@
         "gesture_name": null
       }
     ],
-    "points": [
-      {
-        "session": "2023-11-24T17:14:18.479Z.json",
-        "window_index": 0,
-        "start_sample": 0,
-        "end_sample": 50,
-        "cluster": 5,
-        "x": -7.366493225097656,
-        "y": -2.9358553886413574
-      },
-      {
-        "session": "2023-11-24T17:14:18.479Z.json",
-        "window_index": 1,
-        "start_sample": 25,
-        "end_sample": 75,
-        "cluster": 5,
-        "x": -7.342409133911133,
-        "y": -2.970792770385742
-      },
-      {
-        "session": "2023-11-24T17:14:18.479Z.json",
-        "window_index": 2,
-        "start_sample": 50,
-        "end_sample": 100,
-        "cluster": 5,
-        "x": -7.466203689575195,
-        "y": -2.906552314758301
-      },
-      {
-        "session": "2023-11-24T17:14:18.479Z.json",
-        "window_index": 3,
-        "start_sample": 75,
-        "end_sample": 125,
-        "cluster": 5,
-        "x": -7.953176021575928,
-        "y": -2.669745445251465
-      },
-      {
-        "session": "2023-11-24T17:24:38.129Z.json",
-        "window_index": 0,
-        "start_sample": 0,
-        "end_sample": 50,
-        "cluster": 5,
-        "x": -4.897709369659424,
-        "y": -4.027449131011963
-      },
-      {
-        "session": "2023-11-24T17:24:38.129Z.json",
-        "window_index": 1,
-        "start_sample": 25,
-        "end_sample": 75,
-        "cluster": 5,
-        "x": -4.882840633392334,
-        "y": -4.056598663330078
-      },
-      {
-        "session": "2023-11-24T17:24:38.129Z.json",
-        "window_index": 2,
-        "start_sample": 50,
-        "end_sample": 100,
-        "cluster": 5,
-        "x": -5.24496603012085,
-        "y": -3.940368890762329
-      },
-      {
-        "session": "2023-11-24T17:24:38.129Z.json",
-        "window_index": 3,
-        "start_sample": 75,
-        "end_sample": 125,
-        "cluster": 5,
-        "x": -5.486593723297119,
-        "y": -3.7969167232513428
-      },
-      {
-        "session": "2023-11-24T17:24:38.129Z.json",
-        "window_index": 4,
-        "start_sample": 100,
-        "end_sample": 150,
-        "cluster": 5,
-        "x": -5.374999523162842,
-        "y": -3.8883893489837646
-      },
-      {
-        "session": "2023-11-24T17:24:38.129Z.json",
-        "window_index": 5,
-        "start_sample": 125,
-        "end_sample": 175,
-        "cluster": 5,
-        "x": -5.881031036376953,
-        "y": -3.6444594860076904
-      },
-      {
-        "session": "2023-11-24T17:27:20.364Z.json",
-        "window_index": 0,
-        "start_sample": 0,
-        "end_sample": 50,
-        "cluster": 6,
-        "x": 1.6209582090377808,
-        "y": -3.262857675552368
-      },
-      {
-        "session": "2023-11-24T17:27:20.364Z.json",
-        "window_index": 1,
-        "start_sample": 25,
-        "end_sample": 75,
-        "cluster": 6,
-        "x": 1.6340465545654297,
-        "y": -3.45155668258667
-      },
-      {
-        "session": "2023-11-24T17:27:20.364Z.json",
-        "window_index": 2,
-        "start_sample": 50,
-        "end_sample": 100,
-        "cluster": 5,
-        "x": -4.4716997146606445,
-        "y": -3.958591938018799
-      },
-      {
-        "session": "2023-11-24T17:27:20.364Z.json",
-        "window_index": 3,
-        "start_sample": 75,
-        "end_sample": 125,
-        "cluster": 5,
-        "x": -4.710585117340088,
-        "y": -3.8945062160491943
-      },
-      {
-        "session": "2023-11-24T17:27:20.364Z.json",
-        "window_index": 4,
-        "start_sample": 100,
-        "end_sample": 150,
-        "cluster": 5,
-        "x": -5.730624198913574,
-        "y": -3.205840587615967
-      },
-      {
-        "session": "2023-11-24T17:27:20.364Z.json",
-        "window_index": 5,
-        "start_sample": 125,
-        "end_sample": 175,
-        "cluster": 6,
-        "x": -0.22623063623905182,
-        "y": -5.587225437164307
-      },
-      {
-        "session": "2023-11-24T17:27:53.662Z.json",
-        "window_index": 0,
-        "start_sample": 0,
-        "end_sample": 50,
-        "cluster": 9,
-        "x": -3.8163604736328125,
-        "y": -0.7311968803405762
-      },
-      {
-        "session": "2023-11-24T17:27:53.662Z.json",
-        "window_index": 1,
-        "start_sample": 25,
-        "end_sample": 75,
-        "cluster": 9,
-        "x": -4.005404949188232,
-        "y": -0.23519951105117798
-      },
-      {
-        "session": "2023-11-24T17:27:53.662Z.json",
-        "window_index": 2,
-        "start_sample": 50,
-        "end_sample": 100,
-        "cluster": 9,
-        "x": -3.357248544692993,
-        "y": -0.5103755593299866
-      },
-      {
-        "session": "2023-11-24T17:27:53.662Z.json",
-        "window_index": 3,
-        "start_sample": 75,
-        "end_sample": 125,
-        "cluster": 9,
-        "x": -3.113746404647827,
-        "y": -0.2566426396369934
-      },
-      {
-        "session": "2023-11-24T17:27:53.662Z.json",
-        "window_index": 4,
-        "start_sample": 100,
-        "end_sample": 150,
-        "cluster": 9,
-        "x": -3.177677631378174,
-        "y": -0.008574852719902992
-      },
-      {
-        "session": "2023-11-24T17:27:53.662Z.json",
-        "window_index": 5,
-        "start_sample": 125,
-        "end_sample": 175,
-        "cluster": 9,
-        "x": -3.8229012489318848,
-        "y": 0.11937004327774048
-      },
-      {
-        "session": "2023-11-24T17:28:29.121Z.json",
-        "window_index": 0,
-        "start_sample": 0,
-        "end_sample": 50,
-        "cluster": 9,
-        "x": -2.6218764781951904,
-        "y": -0.14403373003005981
-      },
-      {
-        "session": "2023-11-24T17:28:29.121Z.json",
-        "window_index": 1,
-        "start_sample": 25,
-        "end_sample": 75,
-        "cluster": 0,
-        "x": 4.770029067993164,
-        "y": 1.9275851249694824
-      },
-      {
-        "session": "2023-11-24T17:28:29.121Z.json",
-        "window_index": 2,
-        "start_sample": 50,
-        "end_sample": 100,
-        "cluster": 0,
-        "x": 4.628808498382568,
-        "y": 1.6274211406707764
-      },
-      {
-        "session": "2023-11-24T17:28:29.121Z.json",
-        "window_index": 3,
-        "start_sample": 75,
-        "end_sample": 125,
-        "cluster": 9,
-        "x": -2.020144462585449,
-        "y": 1.6471365690231323
-      },
-      {
-        "session": "2023-11-24T17:28:29.121Z.json",
-        "window_index": 4,
-        "start_sample": 100,
-        "end_sample": 150,
-        "cluster": 9,
-        "x": -1.9268089532852173,
-        "y": 1.6481298208236694
-      },
-      {
-        "session": "2023-11-24T17:28:29.121Z.json",
-        "window_index": 5,
-        "start_sample": 125,
-        "end_sample": 175,
-        "cluster": 9,
-        "x": -3.294929027557373,
-        "y": 0.390995591878891
-      },
-      {
-        "session": "2023-11-24T17:29:02.123Z.json",
-        "window_index": 0,
-        "start_sample": 0,
-        "end_sample": 50,
-        "cluster": 6,
-        "x": 2.709627628326416,
-        "y": -1.7609432935714722
-      },
-      {
-        "session": "2023-11-24T17:29:02.123Z.json",
-        "window_index": 1,
-        "start_sample": 25,
-        "end_sample": 75,
-        "cluster": 6,
-        "x": 2.220080852508545,
-        "y": -2.8839900493621826
-      },
-      {
-        "session": "2023-11-24T17:29:02.123Z.json",
-        "window_index": 2,
-        "start_sample": 50,
-        "end_sample": 100,
-        "cluster": 9,
-        "x": -4.1645827293396,
-        "y": -1.2327312231063843
-      },
-      {
-        "session": "2023-11-24T17:29:02.123Z.json",
-        "window_index": 3,
-        "start_sample": 75,
-        "end_sample": 125,
-        "cluster": 9,
-        "x": -3.1759190559387207,
-        "y": -0.8570836186408997
-      },
-      {
-        "session": "2023-11-24T17:29:02.123Z.json",
-        "window_index": 4,
-        "start_sample": 100,
-        "end_sample": 150,
-        "cluster": 9,
-        "x": -3.00602126121521,
-        "y": -0.682060956954956
-      },
-      {
-        "session": "2023-11-24T17:29:02.123Z.json",
-        "window_index": 5,
-        "start_sample": 125,
-        "end_sample": 175,
-        "cluster": 9,
-        "x": -3.5844879150390625,
-        "y": -0.7775267362594604
-      },
-      {
-        "session": "2023-11-24T17:34:43.947Z.json",
-        "window_index": 0,
-        "start_sample": 0,
-        "end_sample": 50,
-        "cluster": 9,
-        "x": -3.4365198612213135,
-        "y": -1.1531661748886108
-      },
-      {
-        "session": "2023-11-24T17:34:43.947Z.json",
-        "window_index": 1,
-        "start_sample": 25,
-        "end_sample": 75,
-        "cluster": 9,
-        "x": -4.372886657714844,
-        "y": -0.5537518858909607
-      },
-      {
-        "session": "2023-11-24T17:34:43.947Z.json",
-        "window_index": 2,
-        "start_sample": 50,
-        "end_sample": 100,
-        "cluster": 9,
-        "x": -5.9049272537231445,
-        "y": 0.6334106922149658
-      },
-      {
-        "session": "2023-11-24T17:34:43.947Z.json",
-        "window_index": 3,
-        "start_sample": 75,
-        "end_sample": 125,
-        "cluster": 9,
-        "x": -4.210566997528076,
-        "y": -0.349404901266098
-      },
-      {
-        "session": "2023-11-24T17:34:43.947Z.json",
-        "window_index": 4,
-        "start_sample": 100,
-        "end_sample": 150,
-        "cluster": 9,
-        "x": -4.163115978240967,
-        "y": -0.5660808086395264
-      },
-      {
-        "session": "2023-11-24T17:34:43.947Z.json",
-        "window_index": 5,
-        "start_sample": 125,
-        "end_sample": 175,
-        "cluster": 9,
-        "x": -3.415262222290039,
-        "y": -0.8416897654533386
-      },
-      {
-        "session": "2023-11-24T17:35:21.240Z.json",
-        "window_index": 0,
-        "start_sample": 0,
-        "end_sample": 50,
-        "cluster": 9,
-        "x": -4.705413341522217,
-        "y": -0.9591636061668396
-      },
-      {
-        "session": "2023-11-24T17:35:21.240Z.json",
-        "window_index": 1,
-        "start_sample": 25,
-        "end_sample": 75,
-        "cluster": 9,
-        "x": -4.029830455780029,
-        "y": -1.122262716293335
-      },
-      {
-        "session": "2023-11-24T17:35:21.240Z.json",
-        "window_index": 2,
-        "start_sample": 50,
-        "end_sample": 100,
-        "cluster": 9,
-        "x": -3.9338839054107666,
-        "y": -1.0618231296539307
-      },
-      {
-        "session": "2023-11-24T17:35:21.240Z.json",
-        "window_index": 3,
-        "start_sample": 75,
-        "end_sample": 125,
-        "cluster": 6,
-        "x": 1.5906473398208618,
-        "y": -2.3630611896514893
-      },
-      {
-        "session": "2023-11-24T17:35:21.240Z.json",
-        "window_index": 4,
-        "start_sample": 100,
-        "end_sample": 150,
-        "cluster": 6,
-        "x": 1.998716115951538,
-        "y": -2.439814329147339
-      },
-      {
-        "session": "2023-11-24T17:35:21.240Z.json",
-        "window_index": 5,
-        "start_sample": 125,
-        "end_sample": 175,
-        "cluster": 6,
-        "x": 1.7802435159683228,
-        "y": -3.2821028232574463
-      },
-      {
-        "session": "2023-11-24T17:36:05.668Z.json",
-        "window_index": 0,
-        "start_sample": 0,
-        "end_sample": 50,
-        "cluster": 9,
-        "x": -2.9006104469299316,
-        "y": 1.0498409271240234
-      },
-      {
-        "session": "2023-11-24T17:36:05.668Z.json",
-        "window_index": 1,
-        "start_sample": 25,
-        "end_sample": 75,
-        "cluster": 6,
-        "x": 1.6066111326217651,
-        "y": -3.413011312484741
-      },
-      {
-        "session": "2023-11-24T17:36:05.668Z.json",
-        "window_index": 2,
-        "start_sample": 50,
-        "end_sample": 100,
-        "cluster": 6,
-        "x": 1.744451880455017,
-        "y": -3.514346122741699
-      },
-      {
-        "session": "2023-11-24T17:36:05.668Z.json",
-        "window_index": 3,
-        "start_sample": 75,
-        "end_sample": 125,
-        "cluster": 6,
-        "x": 1.9222545623779297,
-        "y": -3.4597439765930176
-      },
-      {
-        "session": "2023-11-24T17:36:05.668Z.json",
-        "window_index": 4,
-        "start_sample": 100,
-        "end_sample": 150,
-        "cluster": 6,
-        "x": 1.9458396434783936,
-        "y": -3.427670478820801
-      },
-      {
-        "session": "2023-11-24T17:36:05.668Z.json",
-        "window_index": 5,
-        "start_sample": 125,
-        "end_sample": 175,
-        "cluster": 6,
-        "x": 1.7021324634552002,
-        "y": -2.400070905685425
-      },
-      {
-        "session": "2023-11-24T17:36:42.659Z.json",
-        "window_index": 0,
-        "start_sample": 0,
-        "end_sample": 50,
-        "cluster": 9,
-        "x": -2.3988990783691406,
-        "y": -1.189388632774353
-      },
-      {
-        "session": "2023-11-24T17:36:42.659Z.json",
-        "window_index": 1,
-        "start_sample": 25,
-        "end_sample": 75,
-        "cluster": 9,
-        "x": -3.3475260734558105,
-        "y": -0.6593649983406067
-      },
-      {
-        "session": "2023-11-24T17:36:42.659Z.json",
-        "window_index": 2,
-        "start_sample": 50,
-        "end_sample": 100,
-        "cluster": 9,
-        "x": -3.0855000019073486,
-        "y": -1.6134148836135864
-      },
-      {
-        "session": "2023-11-24T17:36:42.659Z.json",
-        "window_index": 3,
-        "start_sample": 75,
-        "end_sample": 125,
-        "cluster": 9,
-        "x": -3.183759927749634,
-        "y": -1.7314696311950684
-      },
-      {
-        "session": "2023-11-24T17:36:42.659Z.json",
-        "window_index": 4,
-        "start_sample": 100,
-        "end_sample": 150,
-        "cluster": 9,
-        "x": -3.709554672241211,
-        "y": -0.593566358089447
-      },
-      {
-        "session": "2023-11-24T17:36:42.659Z.json",
-        "window_index": 5,
-        "start_sample": 125,
-        "end_sample": 175,
-        "cluster": 9,
-        "x": -3.6275391578674316,
-        "y": -0.4295608401298523
-      },
-      {
-        "session": "2023-11-24T17:37:23.790Z.json",
-        "window_index": 0,
-        "start_sample": 0,
-        "end_sample": 50,
-        "cluster": 9,
-        "x": -3.8762764930725098,
-        "y": -0.09909950196743011
-      },
-      {
-        "session": "2023-11-24T17:37:23.790Z.json",
-        "window_index": 1,
-        "start_sample": 25,
-        "end_sample": 75,
-        "cluster": 9,
-        "x": -3.884178876876831,
-        "y": -0.41477543115615845
-      },
-      {
-        "session": "2023-11-24T17:37:23.790Z.json",
-        "window_index": 2,
-        "start_sample": 50,
-        "end_sample": 100,
-        "cluster": 9,
-        "x": -2.704622983932495,
-        "y": -0.5344000458717346
-      },
-      {
-        "session": "2023-11-24T17:37:23.790Z.json",
-        "window_index": 3,
-        "start_sample": 75,
-        "end_sample": 125,
-        "cluster": 6,
-        "x": 2.1828596591949463,
-        "y": -2.952200174331665
-      },
-      {
-        "session": "2023-11-24T17:37:23.790Z.json",
-        "window_index": 4,
-        "start_sample": 100,
-        "end_sample": 150,
-        "cluster": 6,
-        "x": 2.286865711212158,
-        "y": -2.680015802383423
-      },
-      {
-        "session": "2023-11-24T17:37:23.790Z.json",
-        "window_index": 5,
-        "start_sample": 125,
-        "end_sample": 175,
-        "cluster": 9,
-        "x": -3.485541582107544,
-        "y": -0.5620556473731995
-      },
-      {
-        "session": "2023-11-24T17:44:59.523Z.json",
-        "window_index": 0,
-        "start_sample": 0,
-        "end_sample": 50,
-        "cluster": 4,
-        "x": 1.803835153579712,
-        "y": -1.5479873418807983
-      },
-      {
-        "session": "2023-11-24T17:44:59.523Z.json",
-        "window_index": 1,
-        "start_sample": 25,
-        "end_sample": 75,
-        "cluster": 2,
-        "x": -3.5588417053222656,
-        "y": 1.2442125082015991
-      },
-      {
-        "session": "2023-11-24T17:44:59.523Z.json",
-        "window_index": 2,
-        "start_sample": 50,
-        "end_sample": 100,
-        "cluster": 2,
-        "x": -0.9376554489135742,
-        "y": 0.5633155107498169
-      },
-      {
-        "session": "2023-11-24T17:44:59.523Z.json",
-        "window_index": 3,
-        "start_sample": 75,
-        "end_sample": 125,
-        "cluster": 2,
-        "x": -1.131115436553955,
-        "y": 1.8405555486679077
-      },
-      {
-        "session": "2023-11-24T17:44:59.523Z.json",
-        "window_index": 4,
-        "start_sample": 100,
-        "end_sample": 150,
-        "cluster": 6,
-        "x": 1.8558192253112793,
-        "y": -0.7802947163581848
-      },
-      {
-        "session": "2023-11-24T17:44:59.523Z.json",
-        "window_index": 5,
-        "start_sample": 125,
-        "end_sample": 175,
-        "cluster": 6,
-        "x": 1.635974407196045,
-        "y": -1.915783405303955
-      },
-      {
-        "session": "2023-11-24T22:05:54.664Z.json",
-        "window_index": 0,
-        "start_sample": 0,
-        "end_sample": 50,
-        "cluster": 6,
-        "x": 1.08206307888031,
-        "y": -3.1777522563934326
-      },
-      {
-        "session": "2023-11-24T22:05:54.664Z.json",
-        "window_index": 1,
-        "start_sample": 25,
-        "end_sample": 75,
-        "cluster": 6,
-        "x": 1.2085747718811035,
-        "y": -3.0207297801971436
-      },
-      {
-        "session": "2023-11-24T22:05:54.664Z.json",
-        "window_index": 2,
-        "start_sample": 50,
-        "end_sample": 100,
-        "cluster": 9,
-        "x": -3.0289344787597656,
-        "y": -1.2225608825683594
-      },
-      {
-        "session": "2023-11-24T22:05:54.664Z.json",
-        "window_index": 3,
-        "start_sample": 75,
-        "end_sample": 125,
-        "cluster": 9,
-        "x": -4.4788498878479,
-        "y": -0.33358803391456604
-      },
-      {
-        "session": "2023-11-24T22:05:54.664Z.json",
-        "window_index": 4,
-        "start_sample": 100,
-        "end_sample": 150,
-        "cluster": 6,
-        "x": 0.7873323559761047,
-        "y": -2.7380964756011963
-      },
-      {
-        "session": "2023-11-24T22:05:54.664Z.json",
-        "window_index": 5,
-        "start_sample": 125,
-        "end_sample": 175,
-        "cluster": 6,
-        "x": 1.2966171503067017,
-        "y": -2.768796443939209
-      },
-      {
-        "session": "2023-11-24T22:19:05.698Z.json",
-        "window_index": 0,
-        "start_sample": 0,
-        "end_sample": 50,
-        "cluster": 2,
-        "x": -3.9715428352355957,
-        "y": -2.3167612552642822
-      },
-      {
-        "session": "2023-11-24T22:19:05.698Z.json",
-        "window_index": 1,
-        "start_sample": 25,
-        "end_sample": 75,
-        "cluster": 4,
-        "x": -0.7790865898132324,
-        "y": -4.038370132446289
-      },
-      {
-        "session": "2023-11-24T22:19:05.698Z.json",
-        "window_index": 2,
-        "start_sample": 50,
-        "end_sample": 100,
-        "cluster": 4,
-        "x": -1.0657730102539062,
-        "y": -3.698580026626587
-      },
-      {
-        "session": "2023-11-24T22:19:05.698Z.json",
-        "window_index": 3,
-        "start_sample": 75,
-        "end_sample": 125,
-        "cluster": 2,
-        "x": -6.494946479797363,
-        "y": 1.0212665796279907
-      },
-      {
-        "session": "2023-11-24T22:19:05.698Z.json",
-        "window_index": 4,
-        "start_sample": 100,
-        "end_sample": 150,
-        "cluster": 2,
-        "x": -5.688276767730713,
-        "y": 1.8174164295196533
-      },
-      {
-        "session": "2023-11-24T22:19:05.698Z.json",
-        "window_index": 5,
-        "start_sample": 125,
-        "end_sample": 175,
-        "cluster": 2,
-        "x": -5.81199312210083,
-        "y": 2.100295305252075
-      },
-      {
-        "session": "2023-11-24T22:19:47.909Z.json",
-        "window_index": 0,
-        "start_sample": 0,
-        "end_sample": 50,
-        "cluster": 4,
-        "x": -0.40496912598609924,
-        "y": -3.536987781524658
-      },
-      {
-        "session": "2023-11-24T22:19:47.909Z.json",
-        "window_index": 1,
-        "start_sample": 25,
-        "end_sample": 75,
-        "cluster": 4,
-        "x": 0.547829270362854,
-        "y": -0.938752293586731
-      },
-      {
-        "session": "2023-11-24T22:19:47.909Z.json",
-        "window_index": 2,
-        "start_sample": 50,
-        "end_sample": 100,
-        "cluster": 4,
-        "x": 0.5342416167259216,
-        "y": -1.048179030418396
-      },
-      {
-        "session": "2023-11-24T22:19:47.909Z.json",
-        "window_index": 3,
-        "start_sample": 75,
-        "end_sample": 125,
-        "cluster": 4,
-        "x": -0.3668545186519623,
-        "y": -3.222228765487671
-      },
-      {
-        "session": "2023-11-24T22:19:47.909Z.json",
-        "window_index": 4,
-        "start_sample": 100,
-        "end_sample": 150,
-        "cluster": 5,
-        "x": -7.873469352722168,
-        "y": -0.040181759744882584
-      },
-      {
-        "session": "2023-11-24T22:19:47.909Z.json",
-        "window_index": 5,
-        "start_sample": 125,
-        "end_sample": 175,
-        "cluster": 4,
-        "x": 1.1794474124908447,
-        "y": 0.12736159563064575
-      },
-      {
-        "session": "2023-11-24T22:20:26.429Z.json",
-        "window_index": 0,
-        "start_sample": 0,
-        "end_sample": 50,
-        "cluster": 7,
-        "x": 0.5307667851448059,
-        "y": 14.926604270935059
-      },
-      {
-        "session": "2023-11-24T22:20:26.429Z.json",
-        "window_index": 1,
-        "start_sample": 25,
-        "end_sample": 75,
-        "cluster": 7,
-        "x": 7.425053596496582,
-        "y": 11.945730209350586
-      },
-      {
-        "session": "2023-11-24T22:20:26.429Z.json",
-        "window_index": 2,
-        "start_sample": 50,
-        "end_sample": 100,
-        "cluster": 0,
-        "x": 4.451407432556152,
-        "y": 5.819165229797363
-      },
-      {
-        "session": "2023-11-24T22:20:26.429Z.json",
-        "window_index": 3,
-        "start_sample": 75,
-        "end_sample": 125,
-        "cluster": 8,
-        "x": -2.1696627140045166,
-        "y": 9.313274383544922
-      },
-      {
-        "session": "2023-11-24T22:20:26.429Z.json",
-        "window_index": 4,
-        "start_sample": 100,
-        "end_sample": 150,
-        "cluster": 8,
-        "x": -2.7288966178894043,
-        "y": 10.490365028381348
-      },
-      {
-        "session": "2023-11-24T22:20:26.429Z.json",
-        "window_index": 5,
-        "start_sample": 125,
-        "end_sample": 175,
-        "cluster": 8,
-        "x": -2.7721316814422607,
-        "y": 9.887199401855469
-      },
-      {
-        "session": "2023-11-24T22:21:08.191Z.json",
-        "window_index": 0,
-        "start_sample": 0,
-        "end_sample": 50,
-        "cluster": 8,
-        "x": -3.626535654067993,
-        "y": 7.323051929473877
-      },
-      {
-        "session": "2023-11-24T22:21:08.191Z.json",
-        "window_index": 1,
-        "start_sample": 25,
-        "end_sample": 75,
-        "cluster": 2,
-        "x": -2.143782377243042,
-        "y": 1.8208669424057007
-      },
-      {
-        "session": "2023-11-24T22:21:08.191Z.json",
-        "window_index": 2,
-        "start_sample": 50,
-        "end_sample": 100,
-        "cluster": 6,
-        "x": -0.3948158025741577,
-        "y": -4.638580322265625
-      },
-      {
-        "session": "2023-11-24T22:21:08.191Z.json",
-        "window_index": 3,
-        "start_sample": 75,
-        "end_sample": 125,
-        "cluster": 4,
-        "x": 1.5693104267120361,
-        "y": -0.23942218720912933
-      },
-      {
-        "session": "2023-11-24T22:21:08.191Z.json",
-        "window_index": 4,
-        "start_sample": 100,
-        "end_sample": 150,
-        "cluster": 0,
-        "x": 1.5537686347961426,
-        "y": 1.917237639427185
-      },
-      {
-        "session": "2023-11-24T22:21:08.191Z.json",
-        "window_index": 5,
-        "start_sample": 125,
-        "end_sample": 175,
-        "cluster": 2,
-        "x": -1.3476535081863403,
-        "y": 3.5295286178588867
-      },
-      {
-        "session": "2023-11-24T22:25:19.216Z.json",
-        "window_index": 0,
-        "start_sample": 0,
-        "end_sample": 50,
-        "cluster": 0,
-        "x": 4.323148727416992,
-        "y": 6.53640079498291
-      },
-      {
-        "session": "2023-11-24T22:25:19.216Z.json",
-        "window_index": 1,
-        "start_sample": 25,
-        "end_sample": 75,
-        "cluster": 7,
-        "x": 3.9686222076416016,
-        "y": 15.245617866516113
-      },
-      {
-        "session": "2023-11-24T22:25:19.216Z.json",
-        "window_index": 2,
-        "start_sample": 50,
-        "end_sample": 100,
-        "cluster": 7,
-        "x": 7.806685924530029,
-        "y": 14.461335182189941
-      },
-      {
-        "session": "2023-11-24T22:25:19.216Z.json",
-        "window_index": 3,
-        "start_sample": 75,
-        "end_sample": 125,
-        "cluster": 7,
-        "x": 6.474788188934326,
-        "y": 12.07801342010498
-      },
-      {
-        "session": "2023-11-24T22:25:19.216Z.json",
-        "window_index": 4,
-        "start_sample": 100,
-        "end_sample": 150,
-        "cluster": 0,
-        "x": 4.196228981018066,
-        "y": 5.610245227813721
-      },
-      {
-        "session": "2023-11-24T22:25:19.216Z.json",
-        "window_index": 5,
-        "start_sample": 125,
-        "end_sample": 175,
-        "cluster": 0,
-        "x": 2.9449222087860107,
-        "y": 2.567631483078003
-      },
-      {
-        "session": "2023-11-24T22:25:51.821Z.json",
-        "window_index": 0,
-        "start_sample": 0,
-        "end_sample": 50,
-        "cluster": 4,
-        "x": -0.2505759596824646,
-        "y": -2.587287187576294
-      },
-      {
-        "session": "2023-11-24T22:25:51.821Z.json",
-        "window_index": 1,
-        "start_sample": 25,
-        "end_sample": 75,
-        "cluster": 2,
-        "x": -4.020888328552246,
-        "y": -1.2870296239852905
-      },
-      {
-        "session": "2023-11-24T22:25:51.821Z.json",
-        "window_index": 2,
-        "start_sample": 50,
-        "end_sample": 100,
-        "cluster": 2,
-        "x": -3.1682748794555664,
-        "y": -0.1719590127468109
-      },
-      {
-        "session": "2023-11-24T22:25:51.821Z.json",
-        "window_index": 3,
-        "start_sample": 75,
-        "end_sample": 125,
-        "cluster": 8,
-        "x": -5.166858196258545,
-        "y": 4.999419212341309
-      },
-      {
-        "session": "2023-11-24T22:25:51.821Z.json",
-        "window_index": 4,
-        "start_sample": 100,
-        "end_sample": 150,
-        "cluster": 8,
-        "x": -4.979798316955566,
-        "y": 5.365060329437256
-      },
-      {
-        "session": "2023-11-24T22:25:51.821Z.json",
-        "window_index": 5,
-        "start_sample": 125,
-        "end_sample": 175,
-        "cluster": 8,
-        "x": -5.438381671905518,
-        "y": 4.596928119659424
-      },
-      {
-        "session": "2023-11-24T22:27:35.295Z.json",
-        "window_index": 0,
-        "start_sample": 0,
-        "end_sample": 50,
-        "cluster": 4,
-        "x": 1.0124688148498535,
-        "y": -1.31989586353302
-      },
-      {
-        "session": "2023-11-24T22:27:35.295Z.json",
-        "window_index": 1,
-        "start_sample": 25,
-        "end_sample": 75,
-        "cluster": 4,
-        "x": 0.9222326874732971,
-        "y": -1.1233277320861816
-      },
-      {
-        "session": "2023-11-24T22:27:35.295Z.json",
-        "window_index": 2,
-        "start_sample": 50,
-        "end_sample": 100,
-        "cluster": 4,
-        "x": 0.7074990272521973,
-        "y": -1.1072520017623901
-      },
-      {
-        "session": "2023-11-24T22:27:35.295Z.json",
-        "window_index": 3,
-        "start_sample": 75,
-        "end_sample": 125,
-        "cluster": 4,
-        "x": 0.6414216756820679,
-        "y": -1.4431524276733398
-      },
-      {
-        "session": "2023-11-24T22:27:35.295Z.json",
-        "window_index": 4,
-        "start_sample": 100,
-        "end_sample": 150,
-        "cluster": 4,
-        "x": 0.8433464765548706,
-        "y": -1.1603761911392212
-      },
-      {
-        "session": "2023-11-24T22:27:35.295Z.json",
-        "window_index": 5,
-        "start_sample": 125,
-        "end_sample": 175,
-        "cluster": 4,
-        "x": 1.4573591947555542,
-        "y": -1.5208197832107544
-      },
-      {
-        "session": "2023-11-24T22:33:46.427Z.json",
-        "window_index": 0,
-        "start_sample": 0,
-        "end_sample": 50,
-        "cluster": 4,
-        "x": 0.9560909867286682,
-        "y": -2.1345317363739014
-      },
-      {
-        "session": "2023-11-24T22:33:46.427Z.json",
-        "window_index": 1,
-        "start_sample": 25,
-        "end_sample": 75,
-        "cluster": 2,
-        "x": -3.032989978790283,
-        "y": -0.4515167474746704
-      },
-      {
-        "session": "2023-11-24T22:33:46.427Z.json",
-        "window_index": 2,
-        "start_sample": 50,
-        "end_sample": 100,
-        "cluster": 4,
-        "x": 1.6103641986846924,
-        "y": -1.4543333053588867
-      },
-      {
-        "session": "2023-11-24T22:33:46.427Z.json",
-        "window_index": 3,
-        "start_sample": 75,
-        "end_sample": 125,
-        "cluster": 4,
-        "x": 1.3927147388458252,
-        "y": -1.553173303604126
-      },
-      {
-        "session": "2023-11-24T22:33:46.427Z.json",
-        "window_index": 4,
-        "start_sample": 100,
-        "end_sample": 150,
-        "cluster": 2,
-        "x": -5.81554651260376,
-        "y": -1.0023579597473145
-      },
-      {
-        "session": "2023-11-24T22:33:46.427Z.json",
-        "window_index": 5,
-        "start_sample": 125,
-        "end_sample": 175,
-        "cluster": 2,
-        "x": -5.765379428863525,
-        "y": 0.29571935534477234
-      },
-      {
-        "session": "2024-01-05T16:40:02.821Z.json",
-        "window_index": 0,
-        "start_sample": 0,
-        "end_sample": 50,
-        "cluster": 1,
-        "x": -4.683309555053711,
-        "y": 4.86203145980835
-      },
-      {
-        "session": "2024-01-05T16:40:02.821Z.json",
-        "window_index": 1,
-        "start_sample": 25,
-        "end_sample": 75,
-        "cluster": 1,
-        "x": -4.6116461753845215,
-        "y": 4.906155586242676
-      },
-      {
-        "session": "2024-01-05T16:40:02.821Z.json",
-        "window_index": 2,
-        "start_sample": 50,
-        "end_sample": 100,
-        "cluster": 1,
-        "x": -4.717696189880371,
-        "y": 5.073543548583984
-      },
-      {
-        "session": "2024-01-05T16:41:20.581Z.json",
-        "window_index": 0,
-        "start_sample": 0,
-        "end_sample": 50,
-        "cluster": 1,
-        "x": -4.352024555206299,
-        "y": 3.505542516708374
-      },
-      {
-        "session": "2024-01-05T16:41:20.581Z.json",
-        "window_index": 1,
-        "start_sample": 25,
-        "end_sample": 75,
-        "cluster": 1,
-        "x": 0.34778761863708496,
-        "y": 9.049903869628906
-      },
-      {
-        "session": "2024-01-05T16:41:20.581Z.json",
-        "window_index": 2,
-        "start_sample": 50,
-        "end_sample": 100,
-        "cluster": 1,
-        "x": 0.29454293847084045,
-        "y": 9.071671485900879
-      },
-      {
-        "session": "2024-01-05T16:41:20.581Z.json",
-        "window_index": 3,
-        "start_sample": 75,
-        "end_sample": 125,
-        "cluster": 1,
-        "x": -4.167419910430908,
-        "y": 2.2801685333251953
-      },
-      {
-        "session": "2024-01-05T16:41:20.581Z.json",
-        "window_index": 4,
-        "start_sample": 100,
-        "end_sample": 150,
-        "cluster": 1,
-        "x": -4.188144207000732,
-        "y": 2.14766263961792
-      },
-      {
-        "session": "2024-01-05T16:41:20.581Z.json",
-        "window_index": 5,
-        "start_sample": 125,
-        "end_sample": 175,
-        "cluster": 1,
-        "x": -4.4008073806762695,
-        "y": 1.3248999118804932
-      },
-      {
-        "session": "2025-12-09T15_23_14.877Z.json",
-        "window_index": 0,
-        "start_sample": 0,
-        "end_sample": 50,
-        "cluster": 3,
-        "x": 10.64960765838623,
-        "y": -4.467431545257568
-      },
-      {
-        "session": "2025-12-09T15_23_14.877Z.json",
-        "window_index": 1,
-        "start_sample": 25,
-        "end_sample": 75,
-        "cluster": 3,
-        "x": 11.231410026550293,
-        "y": -2.569908380508423
-      },
-      {
-        "session": "2025-12-09T15_23_14.877Z.json",
-        "window_index": 2,
-        "start_sample": 50,
-        "end_sample": 100,
-        "cluster": 3,
-        "x": 11.317408561706543,
-        "y": -1.9077258110046387
-      },
-      {
-        "session": "2025-12-09T15_23_14.877Z.json",
-        "window_index": 3,
-        "start_sample": 75,
-        "end_sample": 125,
-        "cluster": 3,
-        "x": 11.572891235351562,
-        "y": -1.768929123878479
-      },
-      {
-        "session": "2025-12-09T15_23_14.877Z.json",
-        "window_index": 4,
-        "start_sample": 100,
-        "end_sample": 150,
-        "cluster": 3,
-        "x": 11.676437377929688,
-        "y": -2.9274792671203613
-      },
-      {
-        "session": "2025-12-09T15_23_14.877Z.json",
-        "window_index": 5,
-        "start_sample": 125,
-        "end_sample": 175,
-        "cluster": 3,
-        "x": 11.806339263916016,
-        "y": -2.2837440967559814
-      },
-      {
-        "session": "2025-12-09T15_23_14.877Z.json",
-        "window_index": 6,
-        "start_sample": 150,
-        "end_sample": 200,
-        "cluster": 3,
-        "x": 11.248373031616211,
-        "y": -2.180863857269287
-      },
-      {
-        "session": "2025-12-09T15_23_14.877Z.json",
-        "window_index": 7,
-        "start_sample": 175,
-        "end_sample": 225,
-        "cluster": 3,
-        "x": 10.653658866882324,
-        "y": -3.5018770694732666
-      },
-      {
-        "session": "2025-12-09T15_23_14.877Z.json",
-        "window_index": 8,
-        "start_sample": 200,
-        "end_sample": 250,
-        "cluster": 3,
-        "x": 9.350759506225586,
-        "y": -1.6684364080429077
-      },
-      {
-        "session": "2025-12-09T15_23_14.877Z.json",
-        "window_index": 9,
-        "start_sample": 225,
-        "end_sample": 275,
-        "cluster": 3,
-        "x": 9.81889533996582,
-        "y": -0.6521888375282288
-      },
-      {
-        "session": "2025-12-09T15_23_14.877Z.json",
-        "window_index": 10,
-        "start_sample": 250,
-        "end_sample": 300,
-        "cluster": 3,
-        "x": 9.47502326965332,
-        "y": -0.5497126579284668
-      },
-      {
-        "session": "2025-12-09T15_23_14.877Z.json",
-        "window_index": 11,
-        "start_sample": 275,
-        "end_sample": 325,
-        "cluster": 3,
-        "x": 11.835066795349121,
-        "y": 2.0536692142486572
-      },
-      {
-        "session": "2025-12-09T15_23_14.877Z.json",
-        "window_index": 12,
-        "start_sample": 300,
-        "end_sample": 350,
-        "cluster": 3,
-        "x": 11.65346908569336,
-        "y": 1.7766141891479492
-      },
-      {
-        "session": "2025-12-09T15_23_14.877Z.json",
-        "window_index": 13,
-        "start_sample": 325,
-        "end_sample": 375,
-        "cluster": 3,
-        "x": 10.153328895568848,
-        "y": -1.329466700553894
-      },
-      {
-        "session": "2025-12-09T15_23_14.877Z.json",
-        "window_index": 14,
-        "start_sample": 350,
-        "end_sample": 400,
-        "cluster": 3,
-        "x": 11.71585464477539,
-        "y": -1.138738751411438
-      },
-      {
-        "session": "2025-12-09T15_23_14.877Z.json",
-        "window_index": 15,
-        "start_sample": 375,
-        "end_sample": 425,
-        "cluster": 3,
-        "x": 11.624038696289062,
-        "y": -1.1429224014282227
-      },
-      {
-        "session": "2025-12-09T15_23_14.877Z.json",
-        "window_index": 16,
-        "start_sample": 400,
-        "end_sample": 450,
-        "cluster": 3,
-        "x": 10.326858520507812,
-        "y": -0.8001536726951599
-      },
-      {
-        "session": "2025-12-09T15_23_14.877Z.json",
-        "window_index": 17,
-        "start_sample": 425,
-        "end_sample": 475,
-        "cluster": 3,
-        "x": 10.445351600646973,
-        "y": -0.6503567099571228
-      },
-      {
-        "session": "2025-12-09T15_23_14.877Z.json",
-        "window_index": 18,
-        "start_sample": 450,
-        "end_sample": 500,
-        "cluster": 3,
-        "x": 9.307812690734863,
-        "y": -2.249568462371826
-      },
-      {
-        "session": "2025-12-09T15_23_14.877Z.json",
-        "window_index": 19,
-        "start_sample": 475,
-        "end_sample": 525,
-        "cluster": 3,
-        "x": 8.096545219421387,
-        "y": -4.673959255218506
-      },
-      {
-        "session": "2025-12-09T15_23_14.877Z.json",
-        "window_index": 20,
-        "start_sample": 500,
-        "end_sample": 550,
-        "cluster": 3,
-        "x": 8.369935989379883,
-        "y": -3.8909363746643066
-      }
-    ]
+    "points": []
   },
   "gestures": [
     "rest",
@@ -3739,23 +3486,31 @@
                 applyFilters();
                 if (window.redrawCanvas) window.redrawCanvas();
             });
+            document.getElementById('calibFilter').addEventListener('change', applyFilters);
             document.getElementById('sortSelect').addEventListener('change', applyFilters);
         }
         
         function applyFilters() {
             const search = document.getElementById('searchBox').value.toLowerCase();
             const sort = document.getElementById('sortSelect').value;
-            
+            const calibFilter = document.getElementById('calibFilter').value;
+
             filteredSessions = explorerData.sessions.filter(s => {
                 // Search filter
                 if (search && !s.filename.toLowerCase().includes(search)) return false;
-                
+
                 // Cluster filter
                 if (selectedCluster !== null) {
                     const hasCluster = s.windows.some(w => w.cluster_id === selectedCluster);
                     if (!hasCluster) return false;
                 }
-                
+
+                // Calibration filter
+                if (calibFilter !== 'all') {
+                    const sessionCalib = s.calibration?.status || 'none';
+                    if (sessionCalib !== calibFilter) return false;
+                }
+
                 return true;
             });
             
@@ -3792,6 +3547,7 @@
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <div class="session-badges">
                                 <span class="badge ${s.labeled ? 'labeled' : 'unlabeled'}">${s.labeled ? 'Labeled' : 'Unlabeled'}</span>
+                                <span class="badge calib-${s.calibration?.status || 'none'}">${getCalibrationLabel(s.calibration?.status)}</span>
                             </div>
                             <span class="expand-icon">▼</span>
                         </div>
@@ -3890,6 +3646,14 @@
         function formatTimestamp(ts) {
             try { return new Date(ts).toLocaleString(); }
             catch { return ts; }
+        }
+
+        function getCalibrationLabel(status) {
+            switch(status) {
+                case 'full': return 'Full Calib';
+                case 'partial': return 'Iron Only';
+                default: return 'No Calib';
+            }
         }
         
         // Modal

@@ -63,11 +63,16 @@ const poseEstimationOptions = {
     useOrientation: true,      // Use IMU orientation for pose context
     show3DOrientation: false,  // Show 3D orientation cube
     useParticleFilter: false,  // Use ParticleFilter vs threshold-based estimation
+    useMLInference: false,     // Use ML model for finger tracking (requires trained model)
     // 3D Hand orientation options
     enableHandOrientation: true,  // Apply sensor fusion to 3D hand orientation
     smoothHandOrientation: true,  // Apply low-pass filtering to hand orientation
     handOrientationAlpha: 0.1     // Smoothing factor (0-1, lower = smoother) - reduced from 0.15 for stability
 };
+
+// ML Finger tracking inference
+let fingerTrackingInference = null;
+let mlModelLoaded = false;
 
 // GitHub token (for upload functionality)
 let ghToken = null;

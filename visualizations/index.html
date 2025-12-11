@@ -416,6 +416,10 @@
                         <input type="checkbox" id="show-raw" checked>
                         📐 Raw Axis
                     </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-trajectory" checked>
+                        🌀 3D Trajectory
+                    </label>
                 </div>
             </div>
 
@@ -1518,7 +1522,8 @@
       "raw_axes_2025-12-09T15_23_14.877Z.png",
       "orientation_3d_2025-12-09T15_23_14.877Z.png"
     ],
-    "calibration_stages_image": "calibration_stages_2025-12-09T15_23_14.877Z.png"
+    "calibration_stages_image": "calibration_stages_2025-12-09T15_23_14.877Z.png",
+    "trajectory_comparison_image": "trajectory_comparison_2025-12-09T15_23_14.877Z.png"
   }
 ];
 
@@ -1530,7 +1535,8 @@
             showComposite: true,
             showCalibration: true,
             showWindows: true,
-            showRaw: true
+            showRaw: true,
+            showTrajectory: true
         };
 
         function initializePage() {
@@ -1606,6 +1612,13 @@
                                 `).join('')}
                             </div>
                         </div>
+
+                        ${session.trajectory_comparison_image ? `
+                        <div class="image-section trajectory-section ${viewSettings.showTrajectory ? '' : 'hidden'}">
+                            <h3 class="section-title">🌀 3D Trajectory Comparison (Raw → Iron → Fused → Filtered)</h3>
+                            <img src="${session.trajectory_comparison_image}" class="composite-image" onclick="openModal(this.src)" alt="3D trajectory comparison">
+                        </div>
+                        ` : ''}
                     </div>
                 </div>
             `).join('');
@@ -1635,6 +1648,7 @@
             viewSettings.showCalibration = document.getElementById('show-calibration').checked;
             viewSettings.showWindows = document.getElementById('show-windows').checked;
             viewSettings.showRaw = document.getElementById('show-raw').checked;
+            viewSettings.showTrajectory = document.getElementById('show-trajectory').checked;
 
             // Update visibility of sections
             document.querySelectorAll('.composite-section').forEach(el => {
@@ -1648,6 +1662,9 @@
             });
             document.querySelectorAll('.raw-section').forEach(el => {
                 el.classList.toggle('hidden', !viewSettings.showRaw);
+            });
+            document.querySelectorAll('.trajectory-section').forEach(el => {
+                el.classList.toggle('hidden', !viewSettings.showTrajectory);
             });
         }
 
@@ -1710,6 +1727,7 @@
             document.getElementById('show-calibration').addEventListener('change', updateViewSettings);
             document.getElementById('show-windows').addEventListener('change', updateViewSettings);
             document.getElementById('show-raw').addEventListener('change', updateViewSettings);
+            document.getElementById('show-trajectory').addEventListener('change', updateViewSettings);
 
             // Close modal on click outside
             document.getElementById('image-modal').addEventListener('click', (e) => {
