@@ -957,9 +957,10 @@ function initMagneticTrajectory() {
         magTrajectory = new MagneticTrajectory(canvas, {
             maxPoints: 200,
             trajectoryColor: '#4ecdc4',
+            backgroundColor: '#ffffff',
             autoNormalize: true,
             showMarkers: true,
-            showCube: true
+            showCube: false
         });
 
         // Clear button
@@ -971,6 +972,10 @@ function initMagneticTrajectory() {
                 log('Magnetic trajectory cleared');
             });
         }
+
+        magTrajectory.addPoint(0, 0, 0);
+        magTrajectory.addPoint(1, 1, 1);
+        updateMagTrajectoryStats();
 
         // Pause/Resume button
         const pauseBtn = $('pauseTrajectoryBtn');

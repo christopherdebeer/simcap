@@ -8,6 +8,8 @@
  *   viz.clear();
  */
 
+const LINE_WIDTH = 5
+
 export class MagneticTrajectory {
     /**
      * @param {HTMLCanvasElement} canvas - Canvas element to draw on
@@ -19,6 +21,7 @@ export class MagneticTrajectory {
      * @param {string} options.trajectoryColor - Line color (default: '#4ecdc4')
      * @param {boolean} options.showMarkers - Show start/end markers (default: true)
      * @param {boolean} options.showCube - Show bounding cube (default: true)
+     * @param {string} options.backgroundColor - Canvas background color (default: null for transparent)
      */
     constructor(canvas, options = {}) {
         this.canvas = canvas;
@@ -32,6 +35,7 @@ export class MagneticTrajectory {
         this.trajectoryColor = options.trajectoryColor || '#4ecdc4';
         this.showMarkers = options.showMarkers !== false;
         this.showCube = options.showCube !== false;
+        this.backgroundColor = options.backgroundColor || null;
 
         // Data buffer
         this.points = [];
@@ -165,7 +169,7 @@ export class MagneticTrajectory {
         ];
 
         this.ctx.strokeStyle = '#333';
-        this.ctx.lineWidth = 1;
+        this.ctx.lineWidth = LINE_WIDTH;
         this.ctx.beginPath();
 
         for (const [a, b] of edges) {
@@ -186,7 +190,7 @@ export class MagneticTrajectory {
         if (normalizedPoints.length < 2) return;
 
         this.ctx.strokeStyle = this.trajectoryColor;
-        this.ctx.lineWidth = 2;
+        this.ctx.lineWidth = LINE_WIDTH;
         this.ctx.lineCap = 'round';
         this.ctx.lineJoin = 'round';
 
@@ -254,7 +258,12 @@ export class MagneticTrajectory {
         const h = this.canvas.height;
 
         // Clear canvas
-        this.ctx.clearRect(0, 0, w, h);
+        if (this.backgroundColor) {
+            this.ctx.fillStyle = this.backgroundColor;
+            this.ctx.fillRect(0, 0, w, h);
+        } else {
+            this.ctx.clearRect(0, 0, w, h);
+        }
 
         // Draw cube wireframe
         if (this.showCube) {
