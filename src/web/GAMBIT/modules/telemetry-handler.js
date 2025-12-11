@@ -114,10 +114,32 @@ export function onTelemetry(telemetry) {
                 decoratedTelemetry.fused_mx = fused.x;
                 decoratedTelemetry.fused_my = fused.y;
                 decoratedTelemetry.fused_mz = fused.z;
+            } else if (!deps.calibrationInstance.earthFieldCalibrated) {
+                // Debug: Log once per session why Earth subtraction isn't running
+                if (!state.loggedEarthCalibrationMissing) {
+                    console.debug('[Calibration] Earth field not calibrated - skipping fused fields');
+                    state.loggedEarthCalibrationMissing = true;
+                }
+            } else if (!orientation) {
+                // Debug: Log once per session why Earth subtraction isn't running
+                if (!state.loggedOrientationMissing) {
+                    console.debug('[Calibration] Orientation not available - skipping fused fields');
+                    state.loggedOrientationMissing = true;
+                }
             }
         } catch (e) {
             // Calibration failed, skip decoration
-            console.debug('[Calibration] Correction failed:', e.message);
+            console.error('[Calibration] Correction failed:', e);
+        }
+    } else {
+        // Debug: Log once per session why calibration isn't running
+        if (!state.loggedCalibrationMissing) {
+            console.debug('[Calibration] Status:', {
+                hasInstance: !!deps.calibrationInstance,
+                hardIronCalibrated: deps.calibrationInstance?.hardIronCalibrated,
+                softIronCalibrated: deps.calibrationInstance?.softIronCalibrated
+            });
+            state.loggedCalibrationMissing = true;
         }
     }
 

@@ -101,7 +101,7 @@ def load_session_data(json_path: Path, apply_calibration: bool = True,
         # Apply filtering decoration
         if apply_filtering:
             try:
-                mag_filter = KalmanFilter3D(process_noise=0.1, measurement_noise=1.0)
+                mag_filter = KalmanFilter3D(process_noise=1.0, measurement_noise=1.0)
                 data = decorate_telemetry_with_filtering(data, mag_filter)
             except Exception as e:
                 print(f"Warning: Failed to apply filtering: {e}")
