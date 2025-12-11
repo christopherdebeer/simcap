@@ -20,6 +20,7 @@ import {
     getWizardState,
     getCalibrationBuffers
 } from './modules/wizard.js';
+import { MagneticTrajectory } from './modules/magnetic-trajectory.js';
 
 // Export state for global access (used by inline functions in HTML)
 window.appState = state;
@@ -74,6 +75,10 @@ const magnetConfig = {
 let hand3DRenderer = null;
 let handPreviewMode = 'labels'; // 'labels' or 'predictions'
 
+// Magnetic trajectory visualization
+let magTrajectory = null;
+let magTrajectoryPaused = false;
+
 // Pose estimation options
 const poseEstimationOptions = {
     useCalibration: true,      // Use calibrated magnetic field data
@@ -120,6 +125,8 @@ async function init() {
         poseState: poseState,
         updatePoseEstimation: updatePoseEstimationFromMag,
         updateUI: updateUI,
+        updateMagTrajectory: updateMagneticTrajectoryFromTelemetry,
+        updateMagTrajectoryStats: updateMagTrajectoryStats,
         $: $
     });
 
@@ -152,6 +159,9 @@ async function init() {
 
     // Initialize hand visualization
     initHandVisualization();
+
+    // Initialize magnetic trajectory visualization
+    initMagneticTrajectory();
 
     // Initialize collapsible sections
     initCollapsibleSections();
@@ -936,6 +946,79 @@ function initHandVisualization() {
 
     // Initial update
     updateHandVisualization();
+}
+
+/**
+ * Initialize magnetic trajectory visualization
+ */
+function initMagneticTrajectory() {
+    const canvas = $('magTrajectoryCanvas');
+    if (canvas) {
+        magTrajectory = new MagneticTrajectory(canvas, {
+            maxPoints: 200,
+            trajectoryColor: '#4ecdc4',
+            autoNormalize: true,
+            showMarkers: true,
+            showCube: true
+        });
+
+        // Clear button
+        const clearBtn = $('clearTrajectoryBtn');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                magTrajectory.clear();
+                updateMagTrajectoryStats();
+                log('Magnetic trajectory cleared');
+            });
+        }
+
+        // Pause/Resume button
+        const pauseBtn = $('pauseTrajectoryBtn');
+        if (pauseBtn) {
+            pauseBtn.addEventListener('click', () => {
+                magTrajectoryPaused = !magTrajectoryPaused;
+                pauseBtn.textContent = magTrajectoryPaused ? 'Resume' : 'Pause';
+                pauseBtn.className = magTrajectoryPaused ? 'btn-primary' : 'btn-secondary';
+                log(`Magnetic trajectory ${magTrajectoryPaused ? 'paused' : 'resumed'}`);
+            });
+        }
+
+        log('Magnetic trajectory visualizer initialized');
+    } else {
+        console.warn('Magnetic trajectory canvas not found');
+    }
+}
+
+/**
+ * Update magnetic trajectory stats display
+ */
+function updateMagTrajectoryStats() {
+    const statsEl = $('trajStats');
+    if (statsEl && magTrajectory) {
+        const stats = magTrajectory.getStats();
+        if (stats.count === 0) {
+            statsEl.textContent = 'No data';
+        } else {
+            statsEl.textContent = `${stats.count} points | Magnitude: ${stats.magnitude.min.toFixed(2)} - ${stats.magnitude.max.toFixed(2)} μT (avg: ${stats.magnitude.avg.toFixed(2)} μT)`;
+        }
+    }
+}
+
+/**
+ * Update magnetic trajectory from telemetry data
+ * Called by telemetry handler when new residual magnetic field data arrives
+ * @param {Object} data - Contains fused_mx, fused_my, fused_mz
+ */
+function updateMagneticTrajectoryFromTelemetry(data) {
+    if (!magTrajectory || magTrajectoryPaused) return;
+    if (!data || data.fused_mx === undefined) return;
+
+    magTrajectory.addPoint(data.fused_mx, data.fused_my, data.fused_mz);
+
+    // Update stats every 50 points
+    if (magTrajectory.points.length % 50 === 0) {
+        updateMagTrajectoryStats();
+    }
 }
 
 /**
