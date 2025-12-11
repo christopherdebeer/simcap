@@ -55,26 +55,38 @@ class SensorDataProcessor:
                 with open(json_file, 'r') as f:
                     data = json.load(f)
 
-                if not data or not isinstance(data, list):
+                # Handle both formats: direct array or wrapped in "samples" key
+                if isinstance(data, dict) and 'samples' in data:
+                    # New format with wrapper
+                    samples = data['samples']
+                    metadata = data.get('metadata', None)
+                elif isinstance(data, list):
+                    # Old format: direct array
+                    samples = data
+                    # Load metadata from separate file if available
+                    meta_file = json_file.with_suffix('.meta.json')
+                    metadata = None
+                    if meta_file.exists():
+                        with open(meta_file, 'r') as f:
+                            metadata = json.load(f)
+                else:
+                    print(f"Skipping {json_file.name}: unexpected format")
                     continue
 
-                # Load metadata if available
-                meta_file = json_file.with_suffix('.meta.json')
-                metadata = None
-                if meta_file.exists():
-                    with open(meta_file, 'r') as f:
-                        metadata = json.load(f)
+                if not samples or not isinstance(samples, list):
+                    print(f"Skipping {json_file.name}: no valid samples")
+                    continue
 
                 session = {
                     'filename': json_file.name,
                     'timestamp': json_file.stem,
-                    'data': data,
+                    'data': samples,
                     'metadata': metadata,
-                    'duration': len(data) / 50.0  # 50Hz sampling
+                    'duration': len(samples) / 50.0  # 50Hz sampling
                 }
 
                 self.sessions.append(session)
-                print(f"Loaded {json_file.name}: {len(data)} samples ({session['duration']:.1f}s)")
+                print(f"Loaded {json_file.name}: {len(samples)} samples ({session['duration']:.1f}s)")
 
             except Exception as e:
                 print(f"Error loading {json_file}: {e}")
