@@ -434,31 +434,71 @@
             <div class="divider"></div>
 
             <div class="filter-group">
-                <span class="filter-label">Trajectories:</span>
+                <span class="filter-label">Window Views:</span>
                 <div class="checkbox-group">
                     <label class="checkbox-label">
-                        <input type="checkbox" id="show-traj-raw" checked>
-                        Raw
+                        <input type="checkbox" id="show-win-composite" checked>
+                        Composite
                     </label>
                     <label class="checkbox-label">
-                        <input type="checkbox" id="show-traj-iron" checked>
-                        Iron
+                        <input type="checkbox" id="show-win-accel-time">
+                        Accel Time
                     </label>
                     <label class="checkbox-label">
-                        <input type="checkbox" id="show-traj-fused" checked>
-                        Fused
+                        <input type="checkbox" id="show-win-gyro-time">
+                        Gyro Time
                     </label>
                     <label class="checkbox-label">
-                        <input type="checkbox" id="show-traj-filtered" checked>
-                        Filtered
+                        <input type="checkbox" id="show-win-mag-time">
+                        Mag Time
                     </label>
                     <label class="checkbox-label">
-                        <input type="checkbox" id="show-traj-combined" checked>
-                        Combined
+                        <input type="checkbox" id="show-win-accel-3d">
+                        Accel 3D
                     </label>
                     <label class="checkbox-label">
-                        <input type="checkbox" id="show-traj-stats" checked>
-                        Statistics
+                        <input type="checkbox" id="show-win-gyro-3d">
+                        Gyro 3D
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-win-mag-3d">
+                        Mag 3D
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-win-combined-3d">
+                        Combined 3D
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-win-signature">
+                        Signature
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-win-stats">
+                        Stats
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-win-traj-raw">
+                        Traj Raw
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-win-traj-iron">
+                        Traj Iron
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-win-traj-fused">
+                        Traj Fused
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-win-traj-filtered">
+                        Traj Filtered
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-win-traj-combined">
+                        Traj Combined
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-win-traj-stats">
+                        Traj Stats
                     </label>
                 </div>
             </div>
@@ -495,12 +535,23 @@
             showCalibration: true,
             showWindows: true,
             showRaw: true,
-            showTrajRaw: true,
-            showTrajIron: true,
-            showTrajFused: true,
-            showTrajFiltered: true,
-            showTrajCombined: true,
-            showTrajStats: true
+            // Window view settings
+            showWinComposite: true,
+            showWinAccelTime: false,
+            showWinGyroTime: false,
+            showWinMagTime: false,
+            showWinAccel3d: false,
+            showWinGyro3d: false,
+            showWinMag3d: false,
+            showWinCombined3d: false,
+            showWinSignature: false,
+            showWinStats: false,
+            showWinTrajRaw: false,
+            showWinTrajIron: false,
+            showWinTrajFused: false,
+            showWinTrajFiltered: false,
+            showWinTrajCombined: false,
+            showWinTrajStats: false
         };
 
         function initializePage() {
@@ -551,40 +602,40 @@
 
                         ${session.trajectory_comparison_images ? `
                         <div class="image-section trajectory-section">
-                            <h3 class="section-title">3D Trajectory Comparison</h3>
+                            <h3 class="section-title">Session-Level 3D Trajectory Comparison</h3>
                             <div class="trajectory-grid">
-                                ${session.trajectory_comparison_images.raw ? `
-                                <div class="trajectory-card ${viewSettings.showTrajRaw ? '' : 'hidden'}" data-type="raw" onclick="openModal('${session.trajectory_comparison_images.raw}')">
+                                ${session.trajectory_comparison_images.raw && viewSettings.showWinTrajRaw ? `
+                                <div class="trajectory-card" data-type="raw" onclick="openModal('${session.trajectory_comparison_images.raw}')">
                                     <img src="${session.trajectory_comparison_images.raw}" class="trajectory-image" alt="Raw trajectory">
                                     <div class="trajectory-label">Raw</div>
                                 </div>
                                 ` : ''}
-                                ${session.trajectory_comparison_images.iron ? `
-                                <div class="trajectory-card ${viewSettings.showTrajIron ? '' : 'hidden'}" data-type="iron" onclick="openModal('${session.trajectory_comparison_images.iron}')">
+                                ${session.trajectory_comparison_images.iron && viewSettings.showWinTrajIron ? `
+                                <div class="trajectory-card" data-type="iron" onclick="openModal('${session.trajectory_comparison_images.iron}')">
                                     <img src="${session.trajectory_comparison_images.iron}" class="trajectory-image" alt="Iron corrected trajectory">
                                     <div class="trajectory-label">Iron Corrected</div>
                                 </div>
                                 ` : ''}
-                                ${session.trajectory_comparison_images.fused ? `
-                                <div class="trajectory-card ${viewSettings.showTrajFused ? '' : 'hidden'}" data-type="fused" onclick="openModal('${session.trajectory_comparison_images.fused}')">
+                                ${session.trajectory_comparison_images.fused && viewSettings.showWinTrajFused ? `
+                                <div class="trajectory-card" data-type="fused" onclick="openModal('${session.trajectory_comparison_images.fused}')">
                                     <img src="${session.trajectory_comparison_images.fused}" class="trajectory-image" alt="Fused trajectory">
                                     <div class="trajectory-label">Fused</div>
                                 </div>
                                 ` : ''}
-                                ${session.trajectory_comparison_images.filtered ? `
-                                <div class="trajectory-card ${viewSettings.showTrajFiltered ? '' : 'hidden'}" data-type="filtered" onclick="openModal('${session.trajectory_comparison_images.filtered}')">
+                                ${session.trajectory_comparison_images.filtered && viewSettings.showWinTrajFiltered ? `
+                                <div class="trajectory-card" data-type="filtered" onclick="openModal('${session.trajectory_comparison_images.filtered}')">
                                     <img src="${session.trajectory_comparison_images.filtered}" class="trajectory-image" alt="Filtered trajectory">
                                     <div class="trajectory-label">Filtered</div>
                                 </div>
                                 ` : ''}
-                                ${session.trajectory_comparison_images.combined ? `
-                                <div class="trajectory-card ${viewSettings.showTrajCombined ? '' : 'hidden'}" data-type="combined" onclick="openModal('${session.trajectory_comparison_images.combined}')">
+                                ${session.trajectory_comparison_images.combined && viewSettings.showWinTrajCombined ? `
+                                <div class="trajectory-card" data-type="combined" onclick="openModal('${session.trajectory_comparison_images.combined}')">
                                     <img src="${session.trajectory_comparison_images.combined}" class="trajectory-image" alt="Combined overlay">
                                     <div class="trajectory-label">Combined Overlay</div>
                                 </div>
                                 ` : ''}
-                                ${session.trajectory_comparison_images.statistics ? `
-                                <div class="trajectory-card ${viewSettings.showTrajStats ? '' : 'hidden'}" data-type="statistics" onclick="openModal('${session.trajectory_comparison_images.statistics}')">
+                                ${session.trajectory_comparison_images.statistics && viewSettings.showWinTrajStats ? `
+                                <div class="trajectory-card" data-type="statistics" onclick="openModal('${session.trajectory_comparison_images.statistics}')">
                                     <img src="${session.trajectory_comparison_images.statistics}" class="trajectory-image" alt="Statistics">
                                     <div class="trajectory-label">Statistics</div>
                                 </div>
@@ -593,74 +644,118 @@
                         </div>
                         ` : ''}
 
-                        ${session.windows.some(w => w.trajectory_images) ? `
-                        <div class="image-section window-trajectories-section">
-                            <h3 class="section-title">Per-Window Trajectory Comparison (${session.windows.filter(w => w.trajectory_images).length} windows)</h3>
-                            ${session.windows.filter(w => w.trajectory_images).map(w => `
+                        <div class="image-section windows-section ${viewSettings.showWindows ? '' : 'hidden'}">
+                            <h3 class="section-title">Per-Window Analysis (${session.windows.length} windows)</h3>
+                            ${session.windows.map(w => `
                                 <div style="margin-bottom: var(--space-xl); padding: var(--space-lg); background: var(--bg-elevated); border: 1px solid var(--border);">
-                                    <h4 style="margin: 0 0 var(--space-md) 0; font-size: 0.875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
-                                        Window ${w.window_num} | ${w.time_start.toFixed(2)}s - ${w.time_end.toFixed(2)}s
-                                    </h4>
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-md);">
+                                        <h4 style="margin: 0; font-size: 0.875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
+                                            Window ${w.window_num} | ${w.time_start.toFixed(2)}s - ${w.time_end.toFixed(2)}s
+                                        </h4>
+                                        <div style="font-size: 0.625rem; color: var(--fg-muted); text-transform: uppercase;">
+                                            Accel: ${w.accel_mag_mean.toFixed(0)} | Gyro: ${w.gyro_mag_mean.toFixed(0)}
+                                        </div>
+                                    </div>
                                     <div class="trajectory-grid">
-                                        ${w.trajectory_images.raw ? `
-                                        <div class="trajectory-card ${viewSettings.showTrajRaw ? '' : 'hidden'}" data-type="raw" onclick="openModal('${w.trajectory_images.raw}')">
-                                            <img src="${w.trajectory_images.raw}" class="trajectory-image" alt="Raw trajectory">
-                                            <div class="trajectory-label">Raw</div>
+                                        ${viewSettings.showWinComposite ? `
+                                        <div class="trajectory-card" data-type="composite" onclick="openModal('${w.filepath}')">
+                                            <img src="${w.filepath}" class="trajectory-image" alt="Composite">
+                                            <div class="trajectory-label">Composite</div>
                                         </div>
                                         ` : ''}
-                                        ${w.trajectory_images.iron ? `
-                                        <div class="trajectory-card ${viewSettings.showTrajIron ? '' : 'hidden'}" data-type="iron" onclick="openModal('${w.trajectory_images.iron}')">
-                                            <img src="${w.trajectory_images.iron}" class="trajectory-image" alt="Iron corrected">
-                                            <div class="trajectory-label">Iron</div>
+                                        ${w.images.timeseries_accel && viewSettings.showWinAccelTime ? `
+                                        <div class="trajectory-card" data-type="accel-time" onclick="openModal('${w.images.timeseries_accel}')">
+                                            <img src="${w.images.timeseries_accel}" class="trajectory-image" alt="Accel Time">
+                                            <div class="trajectory-label">Accel Time</div>
                                         </div>
                                         ` : ''}
-                                        ${w.trajectory_images.fused ? `
-                                        <div class="trajectory-card ${viewSettings.showTrajFused ? '' : 'hidden'}" data-type="fused" onclick="openModal('${w.trajectory_images.fused}')">
-                                            <img src="${w.trajectory_images.fused}" class="trajectory-image" alt="Fused">
-                                            <div class="trajectory-label">Fused</div>
+                                        ${w.images.timeseries_gyro && viewSettings.showWinGyroTime ? `
+                                        <div class="trajectory-card" data-type="gyro-time" onclick="openModal('${w.images.timeseries_gyro}')">
+                                            <img src="${w.images.timeseries_gyro}" class="trajectory-image" alt="Gyro Time">
+                                            <div class="trajectory-label">Gyro Time</div>
                                         </div>
                                         ` : ''}
-                                        ${w.trajectory_images.filtered ? `
-                                        <div class="trajectory-card ${viewSettings.showTrajFiltered ? '' : 'hidden'}" data-type="filtered" onclick="openModal('${w.trajectory_images.filtered}')">
-                                            <img src="${w.trajectory_images.filtered}" class="trajectory-image" alt="Filtered">
-                                            <div class="trajectory-label">Filtered</div>
+                                        ${w.images.timeseries_mag && viewSettings.showWinMagTime ? `
+                                        <div class="trajectory-card" data-type="mag-time" onclick="openModal('${w.images.timeseries_mag}')">
+                                            <img src="${w.images.timeseries_mag}" class="trajectory-image" alt="Mag Time">
+                                            <div class="trajectory-label">Mag Time</div>
                                         </div>
                                         ` : ''}
-                                        ${w.trajectory_images.combined ? `
-                                        <div class="trajectory-card ${viewSettings.showTrajCombined ? '' : 'hidden'}" data-type="combined" onclick="openModal('${w.trajectory_images.combined}')">
-                                            <img src="${w.trajectory_images.combined}" class="trajectory-image" alt="Combined">
-                                            <div class="trajectory-label">Combined</div>
+                                        ${w.images.trajectory_accel_3d && viewSettings.showWinAccel3d ? `
+                                        <div class="trajectory-card" data-type="accel-3d" onclick="openModal('${w.images.trajectory_accel_3d}')">
+                                            <img src="${w.images.trajectory_accel_3d}" class="trajectory-image" alt="Accel 3D">
+                                            <div class="trajectory-label">Accel 3D</div>
                                         </div>
                                         ` : ''}
-                                        ${w.trajectory_images.statistics ? `
-                                        <div class="trajectory-card ${viewSettings.showTrajStats ? '' : 'hidden'}" data-type="statistics" onclick="openModal('${w.trajectory_images.statistics}')">
-                                            <img src="${w.trajectory_images.statistics}" class="trajectory-image" alt="Statistics">
-                                            <div class="trajectory-label">Statistics</div>
+                                        ${w.images.trajectory_gyro_3d && viewSettings.showWinGyro3d ? `
+                                        <div class="trajectory-card" data-type="gyro-3d" onclick="openModal('${w.images.trajectory_gyro_3d}')">
+                                            <img src="${w.images.trajectory_gyro_3d}" class="trajectory-image" alt="Gyro 3D">
+                                            <div class="trajectory-label">Gyro 3D</div>
+                                        </div>
+                                        ` : ''}
+                                        ${w.images.trajectory_mag_3d && viewSettings.showWinMag3d ? `
+                                        <div class="trajectory-card" data-type="mag-3d" onclick="openModal('${w.images.trajectory_mag_3d}')">
+                                            <img src="${w.images.trajectory_mag_3d}" class="trajectory-image" alt="Mag 3D">
+                                            <div class="trajectory-label">Mag 3D</div>
+                                        </div>
+                                        ` : ''}
+                                        ${w.images.trajectory_combined_3d && viewSettings.showWinCombined3d ? `
+                                        <div class="trajectory-card" data-type="combined-3d" onclick="openModal('${w.images.trajectory_combined_3d}')">
+                                            <img src="${w.images.trajectory_combined_3d}" class="trajectory-image" alt="Combined 3D">
+                                            <div class="trajectory-label">Combined 3D</div>
+                                        </div>
+                                        ` : ''}
+                                        ${w.images.signature && viewSettings.showWinSignature ? `
+                                        <div class="trajectory-card" data-type="signature" onclick="openModal('${w.images.signature}')">
+                                            <img src="${w.images.signature}" class="trajectory-image" alt="Signature">
+                                            <div class="trajectory-label">Signature</div>
+                                        </div>
+                                        ` : ''}
+                                        ${w.images.stats && viewSettings.showWinStats ? `
+                                        <div class="trajectory-card" data-type="stats" onclick="openModal('${w.images.stats}')">
+                                            <img src="${w.images.stats}" class="trajectory-image" alt="Stats">
+                                            <div class="trajectory-label">Stats</div>
+                                        </div>
+                                        ` : ''}
+                                        ${w.trajectory_images && w.trajectory_images.raw && viewSettings.showWinTrajRaw ? `
+                                        <div class="trajectory-card" data-type="traj-raw" onclick="openModal('${w.trajectory_images.raw}')">
+                                            <img src="${w.trajectory_images.raw}" class="trajectory-image" alt="Traj Raw">
+                                            <div class="trajectory-label">Traj Raw</div>
+                                        </div>
+                                        ` : ''}
+                                        ${w.trajectory_images && w.trajectory_images.iron && viewSettings.showWinTrajIron ? `
+                                        <div class="trajectory-card" data-type="traj-iron" onclick="openModal('${w.trajectory_images.iron}')">
+                                            <img src="${w.trajectory_images.iron}" class="trajectory-image" alt="Traj Iron">
+                                            <div class="trajectory-label">Traj Iron</div>
+                                        </div>
+                                        ` : ''}
+                                        ${w.trajectory_images && w.trajectory_images.fused && viewSettings.showWinTrajFused ? `
+                                        <div class="trajectory-card" data-type="traj-fused" onclick="openModal('${w.trajectory_images.fused}')">
+                                            <img src="${w.trajectory_images.fused}" class="trajectory-image" alt="Traj Fused">
+                                            <div class="trajectory-label">Traj Fused</div>
+                                        </div>
+                                        ` : ''}
+                                        ${w.trajectory_images && w.trajectory_images.filtered && viewSettings.showWinTrajFiltered ? `
+                                        <div class="trajectory-card" data-type="traj-filtered" onclick="openModal('${w.trajectory_images.filtered}')">
+                                            <img src="${w.trajectory_images.filtered}" class="trajectory-image" alt="Traj Filtered">
+                                            <div class="trajectory-label">Traj Filtered</div>
+                                        </div>
+                                        ` : ''}
+                                        ${w.trajectory_images && w.trajectory_images.combined && viewSettings.showWinTrajCombined ? `
+                                        <div class="trajectory-card" data-type="traj-combined" onclick="openModal('${w.trajectory_images.combined}')">
+                                            <img src="${w.trajectory_images.combined}" class="trajectory-image" alt="Traj Combined">
+                                            <div class="trajectory-label">Traj Combined</div>
+                                        </div>
+                                        ` : ''}
+                                        ${w.trajectory_images && w.trajectory_images.statistics && viewSettings.showWinTrajStats ? `
+                                        <div class="trajectory-card" data-type="traj-stats" onclick="openModal('${w.trajectory_images.statistics}')">
+                                            <img src="${w.trajectory_images.statistics}" class="trajectory-image" alt="Traj Stats">
+                                            <div class="trajectory-label">Traj Stats</div>
                                         </div>
                                         ` : ''}
                                     </div>
                                 </div>
                             `).join('')}
-                        </div>
-                        ` : ''}
-
-                        <div class="image-section windows-section ${viewSettings.showWindows ? '' : 'hidden'}">
-                            <h3 class="section-title">Per-Second Windows (${session.windows.length})</h3>
-                            <div class="windows-grid" id="windows-grid-${idx}">
-                                ${session.windows.map(w => `
-                                    <div class="window-card" onclick="openModal('${w.filepath}')">
-                                        <div class="window-color-bar" style="background-color: ${w.color}"></div>
-                                        <img src="${w.filepath}" class="window-preview" alt="Window ${w.window_num}">
-                                        <div class="window-info">
-                                            <div class="window-title">Window ${w.window_num}</div>
-                                            <div class="window-time">${w.time_start.toFixed(2)}s - ${w.time_end.toFixed(2)}s</div>
-                                            <div class="window-stats">
-                                                Accel: ${w.accel_mag_mean.toFixed(0)} | Gyro: ${w.gyro_mag_mean.toFixed(0)}
-                                            </div>
-                                        </div>
-                                    </div>
-                                `).join('')}
-                            </div>
                         </div>
 
                         <div class="image-section raw-section ${viewSettings.showRaw ? '' : 'hidden'}">
@@ -696,50 +791,32 @@
         }
 
         function updateViewSettings() {
+            // Section visibility
             viewSettings.showComposite = document.getElementById('show-composite').checked;
             viewSettings.showCalibration = document.getElementById('show-calibration').checked;
             viewSettings.showWindows = document.getElementById('show-windows').checked;
             viewSettings.showRaw = document.getElementById('show-raw').checked;
-            viewSettings.showTrajRaw = document.getElementById('show-traj-raw').checked;
-            viewSettings.showTrajIron = document.getElementById('show-traj-iron').checked;
-            viewSettings.showTrajFused = document.getElementById('show-traj-fused').checked;
-            viewSettings.showTrajFiltered = document.getElementById('show-traj-filtered').checked;
-            viewSettings.showTrajCombined = document.getElementById('show-traj-combined').checked;
-            viewSettings.showTrajStats = document.getElementById('show-traj-stats').checked;
+            
+            // Window view settings
+            viewSettings.showWinComposite = document.getElementById('show-win-composite').checked;
+            viewSettings.showWinAccelTime = document.getElementById('show-win-accel-time').checked;
+            viewSettings.showWinGyroTime = document.getElementById('show-win-gyro-time').checked;
+            viewSettings.showWinMagTime = document.getElementById('show-win-mag-time').checked;
+            viewSettings.showWinAccel3d = document.getElementById('show-win-accel-3d').checked;
+            viewSettings.showWinGyro3d = document.getElementById('show-win-gyro-3d').checked;
+            viewSettings.showWinMag3d = document.getElementById('show-win-mag-3d').checked;
+            viewSettings.showWinCombined3d = document.getElementById('show-win-combined-3d').checked;
+            viewSettings.showWinSignature = document.getElementById('show-win-signature').checked;
+            viewSettings.showWinStats = document.getElementById('show-win-stats').checked;
+            viewSettings.showWinTrajRaw = document.getElementById('show-win-traj-raw').checked;
+            viewSettings.showWinTrajIron = document.getElementById('show-win-traj-iron').checked;
+            viewSettings.showWinTrajFused = document.getElementById('show-win-traj-fused').checked;
+            viewSettings.showWinTrajFiltered = document.getElementById('show-win-traj-filtered').checked;
+            viewSettings.showWinTrajCombined = document.getElementById('show-win-traj-combined').checked;
+            viewSettings.showWinTrajStats = document.getElementById('show-win-traj-stats').checked;
 
-            // Update visibility of sections
-            document.querySelectorAll('.composite-section').forEach(el => {
-                el.classList.toggle('hidden', !viewSettings.showComposite);
-            });
-            document.querySelectorAll('.calibration-section').forEach(el => {
-                el.classList.toggle('hidden', !viewSettings.showCalibration);
-            });
-            document.querySelectorAll('.windows-section').forEach(el => {
-                el.classList.toggle('hidden', !viewSettings.showWindows);
-            });
-            document.querySelectorAll('.raw-section').forEach(el => {
-                el.classList.toggle('hidden', !viewSettings.showRaw);
-            });
-
-            // Update trajectory card visibility
-            document.querySelectorAll('.trajectory-card[data-type="raw"]').forEach(el => {
-                el.classList.toggle('hidden', !viewSettings.showTrajRaw);
-            });
-            document.querySelectorAll('.trajectory-card[data-type="iron"]').forEach(el => {
-                el.classList.toggle('hidden', !viewSettings.showTrajIron);
-            });
-            document.querySelectorAll('.trajectory-card[data-type="fused"]').forEach(el => {
-                el.classList.toggle('hidden', !viewSettings.showTrajFused);
-            });
-            document.querySelectorAll('.trajectory-card[data-type="filtered"]').forEach(el => {
-                el.classList.toggle('hidden', !viewSettings.showTrajFiltered);
-            });
-            document.querySelectorAll('.trajectory-card[data-type="combined"]').forEach(el => {
-                el.classList.toggle('hidden', !viewSettings.showTrajCombined);
-            });
-            document.querySelectorAll('.trajectory-card[data-type="statistics"]').forEach(el => {
-                el.classList.toggle('hidden', !viewSettings.showTrajStats);
-            });
+            // Re-render to apply filters
+            renderSessions();
         }
 
         function openModal(imageSrc) {
@@ -796,17 +873,29 @@
                 renderSessions();
             });
 
-            // View filter checkboxes
+            // Section visibility checkboxes
             document.getElementById('show-composite').addEventListener('change', updateViewSettings);
             document.getElementById('show-calibration').addEventListener('change', updateViewSettings);
             document.getElementById('show-windows').addEventListener('change', updateViewSettings);
             document.getElementById('show-raw').addEventListener('change', updateViewSettings);
-            document.getElementById('show-traj-raw').addEventListener('change', updateViewSettings);
-            document.getElementById('show-traj-iron').addEventListener('change', updateViewSettings);
-            document.getElementById('show-traj-fused').addEventListener('change', updateViewSettings);
-            document.getElementById('show-traj-filtered').addEventListener('change', updateViewSettings);
-            document.getElementById('show-traj-combined').addEventListener('change', updateViewSettings);
-            document.getElementById('show-traj-stats').addEventListener('change', updateViewSettings);
+            
+            // Window view checkboxes
+            document.getElementById('show-win-composite').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-accel-time').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-gyro-time').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-mag-time').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-accel-3d').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-gyro-3d').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-mag-3d').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-combined-3d').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-signature').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-stats').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-traj-raw').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-traj-iron').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-traj-fused').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-traj-filtered').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-traj-combined').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-traj-stats').addEventListener('change', updateViewSettings);
 
             // Close modal on click outside
             document.getElementById('image-modal').addEventListener('click', (e) => {
