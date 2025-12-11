@@ -71,10 +71,8 @@ const magnetConfig = {
 };
 
 // Hand visualization
-let handVisualizer = null;
 let hand3DRenderer = null;
 let handPreviewMode = 'labels'; // 'labels' or 'predictions'
-let handViewMode = '2d'; // '2d' or '3d'
 
 // Pose estimation options
 const poseEstimationOptions = {
@@ -788,18 +786,6 @@ function updatePoseEstimationDisplay() {
  * Initialize hand visualization
  */
 function initHandVisualization() {
-    // Initialize 2D visualizer
-    const canvas2D = $('handCanvas');
-    if (canvas2D && typeof HandVisualizer2D !== 'undefined') {
-        handVisualizer = new HandVisualizer2D(canvas2D, {
-            showLabels: true,
-            backgroundColor: 'var(--bg-surface)'
-        });
-        handVisualizer.startAnimation();
-    } else {
-        console.warn('2D hand visualization not available');
-    }
-
     // Initialize 3D renderer
     const canvas3D = $('handCanvas3D');
     if (canvas3D && typeof Hand3DRenderer !== 'undefined') {
@@ -846,36 +832,6 @@ function setHandPreviewMode(mode) {
 }
 
 /**
- * Set hand view mode (2D or 3D)
- */
-function setHandViewMode(mode) {
-    handViewMode = mode;
-
-    // Update button states
-    const btn2D = $('handView2D');
-    const btn3D = $('handView3D');
-    const canvas2D = $('handCanvas');
-    const canvas3D = $('handCanvas3D');
-
-    if (btn2D && btn3D) {
-        if (mode === '2d') {
-            btn2D.className = 'btn-primary btn-small';
-            btn3D.className = 'btn-secondary btn-small';
-            if (canvas2D) canvas2D.style.display = 'block';
-            if (canvas3D) canvas3D.style.display = 'none';
-        } else {
-            btn2D.className = 'btn-secondary btn-small';
-            btn3D.className = 'btn-primary btn-small';
-            if (canvas2D) canvas2D.style.display = 'none';
-            if (canvas3D) canvas3D.style.display = 'block';
-        }
-    }
-
-    updateHandVisualization();
-    log(`Hand view mode: ${mode}`);
-}
-
-/**
  * Update hand visualization based on current mode
  */
 function updateHandVisualization() {
@@ -896,20 +852,9 @@ function updateHandVisualization() {
         }
     }
 
-    // Update active renderer based on view mode
-    if (handViewMode === '2d' && handVisualizer) {
-        handVisualizer.setFingerStates(fingerStates);
-    } else if (handViewMode === '3d' && hand3DRenderer) {
+    // Update 3D renderer
+    if (hand3DRenderer) {
         hand3DRenderer.setFingerPoses(fingerStates);
-
-        // Update orientation from IMU if available
-        if (poseState.orientation) {
-            hand3DRenderer.setOrientation({
-                pitch: poseState.orientation.pitch,
-                yaw: poseState.orientation.yaw,
-                roll: poseState.orientation.roll
-            });
-        }
     }
 }
 
@@ -938,7 +883,6 @@ function convertFingerLabelsToStates(fingerLabels) {
 
 // Export for HTML onclick handlers
 window.setHandPreviewMode = setHandPreviewMode;
-window.setHandViewMode = setHandViewMode;
 
 /**
  * Initialize export functionality
