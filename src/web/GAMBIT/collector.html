@@ -693,17 +693,15 @@
 
     <!-- Calibration Wizard -->
     <section>
-        <h2 class="collapsible">Calibration Wizard</h2>
-        <div class="collapse-content">
-            <p style="font-size: 11px; color: var(--fg-muted); margin-bottom: 12px;">
-                Calibrate the magnetometer to remove environmental interference. Required for accurate magnetic finger tracking.
-            </p>
-            
-            <div id="calibrationStatus" style="background: var(--bg); padding: 8px; border-radius: 4px; margin-bottom: 12px;">
+        <h2 class="collapsible collapsed">Calibration Wizard</h2>
+        <div id="calibrationStatus" style="background: var(--bg); padding: 8px; border-radius: 4px; margin-bottom: 12px;">
                 <div style="font-size: 11px; font-weight: 500; margin-bottom: 4px;">Status: <span id="calStatusText">Not Calibrated</span></div>
                 <div style="font-size: 10px; color: var(--fg-muted);" id="calDetails">No calibration loaded</div>
             </div>
-
+        <div class="collapse-content hidden">
+            <p style="font-size: 11px; color: var(--fg-muted); margin-bottom: 12px;">
+                Calibrate the magnetometer to remove environmental interference. Required for accurate magnetic finger tracking.
+            </p>
             <!-- Step 1: Earth Field -->
             <div id="calStep1" class="calibration-step">
                 <h3>Step 1: Earth Field Calibration</h3>
@@ -748,8 +746,8 @@
 
     <!-- Session Metadata -->
     <section>
-        <h2 class="collapsible">Session Metadata</h2>
-        <div class="collapse-content">
+        <h2 class="collapsible collapsed">Session Metadata</h2>
+        <div class="collapse-content hidden">
             <div class="row">
                 <div>
                     <label>Subject ID</label>
@@ -816,7 +814,7 @@
 
     <!-- Multi-Label Selection -->
     <section>
-        <h2 class="collapsible">Active Labels (Multi-Select)</h2>
+        <h2 class="collapsible collapsed">Active Labels (Multi-Select)</h2>
 
         <!-- Current active labels display - always visible -->
         <div class="active-labels">
@@ -827,7 +825,7 @@
         </div>
 
         <!-- Collapsible content - label selection buttons -->
-        <div class="collapse-content">
+        <div class="collapse-content hidden">
         <!-- Hand Pose -->
         <div class="label-category">
             <h4>Hand Pose</h4>
@@ -926,72 +924,6 @@
         </div>
     </section>
 
-    <!-- Recording Controls -->
-    <section>
-        <h2>Recording</h2>
-        <div class="sample-counter">
-            <span id="sampleCount">0</span> samples
-        </div>
-        <div class="progress-bar">
-            <div class="fill" id="progressFill" style="width: 0%"></div>
-        </div>
-        <div class="row" style="margin-top: 10px">
-            <button id="startBtn" class="btn-success" disabled>Start Recording</button>
-            <button id="stopBtn" class="btn-danger" disabled>Stop Recording</button>
-        </div>
-        <div class="row">
-            <button id="clearBtn" class="btn-secondary" disabled>Clear Session</button>
-            <button id="exportBtn" class="btn-primary" disabled>Export Data</button>
-        </div>
-        <div class="row">
-            <button id="uploadBtn" class="btn-success" disabled>Upload to GitHub</button>
-        </div>
-        <div class="row">
-            <button id="wizardBtn" class="btn-warning" disabled title="Connect device to enable">📋 Data Collection Wizard</button>
-        </div>
-        <div class="row">
-            <button id="poseEstimationBtn" class="btn-secondary" disabled title="Connect device to enable">🎯 Enable Pose Tracking</button>
-        </div>
-        <div id="poseEstimationStatus" style="display: none; margin-top: 10px; padding: 10px; background: var(--bg); border-radius: 8px; border: 1px solid var(--border);">
-            <div style="font-size: 12px; color: var(--fg-muted); margin-bottom: 5px;">Pose Estimation</div>
-            <div style="font-size: 14px; color: var(--accent);">
-                Status: <span id="poseStatusText">Disabled</span>
-            </div>
-            <div style="font-size: 14px; color: var(--accent); margin-top: 5px;">
-                Confidence: <span id="poseConfidenceText">0%</span>
-            </div>
-            <div style="font-size: 11px; color: var(--fg-muted); margin-top: 5px;">
-                Updates: <span id="poseUpdatesText">0</span>
-            </div>
-        </div>
-    </section>
-
-    <!-- GitHub Sync -->
-    <section>
-        <h2 class="collapsible collapsed">GitHub Sync</h2>
-        <div class="collapse-content hidden">
-            <div class="row">
-                <div style="flex: 2">
-                    <label>GitHub Token (PAT with repo scope)</label>
-                    <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxx" />
-                </div>
-            </div>
-            <div style="font-size: 11px; color: var(--fg-muted); margin-top: 5px;">
-                Token is stored locally. Data uploads to: data/GAMBIT/labeled/
-            </div>
-        </div>
-    </section>
-
-    <!-- Labels Created -->
-    <section>
-        <h2>Labels (<span id="labelCount">0</span>)</h2>
-        <div class="labels-list" id="labelsList">
-            <div style="color: var(--fg-muted); text-align: center; padding: 10px;">
-                No labels yet. Start recording and change labels to create segments.
-            </div>
-        </div>
-    </section>
-
     <!-- Hand State Visualization -->
     <section>
         <h2 class="collapsible">Hand State Preview</h2>
@@ -1035,6 +967,74 @@
                 <div id="handOrientationAngles" style="font-size: 12px; font-family: var(--font-mono); color: var(--accent); margin-top: 4px;">
                     Roll: 0° | Pitch: 0° | Yaw: 0°
                 </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Recording Controls -->
+    <section>
+        <h2>Recording</h2>
+        <div class="sample-counter">
+            <span id="sampleCount">0</span> samples
+        </div>
+        <div class="progress-bar">
+            <div class="fill" id="progressFill" style="width: 0%"></div>
+        </div>
+        <div class="row" style="margin-top: 10px">
+            <button id="startBtn" class="btn-success" disabled>Start Recording</button>
+            <button id="stopBtn" class="btn-danger" disabled>Stop Recording</button>
+        </div>
+        <div class="row">
+            <button id="clearBtn" class="btn-secondary" disabled>Clear Session</button>
+            <button id="exportBtn" class="btn-primary" disabled>Export Data</button>
+        </div>
+        <div class="row">
+            <button id="uploadBtn" class="btn-success" disabled>Upload to GitHub</button>
+        </div>
+        <div class="row">
+            <button id="wizardBtn" class="btn-warning" disabled title="Connect device to enable">📋 Data Collection Wizard</button>
+        </div>
+        <div class="row">
+            <button id="poseEstimationBtn" class="btn-secondary" disabled title="Connect device to enable">🎯 Enable Pose Tracking</button>
+        </div>
+        <div id="poseEstimationStatus" style="display: none; margin-top: 10px; padding: 10px; background: var(--bg); border-radius: 8px; border: 1px solid var(--border);">
+            <div>
+                <span>Pose Estimation</span>
+            <span style="color: var(--accent);">
+                Status: <span id="poseStatusText">Disabled</span>
+            </span>
+            <span style="color: var(--accent);">
+                Confidence: <span id="poseConfidenceText">0%</span>
+            </span>
+            <span style="color: var(--fg-muted);">
+                Updates: <span id="poseUpdatesText">0</span>
+            </span>
+            </div>
+        </div>
+    </section>
+
+    <!-- GitHub Sync -->
+    <section>
+        <h2 class="collapsible collapsed">GitHub Sync</h2>
+        <div class="collapse-content hidden">
+            <div class="row">
+                <div style="flex: 2">
+                    <label>GitHub Token (PAT with repo scope)</label>
+                    <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxx" />
+                </div>
+            </div>
+            <div style="font-size: 11px; color: var(--fg-muted); margin-top: 5px;">
+                Token is stored locally. Data uploads to: data/GAMBIT/labeled/
+            </div>
+        </div>
+    </section>
+
+    <!-- Labels Created -->
+    <section>
+        <h2>Labels (<span id="labelCount">0</span>)</h2>
+        <div class="labels-list" id="labelsList">
+            <div style="color: var(--fg-muted); text-align: center; padding: 10px;">
+                No labels yet. Start recording and change labels to create segments.
             </div>
         </div>
     </section>
