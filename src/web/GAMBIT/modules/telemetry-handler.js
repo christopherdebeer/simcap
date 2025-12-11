@@ -194,6 +194,11 @@ export function onTelemetry(telemetry) {
                 decoratedTelemetry.fused_mz ** 2
             );
             $('residual_magnitude').textContent = residualMag.toFixed(2) + ' μT';
+
+            // Update 3D magnetic trajectory visualization
+            if (deps.updateMagTrajectory) {
+                deps.updateMagTrajectory(decoratedTelemetry);
+            }
         } else {
             $('fused_mx').textContent = '-';
             $('fused_my').textContent = '-';
