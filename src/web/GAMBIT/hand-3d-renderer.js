@@ -41,17 +41,9 @@ class Hand3DRenderer {
         ];
         this.palmColor = options.palmColor || '#446';
 
-        this._resize();
-        window.addEventListener('resize', () => this._resize());
-    }
-
-    _resize() {
-        const rect = this.canvas.getBoundingClientRect();
-        this.canvas.width = rect.width * window.devicePixelRatio;
-        this.canvas.height = rect.height * window.devicePixelRatio;
-        this.ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-        this.W = rect.width;
-        this.H = rect.height;
+        // Use fixed canvas dimensions from HTML attributes
+        this.W = canvas.width;
+        this.H = canvas.height;
     }
 
     /**
@@ -198,13 +190,6 @@ class Hand3DRenderer {
         if (this._animationFrame) {
             cancelAnimationFrame(this._animationFrame);
         }
-    }
-
-    /**
-     * Public resize method - call when canvas becomes visible
-     */
-    resize() {
-        this._resize();
     }
 
     // Math helpers
