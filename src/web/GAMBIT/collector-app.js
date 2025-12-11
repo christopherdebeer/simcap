@@ -1136,7 +1136,9 @@ function exportData() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `gambit_session_${Date.now()}.json`;
+    // Use ISO timestamp with colons replaced by underscores for ML pipeline compatibility
+    const timestamp = new Date().toISOString().replace(/:/g, '_');
+    a.download = `${timestamp}.json`;
     a.click();
     URL.revokeObjectURL(url);
 
