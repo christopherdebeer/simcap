@@ -118,9 +118,9 @@ class Hand3DRenderer {
             const intensity = state / 2; // 0 to 1
 
             this.joints[i][0] = 0; // Spread stays at 0
-            this.joints[i][1] = intensity * 80; // MCP
-            this.joints[i][2] = intensity * 70; // PIP
-            this.joints[i][3] = intensity * 60; // DIP
+            this.joints[i][1] = intensity * 60; // MCP
+            this.joints[i][2] = intensity * 50; // PIP
+            this.joints[i][3] = intensity * 30; // DIP
         });
     }
 
@@ -258,14 +258,17 @@ class Hand3DRenderer {
         const yaw = this._rad(this.orientation.yaw);
         const roll = this._rad(this.orientation.roll);
 
-        // Hand transform
-        let handM = this._matMul(this._matRotY(yaw), this._matRotX(pitch));
+        // Hand transform - start with 180° Y rotation so palm faces viewer by default
+        // Then apply user orientation on top
+        let handM = this._matRotY(Math.PI); // Base flip to show palm
+        handM = this._matMul(handM, this._matRotY(yaw));
+        handM = this._matMul(handM, this._matRotX(pitch));
         handM = this._matMul(handM, this._matRotZ(roll));
 
         const lines = [];
         const pts = [];
 
-        // Palm - simple box
+        // Palm - simple box (palm face at positive Z, back at negative Z)
         const palm = [
             [-0.9,-0.3,0.1], [0.8,-0.3,0.1], [0.9,0.6,-0.05], [-0.7,0.6,0.15],
             [-0.9,-0.3,-0.1], [0.8,-0.3,-0.1], [0.9,0.6,-0.15], [-0.7,0.6,-0.05]
@@ -277,6 +280,11 @@ class Hand3DRenderer {
             lines.push([palmT[a], palmT[b], this.palmColor]);
         });
 
+        // Sensor indicator circle on palm surface
+        // Position in center of palm, on the palm-facing side (positive Z)
+        const sensorPos = this._matApply(handM, [0, 0.15, 0.12]);
+        const sensorColor = '#9b59b6'; // Purple to stand out
+
         // Fingers
         this.fingers.forEach((f, fi) => {
             const [name, bx, bz, spread, lens] = f;
@@ -285,13 +293,15 @@ class Hand3DRenderer {
             // Base position on palm
             let m = this._matMul(handM, this._matTrans(bx, 0.6, bz));
 
-            // Spread angle (base splay)
-            m = this._matMul(m, this._matRotZ(this._rad(spread + spreadAdj)));
+            // Spread angle (base splay) - negative to fan outward
+            m = this._matMul(m, this._matRotZ(this._rad(-(spread + spreadAdj))));
 
-            // For thumb, rotate base differently
+            // For thumb, use anatomically correct CMC saddle joint orientation
             if (fi === 0) {
-                m = this._matMul(m, this._matRotY(this._rad(-45)));
-                m = this._matMul(m, this._matRotZ(this._rad(-30)));
+                // Thumb CMC joint: saddle joint allowing opposition movement
+                // Rotate thumb to point outward and slightly forward
+                m = this._matMul(m, this._matRotZ(this._rad(-45)));   // Angle away from palm
+                m = this._matMul(m, this._matRotY(this._rad(45)));    // Point outward toward viewer
             }
 
             const color = this.fingerColors[fi];
@@ -300,8 +310,15 @@ class Hand3DRenderer {
 
             // Each segment (MCP, PIP, DIP)
             [mcp, pip, dip].forEach((angle, si) => {
-                // Flex around X axis (curl toward palm)
-                m = this._matMul(m, this._matRotX(this._rad(angle)));
+                // Flex joints to curl toward palm
+                if (fi === 0) {
+                    // Thumb: CMC/MCP flex brings thumb across palm (opposition)
+                    // Use negative Z rotation to curl thumb toward palm/fingers
+                    m = this._matMul(m, this._matRotZ(this._rad(-angle)));
+                } else {
+                    // Other fingers: curl around X axis (negative to curl toward palm after 180° Y flip)
+                    m = this._matMul(m, this._matRotX(this._rad(-angle)));
+                }
                 m = this._matMul(m, this._matTrans(0, lens[si], 0));
 
                 const newPos = this._matApply(m, [0,0,0]);
@@ -335,6 +352,33 @@ class Hand3DRenderer {
             ctx.lineWidth = 1.5;
             ctx.stroke();
         });
+
+        // Draw sensor indicator (circle on palm)
+        const sensorPr = this._project(sensorPos);
+        // Only draw if palm is facing viewer (sensor visible)
+        // Palm faces viewer when normal Z is positive (toward camera)
+        const palmNormal = this._matApply(handM, [0, 0, 1]);
+        if (palmNormal[2] > 0) {
+            // Palm facing away - sensor on back side, draw smaller/dimmer
+            ctx.fillStyle = 'rgba(155, 89, 182, 0.3)';
+            ctx.strokeStyle = 'rgba(155, 89, 182, 0.5)';
+        } else {
+            // Palm facing viewer - sensor visible
+            ctx.fillStyle = sensorColor;
+            ctx.strokeStyle = '#fff';
+        }
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(sensorPr[0], sensorPr[1], 20, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        
+        // Draw "S" label on sensor
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 10px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('S', sensorPr[0], sensorPr[1]);
     }
 
     /**
