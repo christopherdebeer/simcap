@@ -651,13 +651,15 @@ Magnetometer:
             individual_images['stats'] = str(stats_path.relative_to(self.output_dir))
 
             # 9. Per-Window Trajectory Comparison (if calibration data available)
+            trajectory_images_dict = None
             if has_calibrated or has_fused or has_filtered:
-                traj_comp_path = self._create_window_trajectory_comparison(
+                trajectory_images_dict = self._create_window_trajectory_comparison(
                     sensors, start_idx, end_idx, i+1, n_windows, window_subdir,
                     has_calibrated, has_fused, has_filtered
                 )
-                if traj_comp_path:
-                    individual_images['trajectory_comparison'] = str(traj_comp_path.relative_to(self.output_dir))
+                if trajectory_images_dict:
+                    # Keep composite for backward compatibility
+                    individual_images['trajectory_comparison'] = trajectory_images_dict.get('combined', '')
 
             # 10. Combined 3D Trajectory
             fig_combined = plt.figure(figsize=(8, 8))
@@ -865,7 +867,7 @@ Magnetometer:
             color = self.distinction_engine.sensor_to_color(sensors, start_idx, end_idx)
             color_hex = '#{:02x}{:02x}{:02x}'.format(int(color[0]*255), int(color[1]*255), int(color[2]*255))
 
-            window_info.append({
+            window_entry = {
                 'window_num': i + 1,
                 'time_start': window_time_start,
                 'time_end': window_time_end,
@@ -874,27 +876,30 @@ Magnetometer:
                 'color': color_hex,
                 'accel_mag_mean': float(sensors['accel_mag'][start_idx:end_idx].mean()),
                 'gyro_mag_mean': float(sensors['gyro_mag'][start_idx:end_idx].mean()),
-                'images': individual_images,  # New: individual image paths
-            })
+                'images': individual_images,  # Individual image paths
+            }
+            
+            # Add trajectory images dict if available
+            if trajectory_images_dict:
+                window_entry['trajectory_images'] = trajectory_images_dict
+            
+            window_info.append(window_entry)
 
         print(f"  Created {len(window_info)} window images in {session_dir.name}/ (with individual figures)")
         return window_info
 
     def _create_window_trajectory_comparison(self, sensors: Dict, start_idx: int, end_idx: int, 
                                               window_num: int, n_windows: int, window_subdir: Path,
-                                              has_calibrated: bool, has_fused: bool, has_filtered: bool) -> Optional[Path]:
-        """Create a per-window trajectory comparison image showing all calibration stages.
+                                              has_calibrated: bool, has_fused: bool, has_filtered: bool) -> Optional[Dict]:
+        """Create individual trajectory images for a window showing all calibration stages.
         
-        Full comparison including 3D plots and statistics panel.
+        Generates separate images for each stage:
+        - Raw, Iron, Fused, Filtered (individual 3D plots)
+        - Combined overlay
+        - Statistics panel
+        
+        Returns dict with paths to individual images.
         """
-        # Create figure with 2 rows: individual trajectories + combined overlay + stats
-        fig = plt.figure(figsize=(16, 12))
-        gs = GridSpec(2, 4, figure=fig, hspace=0.25, wspace=0.2, height_ratios=[1.2, 1])
-
-        fig.suptitle(f'Window {window_num}/{n_windows} Trajectory Comparison\n'
-                     f'Time: {start_idx/50.0:.2f}s - {end_idx/50.0:.2f}s',
-                     fontsize=14, fontweight='bold')
-
         # Color scheme
         colors = {
             'raw': 'gray',
@@ -906,54 +911,252 @@ Magnetometer:
         n_samples = end_idx - start_idx
         time_colors = np.linspace(0, 1, n_samples)
 
-        # Helper function to plot 3D trajectory
-        def plot_trajectory(ax, mx, my, mz, title, color, cmap_name):
+        # Helper function to plot 3D trajectory with time coloring
+        def plot_trajectory(mx, my, mz, title, color, cmap_name, output_path):
+            fig = plt.figure(figsize=(8, 6))
+            ax = fig.add_subplot(111, projection='3d')
+            
+            # Plot trajectory with time-based coloring
             for j in range(len(mx) - 1):
                 ax.plot([mx[j], mx[j+1]], [my[j], my[j+1]], [mz[j], mz[j+1]],
-                       color=plt.cm.get_cmap(cmap_name)(time_colors[j]), linewidth=1.5, alpha=0.8)
-            ax.scatter([mx[0]], [my[0]], [mz[0]], c='green', s=60, marker='o', label='Start', zorder=10)
-            ax.scatter([mx[-1]], [my[-1]], [mz[-1]], c='red', s=60, marker='s', label='End', zorder=10)
-            ax.set_title(title, fontweight='bold', fontsize=10, color=color)
-            ax.set_xlabel('X', fontsize=8)
-            ax.set_ylabel('Y', fontsize=8)
-            ax.set_zlabel('Z', fontsize=8)
-            ax.legend(fontsize=6, loc='upper left')
-            ax.tick_params(axis='both', which='major', labelsize=6)
+                       color=matplotlib.colormaps[cmap_name](time_colors[j]), linewidth=1.5, alpha=0.8)
 
-        # Plot individual trajectories
-        col = 0
+            # Start/end markers
+            ax.scatter([mx[0]], [my[0]], [mz[0]], c='green', s=80, marker='o', label='Start', zorder=10)
+            ax.scatter([mx[-1]], [my[-1]], [mz[-1]], c='red', s=80, marker='s', label='End', zorder=10)
+
+            ax.set_title(f'{title}\nWindow {window_num} | {start_idx/50.0:.1f}s - {end_idx/50.0:.1f}s', 
+                        fontweight='bold', fontsize=11, color=color)
+            ax.set_xlabel('X (μT)', fontsize=9)
+            ax.set_ylabel('Y (μT)', fontsize=9)
+            ax.set_zlabel('Z (μT)', fontsize=9)
+            ax.legend(fontsize=8, loc='upper left')
+            ax.tick_params(axis='both', which='major', labelsize=7)
+            
+            plt.tight_layout()
+            plt.savefig(output_path, dpi=100, bbox_inches='tight')
+            plt.close(fig)
+
+        # Helper function to compute trajectory statistics
+        def compute_traj_stats(mx, my, mz):
+            spread = np.sqrt(np.std(mx)**2 + np.std(my)**2 + np.std(mz)**2)
+            dx, dy, dz = np.diff(mx), np.diff(my), np.diff(mz)
+            path_length = np.sum(np.sqrt(dx**2 + dy**2 + dz**2))
+            center = (np.mean(mx), np.mean(my), np.mean(mz))
+            return {'spread': spread, 'path_length': path_length, 'center': center}
+
+        # Dictionary to store image paths
+        trajectory_images = {}
 
         # 1. Raw trajectory
-        ax_raw = fig.add_subplot(gs[0, col], projection='3d')
-        plot_trajectory(ax_raw, sensors['mx'][start_idx:end_idx], sensors['my'][start_idx:end_idx], 
-                       sensors['mz'][start_idx:end_idx], 'Raw', colors['raw'], 'Greys')
-        col += 1
+        raw_path = window_subdir / 'trajectory_raw.png'
+        plot_trajectory(sensors['mx'][start_idx:end_idx], sensors['my'][start_idx:end_idx], 
+                       sensors['mz'][start_idx:end_idx], 'Raw Magnetometer', colors['raw'], 'Greys', raw_path)
+        trajectory_images['raw'] = str(raw_path.relative_to(self.output_dir))
 
         # 2. Iron corrected (if available)
         if has_calibrated:
-            ax_iron = fig.add_subplot(gs[0, col], projection='3d')
-            plot_trajectory(ax_iron, sensors['calibrated_mx'][start_idx:end_idx], 
+            iron_path = window_subdir / 'trajectory_iron.png'
+            plot_trajectory(sensors['calibrated_mx'][start_idx:end_idx], 
                            sensors['calibrated_my'][start_idx:end_idx], 
-                           sensors['calibrated_mz'][start_idx:end_idx], 'Iron', colors['iron'], 'Blues')
-            col += 1
+                           sensors['calibrated_mz'][start_idx:end_idx], 
+                           'Iron Corrected', colors['iron'], 'Blues', iron_path)
+            trajectory_images['iron'] = str(iron_path.relative_to(self.output_dir))
 
         # 3. Fused (if available)
         if has_fused:
-            ax_fused = fig.add_subplot(gs[0, col], projection='3d')
-            plot_trajectory(ax_fused, sensors['fused_mx'][start_idx:end_idx], 
+            fused_path = window_subdir / 'trajectory_fused.png'
+            plot_trajectory(sensors['fused_mx'][start_idx:end_idx], 
                            sensors['fused_my'][start_idx:end_idx], 
-                           sensors['fused_mz'][start_idx:end_idx], 'Fused', colors['fused'], 'Greens')
-            col += 1
+                           sensors['fused_mz'][start_idx:end_idx], 
+                           'Fused (Earth Subtracted)', colors['fused'], 'Greens', fused_path)
+            trajectory_images['fused'] = str(fused_path.relative_to(self.output_dir))
 
         # 4. Filtered (if available)
         if has_filtered:
-            ax_filtered = fig.add_subplot(gs[0, col], projection='3d')
-            plot_trajectory(ax_filtered, sensors['filtered_mx'][start_idx:end_idx], 
+            filtered_path = window_subdir / 'trajectory_filtered.png'
+            plot_trajectory(sensors['filtered_mx'][start_idx:end_idx], 
                            sensors['filtered_my'][start_idx:end_idx], 
-                           sensors['filtered_mz'][start_idx:end_idx], 'Filtered', colors['filtered'], 'Reds')
+                           sensors['filtered_mz'][start_idx:end_idx], 
+                           'Filtered (Kalman)', colors['filtered'], 'Reds', filtered_path)
+            trajectory_images['filtered'] = str(filtered_path.relative_to(self.output_dir))
+
+        # 5. Combined overlay trajectory
+        combined_path = window_subdir / 'trajectory_combined.png'
+        fig = plt.figure(figsize=(8, 6))
+        ax = fig.add_subplot(111, projection='3d')
+
+        ax.plot(sensors['mx'][start_idx:end_idx], sensors['my'][start_idx:end_idx], 
+                sensors['mz'][start_idx:end_idx], color=colors['raw'], alpha=0.3, 
+                linewidth=0.8, linestyle='--', label='Raw')
+        if has_calibrated:
+            ax.plot(sensors['calibrated_mx'][start_idx:end_idx], 
+                    sensors['calibrated_my'][start_idx:end_idx], 
+                    sensors['calibrated_mz'][start_idx:end_idx],
+                    color=colors['iron'], alpha=0.5, linewidth=1, label='Iron')
+        if has_fused:
+            ax.plot(sensors['fused_mx'][start_idx:end_idx], 
+                    sensors['fused_my'][start_idx:end_idx], 
+                    sensors['fused_mz'][start_idx:end_idx],
+                    color=colors['fused'], alpha=0.7, linewidth=1.2, label='Fused')
+        if has_filtered:
+            ax.plot(sensors['filtered_mx'][start_idx:end_idx], 
+                    sensors['filtered_my'][start_idx:end_idx], 
+                    sensors['filtered_mz'][start_idx:end_idx],
+                    color=colors['filtered'], alpha=0.9, linewidth=1.5, label='Filtered')
+
+        ax.set_title(f'Combined Overlay\nWindow {window_num} | {start_idx/50.0:.1f}s - {end_idx/50.0:.1f}s',
+                    fontweight='bold', fontsize=11)
+        ax.set_xlabel('X (μT)', fontsize=9)
+        ax.set_ylabel('Y (μT)', fontsize=9)
+        ax.set_zlabel('Z (μT)', fontsize=9)
+        ax.legend(fontsize=8, loc='upper left')
+        ax.tick_params(axis='both', which='major', labelsize=7)
+
+        plt.tight_layout()
+        plt.savefig(combined_path, dpi=100, bbox_inches='tight')
+        plt.close(fig)
+        trajectory_images['combined'] = str(combined_path.relative_to(self.output_dir))
+
+        # 6. Statistics panel
+        stats_path = window_subdir / 'trajectory_stats.png'
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.axis('off')
+
+        raw_stats = compute_traj_stats(sensors['mx'][start_idx:end_idx], 
+                                       sensors['my'][start_idx:end_idx], 
+                                       sensors['mz'][start_idx:end_idx])
+
+        stats_text = f"""
+WINDOW {window_num} TRAJECTORY STATS
+{'='*40}
+
+◆ RAW
+  Spread: {raw_stats['spread']:.2f} μT
+  Path: {raw_stats['path_length']:.2f} μT
+  Center: ({raw_stats['center'][0]:.1f}, {raw_stats['center'][1]:.1f}, {raw_stats['center'][2]:.1f})
+"""
+        if has_calibrated:
+            iron_stats = compute_traj_stats(sensors['calibrated_mx'][start_idx:end_idx],
+                                           sensors['calibrated_my'][start_idx:end_idx],
+                                           sensors['calibrated_mz'][start_idx:end_idx])
+            stats_text += f"""
+◆ IRON
+  Spread: {iron_stats['spread']:.2f} μT ({(iron_stats['spread']/raw_stats['spread']*100):.0f}%)
+  Path: {iron_stats['path_length']:.2f} μT
+"""
+        if has_fused:
+            fused_stats = compute_traj_stats(sensors['fused_mx'][start_idx:end_idx],
+                                            sensors['fused_my'][start_idx:end_idx],
+                                            sensors['fused_mz'][start_idx:end_idx])
+            stats_text += f"""
+◆ FUSED
+  Spread: {fused_stats['spread']:.2f} μT ({(fused_stats['spread']/raw_stats['spread']*100):.0f}%)
+  Path: {fused_stats['path_length']:.2f} μT
+  Center: ({fused_stats['center'][0]:.1f}, {fused_stats['center'][1]:.1f}, {fused_stats['center'][2]:.1f})
+"""
+        if has_filtered:
+            filtered_stats = compute_traj_stats(sensors['filtered_mx'][start_idx:end_idx],
+                                               sensors['filtered_my'][start_idx:end_idx],
+                                               sensors['filtered_mz'][start_idx:end_idx])
+            stats_text += f"""
+◆ FILTERED
+  Spread: {filtered_stats['spread']:.2f} μT ({(filtered_stats['spread']/raw_stats['spread']*100):.0f}%)
+  Path: {filtered_stats['path_length']:.2f} μT
+"""
+
+        stats_text += f"""
+{'='*40}
+Time: {start_idx/50.0:.2f}s - {end_idx/50.0:.2f}s
+"""
+
+        ax.text(0.05, 0.95, stats_text.strip(), transform=ax.transAxes,
+               fontsize=10, verticalalignment='top', fontfamily='monospace',
+               bbox=dict(boxstyle='round,pad=0.6', facecolor='#f8f9fa', alpha=0.95, edgecolor='#dee2e6'))
+
+        plt.tight_layout()
+        plt.savefig(stats_path, dpi=100, bbox_inches='tight')
+        plt.close(fig)
+        trajectory_images['statistics'] = str(stats_path.relative_to(self.output_dir))
+
+        # Also create composite for backward compatibility
+        fig = plt.figure(figsize=(16, 12))
+        gs = GridSpec(2, 4, figure=fig, hspace=0.25, wspace=0.2, height_ratios=[1.2, 1])
+
+        fig.suptitle(f'Window {window_num}/{n_windows} Trajectory Comparison\n'
+                     f'Time: {start_idx/50.0:.2f}s - {end_idx/50.0:.2f}s',
+                     fontsize=14, fontweight='bold')
+
+        # Plot individual trajectories in row 1
+        col = 0
+        ax_raw = fig.add_subplot(gs[0, col], projection='3d')
+        for j in range(n_samples - 1):
+            ax_raw.plot([sensors['mx'][start_idx+j], sensors['mx'][start_idx+j+1]], 
+                       [sensors['my'][start_idx+j], sensors['my'][start_idx+j+1]], 
+                       [sensors['mz'][start_idx+j], sensors['mz'][start_idx+j+1]],
+                       color=matplotlib.colormaps['Greys'](time_colors[j]), linewidth=1.5, alpha=0.8)
+        ax_raw.scatter([sensors['mx'][start_idx]], [sensors['my'][start_idx]], [sensors['mz'][start_idx]], 
+                      c='green', s=60, marker='o', label='Start', zorder=10)
+        ax_raw.scatter([sensors['mx'][end_idx-1]], [sensors['my'][end_idx-1]], [sensors['mz'][end_idx-1]], 
+                      c='red', s=60, marker='s', label='End', zorder=10)
+        ax_raw.set_title('Raw', fontweight='bold', fontsize=10, color=colors['raw'])
+        ax_raw.set_xlabel('X', fontsize=8); ax_raw.set_ylabel('Y', fontsize=8); ax_raw.set_zlabel('Z', fontsize=8)
+        ax_raw.legend(fontsize=6, loc='upper left')
+        ax_raw.tick_params(axis='both', which='major', labelsize=6)
+        col += 1
+
+        if has_calibrated:
+            ax_iron = fig.add_subplot(gs[0, col], projection='3d')
+            for j in range(n_samples - 1):
+                ax_iron.plot([sensors['calibrated_mx'][start_idx+j], sensors['calibrated_mx'][start_idx+j+1]], 
+                           [sensors['calibrated_my'][start_idx+j], sensors['calibrated_my'][start_idx+j+1]], 
+                           [sensors['calibrated_mz'][start_idx+j], sensors['calibrated_mz'][start_idx+j+1]],
+                           color=matplotlib.colormaps['Blues'](time_colors[j]), linewidth=1.5, alpha=0.8)
+            ax_iron.scatter([sensors['calibrated_mx'][start_idx]], [sensors['calibrated_my'][start_idx]], 
+                          [sensors['calibrated_mz'][start_idx]], c='green', s=60, marker='o', label='Start', zorder=10)
+            ax_iron.scatter([sensors['calibrated_mx'][end_idx-1]], [sensors['calibrated_my'][end_idx-1]], 
+                          [sensors['calibrated_mz'][end_idx-1]], c='red', s=60, marker='s', label='End', zorder=10)
+            ax_iron.set_title('Iron', fontweight='bold', fontsize=10, color=colors['iron'])
+            ax_iron.set_xlabel('X', fontsize=8); ax_iron.set_ylabel('Y', fontsize=8); ax_iron.set_zlabel('Z', fontsize=8)
+            ax_iron.legend(fontsize=6, loc='upper left')
+            ax_iron.tick_params(axis='both', which='major', labelsize=6)
             col += 1
 
-        # Row 2: Combined overlay trajectory
+        if has_fused:
+            ax_fused = fig.add_subplot(gs[0, col], projection='3d')
+            for j in range(n_samples - 1):
+                ax_fused.plot([sensors['fused_mx'][start_idx+j], sensors['fused_mx'][start_idx+j+1]], 
+                            [sensors['fused_my'][start_idx+j], sensors['fused_my'][start_idx+j+1]], 
+                            [sensors['fused_mz'][start_idx+j], sensors['fused_mz'][start_idx+j+1]],
+                            color=matplotlib.colormaps['Greens'](time_colors[j]), linewidth=1.5, alpha=0.8)
+            ax_fused.scatter([sensors['fused_mx'][start_idx]], [sensors['fused_my'][start_idx]], 
+                           [sensors['fused_mz'][start_idx]], c='green', s=60, marker='o', label='Start', zorder=10)
+            ax_fused.scatter([sensors['fused_mx'][end_idx-1]], [sensors['fused_my'][end_idx-1]], 
+                           [sensors['fused_mz'][end_idx-1]], c='red', s=60, marker='s', label='End', zorder=10)
+            ax_fused.set_title('Fused', fontweight='bold', fontsize=10, color=colors['fused'])
+            ax_fused.set_xlabel('X', fontsize=8); ax_fused.set_ylabel('Y', fontsize=8); ax_fused.set_zlabel('Z', fontsize=8)
+            ax_fused.legend(fontsize=6, loc='upper left')
+            ax_fused.tick_params(axis='both', which='major', labelsize=6)
+            col += 1
+
+        if has_filtered:
+            ax_filtered = fig.add_subplot(gs[0, col], projection='3d')
+            for j in range(n_samples - 1):
+                ax_filtered.plot([sensors['filtered_mx'][start_idx+j], sensors['filtered_mx'][start_idx+j+1]], 
+                               [sensors['filtered_my'][start_idx+j], sensors['filtered_my'][start_idx+j+1]], 
+                               [sensors['filtered_mz'][start_idx+j], sensors['filtered_mz'][start_idx+j+1]],
+                               color=matplotlib.colormaps['Reds'](time_colors[j]), linewidth=1.5, alpha=0.8)
+            ax_filtered.scatter([sensors['filtered_mx'][start_idx]], [sensors['filtered_my'][start_idx]], 
+                              [sensors['filtered_mz'][start_idx]], c='green', s=60, marker='o', label='Start', zorder=10)
+            ax_filtered.scatter([sensors['filtered_mx'][end_idx-1]], [sensors['filtered_my'][end_idx-1]], 
+                              [sensors['filtered_mz'][end_idx-1]], c='red', s=60, marker='s', label='End', zorder=10)
+            ax_filtered.set_title('Filtered', fontweight='bold', fontsize=10, color=colors['filtered'])
+            ax_filtered.set_xlabel('X', fontsize=8); ax_filtered.set_ylabel('Y', fontsize=8); ax_filtered.set_zlabel('Z', fontsize=8)
+            ax_filtered.legend(fontsize=6, loc='upper left')
+            ax_filtered.tick_params(axis='both', which='major', labelsize=6)
+            col += 1
+
+        # Row 2: Combined overlay + stats
         ax_combined = fig.add_subplot(gs[1, :2], projection='3d')
         ax_combined.plot(sensors['mx'][start_idx:end_idx], sensors['my'][start_idx:end_idx], 
                         sensors['mz'][start_idx:end_idx], color=colors['raw'], alpha=0.3, 
@@ -974,22 +1177,12 @@ Magnetometer:
                             sensors['filtered_mz'][start_idx:end_idx],
                             color=colors['filtered'], alpha=0.9, linewidth=1.5, label='Filtered')
         ax_combined.set_title('Combined Overlay', fontweight='bold', fontsize=10)
-        ax_combined.set_xlabel('X', fontsize=8)
-        ax_combined.set_ylabel('Y', fontsize=8)
-        ax_combined.set_zlabel('Z', fontsize=8)
+        ax_combined.set_xlabel('X', fontsize=8); ax_combined.set_ylabel('Y', fontsize=8); ax_combined.set_zlabel('Z', fontsize=8)
         ax_combined.legend(fontsize=7, loc='upper left')
 
         # Row 2: Statistics panel
         ax_stats = fig.add_subplot(gs[1, 2:])
         ax_stats.axis('off')
-
-        # Compute trajectory statistics for this window
-        def compute_traj_stats(mx, my, mz):
-            spread = np.sqrt(np.std(mx)**2 + np.std(my)**2 + np.std(mz)**2)
-            dx, dy, dz = np.diff(mx), np.diff(my), np.diff(mz)
-            path_length = np.sum(np.sqrt(dx**2 + dy**2 + dz**2))
-            center = (np.mean(mx), np.mean(my), np.mean(mz))
-            return {'spread': spread, 'path_length': path_length, 'center': center}
 
         raw_stats = compute_traj_stats(sensors['mx'][start_idx:end_idx], 
                                        sensors['my'][start_idx:end_idx], 
@@ -1037,12 +1230,12 @@ WINDOW {window_num} TRAJECTORY STATS
                      fontsize=9, verticalalignment='top', fontfamily='monospace',
                      bbox=dict(boxstyle='round,pad=0.5', facecolor='#f8f9fa', alpha=0.9, edgecolor='#dee2e6'))
 
-        # Save
-        output_file = window_subdir / 'trajectory_comparison.png'
-        plt.savefig(output_file, dpi=100, bbox_inches='tight')
+        # Save composite
+        composite_path = window_subdir / 'trajectory_comparison.png'
+        plt.savefig(composite_path, dpi=100, bbox_inches='tight')
         plt.close(fig)
 
-        return output_file
+        return trajectory_images
 
     def create_raw_axis_images(self, session: Dict, processor: SensorDataProcessor) -> List[Path]:
         """Create detailed raw axis/orientation visualization images."""
@@ -1234,17 +1427,18 @@ WINDOW {window_num} TRAJECTORY STATS
         print(f"  Created raw axis images: {len(output_files)} files")
         return output_files
 
-    def create_trajectory_comparison_image(self, session: Dict, processor: SensorDataProcessor) -> Optional[Path]:
-        """Create a dedicated 3D trajectory comparison visualization for all calibration stages.
+    def create_trajectory_comparison_image(self, session: Dict, processor: SensorDataProcessor) -> Optional[Dict]:
+        """Create individual 3D trajectory images for all calibration stages.
 
-        Shows magnetometer trajectories in 3D space for:
+        Generates separate images for each stage:
         - Raw (gray)
         - Iron Corrected (blue)
         - Fused (green)
         - Filtered (red)
+        - Combined overlay
+        - Statistics panel
 
-        This helps visualize how calibration affects the magnetic field trajectory
-        and is crucial for understanding finger tracking signal quality.
+        Returns dict with paths to individual images for flexible HTML display.
         """
         data = session['data']
         sensors = processor.extract_sensor_arrays(data)
@@ -1257,25 +1451,9 @@ WINDOW {window_num} TRAJECTORY STATS
         if not (has_calibrated or has_fused or has_filtered):
             return None
 
-        # Determine number of stages to show
-        n_stages = 1  # Raw always
-        if has_calibrated:
-            n_stages += 1
-        if has_fused:
-            n_stages += 1
-        if has_filtered:
-            n_stages += 1
-
-        # Create figure with 2 rows: individual trajectories + combined overlay
-        fig = plt.figure(figsize=(20, 14))
-
-        # Row 1: Individual 3D trajectories (up to 4)
-        # Row 2: Combined overlay + statistics
-        gs = GridSpec(2, 4, figure=fig, hspace=0.25, wspace=0.2, height_ratios=[1.2, 1])
-
-        fig.suptitle(f'Magnetometer 3D Trajectory Comparison: {session["filename"]}\n'
-                     f'Duration: {session["duration"]:.1f}s | Samples: {len(data)}',
-                     fontsize=16, fontweight='bold')
+        # Create subdirectory for trajectory images
+        traj_dir = self.output_dir / f"trajectory_comparison_{session['timestamp']}"
+        traj_dir.mkdir(parents=True, exist_ok=True)
 
         # Color scheme
         colors = {
@@ -1290,100 +1468,47 @@ WINDOW {window_num} TRAJECTORY STATS
         time_colors = np.linspace(0, 1, n_samples)
 
         # Helper function to plot 3D trajectory with time coloring
-        def plot_trajectory(ax, mx, my, mz, title, color, cmap_name):
+        def plot_trajectory(mx, my, mz, title, color, cmap_name, output_path):
+            fig = plt.figure(figsize=(10, 8))
+            ax = fig.add_subplot(111, projection='3d')
+            
             # Plot trajectory with time-based coloring
             for i in range(len(mx) - 1):
                 ax.plot([mx[i], mx[i+1]], [my[i], my[i+1]], [mz[i], mz[i+1]],
-                       color=plt.cm.get_cmap(cmap_name)(time_colors[i]), linewidth=1, alpha=0.7)
+                       color=plt.cm.get_cmap(cmap_name)(time_colors[i]), linewidth=1.5, alpha=0.8)
 
             # Start/end markers
-            ax.scatter([mx[0]], [my[0]], [mz[0]], c='green', s=80, marker='o', label='Start', zorder=10)
-            ax.scatter([mx[-1]], [my[-1]], [mz[-1]], c='red', s=80, marker='s', label='End', zorder=10)
+            ax.scatter([mx[0]], [my[0]], [mz[0]], c='green', s=100, marker='o', label='Start', zorder=10)
+            ax.scatter([mx[-1]], [my[-1]], [mz[-1]], c='red', s=100, marker='s', label='End', zorder=10)
 
-            ax.set_title(title, fontweight='bold', fontsize=11, color=color)
-            ax.set_xlabel('X (μT)', fontsize=9)
-            ax.set_ylabel('Y (μT)', fontsize=9)
-            ax.set_zlabel('Z (μT)', fontsize=9)
-            ax.legend(fontsize=7, loc='upper left')
-            ax.tick_params(axis='both', which='major', labelsize=7)
+            ax.set_title(f'{title}\n{session["filename"]} | {session["duration"]:.1f}s', 
+                        fontweight='bold', fontsize=12, color=color)
+            ax.set_xlabel('X (μT)', fontsize=10)
+            ax.set_ylabel('Y (μT)', fontsize=10)
+            ax.set_zlabel('Z (μT)', fontsize=10)
+            ax.legend(fontsize=9, loc='upper left')
+            ax.tick_params(axis='both', which='major', labelsize=8)
+            
+            plt.tight_layout()
+            plt.savefig(output_path, dpi=120, bbox_inches='tight')
+            plt.close(fig)
 
-        # Plot individual trajectories
-        col = 0
-
-        # 1. Raw trajectory
-        ax_raw = fig.add_subplot(gs[0, col], projection='3d')
-        plot_trajectory(ax_raw, sensors['mx'], sensors['my'], sensors['mz'],
-                       'Raw Magnetometer', colors['raw'], 'Greys')
-        col += 1
-
-        # 2. Iron corrected (if available)
-        if has_calibrated:
-            ax_iron = fig.add_subplot(gs[0, col], projection='3d')
-            plot_trajectory(ax_iron, sensors['calibrated_mx'], sensors['calibrated_my'], sensors['calibrated_mz'],
-                           'Iron Corrected', colors['iron'], 'Blues')
-            col += 1
-
-        # 3. Fused (if available)
-        if has_fused:
-            ax_fused = fig.add_subplot(gs[0, col], projection='3d')
-            plot_trajectory(ax_fused, sensors['fused_mx'], sensors['fused_my'], sensors['fused_mz'],
-                           'Fused (Earth Subtracted)', colors['fused'], 'Greens')
-            col += 1
-
-        # 4. Filtered (if available)
-        if has_filtered:
-            ax_filtered = fig.add_subplot(gs[0, col], projection='3d')
-            plot_trajectory(ax_filtered, sensors['filtered_mx'], sensors['filtered_my'], sensors['filtered_mz'],
-                           'Filtered (Kalman)', colors['filtered'], 'Reds')
-            col += 1
-
-        # Row 2: Combined overlay trajectory
-        ax_combined = fig.add_subplot(gs[1, :2], projection='3d')
-
-        # Plot all stages overlaid with distinct colors
-        ax_combined.plot(sensors['mx'], sensors['my'], sensors['mz'],
-                        color=colors['raw'], alpha=0.3, linewidth=0.8, linestyle='--', label='Raw')
-        if has_calibrated:
-            ax_combined.plot(sensors['calibrated_mx'], sensors['calibrated_my'], sensors['calibrated_mz'],
-                            color=colors['iron'], alpha=0.5, linewidth=1, label='Iron')
-        if has_fused:
-            ax_combined.plot(sensors['fused_mx'], sensors['fused_my'], sensors['fused_mz'],
-                            color=colors['fused'], alpha=0.7, linewidth=1.2, label='Fused')
-        if has_filtered:
-            ax_combined.plot(sensors['filtered_mx'], sensors['filtered_my'], sensors['filtered_mz'],
-                            color=colors['filtered'], alpha=0.9, linewidth=1.5, label='Filtered')
-
-        ax_combined.set_title('Combined Trajectory Overlay', fontweight='bold', fontsize=12)
-        ax_combined.set_xlabel('X (μT)', fontsize=9)
-        ax_combined.set_ylabel('Y (μT)', fontsize=9)
-        ax_combined.set_zlabel('Z (μT)', fontsize=9)
-        ax_combined.legend(fontsize=9, loc='upper left')
-
-        # Row 2: Statistics panel
-        ax_stats = fig.add_subplot(gs[1, 2:])
-        ax_stats.axis('off')
-
-        # Compute trajectory statistics
+        # Helper function to compute trajectory statistics
         def compute_traj_stats(mx, my, mz):
-            # Trajectory spread (standard deviation of positions)
             spread_x = np.std(mx)
             spread_y = np.std(my)
             spread_z = np.std(mz)
             total_spread = np.sqrt(spread_x**2 + spread_y**2 + spread_z**2)
 
-            # Trajectory length (total path distance)
             dx = np.diff(mx)
             dy = np.diff(my)
             dz = np.diff(mz)
             path_length = np.sum(np.sqrt(dx**2 + dy**2 + dz**2))
 
-            # Bounding box
             bbox_x = np.max(mx) - np.min(mx)
             bbox_y = np.max(my) - np.min(my)
             bbox_z = np.max(mz) - np.min(mz)
-            bbox_vol = bbox_x * bbox_y * bbox_z
 
-            # Center of mass
             com = (np.mean(mx), np.mean(my), np.mean(mz))
 
             return {
@@ -1391,15 +1516,79 @@ WINDOW {window_num} TRAJECTORY STATS
                 'spread_xyz': (spread_x, spread_y, spread_z),
                 'path_length': path_length,
                 'bbox': (bbox_x, bbox_y, bbox_z),
-                'bbox_vol': bbox_vol,
                 'center': com
             }
+
+        # Dictionary to store image paths
+        trajectory_images = {}
+
+        # 1. Raw trajectory
+        raw_path = traj_dir / 'raw_3d.png'
+        plot_trajectory(sensors['mx'], sensors['my'], sensors['mz'],
+                       'Raw Magnetometer', colors['raw'], 'Greys', raw_path)
+        trajectory_images['raw'] = str(raw_path.relative_to(self.output_dir))
+
+        # 2. Iron corrected (if available)
+        if has_calibrated:
+            iron_path = traj_dir / 'iron_3d.png'
+            plot_trajectory(sensors['calibrated_mx'], sensors['calibrated_my'], sensors['calibrated_mz'],
+                           'Iron Corrected', colors['iron'], 'Blues', iron_path)
+            trajectory_images['iron'] = str(iron_path.relative_to(self.output_dir))
+
+        # 3. Fused (if available)
+        if has_fused:
+            fused_path = traj_dir / 'fused_3d.png'
+            plot_trajectory(sensors['fused_mx'], sensors['fused_my'], sensors['fused_mz'],
+                           'Fused (Earth Subtracted)', colors['fused'], 'Greens', fused_path)
+            trajectory_images['fused'] = str(fused_path.relative_to(self.output_dir))
+
+        # 4. Filtered (if available)
+        if has_filtered:
+            filtered_path = traj_dir / 'filtered_3d.png'
+            plot_trajectory(sensors['filtered_mx'], sensors['filtered_my'], sensors['filtered_mz'],
+                           'Filtered (Kalman)', colors['filtered'], 'Reds', filtered_path)
+            trajectory_images['filtered'] = str(filtered_path.relative_to(self.output_dir))
+
+        # 5. Combined overlay trajectory
+        combined_path = traj_dir / 'combined_overlay.png'
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(111, projection='3d')
+
+        ax.plot(sensors['mx'], sensors['my'], sensors['mz'],
+                color=colors['raw'], alpha=0.3, linewidth=1, linestyle='--', label='Raw')
+        if has_calibrated:
+            ax.plot(sensors['calibrated_mx'], sensors['calibrated_my'], sensors['calibrated_mz'],
+                    color=colors['iron'], alpha=0.5, linewidth=1.2, label='Iron')
+        if has_fused:
+            ax.plot(sensors['fused_mx'], sensors['fused_my'], sensors['fused_mz'],
+                    color=colors['fused'], alpha=0.7, linewidth=1.5, label='Fused')
+        if has_filtered:
+            ax.plot(sensors['filtered_mx'], sensors['filtered_my'], sensors['filtered_mz'],
+                    color=colors['filtered'], alpha=0.9, linewidth=1.8, label='Filtered')
+
+        ax.set_title(f'Combined Trajectory Overlay\n{session["filename"]} | {session["duration"]:.1f}s',
+                    fontweight='bold', fontsize=12)
+        ax.set_xlabel('X (μT)', fontsize=10)
+        ax.set_ylabel('Y (μT)', fontsize=10)
+        ax.set_zlabel('Z (μT)', fontsize=10)
+        ax.legend(fontsize=9, loc='upper left')
+        ax.tick_params(axis='both', which='major', labelsize=8)
+
+        plt.tight_layout()
+        plt.savefig(combined_path, dpi=120, bbox_inches='tight')
+        plt.close(fig)
+        trajectory_images['combined'] = str(combined_path.relative_to(self.output_dir))
+
+        # 6. Statistics panel
+        stats_path = traj_dir / 'statistics.png'
+        fig, ax = plt.subplots(figsize=(10, 8))
+        ax.axis('off')
 
         raw_stats = compute_traj_stats(sensors['mx'], sensors['my'], sensors['mz'])
 
         stats_text = f"""
 TRAJECTORY STATISTICS
-{'='*45}
+{'='*50}
 
 ◆ RAW MAGNETOMETER
   Spread: {raw_stats['spread']:.1f} μT
@@ -1439,25 +1628,28 @@ TRAJECTORY STATISTICS
 """
 
         stats_text += f"""
-{'='*45}
+{'='*50}
 INTERPRETATION GUIDE:
 • Spread: Lower = more concentrated signal
 • Path Length: Lower = smoother trajectory
 • Center near (0,0,0): Good Earth field removal
 • Fused trajectory shows finger magnet signal only
+
+Session: {session['filename']}
+Duration: {session['duration']:.1f}s | Samples: {len(data)}
 """
 
-        ax_stats.text(0.02, 0.98, stats_text.strip(), transform=ax_stats.transAxes,
-                     fontsize=9, verticalalignment='top', fontfamily='monospace',
-                     bbox=dict(boxstyle='round,pad=0.5', facecolor='#f8f9fa', alpha=0.9, edgecolor='#dee2e6'))
+        ax.text(0.05, 0.95, stats_text.strip(), transform=ax.transAxes,
+               fontsize=10, verticalalignment='top', fontfamily='monospace',
+               bbox=dict(boxstyle='round,pad=0.8', facecolor='#f8f9fa', alpha=0.95, edgecolor='#dee2e6'))
 
-        # Save
-        output_file = self.output_dir / f"trajectory_comparison_{session['timestamp']}.png"
-        plt.savefig(output_file, dpi=150, bbox_inches='tight')
+        plt.tight_layout()
+        plt.savefig(stats_path, dpi=120, bbox_inches='tight')
         plt.close(fig)
+        trajectory_images['statistics'] = str(stats_path.relative_to(self.output_dir))
 
-        print(f"  Created trajectory comparison image: {output_file.name}")
-        return output_file
+        print(f"  Created {len(trajectory_images)} trajectory comparison images in {traj_dir.name}/")
+        return trajectory_images
 
     def create_calibration_stages_image(self, session: Dict, processor: SensorDataProcessor) -> Optional[Path]:
         """Create a dedicated multi-stage magnetometer calibration comparison visualization.
@@ -1786,8 +1978,8 @@ def main():
             # Generate calibration stages comparison image (if calibration data available)
             calibration_stages_path = visualizer.create_calibration_stages_image(session, processor)
 
-            # Generate 3D trajectory comparison image (if calibration data available)
-            trajectory_comparison_path = visualizer.create_trajectory_comparison_image(session, processor)
+            # Generate 3D trajectory comparison images (if calibration data available)
+            trajectory_comparison_images = visualizer.create_trajectory_comparison_image(session, processor)
 
             # Store session data for HTML generation
             session_entry = {
@@ -1803,9 +1995,9 @@ def main():
             if calibration_stages_path:
                 session_entry['calibration_stages_image'] = str(calibration_stages_path.relative_to(output_dir))
 
-            # Include trajectory comparison image if it was created
-            if trajectory_comparison_path:
-                session_entry['trajectory_comparison_image'] = str(trajectory_comparison_path.relative_to(output_dir))
+            # Include trajectory comparison images dict if it was created
+            if trajectory_comparison_images:
+                session_entry['trajectory_comparison_images'] = trajectory_comparison_images
 
             sessions_data.append(session_entry)
 
