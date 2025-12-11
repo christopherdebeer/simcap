@@ -793,7 +793,7 @@ function initHandVisualization() {
     if (canvas2D && typeof HandVisualizer2D !== 'undefined') {
         handVisualizer = new HandVisualizer2D(canvas2D, {
             showLabels: true,
-            backgroundColor: 'var(--bg)'
+            backgroundColor: 'var(--bg-surface)'
         });
         handVisualizer.startAnimation();
     } else {
@@ -804,7 +804,7 @@ function initHandVisualization() {
     const canvas3D = $('handCanvas3D');
     if (canvas3D && typeof Hand3DRenderer !== 'undefined') {
         hand3DRenderer = new Hand3DRenderer(canvas3D, {
-            backgroundColor: '#1a1a2e'
+            backgroundColor: 'var(--bg-surface)'
         });
         hand3DRenderer.startAnimation();
     } else {
