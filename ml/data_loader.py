@@ -56,6 +56,10 @@ def load_session_data(json_path: Path, apply_calibration: bool = True,
     The returned array uses the best available data:
     - filtered > calibrated > raw magnetometer values
 
+    Supports two JSON formats:
+    - V1 (legacy): Array of samples directly: [{sample1}, {sample2}, ...]
+    - V2 (new): Wrapper object: {version: "2.0", timestamp: "...", samples: [...]}
+
     Args:
         json_path: Path to the .json data file
         apply_calibration: Apply magnetometer calibration if available
@@ -68,7 +72,17 @@ def load_session_data(json_path: Path, apply_calibration: bool = True,
         Note: mx, my, mz will be filtered/calibrated if available, otherwise raw
     """
     with open(json_path, 'r') as f:
-        data = json.load(f)
+        raw_json = json.load(f)
+
+    # Handle both V1 (array) and V2 (wrapper object) formats
+    if isinstance(raw_json, list):
+        # V1 format: array of samples directly
+        data = raw_json
+    elif isinstance(raw_json, dict) and 'samples' in raw_json:
+        # V2 format: wrapper object with samples array
+        data = raw_json['samples']
+    else:
+        raise ValueError(f"Unknown JSON format in {json_path}: expected array or object with 'samples' key")
 
     # Preserve raw data, apply decorations
     if apply_calibration or apply_filtering:
@@ -174,9 +188,13 @@ def compute_dataset_stats(data_dir: Path) -> DatasetStats:
     all_data = []
 
     for json_path in data_dir.glob('*.json'):
-        if json_path.suffix == '.json' and not json_path.name.endswith('.meta.json'):
-            data = load_session_data(json_path)
-            all_data.append(data)
+        # Skip non-session files
+        if (json_path.name.endswith('.meta.json') or
+            json_path.name.endswith('.full.json') or
+            'calibration' in json_path.name.lower()):
+            continue
+        data = load_session_data(json_path)
+        all_data.append(data)
 
     if not all_data:
         raise ValueError(f"No data files found in {data_dir}")
@@ -668,7 +686,10 @@ class GambitDataset:
         custom_labels = set()
 
         for json_path in sorted(self.data_dir.glob('*.json')):
-            if json_path.name.endswith('.meta.json'):
+            # Skip non-session files
+            if (json_path.name.endswith('.meta.json') or
+                json_path.name.endswith('.full.json') or
+                'calibration' in json_path.name.lower()):
                 continue
 
             data = load_session_data(json_path)
