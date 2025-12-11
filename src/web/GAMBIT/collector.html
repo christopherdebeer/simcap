@@ -995,7 +995,7 @@
     <!-- Hand State Visualization -->
     <section>
         <h2 class="collapsible">Hand State Preview</h2>
-        <div class="collapse-content">
+        <div class="collapse-content" style="display: flex;flex-direction: column;">
             <!-- Mode Toggle -->
             <div style="display: flex; justify-content: center; gap: 8px; margin-bottom: 10px;">
                 <button id="handModeLabels" class="btn-primary btn-small" onclick="setHandPreviewMode('labels')">🏷️ Labels</button>
@@ -1006,11 +1006,23 @@
                 📋 Showing: Manual Labels
             </div>
             <!-- Canvas container -->
-            <div style="display: flex; justify-content: center; padding: 10px;">
+            <div style="position: relative;width: auto;margin: 0 auto;">
+                <canvas id="magTrajectoryCanvas" width="400" height="400" style="left: 1em; top: 1em; border: 1px solid #efefef; background: transparent; border-radius: 8px; position: absolute; width: 20%; z-index: 9999;"></canvas>
                 <canvas id="handCanvas3D" width="400" height="400" style="border: 1px solid var(--border); background: var(--bg); border-radius: 8px;"></canvas>
             </div>
             <div id="handPreviewDescription" style="text-align: center; color: var(--fg-muted); font-size: 12px; margin-top: 10px;">
                 Visual representation of manually selected finger states
+            </div>
+            <!-- Residual Magnetic Field Trajectory for canvas#magTrajectoryCanvas -->
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
+                    <button id="clearTrajectoryBtn" class="btn-secondary" style="font-size: 12px; padding: 6px 12px;">Clear Trajectory</button>
+                    <button id="pauseTrajectoryBtn" class="btn-secondary" style="font-size: 12px; padding: 6px 12px;">Pause</button>
+                </div>
+                <div style="font-size: 11px; opacity: 0.7; text-align: center;">
+                    <div>Green = Start | Red = End | Shows last <span id="trajPointCount">200</span> samples</div>
+                    <div id="trajStats" style="margin-top: 4px;">-</div>
+                </div>
             </div>
             <!-- Prediction confidence (only shown in predictions mode) -->
             <div id="handPredictionInfo" style="display: none; text-align: center; margin-top: 10px; padding: 8px; background: var(--bg); border-radius: 4px;">
@@ -1074,23 +1086,6 @@
         </div>
     </section>
 
-    <!-- Residual Magnetic Field Trajectory -->
-    <section>
-        <h2 class="collapsible">Residual Magnetic Field Trajectory</h2>
-        <div class="collapse-content">
-            <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
-                <canvas id="magTrajectoryCanvas" width="400" height="400" style="background: #0f0f1a; border-radius: 8px;"></canvas>
-                <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
-                    <button id="clearTrajectoryBtn" class="btn-secondary" style="font-size: 12px; padding: 6px 12px;">Clear Trajectory</button>
-                    <button id="pauseTrajectoryBtn" class="btn-secondary" style="font-size: 12px; padding: 6px 12px;">Pause</button>
-                </div>
-                <div style="font-size: 11px; opacity: 0.7; text-align: center;">
-                    <div>Green = Start | Red = End | Shows last <span id="trajPointCount">200</span> samples</div>
-                    <div id="trajStats" style="margin-top: 4px;">-</div>
-                </div>
-            </div>
-        </div>
-    </section>
 
     <!-- Log -->
     <section>
