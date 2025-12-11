@@ -245,6 +245,98 @@
             .breadcrumb {
                 text-align: center;
             }
+
+            /* Playback controls */
+            .playback-controls {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-sm);
+            }
+
+            .session-select {
+                width: 100%;
+                padding: var(--space-xs);
+                font-size: 0.875rem;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: var(--radius-sm);
+                color: var(--fg);
+            }
+
+            .playback-buttons {
+                display: flex;
+                align-items: center;
+                gap: var(--space-sm);
+            }
+
+            .btn-sm {
+                padding: var(--space-xs) var(--space-sm);
+                font-size: 0.75rem;
+            }
+
+            .playback-status {
+                font-size: 0.75rem;
+                color: var(--fg-muted);
+                margin-left: auto;
+            }
+
+            .playback-progress {
+                display: flex;
+                align-items: center;
+                gap: var(--space-sm);
+            }
+
+            .playback-progress input[type="range"] {
+                flex: 1;
+                height: 6px;
+                -webkit-appearance: none;
+                background: var(--border);
+                border-radius: 3px;
+            }
+
+            .playback-progress input[type="range"]::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                width: 14px;
+                height: 14px;
+                background: var(--accent);
+                border-radius: 50%;
+                cursor: pointer;
+            }
+
+            .playback-progress input[type="range"]:disabled::-webkit-slider-thumb {
+                background: var(--fg-muted);
+            }
+
+            #playbackTime {
+                font-size: 0.75rem;
+                color: var(--fg-muted);
+                min-width: 80px;
+                text-align: right;
+            }
+
+            .playback-speed {
+                display: flex;
+                align-items: center;
+                gap: var(--space-sm);
+                font-size: 0.75rem;
+            }
+
+            .playback-speed select {
+                padding: 2px 4px;
+                font-size: 0.75rem;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: var(--radius-sm);
+                color: var(--fg);
+            }
+
+            #playbackCard {
+                border-color: var(--accent);
+            }
+
+            #playbackCard.playing {
+                border-color: var(--success);
+            }
         </style>
     </head>
     <body>
@@ -334,6 +426,34 @@
                 <div class="face bottom">gyro 6</div>
             </div>
         </section>
+
+        <div class="card" id="playbackCard">
+            <div class="card-header">Session Playback</div>
+            <div class="playback-controls">
+                <select id="sessionSelect" class="session-select">
+                    <option value="">-- Load sessions --</option>
+                </select>
+                <div class="playback-buttons">
+                    <button class="btn btn-sm" id="playBtn" disabled>Play</button>
+                    <button class="btn btn-sm" id="stopBtn" disabled>Stop</button>
+                    <span id="playbackStatus" class="playback-status"></span>
+                </div>
+                <div class="playback-progress">
+                    <input type="range" id="playbackSlider" min="0" max="100" value="0" disabled>
+                    <span id="playbackTime">0:00 / 0:00</span>
+                </div>
+                <div class="playback-speed">
+                    <label>Speed:</label>
+                    <select id="playbackSpeed">
+                        <option value="0.25">0.25x</option>
+                        <option value="0.5">0.5x</option>
+                        <option value="1" selected>1x</option>
+                        <option value="2">2x</option>
+                        <option value="4">4x</option>
+                    </select>
+                </div>
+            </div>
+        </div>
 
         <footer class="page-footer">
             <span>SIMCAP GAMBIT</span>
@@ -984,7 +1104,291 @@
 
             // Initialize on page load
             initGestureInference();
-            
+
+            // ===== Session Playback System =====
+            const MANIFEST_URL = '../../../data/GAMBIT/manifest.json';
+            const DATA_BASE_URL = '../../../data/GAMBIT/';
+
+            let playbackState = {
+                sessions: [],
+                currentSession: null,
+                samples: [],
+                currentIndex: 0,
+                isPlaying: false,
+                playbackInterval: null,
+                speed: 1
+            };
+
+            // Format seconds as M:SS
+            function formatTime(seconds) {
+                const mins = Math.floor(seconds / 60);
+                const secs = Math.floor(seconds % 60);
+                return `${mins}:${secs.toString().padStart(2, '0')}`;
+            }
+
+            // Load manifest and populate session selector
+            async function loadManifest() {
+                const select = document.getElementById('sessionSelect');
+                const status = document.getElementById('playbackStatus');
+
+                try {
+                    status.textContent = 'Loading sessions...';
+                    const response = await fetch(MANIFEST_URL);
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    const manifest = await response.json();
+                    playbackState.sessions = manifest.sessions || [];
+
+                    // Clear and populate select
+                    select.innerHTML = '<option value="">-- Select a session --</option>';
+
+                    playbackState.sessions.forEach((session, index) => {
+                        const option = document.createElement('option');
+                        option.value = index;
+
+                        // Format display text
+                        const date = new Date(session.timestamp);
+                        const dateStr = date.toLocaleDateString();
+                        const timeStr = date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+                        const duration = session.durationSec ? `${formatTime(session.durationSec)}` : '?';
+                        const samples = session.sampleCount || '?';
+
+                        option.textContent = `${dateStr} ${timeStr} - ${duration} (${samples} samples)`;
+                        select.appendChild(option);
+                    });
+
+                    status.textContent = `${playbackState.sessions.length} sessions available`;
+                    console.log('[Playback] Loaded manifest with', playbackState.sessions.length, 'sessions');
+
+                } catch (error) {
+                    console.error('[Playback] Failed to load manifest:', error);
+                    status.textContent = 'Failed to load sessions';
+                    select.innerHTML = '<option value="">-- Error loading --</option>';
+                }
+            }
+
+            // Load a specific session's data
+            async function loadSession(index) {
+                const session = playbackState.sessions[index];
+                if (!session) return;
+
+                const status = document.getElementById('playbackStatus');
+                const playBtn = document.getElementById('playBtn');
+                const slider = document.getElementById('playbackSlider');
+
+                try {
+                    status.textContent = 'Loading session...';
+                    playBtn.disabled = true;
+
+                    const url = DATA_BASE_URL + session.filename;
+                    const response = await fetch(url);
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    const data = await response.json();
+
+                    // Handle both v1.0 (array) and v2.0 (object with samples) formats
+                    if (Array.isArray(data)) {
+                        playbackState.samples = data;
+                    } else if (data.samples && Array.isArray(data.samples)) {
+                        playbackState.samples = data.samples;
+                    } else {
+                        throw new Error('Unknown data format');
+                    }
+
+                    playbackState.currentSession = session;
+                    playbackState.currentIndex = 0;
+
+                    // Enable playback controls
+                    playBtn.disabled = false;
+                    slider.disabled = false;
+                    slider.max = playbackState.samples.length - 1;
+                    slider.value = 0;
+
+                    updatePlaybackTime();
+                    status.textContent = `Loaded: ${playbackState.samples.length} samples`;
+                    console.log('[Playback] Loaded session:', session.filename, 'with', playbackState.samples.length, 'samples');
+
+                } catch (error) {
+                    console.error('[Playback] Failed to load session:', error);
+                    status.textContent = 'Failed to load session';
+                    playBtn.disabled = true;
+                    slider.disabled = true;
+                }
+            }
+
+            // Update playback time display
+            function updatePlaybackTime() {
+                const timeEl = document.getElementById('playbackTime');
+                const slider = document.getElementById('playbackSlider');
+
+                const currentSec = playbackState.currentIndex / 20; // Assuming 20Hz
+                const totalSec = playbackState.samples.length / 20;
+
+                timeEl.textContent = `${formatTime(currentSec)} / ${formatTime(totalSec)}`;
+                slider.value = playbackState.currentIndex;
+            }
+
+            // Play a single sample through the visualization
+            function playSample(sample) {
+                // Feed sample through updateData (same as live data)
+                updateData(sample);
+            }
+
+            // Start playback
+            function startPlayback() {
+                if (playbackState.samples.length === 0) return;
+                if (playbackState.isPlaying) return;
+
+                playbackState.isPlaying = true;
+
+                const playBtn = document.getElementById('playBtn');
+                const stopBtn = document.getElementById('stopBtn');
+                const card = document.getElementById('playbackCard');
+                const status = document.getElementById('playbackStatus');
+
+                playBtn.textContent = 'Pause';
+                stopBtn.disabled = false;
+                card.classList.add('playing');
+                status.textContent = 'Playing...';
+
+                // Calculate interval based on speed (base is 50ms for 20Hz)
+                const baseInterval = 50;
+                const interval = baseInterval / playbackState.speed;
+
+                playbackState.playbackInterval = setInterval(() => {
+                    if (playbackState.currentIndex >= playbackState.samples.length) {
+                        stopPlayback();
+                        return;
+                    }
+
+                    const sample = playbackState.samples[playbackState.currentIndex];
+                    playSample(sample);
+
+                    playbackState.currentIndex++;
+                    updatePlaybackTime();
+
+                }, interval);
+
+                console.log('[Playback] Started at', playbackState.speed, 'x speed');
+            }
+
+            // Pause playback
+            function pausePlayback() {
+                if (!playbackState.isPlaying) return;
+
+                playbackState.isPlaying = false;
+
+                if (playbackState.playbackInterval) {
+                    clearInterval(playbackState.playbackInterval);
+                    playbackState.playbackInterval = null;
+                }
+
+                const playBtn = document.getElementById('playBtn');
+                const card = document.getElementById('playbackCard');
+                const status = document.getElementById('playbackStatus');
+
+                playBtn.textContent = 'Play';
+                card.classList.remove('playing');
+                status.textContent = 'Paused';
+
+                console.log('[Playback] Paused at index', playbackState.currentIndex);
+            }
+
+            // Stop playback and reset to beginning
+            function stopPlayback() {
+                pausePlayback();
+
+                playbackState.currentIndex = 0;
+
+                const stopBtn = document.getElementById('stopBtn');
+                const status = document.getElementById('playbackStatus');
+
+                stopBtn.disabled = true;
+                status.textContent = 'Stopped';
+
+                updatePlaybackTime();
+                console.log('[Playback] Stopped');
+            }
+
+            // Seek to position
+            function seekTo(index) {
+                playbackState.currentIndex = Math.max(0, Math.min(index, playbackState.samples.length - 1));
+                updatePlaybackTime();
+
+                // Show the sample at this position
+                if (playbackState.samples[playbackState.currentIndex]) {
+                    playSample(playbackState.samples[playbackState.currentIndex]);
+                }
+            }
+
+            // Initialize playback controls
+            function initPlayback() {
+                const select = document.getElementById('sessionSelect');
+                const playBtn = document.getElementById('playBtn');
+                const stopBtn = document.getElementById('stopBtn');
+                const slider = document.getElementById('playbackSlider');
+                const speedSelect = document.getElementById('playbackSpeed');
+
+                // Session selection
+                select.addEventListener('change', (e) => {
+                    stopPlayback();
+                    if (e.target.value !== '') {
+                        loadSession(parseInt(e.target.value));
+                    }
+                });
+
+                // Play/Pause button
+                playBtn.addEventListener('click', () => {
+                    if (playbackState.isPlaying) {
+                        pausePlayback();
+                    } else {
+                        startPlayback();
+                    }
+                });
+
+                // Stop button
+                stopBtn.addEventListener('click', () => {
+                    stopPlayback();
+                });
+
+                // Slider seek
+                slider.addEventListener('input', (e) => {
+                    const wasPlaying = playbackState.isPlaying;
+                    if (wasPlaying) pausePlayback();
+
+                    seekTo(parseInt(e.target.value));
+                });
+
+                slider.addEventListener('change', (e) => {
+                    // Resume if was playing before seek
+                });
+
+                // Speed control
+                speedSelect.addEventListener('change', (e) => {
+                    playbackState.speed = parseFloat(e.target.value);
+
+                    // If playing, restart with new speed
+                    if (playbackState.isPlaying) {
+                        pausePlayback();
+                        startPlayback();
+                    }
+
+                    console.log('[Playback] Speed set to', playbackState.speed, 'x');
+                });
+
+                // Load manifest on init
+                loadManifest();
+            }
+
+            // Initialize playback system
+            initPlayback();
+
         </script>
     </body>
 </html>
