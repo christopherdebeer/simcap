@@ -180,6 +180,31 @@ export function onTelemetry(telemetry) {
         $('mx').textContent = (decoratedTelemetry.calibrated_mx || telemetry.mx).toFixed(2);
         $('my').textContent = (decoratedTelemetry.calibrated_my || telemetry.my).toFixed(2);
         $('mz').textContent = (decoratedTelemetry.calibrated_mz || telemetry.mz).toFixed(2);
+
+        // Update residual magnetic field display (finger magnet signals)
+        if (decoratedTelemetry.fused_mx !== undefined) {
+            $('fused_mx').textContent = decoratedTelemetry.fused_mx.toFixed(2);
+            $('fused_my').textContent = decoratedTelemetry.fused_my.toFixed(2);
+            $('fused_mz').textContent = decoratedTelemetry.fused_mz.toFixed(2);
+
+            // Calculate and display residual magnitude (useful for finger magnet detection)
+            const residualMag = Math.sqrt(
+                decoratedTelemetry.fused_mx ** 2 +
+                decoratedTelemetry.fused_my ** 2 +
+                decoratedTelemetry.fused_mz ** 2
+            );
+            $('residual_magnitude').textContent = residualMag.toFixed(2) + ' μT';
+
+            // Update 3D magnetic trajectory visualization
+            if (deps.updateMagTrajectory) {
+                deps.updateMagTrajectory(decoratedTelemetry);
+            }
+        } else {
+            $('fused_mx').textContent = '-';
+            $('fused_my').textContent = '-';
+            $('fused_mz').textContent = '-';
+            $('residual_magnitude').textContent = '-';
+        }
     }
 
     // Update sample count (throttled)
