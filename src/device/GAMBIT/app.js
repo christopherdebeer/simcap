@@ -2,7 +2,7 @@
 var FIRMWARE_INFO = {
     id: "GAMBIT",
     name: "GAMBIT IMU Telemetry",
-    version: "0.3.2",
+    version: "0.3.3",
     features: ["imu", "magnetometer", "environmental", "streaming", "logging", "framing"],
     author: "SIMCAP"
 };
@@ -227,22 +227,31 @@ function getData(count, intervalMs) {
     
     var hz = Math.round(1000 / intervalMs);
     
-    // If already streaming, this acts as keepalive (no log to avoid interleaving)
+    // If already streaming, this acts as keepalive
     if (interval) {
-        // Keepalive - just refresh timeout, don't log
-    } else {
-        // Starting new stream - log before enabling streaming flag
-        if (count && count > 0) {
-            logInfo('Stream: ' + count + ' @ ' + hz + 'Hz');
-        } else {
-            logInfo('Stream: ' + hz + 'Hz (30s timeout)');
+        // Keepalive - refresh timeout for unlimited streaming, don't log
+        if (!streamCount) {
+            if (streamTimeout) {
+                clearTimeout(streamTimeout);
+            }
+            streamTimeout = setTimeout(function(){
+                stopData();
+            }, 30000);
         }
-        
-        sampleCount = 0;
-        streamCount = (count && count > 0) ? count : null;
-        streamStartTime = Date.now();
-        streamingActive = true;  // Suppress console.log during streaming
+        return; // Don't restart streaming or emit extra sample
     }
+    
+    // Starting new stream - log before enabling streaming flag
+    if (count && count > 0) {
+        logInfo('Stream: ' + count + ' @ ' + hz + 'Hz');
+    } else {
+        logInfo('Stream: ' + hz + 'Hz (30s timeout)');
+    }
+    
+    sampleCount = 0;
+    streamCount = (count && count > 0) ? count : null;
+    streamStartTime = Date.now();
+    streamingActive = true;  // Suppress console.log during streaming
 
     // Only set timeout for unlimited streaming (no count specified)
     // Fixed-count collection auto-stops when complete, no timeout needed
@@ -259,17 +268,15 @@ function getData(count, intervalMs) {
         }, 30000);
     }
 
-    // Start streaming if not already running
-    if (!interval) {
-        interval = setInterval(function() {
-            emit();
-            
-            // Auto-stop if we've reached the target count
-            if (streamCount && sampleCount >= streamCount) {
-                stopData();  // stopData re-enables logging, then logs
-            }
-        }, intervalMs);
-    }
+    // Start streaming
+    interval = setInterval(function() {
+        emit();
+        
+        // Auto-stop if we've reached the target count
+        if (streamCount && sampleCount >= streamCount) {
+            stopData();  // stopData re-enables logging, then logs
+        }
+    }, intervalMs);
 
     return emit();
 }
