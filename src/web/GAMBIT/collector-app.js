@@ -22,6 +22,13 @@ import {
     getCalibrationBuffers
 } from './modules/wizard.js';
 import { MagneticTrajectory } from './modules/magnetic-trajectory.js';
+import {
+    getBrowserLocation,
+    getDefaultLocation,
+    exportLocationMetadata,
+    formatLocation,
+    formatFieldData
+} from './shared/geomagnetic-field.js';
 
 // Export state for global access (used by inline functions in HTML)
 window.appState = state;
@@ -195,11 +202,33 @@ async function init() {
         console.warn('Failed to load GitHub token:', e);
     }
 
+    // Initialize geomagnetic location
+    await initGeomagneticLocation();
+
     // Initial UI update
     updateUI();
     updateCalibrationStatus();
 
     log('GAMBIT Collector ready');
+}
+
+/**
+ * Initialize geomagnetic location
+ * Try browser geolocation first, fall back to Edinburgh default
+ */
+async function initGeomagneticLocation() {
+    try {
+        log('Detecting geomagnetic location...');
+        const location = await getBrowserLocation();
+        state.geomagneticLocation = location.selected;
+        log(`Location: ${formatLocation(location.selected)} (auto-detected)`);
+        log(`Magnetic field: ${location.selected.intensity.toFixed(1)} µT, Declination: ${location.selected.declination.toFixed(1)}°`);
+    } catch (error) {
+        // Fall back to default location (Edinburgh)
+        state.geomagneticLocation = getDefaultLocation();
+        log(`Location: ${formatLocation(state.geomagneticLocation)} (default)`);
+        console.info('[Geolocation] Browser detection failed, using default:', error.message);
+    }
 }
 
 /**
@@ -1391,6 +1420,7 @@ function buildExportData(options = {}) {
             device: 'GAMBIT',
             firmware_version: state.firmwareVersion || 'unknown',
             calibration: calibrationInstance ? calibrationInstance.toJSON() : null,
+            location: exportLocationMetadata(state.geomagneticLocation),
             subject_id: subjectId,
             environment: environment,
             hand: hand,
