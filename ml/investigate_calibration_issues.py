@@ -70,9 +70,15 @@ def analyze_earth_field_calibration_data(sessions_data):
 
                 # Extract magnetometer data for this segment
                 seg_samples = samples[start:end]
-                mx = np.array([s['mx'] for s in seg_samples])
-                my = np.array([s['my'] for s in seg_samples])
-                mz = np.array([s['mz'] for s in seg_samples])
+                # Use converted µT values if available, otherwise use raw LSB
+                if 'mx_ut' in seg_samples[0]:
+                    mx = np.array([s['mx_ut'] for s in seg_samples])
+                    my = np.array([s['my_ut'] for s in seg_samples])
+                    mz = np.array([s['mz_ut'] for s in seg_samples])
+                else:
+                    mx = np.array([s['mx'] for s in seg_samples])
+                    my = np.array([s['my'] for s in seg_samples])
+                    mz = np.array([s['mz'] for s in seg_samples])
 
                 # Calculate statistics
                 print(f"  Raw Magnetometer Statistics:")
@@ -119,9 +125,15 @@ def analyze_hard_iron_calibration_data(sessions_data):
 
                 # Extract magnetometer data for this segment
                 seg_samples = samples[start:end]
-                mx = np.array([s['mx'] for s in seg_samples])
-                my = np.array([s['my'] for s in seg_samples])
-                mz = np.array([s['mz'] for s in seg_samples])
+                # Use converted µT values if available, otherwise use raw LSB
+                if 'mx_ut' in seg_samples[0]:
+                    mx = np.array([s['mx_ut'] for s in seg_samples])
+                    my = np.array([s['my_ut'] for s in seg_samples])
+                    mz = np.array([s['mz_ut'] for s in seg_samples])
+                else:
+                    mx = np.array([s['mx'] for s in seg_samples])
+                    my = np.array([s['my'] for s in seg_samples])
+                    mz = np.array([s['mz'] for s in seg_samples])
 
                 # For hard iron calibration, we expect the device to be rotated
                 # Check the range of values

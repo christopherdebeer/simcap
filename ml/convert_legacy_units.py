@@ -196,7 +196,7 @@ Examples:
     print(f"GAMBIT Legacy Unit Conversion")
     print("=" * 80)
     print(f"Files to process: {len(files)}")
-    print(f"Dry run: {'YES' % if args.dry_run else 'NO'}")
+    print(f"Dry run: {'YES' if args.dry_run else 'NO'}")
     print(f"Create backups: {'NO' if args.no_backup else 'YES'}")
     print()
 
