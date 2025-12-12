@@ -194,6 +194,9 @@ a:hover {
     border: 1px solid var(--border);
     padding: var(--space-lg);
     margin-bottom: var(--space-md);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5em;
 }
 
 .card-header {
@@ -204,6 +207,7 @@ a:hover {
     padding-bottom: var(--space-sm);
     border-bottom: 1px solid var(--border);
     margin-bottom: var(--space-md);
+
 }
 
 /* ===== Buttons ===== */

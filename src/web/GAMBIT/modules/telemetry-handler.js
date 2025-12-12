@@ -1,25 +1,31 @@
 /**
  * Telemetry Data Handler
- * Processes incoming sensor data with calibration, filtering, and pose estimation
+ * 
+ * Processes incoming sensor data using the shared TelemetryProcessor.
+ * Handles session recording, calibration wizard, and UI updates.
+ * 
+ * This module wraps the shared TelemetryProcessor and adds collector-specific
+ * functionality like session storage, calibration wizard integration, and
+ * pose estimation updates.
  */
 
 import { state } from './state.js';
+import { TelemetryProcessor } from '../shared/telemetry-processor.js';
 
 // Module dependencies (initialized by setDependencies)
 let deps = {
     calibrationInstance: null,
-    magFilter: null,
-    imuFusion: null,
     wizard: null,
     calibrationBuffers: null,
     poseState: null,
     updatePoseEstimation: null,
+    updateMagTrajectory: null,
     updateUI: null,
     $: null
 };
 
-let lastTelemetryTime = null;
-let imuInitialized = false;
+// Shared telemetry processor instance
+let telemetryProcessor = null;
 
 /**
  * Set module dependencies
@@ -27,14 +33,47 @@ let imuInitialized = false;
  */
 export function setDependencies(dependencies) {
     deps = { ...deps, ...dependencies };
+    
+    // Update calibration in processor if it exists
+    if (telemetryProcessor && deps.calibrationInstance) {
+        telemetryProcessor.setCalibration(deps.calibrationInstance);
+    }
 }
 
 /**
- * Reset IMU state
+ * Initialize the telemetry processor
+ * Call this after dependencies are set
+ */
+export function initProcessor() {
+    telemetryProcessor = new TelemetryProcessor({
+        calibration: deps.calibrationInstance,
+        onOrientationUpdate: (euler, quaternion) => {
+            // Update hand 3D renderer if available
+            if (deps.hand3DRenderer && euler) {
+                deps.hand3DRenderer.updateFromSensorFusion(euler);
+            }
+        },
+        onGyroBiasCalibrated: () => {
+            console.log('[TelemetryHandler] Gyroscope bias calibration complete');
+        }
+    });
+}
+
+/**
+ * Reset telemetry processor state
+ * Call this when starting a new session or after disconnection
+ */
+export function resetProcessor() {
+    if (telemetryProcessor) {
+        telemetryProcessor.reset();
+    }
+}
+
+/**
+ * Reset IMU state (alias for resetProcessor for backward compatibility)
  */
 export function resetIMU() {
-    imuInitialized = false;
-    lastTelemetryTime = null;
+    resetProcessor();
 }
 
 /**
@@ -49,134 +88,36 @@ export function onTelemetry(telemetry) {
     // Track whether we should store this sample (not when paused)
     const shouldStore = !state.paused;
 
-    // IMPORTANT: Preserve raw data, only DECORATE with processed fields
-    // Create a decorated copy of telemetry with additional processed fields
-    const decoratedTelemetry = {...telemetry};
-
-    // Calculate time step for IMU fusion
-    const now = performance.now();
-    const dt = lastTelemetryTime ? (now - lastTelemetryTime) / 1000 : 0.02; // Default 50Hz
-    lastTelemetryTime = now;
-
-    // Update IMU sensor fusion to estimate device orientation
-    // Uses accelerometer + gyroscope (NOT magnetometer - it's our measurement target)
-    if (deps.imuFusion && telemetry.ax !== undefined && telemetry.gx !== undefined) {
-        if (!imuInitialized && Math.abs(telemetry.ax) + Math.abs(telemetry.ay) + Math.abs(telemetry.az) > 0.5) {
-            // Initialize orientation from accelerometer (assumes stationary)
-            deps.imuFusion.initFromAccelerometer(telemetry.ax, telemetry.ay, telemetry.az);
-            imuInitialized = true;
-        }
-        // Update orientation estimate
-        deps.imuFusion.update(
-            telemetry.ax, telemetry.ay, telemetry.az,  // Accelerometer
-            telemetry.gx, telemetry.gy, telemetry.gz,  // Gyroscope
-            dt,                                         // Time step
-            true                                        // Gyro is in deg/s
-        );
+    // Initialize processor if needed
+    if (!telemetryProcessor) {
+        initProcessor();
+    }
+    
+    // Update calibration instance if changed
+    if (deps.calibrationInstance && telemetryProcessor.calibration !== deps.calibrationInstance) {
+        telemetryProcessor.setCalibration(deps.calibrationInstance);
     }
 
-    // Get current orientation for Earth field subtraction
-    const orientation = (deps.imuFusion && imuInitialized) ? deps.imuFusion.getQuaternion() : null;
-    const euler = (deps.imuFusion && imuInitialized) ? deps.imuFusion.getEulerAngles() : null;
+    // Process telemetry through the shared pipeline
+    // This handles: unit conversion, IMU fusion, gyro bias, calibration, filtering
+    const decoratedTelemetry = telemetryProcessor.process(telemetry);
 
-    // Add orientation to telemetry
-    if (orientation) {
-        decoratedTelemetry.orientation_w = orientation.w;
-        decoratedTelemetry.orientation_x = orientation.x;
-        decoratedTelemetry.orientation_y = orientation.y;
-        decoratedTelemetry.orientation_z = orientation.z;
-        decoratedTelemetry.euler_roll = euler.roll;
-        decoratedTelemetry.euler_pitch = euler.pitch;
-        decoratedTelemetry.euler_yaw = euler.yaw;
-    }
+    // Get orientation for pose estimation
+    const orientation = telemetryProcessor.getQuaternion();
+    const euler = telemetryProcessor.getEulerAngles();
 
-    // Apply calibration correction (adds calibrated_ fields - iron correction only)
-    if (deps.calibrationInstance &&
-        deps.calibrationInstance.hardIronCalibrated &&
-        deps.calibrationInstance.softIronCalibrated) {
-        try {
-            // Iron correction only (no Earth field subtraction yet)
-            const ironCorrected = deps.calibrationInstance.correctIronOnly({
-                x: telemetry.mx,
-                y: telemetry.my,
-                z: telemetry.mz
-            });
-            decoratedTelemetry.calibrated_mx = ironCorrected.x;
-            decoratedTelemetry.calibrated_my = ironCorrected.y;
-            decoratedTelemetry.calibrated_mz = ironCorrected.z;
-
-            // Full correction with Earth field subtraction (requires orientation)
-            if (deps.calibrationInstance.earthFieldCalibrated && orientation) {
-                // Create Quaternion object for calibration.correct()
-                const quatOrientation = new Quaternion(
-                    orientation.w, orientation.x, orientation.y, orientation.z
-                );
-                const fused = deps.calibrationInstance.correct(
-                    { x: telemetry.mx, y: telemetry.my, z: telemetry.mz },
-                    quatOrientation
-                );
-                decoratedTelemetry.fused_mx = fused.x;
-                decoratedTelemetry.fused_my = fused.y;
-                decoratedTelemetry.fused_mz = fused.z;
-            } else if (!deps.calibrationInstance.earthFieldCalibrated) {
-                // Debug: Log once per session why Earth subtraction isn't running
-                if (!state.loggedEarthCalibrationMissing) {
-                    console.debug('[Calibration] Earth field not calibrated - skipping fused fields');
-                    state.loggedEarthCalibrationMissing = true;
-                }
-            } else if (!orientation) {
-                // Debug: Log once per session why Earth subtraction isn't running
-                if (!state.loggedOrientationMissing) {
-                    console.debug('[Calibration] Orientation not available - skipping fused fields');
-                    state.loggedOrientationMissing = true;
-                }
-            }
-        } catch (e) {
-            // Calibration failed, skip decoration
-            console.error('[Calibration] Correction failed:', e);
-        }
-    } else {
-        // Debug: Log once per session why calibration isn't running
-        if (!state.loggedCalibrationMissing) {
-            console.debug('[Calibration] Status:', {
-                hasInstance: !!deps.calibrationInstance,
-                hardIronCalibrated: deps.calibrationInstance?.hardIronCalibrated,
-                softIronCalibrated: deps.calibrationInstance?.softIronCalibrated
-            });
-            state.loggedCalibrationMissing = true;
-        }
-    }
-
-    // Apply Kalman filtering (adds filtered_ fields)
-    // Use best available source: fused > calibrated > raw
-    if (deps.magFilter) {
-        try {
-            const magInput = {
-                x: decoratedTelemetry.fused_mx || decoratedTelemetry.calibrated_mx || telemetry.mx,
-                y: decoratedTelemetry.fused_my || decoratedTelemetry.calibrated_my || telemetry.my,
-                z: decoratedTelemetry.fused_mz || decoratedTelemetry.calibrated_mz || telemetry.mz
-            };
-            const filteredMag = deps.magFilter.update(magInput);
-            decoratedTelemetry.filtered_mx = filteredMag.x;
-            decoratedTelemetry.filtered_my = filteredMag.y;
-            decoratedTelemetry.filtered_mz = filteredMag.z;
-
-            // Update pose estimation with filtered magnetic field + orientation context
-            if (deps.poseState?.enabled && deps.updatePoseEstimation) {
-                deps.updatePoseEstimation({
-                    magField: {
-                        x: filteredMag.x,
-                        y: filteredMag.y,
-                        z: filteredMag.z
-                    },
-                    orientation: orientation,      // Quaternion from IMU fusion
-                    euler: euler,                  // Euler angles (roll, pitch, yaw)
-                    sample: decoratedTelemetry     // Full sample with all fields (calibrated, fused, raw)
-                });
-            }
-        } catch (e) {
-            // Filtering failed, skip decoration
-        }
+    // Update pose estimation with filtered magnetic field + orientation context
+    if (deps.poseState?.enabled && deps.updatePoseEstimation && decoratedTelemetry.filtered_mx !== undefined) {
+        deps.updatePoseEstimation({
+            magField: {
+                x: decoratedTelemetry.filtered_mx,
+                y: decoratedTelemetry.filtered_my,
+                z: decoratedTelemetry.filtered_mz
+            },
+            orientation: orientation,
+            euler: euler,
+            sample: decoratedTelemetry
+        });
     }
 
     // Store decorated telemetry (includes raw + processed fields) - skip if paused
@@ -196,47 +137,100 @@ export function onTelemetry(telemetry) {
         }
     }
 
-    // Update live display (show calibrated values if available, otherwise raw)
+    // Update live display
     if (deps.$) {
-        const $ = deps.$;
-        $('ax').textContent = telemetry.ax;
-        $('ay').textContent = telemetry.ay;
-        $('az').textContent = telemetry.az;
-        $('gx').textContent = telemetry.gx;
-        $('gy').textContent = telemetry.gy;
-        $('gz').textContent = telemetry.gz;
-        $('mx').textContent = (decoratedTelemetry.calibrated_mx || telemetry.mx).toFixed(2);
-        $('my').textContent = (decoratedTelemetry.calibrated_my || telemetry.my).toFixed(2);
-        $('mz').textContent = (decoratedTelemetry.calibrated_mz || telemetry.mz).toFixed(2);
-
-        // Update residual magnetic field display (finger magnet signals)
-        if (decoratedTelemetry.fused_mx !== undefined) {
-            $('fused_mx').textContent = decoratedTelemetry.fused_mx.toFixed(2);
-            $('fused_my').textContent = decoratedTelemetry.fused_my.toFixed(2);
-            $('fused_mz').textContent = decoratedTelemetry.fused_mz.toFixed(2);
-
-            // Calculate and display residual magnitude (useful for finger magnet detection)
-            const residualMag = Math.sqrt(
-                decoratedTelemetry.fused_mx ** 2 +
-                decoratedTelemetry.fused_my ** 2 +
-                decoratedTelemetry.fused_mz ** 2
-            );
-            $('residual_magnitude').textContent = residualMag.toFixed(2) + ' μT';
-
-            // Update 3D magnetic trajectory visualization
-            if (deps.updateMagTrajectory) {
-                deps.updateMagTrajectory(decoratedTelemetry);
-            }
-        } else {
-            $('fused_mx').textContent = '-';
-            $('fused_my').textContent = '-';
-            $('fused_mz').textContent = '-';
-            $('residual_magnitude').textContent = '-';
-        }
+        updateLiveDisplay(telemetry, decoratedTelemetry);
     }
 
     // Update sample count (throttled)
     if (state.sessionData.length % 10 === 0 && deps.updateUI) {
         deps.updateUI();
     }
+}
+
+/**
+ * Update live sensor display
+ * @param {Object} raw - Raw telemetry
+ * @param {Object} decorated - Decorated telemetry with processed fields
+ */
+function updateLiveDisplay(raw, decorated) {
+    const $ = deps.$;
+    
+    // Raw IMU values
+    $('ax').textContent = raw.ax;
+    $('ay').textContent = raw.ay;
+    $('az').textContent = raw.az;
+    $('gx').textContent = raw.gx;
+    $('gy').textContent = raw.gy;
+    $('gz').textContent = raw.gz;
+    
+    // Calibrated magnetometer (show calibrated if available, otherwise raw)
+    $('mx').textContent = (decorated.calibrated_mx ?? raw.mx).toFixed(2);
+    $('my').textContent = (decorated.calibrated_my ?? raw.my).toFixed(2);
+    $('mz').textContent = (decorated.calibrated_mz ?? raw.mz).toFixed(2);
+
+    // Residual magnetic field display (finger magnet signals)
+    if (decorated.fused_mx !== undefined) {
+        $('fused_mx').textContent = decorated.fused_mx.toFixed(2);
+        $('fused_my').textContent = decorated.fused_my.toFixed(2);
+        $('fused_mz').textContent = decorated.fused_mz.toFixed(2);
+
+        // Display residual magnitude
+        const residualMag = decorated.residual_magnitude ?? Math.sqrt(
+            decorated.fused_mx ** 2 +
+            decorated.fused_my ** 2 +
+            decorated.fused_mz ** 2
+        );
+        $('residual_magnitude').textContent = residualMag.toFixed(2) + ' μT';
+
+        // Update 3D magnetic trajectory visualization
+        if (deps.updateMagTrajectory) {
+            deps.updateMagTrajectory(decorated);
+        }
+    } else {
+        $('fused_mx').textContent = '-';
+        $('fused_my').textContent = '-';
+        $('fused_mz').textContent = '-';
+        $('residual_magnitude').textContent = '-';
+    }
+}
+
+/**
+ * Get the telemetry processor instance
+ * @returns {TelemetryProcessor|null}
+ */
+export function getProcessor() {
+    return telemetryProcessor;
+}
+
+/**
+ * Get current orientation as Euler angles
+ * @returns {Object|null} {roll, pitch, yaw} in degrees
+ */
+export function getEulerAngles() {
+    return telemetryProcessor?.getEulerAngles() ?? null;
+}
+
+/**
+ * Get current orientation as quaternion
+ * @returns {Object|null} {w, x, y, z}
+ */
+export function getQuaternion() {
+    return telemetryProcessor?.getQuaternion() ?? null;
+}
+
+/**
+ * Check if gyroscope bias is calibrated
+ * @returns {boolean}
+ */
+export function isGyroBiasCalibrated() {
+    return telemetryProcessor?.getGyroBiasState().calibrated ?? false;
+}
+
+/**
+ * Get motion state
+ * @returns {Object} {isMoving, accelStd, gyroStd}
+ */
+export function getMotionState() {
+    return telemetryProcessor?.getMotionState() ?? { isMoving: false, accelStd: 0, gyroStd: 0 };
 }
