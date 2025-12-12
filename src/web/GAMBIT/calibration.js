@@ -714,7 +714,16 @@ class EnvironmentalCalibration {
             earthFieldMagnitude: this.earthFieldMagnitude,
             hardIronCalibrated: this.hardIronCalibrated,
             softIronCalibrated: this.softIronCalibrated,
-            earthFieldCalibrated: this.earthFieldCalibrated
+            earthFieldCalibrated: this.earthFieldCalibrated,
+            timestamp: new Date().toISOString(),
+            // Unit metadata (CRITICAL: documents what units these values are in)
+            units: {
+                hardIronOffset: 'µT',
+                earthField: 'µT',
+                earthFieldMagnitude: 'µT',
+                softIronMatrix: 'dimensionless',
+                note: 'Calibration operates in µT units. Raw sensor data (LSB) must be converted before applying calibration.'
+            }
         };
     }
 

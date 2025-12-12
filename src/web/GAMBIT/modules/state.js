@@ -13,6 +13,9 @@ export const state = {
     gambitClient: null,
     firmwareVersion: null,  // Firmware version from connected device
 
+    // Geomagnetic field location
+    geomagneticLocation: null,  // Current selected location from lookup table
+
     // Multi-label current state
     currentLabels: {
         pose: null,

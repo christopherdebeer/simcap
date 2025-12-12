@@ -21,6 +21,11 @@ import {
     createGyroBiasState
 } from './sensor-config.js';
 
+import {
+    magLsbToMicroTesla,
+    getSensorUnitMetadata
+} from './sensor-units.js';
+
 /**
  * TelemetryProcessor class
  * 
@@ -95,9 +100,9 @@ export class TelemetryProcessor {
      * @param {number} raw.gx - Gyroscope X (LSB)
      * @param {number} raw.gy - Gyroscope Y (LSB)
      * @param {number} raw.gz - Gyroscope Z (LSB)
-     * @param {number} raw.mx - Magnetometer X
-     * @param {number} raw.my - Magnetometer Y
-     * @param {number} raw.mz - Magnetometer Z
+     * @param {number} raw.mx - Magnetometer X (LSB, raw sensor units)
+     * @param {number} raw.my - Magnetometer Y (LSB, raw sensor units)
+     * @param {number} raw.mz - Magnetometer Z (LSB, raw sensor units)
      * @returns {Object} Decorated telemetry with processed fields
      */
     process(raw) {
@@ -123,13 +128,23 @@ export class TelemetryProcessor {
         const gy_dps = gyroLsbToDps(raw.gy || 0);
         const gz_dps = gyroLsbToDps(raw.gz || 0);
         
-        // Store converted values
+        // Store converted values (DECORATION - raw values preserved)
         decorated.ax_g = ax_g;
         decorated.ay_g = ay_g;
         decorated.az_g = az_g;
         decorated.gx_dps = gx_dps;
         decorated.gy_dps = gy_dps;
         decorated.gz_dps = gz_dps;
+
+        // Convert magnetometer from LSB to µT (CRITICAL FIX)
+        const mx_ut = magLsbToMicroTesla(raw.mx || 0);
+        const my_ut = magLsbToMicroTesla(raw.my || 0);
+        const mz_ut = magLsbToMicroTesla(raw.mz || 0);
+
+        // Store converted magnetometer values (DECORATION - raw preserved)
+        decorated.mx_ut = mx_ut;
+        decorated.my_ut = my_ut;
+        decorated.mz_ut = mz_ut;
         
         // ===== Step 2: Motion Detection =====
         // Use RAW LSB values for motion detection (thresholds are in LSB)
@@ -209,10 +224,11 @@ export class TelemetryProcessor {
             
             try {
                 // Iron correction only (no Earth field subtraction yet)
+                // IMPORTANT: Use converted µT values, not raw LSB
                 const ironCorrected = this.calibration.correctIronOnly({
-                    x: raw.mx,
-                    y: raw.my,
-                    z: raw.mz
+                    x: mx_ut,
+                    y: my_ut,
+                    z: mz_ut
                 });
                 decorated.calibrated_mx = ironCorrected.x;
                 decorated.calibrated_my = ironCorrected.y;
@@ -225,8 +241,9 @@ export class TelemetryProcessor {
                     const quatOrientation = new Quaternion(
                         orientation.w, orientation.x, orientation.y, orientation.z
                     );
+                    // IMPORTANT: Use converted µT values, not raw LSB
                     const fused = this.calibration.correct(
-                        { x: raw.mx, y: raw.my, z: raw.mz },
+                        { x: mx_ut, y: my_ut, z: mz_ut },
                         quatOrientation
                     );
                     decorated.fused_mx = fused.x;
@@ -263,12 +280,13 @@ export class TelemetryProcessor {
         }
         
         // ===== Step 6: Kalman Filtering =====
-        // Use best available source: fused > calibrated > raw
+        // Use best available source: fused > calibrated > converted µT
+        // IMPORTANT: Use µT values, not raw LSB
         try {
             const magInput = {
-                x: decorated.fused_mx ?? decorated.calibrated_mx ?? raw.mx,
-                y: decorated.fused_my ?? decorated.calibrated_my ?? raw.my,
-                z: decorated.fused_mz ?? decorated.calibrated_mz ?? raw.mz
+                x: decorated.fused_mx ?? decorated.calibrated_mx ?? mx_ut,
+                y: decorated.fused_my ?? decorated.calibrated_my ?? my_ut,
+                z: decorated.fused_mz ?? decorated.calibrated_mz ?? mz_ut
             };
             const filteredMag = this.magFilter.update(magInput);
             decorated.filtered_mx = filteredMag.x;
