@@ -398,6 +398,29 @@
             <div class="divider"></div>
 
             <div class="filter-group">
+                <span class="filter-label">Firmware:</span>
+                <select id="firmware-filter">
+                    <option value="all">All Versions</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <span class="filter-label">Type:</span>
+                <select id="session-type-filter">
+                    <option value="all">All Types</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <span class="filter-label">Labels:</span>
+                <select id="label-filter">
+                    <option value="all">All Labels</option>
+                </select>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="filter-group">
                 <span class="filter-label">Sort:</span>
                 <select id="sort-select">
                     <option value="timestamp-desc">Newest First</option>
@@ -529,6 +552,13 @@
         let filteredSessions = [...sessionsData];
         let defaultExpanded = false;
 
+        // Filter state
+        let filterState = {
+            firmwareVersion: 'all',
+            sessionType: 'all',
+            labelFilter: 'all'
+        };
+
         // View settings
         let viewSettings = {
             showComposite: true,
@@ -555,9 +585,58 @@
         };
 
         function initializePage() {
+            initializeFilterDropdowns();
             updateStats();
             renderSessions();
             setupEventListeners();
+        }
+
+        function initializeFilterDropdowns() {
+            // Collect unique firmware versions
+            const firmwareVersions = new Set();
+            const sessionTypes = new Set();
+            const customLabels = new Set();
+            const calibrationTypes = new Set();
+
+            sessionsData.forEach(s => {
+                if (s.firmware_version) firmwareVersions.add(s.firmware_version);
+                if (s.session_type) sessionTypes.add(s.session_type);
+                if (s.custom_labels) s.custom_labels.forEach(l => customLabels.add(l));
+                if (s.calibration_types) s.calibration_types.forEach(ct => calibrationTypes.add(ct));
+            });
+
+            // Populate firmware filter
+            const fwSelect = document.getElementById('firmware-filter');
+            [...firmwareVersions].sort().forEach(fw => {
+                const opt = document.createElement('option');
+                opt.value = fw;
+                opt.textContent = `v${fw}`;
+                fwSelect.appendChild(opt);
+            });
+
+            // Populate session type filter
+            const typeSelect = document.getElementById('session-type-filter');
+            [...sessionTypes].sort().forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = t;
+                opt.textContent = t.charAt(0).toUpperCase() + t.slice(1);
+                typeSelect.appendChild(opt);
+            });
+
+            // Populate label filter (custom + calibration types)
+            const labelSelect = document.getElementById('label-filter');
+            [...customLabels].sort().forEach(l => {
+                const opt = document.createElement('option');
+                opt.value = l;
+                opt.textContent = l;
+                labelSelect.appendChild(opt);
+            });
+            [...calibrationTypes].sort().forEach(ct => {
+                const opt = document.createElement('option');
+                opt.value = `cal:${ct}`;
+                opt.textContent = `cal:${ct}`;
+                labelSelect.appendChild(opt);
+            });
         }
 
         function updateStats() {
@@ -583,7 +662,17 @@
                     <div class="session-header" onclick="toggleSession(${idx})">
                         <div>
                             <div class="session-title">${session.filename}</div>
-                            <div class="session-info">${formatTimestamp(session.timestamp)} | ${session.duration.toFixed(1)}s | ${session.windows.length} windows</div>
+                            <div class="session-info">
+                                ${formatTimestamp(session.timestamp)} | ${session.duration.toFixed(1)}s | ${session.windows.length} windows
+                                ${session.firmware_version ? ` | <span style="color: var(--accent);">v${session.firmware_version}</span>` : ''}
+                                ${session.session_type && session.session_type !== 'recording' ? ` | <span style="color: var(--warning);">${session.session_type}</span>` : ''}
+                            </div>
+                            ${(session.custom_labels && session.custom_labels.length > 0) || (session.calibration_types && session.calibration_types.length > 0) ? `
+                            <div style="margin-top: var(--space-xs); font-size: 0.7rem;">
+                                ${(session.custom_labels || []).map(l => `<span style="background: rgba(102, 126, 234, 0.3); padding: 2px 6px; border-radius: 3px; margin-right: 4px;">${l}</span>`).join('')}
+                                ${(session.calibration_types || []).map(ct => `<span style="background: rgba(77, 175, 74, 0.3); padding: 2px 6px; border-radius: 3px; margin-right: 4px;">cal:${ct}</span>`).join('')}
+                            </div>
+                            ` : ''}
                         </div>
                         <div class="expand-icon">▼</div>
                     </div>
@@ -839,39 +928,84 @@
             }
         }
 
+        function applyFilters() {
+            const query = document.getElementById('search-box').value.toLowerCase();
+            const sortBy = document.getElementById('sort-select').value;
+
+            filteredSessions = sessionsData.filter(s => {
+                // Text search
+                if (query && !s.filename.toLowerCase().includes(query) &&
+                    !s.timestamp.toLowerCase().includes(query)) {
+                    return false;
+                }
+
+                // Firmware version filter
+                if (filterState.firmwareVersion !== 'all') {
+                    if (s.firmware_version !== filterState.firmwareVersion) return false;
+                }
+
+                // Session type filter
+                if (filterState.sessionType !== 'all') {
+                    if (s.session_type !== filterState.sessionType) return false;
+                }
+
+                // Label filter (custom labels or calibration types)
+                if (filterState.labelFilter !== 'all') {
+                    if (filterState.labelFilter.startsWith('cal:')) {
+                        const calType = filterState.labelFilter.replace('cal:', '');
+                        if (!s.calibration_types || !s.calibration_types.includes(calType)) return false;
+                    } else {
+                        if (!s.custom_labels || !s.custom_labels.includes(filterState.labelFilter)) return false;
+                    }
+                }
+
+                return true;
+            });
+
+            // Sort
+            filteredSessions.sort((a, b) => {
+                switch(sortBy) {
+                    case 'timestamp-desc':
+                        return b.timestamp.localeCompare(a.timestamp);
+                    case 'timestamp-asc':
+                        return a.timestamp.localeCompare(b.timestamp);
+                    case 'duration-desc':
+                        return b.duration - a.duration;
+                    case 'duration-asc':
+                        return a.duration - b.duration;
+                    default:
+                        return 0;
+                }
+            });
+
+            updateStats();
+            renderSessions();
+        }
+
         function setupEventListeners() {
             // Search functionality
-            document.getElementById('search-box').addEventListener('input', (e) => {
-                const query = e.target.value.toLowerCase();
-                filteredSessions = sessionsData.filter(s =>
-                    s.filename.toLowerCase().includes(query) ||
-                    s.timestamp.toLowerCase().includes(query)
-                );
-                updateStats();
-                renderSessions();
+            document.getElementById('search-box').addEventListener('input', applyFilters);
+
+            // Firmware filter
+            document.getElementById('firmware-filter').addEventListener('change', (e) => {
+                filterState.firmwareVersion = e.target.value;
+                applyFilters();
+            });
+
+            // Session type filter
+            document.getElementById('session-type-filter').addEventListener('change', (e) => {
+                filterState.sessionType = e.target.value;
+                applyFilters();
+            });
+
+            // Label filter
+            document.getElementById('label-filter').addEventListener('change', (e) => {
+                filterState.labelFilter = e.target.value;
+                applyFilters();
             });
 
             // Sort functionality
-            document.getElementById('sort-select').addEventListener('change', (e) => {
-                const sortBy = e.target.value;
-
-                filteredSessions.sort((a, b) => {
-                    switch(sortBy) {
-                        case 'timestamp-desc':
-                            return b.timestamp.localeCompare(a.timestamp);
-                        case 'timestamp-asc':
-                            return a.timestamp.localeCompare(b.timestamp);
-                        case 'duration-desc':
-                            return b.duration - a.duration;
-                        case 'duration-asc':
-                            return a.duration - b.duration;
-                        default:
-                            return 0;
-                    }
-                });
-
-                renderSessions();
-            });
+            document.getElementById('sort-select').addEventListener('change', applyFilters);
 
             // Section visibility checkboxes
             document.getElementById('show-composite').addEventListener('change', updateViewSettings);

@@ -55,11 +55,35 @@ class SensorDataProcessor:
                 with open(json_file, 'r') as f:
                     data = json.load(f)
 
-                # Handle both formats: direct array or wrapped in "samples" key
+                # Handle v1, v2.0, and v2.1 formats
+                version = '1.0'
+                labels = []
+                firmware_version = None
+                session_type = 'recording'
+                custom_labels = []
+                calibration_types = []
+
                 if isinstance(data, dict) and 'samples' in data:
-                    # New format with wrapper
+                    # New format with wrapper (v2.0 or v2.1)
                     samples = data['samples']
-                    metadata = data.get('metadata', None)
+                    metadata = data.get('metadata', {})
+                    version = data.get('version', '2.0')
+                    labels = data.get('labels', [])
+
+                    # Extract v2.1 fields from embedded metadata
+                    if metadata:
+                        firmware_version = metadata.get('firmware_version')
+                        session_type = metadata.get('session_type', 'recording')
+
+                    # Extract custom labels and calibration types from labels
+                    for label in labels:
+                        if 'labels' in label:
+                            lab = label['labels']
+                            if lab.get('custom'):
+                                custom_labels.extend(lab['custom'])
+                            if lab.get('calibration') and lab['calibration'] != 'none':
+                                calibration_types.append(lab['calibration'])
+
                 elif isinstance(data, list):
                     # Old format: direct array
                     samples = data
@@ -82,11 +106,19 @@ class SensorDataProcessor:
                     'timestamp': json_file.stem,
                     'data': samples,
                     'metadata': metadata,
-                    'duration': len(samples) / 50.0  # 50Hz sampling
+                    'duration': len(samples) / 50.0,  # 50Hz sampling
+                    # V2.1 extended fields
+                    'version': version,
+                    'firmware_version': firmware_version,
+                    'session_type': session_type,
+                    'labels': labels,
+                    'custom_labels': list(set(custom_labels)),
+                    'calibration_types': list(set(calibration_types))
                 }
 
                 self.sessions.append(session)
-                print(f"Loaded {json_file.name}: {len(samples)} samples ({session['duration']:.1f}s)")
+                fw_info = f" | fw:{firmware_version}" if firmware_version else ""
+                print(f"Loaded {json_file.name}: {len(samples)} samples ({session['duration']:.1f}s){fw_info}")
 
             except Exception as e:
                 print(f"Error loading {json_file}: {e}")
@@ -1989,6 +2021,12 @@ def main():
                 'composite_image': str(composite_path.relative_to(output_dir)),
                 'windows': windows_info,
                 'raw_images': [str(img.relative_to(output_dir)) for img in raw_images],
+                # V2.1 extended fields
+                'firmware_version': session.get('firmware_version'),
+                'session_type': session.get('session_type', 'recording'),
+                'labels': session.get('labels', []),
+                'custom_labels': session.get('custom_labels', []),
+                'calibration_types': session.get('calibration_types', [])
             }
 
             # Include calibration stages image if it was created
