@@ -20,7 +20,7 @@ from typing import Dict, List, Any, Optional
 
 import numpy as np
 
-from .data_loader import GambitDataset, load_session_data, load_session_metadata
+from .data_loader import GambitDataset, load_session_data, load_session_metadata, load_session_raw
 
 
 def detect_calibration_status(raw_data: list) -> dict:
@@ -243,15 +243,20 @@ def build_unified_data(
             cluster_assignments[session][window_key] = point['cluster']
     
     # Build sessions with visualization and cluster data
+    firmware_versions = set()
+    session_types = set()
+    all_custom_labels = set()
+    calibration_label_types = set()
+
     for json_path in sorted(data_dir.glob('*.json')):
         if json_path.name.endswith('.meta.json'):
             continue
-        
+
         filename = json_path.name
-        
+
         # Get visualization data if available
         viz = viz_data.get(filename, {})
-        
+
         # Load raw data for duration and calibration status
         try:
             raw_data = load_session_data(json_path)
@@ -260,14 +265,23 @@ def build_unified_data(
         except:
             duration = viz.get('duration', 0)
             calib_status = {'has_calibrated': False, 'has_fused': False, 'has_filtered': False, 'has_orientation': False, 'status': 'none'}
-        
+
+        # Load session info for firmware version (v2.1 embedded data)
+        try:
+            session_info = load_session_raw(json_path)
+            firmware_version = session_info.firmware_version
+            if firmware_version:
+                firmware_versions.add(firmware_version)
+        except:
+            firmware_version = None
+
         # Get metadata if available
         meta = load_session_metadata(json_path)
-        
+
         # Build windows with cluster info
         windows = []
         session_clusters = cluster_assignments.get(filename, {})
-        
+
         for i, w in enumerate(viz.get('windows', [])):
             window_key = f"{int(w.get('time_start', i) * 50)}_{int(w.get('time_end', i+1) * 50)}"
             # Try different key formats
@@ -278,12 +292,12 @@ def build_unified_data(
                 end = start + window_size
                 window_key = f"{start}_{end}"
                 cluster_id = session_clusters.get(window_key, -1)
-            
+
             windows.append({
                 **w,
                 'cluster_id': cluster_id if cluster_id is not None else -1
             })
-        
+
         # If no viz windows, create from cluster data
         if not windows and filename in cluster_assignments:
             for window_key, cluster_id in cluster_assignments[filename].items():
@@ -295,7 +309,34 @@ def build_unified_data(
                     'cluster_id': cluster_id,
                     'filepath': None
                 })
-        
+
+        # Extract custom labels and calibration types from v2 labels
+        custom_labels = []
+        calibration_types = []
+        labels_v2 = []
+        session_type = 'recording'
+
+        if meta:
+            session_type = getattr(meta, 'session_type', 'recording')
+            session_types.add(session_type)
+
+            for seg in meta.labels_v2:
+                labels_v2.append({
+                    'start_sample': seg.start_sample,
+                    'end_sample': seg.end_sample,
+                    'pose': seg.labels.pose,
+                    'motion': seg.labels.motion.value,
+                    'calibration': seg.labels.calibration.value,
+                    'custom': seg.labels.custom,
+                    'notes': seg.notes
+                })
+                custom_labels.extend(seg.labels.custom)
+                if seg.labels.calibration.value != 'none':
+                    calibration_types.append(seg.labels.calibration.value)
+
+            all_custom_labels.update(custom_labels)
+            calibration_label_types.update(calibration_types)
+
         session = {
             'filename': filename,
             'timestamp': filename.replace('.json', ''),
@@ -303,7 +344,7 @@ def build_unified_data(
             'composite_image': viz.get('composite_image'),
             'raw_images': viz.get('raw_images', []),
             'windows': windows,
-            'labeled': meta is not None and bool(meta.labels),
+            'labeled': meta is not None and (bool(meta.labels) or bool(meta.labels_v2)),
             'split': meta.split if meta else None,
             'labels': [
                 {
@@ -314,6 +355,7 @@ def build_unified_data(
                 }
                 for seg in (meta.labels if meta else [])
             ],
+            'labels_v2': labels_v2,
             # Calibration status
             'calibration': {
                 'status': calib_status['status'],
@@ -321,9 +363,14 @@ def build_unified_data(
                 'has_fused': calib_status['has_fused'],
                 'has_filtered': calib_status['has_filtered'],
                 'has_orientation': calib_status['has_orientation']
-            }
+            },
+            # V2.1 extended fields
+            'firmware_version': firmware_version,
+            'session_type': session_type,
+            'custom_labels': list(set(custom_labels)),
+            'calibration_types': list(set(calibration_types))
         }
-        
+
         sessions.append(session)
     
     # Build cluster summary
@@ -386,6 +433,13 @@ def build_unified_data(
             'window_size': window_size,
             'stride': stride,
             'sample_rate': 50
+        },
+        # V2.1 filter options
+        'filter_options': {
+            'firmware_versions': sorted(list(firmware_versions)),
+            'session_types': sorted(list(session_types)),
+            'custom_labels': sorted(list(all_custom_labels)),
+            'calibration_types': sorted(list(calibration_label_types))
         }
     }
 
@@ -1075,11 +1129,20 @@ def generate_html(data: Dict[str, Any], output_path: Path):
                         <select id="clusterFilter">
                             <option value="all">All Clusters</option>
                         </select>
+                        <select id="firmwareFilter">
+                            <option value="all">All Firmware</option>
+                        </select>
+                        <select id="sessionTypeFilter">
+                            <option value="all">All Types</option>
+                        </select>
                         <select id="calibFilter">
                             <option value="all">All Calibration</option>
                             <option value="full">Full Calib Only</option>
                             <option value="partial">Iron Only</option>
                             <option value="none">No Calib</option>
+                        </select>
+                        <select id="labelFilter">
+                            <option value="all">All Labels</option>
                         </select>
                         <select id="sortSelect">
                             <option value="timestamp-desc">Newest First</option>
@@ -1106,7 +1169,7 @@ def generate_html(data: Dict[str, Any], output_path: Path):
                         <button class="action-btn" onclick="expandAll()">Expand All</button>
                         <button class="action-btn" onclick="collapseAll()">Collapse All</button>
                     </div>
-                    
+
                     <div class="session-grid" id="sessionGrid"></div>
                 </div>
             </div>
@@ -1279,7 +1342,7 @@ def generate_html(data: Dict[str, Any], output_path: Path):
         function initClusterLegend() {{
             const legend = document.getElementById('clusterLegend');
             const clusters = explorerData.clustering.clusters || [];
-            
+
             legend.innerHTML = clusters.map(c => `
                 <div class="cluster-item" data-cluster="${{c.id}}" onclick="selectCluster(${{c.id}})">
                     <div class="cluster-dot" style="background: ${{clusterColors[c.id % clusterColors.length]}}"></div>
@@ -1287,14 +1350,52 @@ def generate_html(data: Dict[str, Any], output_path: Path):
                     <span class="cluster-count">${{c.size}}</span>
                 </div>
             `).join('');
-            
-            // Populate filter dropdown
+
+            // Populate cluster filter dropdown
             const filter = document.getElementById('clusterFilter');
             clusters.forEach(c => {{
                 const opt = document.createElement('option');
                 opt.value = c.id;
                 opt.textContent = `Cluster ${{c.id}} (${{c.size}})`;
                 filter.appendChild(opt);
+            }});
+
+            // Populate firmware version filter
+            const fwFilter = document.getElementById('firmwareFilter');
+            const fwVersions = explorerData.filter_options?.firmware_versions || [];
+            fwVersions.forEach(fw => {{
+                const opt = document.createElement('option');
+                opt.value = fw;
+                opt.textContent = `v${{fw}}`;
+                fwFilter.appendChild(opt);
+            }});
+
+            // Populate session type filter
+            const typeFilter = document.getElementById('sessionTypeFilter');
+            const sessionTypes = explorerData.filter_options?.session_types || [];
+            sessionTypes.forEach(t => {{
+                const opt = document.createElement('option');
+                opt.value = t;
+                opt.textContent = t.charAt(0).toUpperCase() + t.slice(1);
+                typeFilter.appendChild(opt);
+            }});
+
+            // Populate custom label filter
+            const labelFilter = document.getElementById('labelFilter');
+            const customLabels = explorerData.filter_options?.custom_labels || [];
+            customLabels.forEach(l => {{
+                const opt = document.createElement('option');
+                opt.value = l;
+                opt.textContent = l;
+                labelFilter.appendChild(opt);
+            }});
+            // Add calibration types to label filter
+            const calTypes = explorerData.filter_options?.calibration_types || [];
+            calTypes.forEach(ct => {{
+                const opt = document.createElement('option');
+                opt.value = `cal:${{ct}}`;
+                opt.textContent = `cal:${{ct}}`;
+                labelFilter.appendChild(opt);
             }});
         }}
         
@@ -1326,12 +1427,18 @@ def generate_html(data: Dict[str, Any], output_path: Path):
             }});
             document.getElementById('calibFilter').addEventListener('change', applyFilters);
             document.getElementById('sortSelect').addEventListener('change', applyFilters);
+            document.getElementById('firmwareFilter').addEventListener('change', applyFilters);
+            document.getElementById('sessionTypeFilter').addEventListener('change', applyFilters);
+            document.getElementById('labelFilter').addEventListener('change', applyFilters);
         }}
-        
+
         function applyFilters() {{
             const search = document.getElementById('searchBox').value.toLowerCase();
             const sort = document.getElementById('sortSelect').value;
             const calibFilter = document.getElementById('calibFilter').value;
+            const firmwareFilter = document.getElementById('firmwareFilter').value;
+            const sessionTypeFilter = document.getElementById('sessionTypeFilter').value;
+            const labelFilter = document.getElementById('labelFilter').value;
 
             filteredSessions = explorerData.sessions.filter(s => {{
                 // Search filter
@@ -1343,15 +1450,37 @@ def generate_html(data: Dict[str, Any], output_path: Path):
                     if (!hasCluster) return false;
                 }}
 
-                // Calibration filter
+                // Calibration status filter (data calibration)
                 if (calibFilter !== 'all') {{
                     const sessionCalib = s.calibration?.status || 'none';
                     if (sessionCalib !== calibFilter) return false;
                 }}
 
+                // Firmware version filter
+                if (firmwareFilter !== 'all') {{
+                    if (s.firmware_version !== firmwareFilter) return false;
+                }}
+
+                // Session type filter
+                if (sessionTypeFilter !== 'all') {{
+                    if (s.session_type !== sessionTypeFilter) return false;
+                }}
+
+                // Label filter (custom labels or calibration types)
+                if (labelFilter !== 'all') {{
+                    if (labelFilter.startsWith('cal:')) {{
+                        // Calibration type label
+                        const calType = labelFilter.replace('cal:', '');
+                        if (!s.calibration_types || !s.calibration_types.includes(calType)) return false;
+                    }} else {{
+                        // Custom label
+                        if (!s.custom_labels || !s.custom_labels.includes(labelFilter)) return false;
+                    }}
+                }}
+
                 return true;
             }});
-            
+
             // Sort
             filteredSessions.sort((a, b) => {{
                 switch(sort) {{
@@ -1362,7 +1491,7 @@ def generate_html(data: Dict[str, Any], output_path: Path):
                     default: return 0;
                 }}
             }});
-            
+
             renderSessions();
         }}
         
@@ -1380,22 +1509,50 @@ def generate_html(data: Dict[str, Any], output_path: Path):
                     <div class="session-header" onclick="toggleSession(${{idx}})">
                         <div>
                             <div class="session-title">${{s.filename}}</div>
-                            <div class="session-info">${{formatTimestamp(s.timestamp)}} | ${{s.duration.toFixed(1)}}s | ${{s.windows.length}} windows</div>
+                            <div class="session-info">
+                                ${{formatTimestamp(s.timestamp)}} | ${{s.duration.toFixed(1)}}s | ${{s.windows.length}} windows
+                                ${{s.firmware_version ? ` | v${{s.firmware_version}}` : ''}}
+                                ${{s.session_type && s.session_type !== 'recording' ? ` | ${{s.session_type}}` : ''}}
+                            </div>
+                            ${{(s.custom_labels && s.custom_labels.length > 0) || (s.calibration_types && s.calibration_types.length > 0) ? `
+                                <div class="session-labels" style="margin-top: 4px; font-size: 0.8em;">
+                                    ${{(s.custom_labels || []).map(l => `<span style="background: rgba(102, 126, 234, 0.3); padding: 2px 6px; border-radius: 4px; margin-right: 4px;">${{l}}</span>`).join('')}}
+                                    ${{(s.calibration_types || []).map(ct => `<span style="background: rgba(77, 175, 74, 0.3); padding: 2px 6px; border-radius: 4px; margin-right: 4px;">cal:${{ct}}</span>`).join('')}}
+                                </div>
+                            ` : ''}}
                         </div>
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <div class="session-badges">
                                 <span class="badge ${{s.labeled ? 'labeled' : 'unlabeled'}}">${{s.labeled ? 'Labeled' : 'Unlabeled'}}</span>
                                 <span class="badge calib-${{s.calibration?.status || 'none'}}">${{getCalibrationLabel(s.calibration?.status)}}</span>
+                                ${{s.session_type === 'calibration' ? '<span class="badge" style="background: #9467bd;">Calibration</span>' : ''}}
                             </div>
                             <span class="expand-icon">▼</span>
                         </div>
                     </div>
                     <div class="session-content">
+                        ${{(s.labels_v2 && s.labels_v2.length > 0) ? `
+                            <h3 class="section-title">🏷️ Labels (${{s.labels_v2.length}} segments)</h3>
+                            <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 15px;">
+                                ${{s.labels_v2.slice(0, 10).map(l => `
+                                    <div style="background: rgba(255,255,255,0.05); padding: 8px 12px; border-radius: 6px; font-size: 0.85em;">
+                                        <div><strong>${{l.pose || 'No pose'}}</strong> (${{l.start_sample}}-${{l.end_sample}})</div>
+                                        <div style="opacity: 0.7; font-size: 0.9em;">
+                                            ${{l.motion !== 'static' ? `motion: ${{l.motion}}` : ''}}
+                                            ${{l.calibration !== 'none' ? `cal: ${{l.calibration}}` : ''}}
+                                            ${{l.custom && l.custom.length > 0 ? l.custom.join(', ') : ''}}
+                                        </div>
+                                    </div>
+                                `).join('')}}
+                                ${{s.labels_v2.length > 10 ? `<div style="padding: 8px; opacity: 0.6;">... and ${{s.labels_v2.length - 10}} more</div>` : ''}}
+                            </div>
+                        ` : ''}}
+
                         ${{s.composite_image ? `
                             <h3 class="section-title">📊 Composite View</h3>
                             <img src="${{s.composite_image}}" class="composite-image" onclick="openModal(this.src)">
                         ` : ''}}
-                        
+
                         <h3 class="section-title">🔍 Windows (${{s.windows.length}})</h3>
                         <div class="windows-grid">
                             ${{s.windows.map(w => `
@@ -1412,7 +1569,7 @@ def generate_html(data: Dict[str, Any], output_path: Path):
                                 </div>
                             `).join('')}}
                         </div>
-                        
+
                         ${{s.raw_images && s.raw_images.length > 0 ? `
                             <h3 class="section-title">📐 Raw Views</h3>
                             <div class="raw-images">
