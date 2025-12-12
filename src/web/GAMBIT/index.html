@@ -565,6 +565,7 @@
             }
 
             let ghToken;
+            let firmwareVersion = null;  // Store firmware version for session metadata
 
             let uploadTimeout;
             let sessionData = []
@@ -662,7 +663,7 @@
                 uploadTimeout = setTimeout(function() {
                     if (sessionData.length > 0) {
                         console.log("Uploading to gh");
-                        ghPutData(JSON.stringify(sessionData));
+                        ghPutData(sessionData);  // Pass array directly, ghPutData wraps in v2.1 schema
                         sessionData = [];
                     }
                 }, 1000);
@@ -681,6 +682,7 @@
 
             gambitClient.on('firmware', function(fw) {
                 console.log('[GambitClient] Firmware:', fw);
+                firmwareVersion = fw.version || 'unknown';
             });
 
             var minMaxs = {}
@@ -859,15 +861,36 @@
             const getEndpoint = (opts,file) => `https://api.github.com/repos/${opts.username}/${opts.repository}/contents/${file}`
 
 
-            async function ghPutData(content) {
+            async function ghPutData(rawSessionData) {
 
                 if (!ghToken) {
                     console.log("ghToken not found. skipping upload.")
                     return;
-                } else {
-
                 }
 
+                // Build v2.1 schema export data (consistent with collector-app.js)
+                const exportData = {
+                    version: '2.1',
+                    timestamp: new Date().toISOString(),
+                    samples: rawSessionData,
+                    labels: [],  // index.html doesn't support labeling
+                    metadata: {
+                        sample_rate: 26,  // Match firmware accelOn rate
+                        device: 'GAMBIT',
+                        firmware_version: firmwareVersion || 'unknown',
+                        calibration: calibration ? calibration.toJSON() : null,
+                        subject_id: 'unknown',
+                        environment: 'unknown',
+                        hand: 'unknown',
+                        split: 'train',
+                        magnet_config: 'none',
+                        magnet_type: 'unknown',
+                        notes: '',
+                        session_type: 'streaming'  // Distinguishes from collector's 'recording'
+                    }
+                };
+
+                const content = JSON.stringify(exportData, null, 2);
                 const d = new Date()
                 const filename = `${d.toISOString()}.json`
 
