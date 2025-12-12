@@ -6,10 +6,12 @@
 export const state = {
     connected: false,
     recording: false,
+    paused: false,  // Recording pause state
     sessionData: [],
     labels: [],  // V2 multi-label segments
     currentLabelStart: null,
     gambitClient: null,
+    firmwareVersion: null,  // Firmware version from connected device
 
     // Multi-label current state
     currentLabels: {
@@ -26,8 +28,11 @@ export const state = {
         custom: []
     },
 
-    // Custom labels defined for this session
-    customLabelDefinitions: []
+    // Custom labels defined for this session (separate from active)
+    customLabelDefinitions: [],
+
+    // Active custom labels (subset of definitions that are currently applied)
+    activeCustomLabels: []
 };
 
 /**
@@ -37,6 +42,7 @@ export function resetSession() {
     state.sessionData = [];
     state.labels = [];
     state.currentLabelStart = null;
+    state.paused = false;
     state.currentLabels = {
         pose: null,
         fingers: {
@@ -50,4 +56,5 @@ export function resetSession() {
         calibration: 'none',
         custom: []
     };
+    // Note: customLabelDefinitions and activeCustomLabels are preserved
 }

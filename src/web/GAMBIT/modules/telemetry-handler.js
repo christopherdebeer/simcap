@@ -43,7 +43,11 @@ export function resetIMU() {
  * @param {Object} telemetry - Raw telemetry data from device
  */
 export function onTelemetry(telemetry) {
+    // Skip if not recording at all
     if (!state.recording) return;
+
+    // Track whether we should store this sample (not when paused)
+    const shouldStore = !state.paused;
 
     // IMPORTANT: Preserve raw data, only DECORATE with processed fields
     // Create a decorated copy of telemetry with additional processed fields
@@ -175,8 +179,10 @@ export function onTelemetry(telemetry) {
         }
     }
 
-    // Store decorated telemetry (includes raw + processed fields)
-    state.sessionData.push(decoratedTelemetry);
+    // Store decorated telemetry (includes raw + processed fields) - skip if paused
+    if (shouldStore) {
+        state.sessionData.push(decoratedTelemetry);
+    }
 
     // Collect samples for calibration buffers during wizard
     if (deps.wizard?.active && deps.wizard.phase === 'hold') {
