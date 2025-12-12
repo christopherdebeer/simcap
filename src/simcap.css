@@ -456,6 +456,20 @@ input::placeholder, textarea::placeholder {
     color: var(--fg);
 }
 
+.chip {
+    background: var(--fg-muted);
+    color: var(--bg);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 500;
+}
+
+.chips-container {
+    display: inline-flex;
+    gap: 0.5em;
+}
+
 /* ===== Responsive ===== */
 @media (min-width: 640px) {
     .page-header {

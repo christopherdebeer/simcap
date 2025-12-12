@@ -410,6 +410,15 @@
             <div class="divider"></div>
 
             <div class="filter-group">
+                <span class="filter-label">Label:</span>
+                <select id="label-filter">
+                    <option value="all">All Labels</option>
+                </select>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="filter-group">
                 <span class="filter-label">Show:</span>
                 <div class="checkbox-group">
                     <label class="checkbox-label">
@@ -528,6 +537,278 @@
 
         let filteredSessions = [...sessionsData];
         let defaultExpanded = false;
+        let selectedLabel = 'all';
+
+        // Collect all unique labels across all sessions
+        function getAllLabels() {
+            const labels = new Set();
+            sessionsData.forEach(session => {
+                // Add custom_labels from session
+                if (session.custom_labels) {
+                    session.custom_labels.forEach(l => labels.add(l));
+                }
+                // Add labels from label segments
+                if (session.labels) {
+                    session.labels.forEach(segment => {
+                        if (segment.labels) {
+                            if (segment.labels.pose) labels.add(`pose:${segment.labels.pose}`);
+                            if (segment.labels.motion) labels.add(`motion:${segment.labels.motion}`);
+                            if (segment.labels.calibration && segment.labels.calibration !== 'none') {
+                                labels.add(`calibration:${segment.labels.calibration}`);
+                            }
+                            if (segment.labels.custom) {
+                                segment.labels.custom.forEach(l => labels.add(l));
+                            }
+                        }
+                    });
+                }
+            });
+            return Array.from(labels).sort();
+        }
+
+        // Get labels for a specific window based on sample range overlap
+        // Assumes 50Hz sample rate
+        const SAMPLE_RATE = 50;
+        
+        function getLabelsForWindow(session, window) {
+            const windowLabels = {
+                pose: null,
+                motion: null,
+                calibration: null,
+                custom: []
+            };
+            
+            if (!session.labels) return windowLabels;
+            
+            const windowStartSample = Math.floor(window.time_start * SAMPLE_RATE);
+            const windowEndSample = Math.floor(window.time_end * SAMPLE_RATE);
+            
+            session.labels.forEach(segment => {
+                // Check if this label segment overlaps with the window
+                const segmentStart = segment.start_sample;
+                const segmentEnd = segment.end_sample;
+                
+                // Overlap check: segments overlap if one starts before the other ends
+                const overlaps = windowStartSample < segmentEnd && windowEndSample > segmentStart;
+                
+                if (overlaps && segment.labels) {
+                    if (segment.labels.pose && !windowLabels.pose) {
+                        windowLabels.pose = segment.labels.pose;
+                    }
+                    if (segment.labels.motion && !windowLabels.motion) {
+                        windowLabels.motion = segment.labels.motion;
+                    }
+                    if (segment.labels.calibration && segment.labels.calibration !== 'none' && !windowLabels.calibration) {
+                        windowLabels.calibration = segment.labels.calibration;
+                    }
+                    if (segment.labels.custom) {
+                        segment.labels.custom.forEach(l => {
+                            if (!windowLabels.custom.includes(l)) {
+                                windowLabels.custom.push(l);
+                            }
+                        });
+                    }
+                }
+            });
+            
+            return windowLabels;
+        }
+
+        // Format window labels as chip HTML
+        function formatWindowLabels(windowLabels) {
+            const chips = [];
+            if (windowLabels.pose) {
+                chips.push(`<span class="chip" style="background: var(--accent);">${windowLabels.pose}</span>`);
+            }
+            if (windowLabels.motion && windowLabels.motion !== 'static') {
+                chips.push(`<span class="chip" style="background: var(--warning);">${windowLabels.motion}</span>`);
+            }
+            if (windowLabels.calibration) {
+                chips.push(`<span class="chip" style="background: var(--success);">${windowLabels.calibration}</span>`);
+            }
+            windowLabels.custom.forEach(l => {
+                chips.push(`<span class="chip">${l}</span>`);
+            });
+            return chips.join('');
+        }
+
+        // Check if a session or its windows contain a specific label
+        function sessionHasLabel(session, label) {
+            if (label === 'all') return true;
+            
+            // Check session custom_labels
+            if (session.custom_labels && session.custom_labels.includes(label)) {
+                return true;
+            }
+            
+            // Check label segments
+            if (session.labels) {
+                for (const segment of session.labels) {
+                    if (segment.labels) {
+                        if (label.startsWith('pose:') && segment.labels.pose === label.replace('pose:', '')) {
+                            return true;
+                        }
+                        if (label.startsWith('motion:') && segment.labels.motion === label.replace('motion:', '')) {
+                            return true;
+                        }
+                        if (label.startsWith('calibration:') && segment.labels.calibration === label.replace('calibration:', '')) {
+                            return true;
+                        }
+                        if (segment.labels.custom && segment.labels.custom.includes(label)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            
+            return false;
+        }
+
+        // Render windows for a session (separate function to avoid template literal issues)
+        function renderWindows(session) {
+            return session.windows.map(w => {
+                const windowLabels = getLabelsForWindow(session, w);
+                let html = `
+                <div style="margin-bottom: var(--space-xl); padding: var(--space-lg); background: var(--bg-elevated); border: 1px solid var(--border);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-md);">
+                        <h4 style="margin: 0; font-size: 0.875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
+                            Window ${w.window_num} | ${w.time_start.toFixed(2)}s - ${w.time_end.toFixed(2)}s
+                            <span class="chips-container">
+                                ${formatWindowLabels(windowLabels)}
+                            </span>
+                        </h4>
+                        <div style="font-size: 0.625rem; color: var(--fg-muted); text-transform: uppercase;">
+                            Accel: ${w.accel_mag_mean.toFixed(0)} | Gyro: ${w.gyro_mag_mean.toFixed(0)}
+                        </div>
+                    </div>
+                    <div class="trajectory-grid">`;
+                
+                if (viewSettings.showWinComposite) {
+                    html += `<div class="trajectory-card" data-type="composite" onclick="openModal('${w.filepath}')">
+                        <img src="${w.filepath}" class="trajectory-image" alt="Composite">
+                        <div class="trajectory-label">Composite</div>
+                    </div>`;
+                }
+                if (w.images.timeseries_accel && viewSettings.showWinAccelTime) {
+                    html += `<div class="trajectory-card" data-type="accel-time" onclick="openModal('${w.images.timeseries_accel}')">
+                        <img src="${w.images.timeseries_accel}" class="trajectory-image" alt="Accel Time">
+                        <div class="trajectory-label">Accel Time</div>
+                    </div>`;
+                }
+                if (w.images.timeseries_gyro && viewSettings.showWinGyroTime) {
+                    html += `<div class="trajectory-card" data-type="gyro-time" onclick="openModal('${w.images.timeseries_gyro}')">
+                        <img src="${w.images.timeseries_gyro}" class="trajectory-image" alt="Gyro Time">
+                        <div class="trajectory-label">Gyro Time</div>
+                    </div>`;
+                }
+                if (w.images.timeseries_mag && viewSettings.showWinMagTime) {
+                    html += `<div class="trajectory-card" data-type="mag-time" onclick="openModal('${w.images.timeseries_mag}')">
+                        <img src="${w.images.timeseries_mag}" class="trajectory-image" alt="Mag Time">
+                        <div class="trajectory-label">Mag Time</div>
+                    </div>`;
+                }
+                if (w.images.trajectory_accel_3d && viewSettings.showWinAccel3d) {
+                    html += `<div class="trajectory-card" data-type="accel-3d" onclick="openModal('${w.images.trajectory_accel_3d}')">
+                        <img src="${w.images.trajectory_accel_3d}" class="trajectory-image" alt="Accel 3D">
+                        <div class="trajectory-label">Accel 3D</div>
+                    </div>`;
+                }
+                if (w.images.trajectory_gyro_3d && viewSettings.showWinGyro3d) {
+                    html += `<div class="trajectory-card" data-type="gyro-3d" onclick="openModal('${w.images.trajectory_gyro_3d}')">
+                        <img src="${w.images.trajectory_gyro_3d}" class="trajectory-image" alt="Gyro 3D">
+                        <div class="trajectory-label">Gyro 3D</div>
+                    </div>`;
+                }
+                if (w.images.trajectory_mag_3d && viewSettings.showWinMag3d) {
+                    html += `<div class="trajectory-card" data-type="mag-3d" onclick="openModal('${w.images.trajectory_mag_3d}')">
+                        <img src="${w.images.trajectory_mag_3d}" class="trajectory-image" alt="Mag 3D">
+                        <div class="trajectory-label">Mag 3D</div>
+                    </div>`;
+                }
+                if (w.images.trajectory_combined_3d && viewSettings.showWinCombined3d) {
+                    html += `<div class="trajectory-card" data-type="combined-3d" onclick="openModal('${w.images.trajectory_combined_3d}')">
+                        <img src="${w.images.trajectory_combined_3d}" class="trajectory-image" alt="Combined 3D">
+                        <div class="trajectory-label">Combined 3D</div>
+                    </div>`;
+                }
+                if (w.images.signature && viewSettings.showWinSignature) {
+                    html += `<div class="trajectory-card" data-type="signature" onclick="openModal('${w.images.signature}')">
+                        <img src="${w.images.signature}" class="trajectory-image" alt="Signature">
+                        <div class="trajectory-label">Signature</div>
+                    </div>`;
+                }
+                if (w.images.stats && viewSettings.showWinStats) {
+                    html += `<div class="trajectory-card" data-type="stats" onclick="openModal('${w.images.stats}')">
+                        <img src="${w.images.stats}" class="trajectory-image" alt="Stats">
+                        <div class="trajectory-label">Stats</div>
+                    </div>`;
+                }
+                if (w.trajectory_images && w.trajectory_images.raw && viewSettings.showWinTrajRaw) {
+                    html += `<div class="trajectory-card" data-type="traj-raw" onclick="openModal('${w.trajectory_images.raw}')">
+                        <img src="${w.trajectory_images.raw}" class="trajectory-image" alt="Traj Raw">
+                        <div class="trajectory-label">Traj Raw</div>
+                    </div>`;
+                }
+                if (w.trajectory_images && w.trajectory_images.iron && viewSettings.showWinTrajIron) {
+                    html += `<div class="trajectory-card" data-type="traj-iron" onclick="openModal('${w.trajectory_images.iron}')">
+                        <img src="${w.trajectory_images.iron}" class="trajectory-image" alt="Traj Iron">
+                        <div class="trajectory-label">Traj Iron</div>
+                    </div>`;
+                }
+                if (w.trajectory_images && w.trajectory_images.fused && viewSettings.showWinTrajFused) {
+                    html += `<div class="trajectory-card" data-type="traj-fused" onclick="openModal('${w.trajectory_images.fused}')">
+                        <img src="${w.trajectory_images.fused}" class="trajectory-image" alt="Traj Fused">
+                        <div class="trajectory-label">Traj Fused</div>
+                    </div>`;
+                }
+                if (w.trajectory_images && w.trajectory_images.filtered && viewSettings.showWinTrajFiltered) {
+                    html += `<div class="trajectory-card" data-type="traj-filtered" onclick="openModal('${w.trajectory_images.filtered}')">
+                        <img src="${w.trajectory_images.filtered}" class="trajectory-image" alt="Traj Filtered">
+                        <div class="trajectory-label">Traj Filtered</div>
+                    </div>`;
+                }
+                if (w.trajectory_images && w.trajectory_images.combined && viewSettings.showWinTrajCombined) {
+                    html += `<div class="trajectory-card" data-type="traj-combined" onclick="openModal('${w.trajectory_images.combined}')">
+                        <img src="${w.trajectory_images.combined}" class="trajectory-image" alt="Traj Combined">
+                        <div class="trajectory-label">Traj Combined</div>
+                    </div>`;
+                }
+                if (w.trajectory_images && w.trajectory_images.statistics && viewSettings.showWinTrajStats) {
+                    html += `<div class="trajectory-card" data-type="traj-stats" onclick="openModal('${w.trajectory_images.statistics}')">
+                        <img src="${w.trajectory_images.statistics}" class="trajectory-image" alt="Traj Stats">
+                        <div class="trajectory-label">Traj Stats</div>
+                    </div>`;
+                }
+                
+                html += `</div></div>`;
+                return html;
+            }).join('');
+        }
+
+        // Populate label filter dropdown
+        function populateLabelFilter() {
+            const select = document.getElementById('label-filter');
+            const labels = getAllLabels();
+            labels.forEach(label => {
+                const option = document.createElement('option');
+                option.value = label;
+                option.textContent = label;
+                select.appendChild(option);
+            });
+        }
+
+        // Apply all filters (search + label)
+        function applyFilters() {
+            const query = document.getElementById('search-box').value.toLowerCase();
+            filteredSessions = sessionsData.filter(s => {
+                const matchesSearch = s.filename.toLowerCase().includes(query) ||
+                    s.timestamp.toLowerCase().includes(query);
+                const matchesLabel = sessionHasLabel(s, selectedLabel);
+                return matchesSearch && matchesLabel;
+            });
+            updateStats();
+            renderSessions();
+        }
 
         // View settings
         let viewSettings = {
@@ -555,6 +836,7 @@
         };
 
         function initializePage() {
+            populateLabelFilter();
             updateStats();
             renderSessions();
             setupEventListeners();
@@ -583,7 +865,7 @@
                     <div class="session-header" onclick="toggleSession(${idx})">
                         <div>
                             <div class="session-title">${session.filename}</div>
-                            <div class="session-info">${formatTimestamp(session.timestamp)} | ${session.duration.toFixed(1)}s | ${session.windows.length} windows</div>
+                            <div class="session-info">${formatTimestamp(session.timestamp.replaceAll('_', ':'))} | ${session.duration.toFixed(1)}s | ${session.windows.length} windows <span class="chips-container">${ session.custom_labels?.map( l => `<span class="chip">${l}</span>`).join('') }</span></div>
                         </div>
                         <div class="expand-icon">▼</div>
                     </div>
@@ -646,116 +928,7 @@
 
                         <div class="image-section windows-section ${viewSettings.showWindows ? '' : 'hidden'}">
                             <h3 class="section-title">Per-Window Analysis (${session.windows.length} windows)</h3>
-                            ${session.windows.map(w => `
-                                <div style="margin-bottom: var(--space-xl); padding: var(--space-lg); background: var(--bg-elevated); border: 1px solid var(--border);">
-                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-md);">
-                                        <h4 style="margin: 0; font-size: 0.875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
-                                            Window ${w.window_num} | ${w.time_start.toFixed(2)}s - ${w.time_end.toFixed(2)}s
-                                        </h4>
-                                        <div style="font-size: 0.625rem; color: var(--fg-muted); text-transform: uppercase;">
-                                            Accel: ${w.accel_mag_mean.toFixed(0)} | Gyro: ${w.gyro_mag_mean.toFixed(0)}
-                                        </div>
-                                    </div>
-                                    <div class="trajectory-grid">
-                                        ${viewSettings.showWinComposite ? `
-                                        <div class="trajectory-card" data-type="composite" onclick="openModal('${w.filepath}')">
-                                            <img src="${w.filepath}" class="trajectory-image" alt="Composite">
-                                            <div class="trajectory-label">Composite</div>
-                                        </div>
-                                        ` : ''}
-                                        ${w.images.timeseries_accel && viewSettings.showWinAccelTime ? `
-                                        <div class="trajectory-card" data-type="accel-time" onclick="openModal('${w.images.timeseries_accel}')">
-                                            <img src="${w.images.timeseries_accel}" class="trajectory-image" alt="Accel Time">
-                                            <div class="trajectory-label">Accel Time</div>
-                                        </div>
-                                        ` : ''}
-                                        ${w.images.timeseries_gyro && viewSettings.showWinGyroTime ? `
-                                        <div class="trajectory-card" data-type="gyro-time" onclick="openModal('${w.images.timeseries_gyro}')">
-                                            <img src="${w.images.timeseries_gyro}" class="trajectory-image" alt="Gyro Time">
-                                            <div class="trajectory-label">Gyro Time</div>
-                                        </div>
-                                        ` : ''}
-                                        ${w.images.timeseries_mag && viewSettings.showWinMagTime ? `
-                                        <div class="trajectory-card" data-type="mag-time" onclick="openModal('${w.images.timeseries_mag}')">
-                                            <img src="${w.images.timeseries_mag}" class="trajectory-image" alt="Mag Time">
-                                            <div class="trajectory-label">Mag Time</div>
-                                        </div>
-                                        ` : ''}
-                                        ${w.images.trajectory_accel_3d && viewSettings.showWinAccel3d ? `
-                                        <div class="trajectory-card" data-type="accel-3d" onclick="openModal('${w.images.trajectory_accel_3d}')">
-                                            <img src="${w.images.trajectory_accel_3d}" class="trajectory-image" alt="Accel 3D">
-                                            <div class="trajectory-label">Accel 3D</div>
-                                        </div>
-                                        ` : ''}
-                                        ${w.images.trajectory_gyro_3d && viewSettings.showWinGyro3d ? `
-                                        <div class="trajectory-card" data-type="gyro-3d" onclick="openModal('${w.images.trajectory_gyro_3d}')">
-                                            <img src="${w.images.trajectory_gyro_3d}" class="trajectory-image" alt="Gyro 3D">
-                                            <div class="trajectory-label">Gyro 3D</div>
-                                        </div>
-                                        ` : ''}
-                                        ${w.images.trajectory_mag_3d && viewSettings.showWinMag3d ? `
-                                        <div class="trajectory-card" data-type="mag-3d" onclick="openModal('${w.images.trajectory_mag_3d}')">
-                                            <img src="${w.images.trajectory_mag_3d}" class="trajectory-image" alt="Mag 3D">
-                                            <div class="trajectory-label">Mag 3D</div>
-                                        </div>
-                                        ` : ''}
-                                        ${w.images.trajectory_combined_3d && viewSettings.showWinCombined3d ? `
-                                        <div class="trajectory-card" data-type="combined-3d" onclick="openModal('${w.images.trajectory_combined_3d}')">
-                                            <img src="${w.images.trajectory_combined_3d}" class="trajectory-image" alt="Combined 3D">
-                                            <div class="trajectory-label">Combined 3D</div>
-                                        </div>
-                                        ` : ''}
-                                        ${w.images.signature && viewSettings.showWinSignature ? `
-                                        <div class="trajectory-card" data-type="signature" onclick="openModal('${w.images.signature}')">
-                                            <img src="${w.images.signature}" class="trajectory-image" alt="Signature">
-                                            <div class="trajectory-label">Signature</div>
-                                        </div>
-                                        ` : ''}
-                                        ${w.images.stats && viewSettings.showWinStats ? `
-                                        <div class="trajectory-card" data-type="stats" onclick="openModal('${w.images.stats}')">
-                                            <img src="${w.images.stats}" class="trajectory-image" alt="Stats">
-                                            <div class="trajectory-label">Stats</div>
-                                        </div>
-                                        ` : ''}
-                                        ${w.trajectory_images && w.trajectory_images.raw && viewSettings.showWinTrajRaw ? `
-                                        <div class="trajectory-card" data-type="traj-raw" onclick="openModal('${w.trajectory_images.raw}')">
-                                            <img src="${w.trajectory_images.raw}" class="trajectory-image" alt="Traj Raw">
-                                            <div class="trajectory-label">Traj Raw</div>
-                                        </div>
-                                        ` : ''}
-                                        ${w.trajectory_images && w.trajectory_images.iron && viewSettings.showWinTrajIron ? `
-                                        <div class="trajectory-card" data-type="traj-iron" onclick="openModal('${w.trajectory_images.iron}')">
-                                            <img src="${w.trajectory_images.iron}" class="trajectory-image" alt="Traj Iron">
-                                            <div class="trajectory-label">Traj Iron</div>
-                                        </div>
-                                        ` : ''}
-                                        ${w.trajectory_images && w.trajectory_images.fused && viewSettings.showWinTrajFused ? `
-                                        <div class="trajectory-card" data-type="traj-fused" onclick="openModal('${w.trajectory_images.fused}')">
-                                            <img src="${w.trajectory_images.fused}" class="trajectory-image" alt="Traj Fused">
-                                            <div class="trajectory-label">Traj Fused</div>
-                                        </div>
-                                        ` : ''}
-                                        ${w.trajectory_images && w.trajectory_images.filtered && viewSettings.showWinTrajFiltered ? `
-                                        <div class="trajectory-card" data-type="traj-filtered" onclick="openModal('${w.trajectory_images.filtered}')">
-                                            <img src="${w.trajectory_images.filtered}" class="trajectory-image" alt="Traj Filtered">
-                                            <div class="trajectory-label">Traj Filtered</div>
-                                        </div>
-                                        ` : ''}
-                                        ${w.trajectory_images && w.trajectory_images.combined && viewSettings.showWinTrajCombined ? `
-                                        <div class="trajectory-card" data-type="traj-combined" onclick="openModal('${w.trajectory_images.combined}')">
-                                            <img src="${w.trajectory_images.combined}" class="trajectory-image" alt="Traj Combined">
-                                            <div class="trajectory-label">Traj Combined</div>
-                                        </div>
-                                        ` : ''}
-                                        ${w.trajectory_images && w.trajectory_images.statistics && viewSettings.showWinTrajStats ? `
-                                        <div class="trajectory-card" data-type="traj-stats" onclick="openModal('${w.trajectory_images.statistics}')">
-                                            <img src="${w.trajectory_images.statistics}" class="trajectory-image" alt="Traj Stats">
-                                            <div class="trajectory-label">Traj Stats</div>
-                                        </div>
-                                        ` : ''}
-                                    </div>
-                                </div>
-                            `).join('')}
+                            ${renderWindows(session)}
                         </div>
 
                         <div class="image-section raw-section ${viewSettings.showRaw ? '' : 'hidden'}">
@@ -840,15 +1013,15 @@
         }
 
         function setupEventListeners() {
-            // Search functionality
-            document.getElementById('search-box').addEventListener('input', (e) => {
-                const query = e.target.value.toLowerCase();
-                filteredSessions = sessionsData.filter(s =>
-                    s.filename.toLowerCase().includes(query) ||
-                    s.timestamp.toLowerCase().includes(query)
-                );
-                updateStats();
-                renderSessions();
+            // Search functionality - use applyFilters to combine with label filter
+            document.getElementById('search-box').addEventListener('input', () => {
+                applyFilters();
+            });
+
+            // Label filter functionality
+            document.getElementById('label-filter').addEventListener('change', (e) => {
+                selectedLabel = e.target.value;
+                applyFilters();
             });
 
             // Sort functionality
