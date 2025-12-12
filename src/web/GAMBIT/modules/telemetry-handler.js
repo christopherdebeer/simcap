@@ -126,13 +126,14 @@ export function onTelemetry(telemetry) {
     }
 
     // Collect samples for calibration buffers during wizard
+    // IMPORTANT: Use converted µT values, not raw LSB!
     if (deps.wizard?.active && deps.wizard.phase === 'hold') {
         const currentStep = deps.wizard.steps[deps.wizard.currentStep];
         if (currentStep && deps.calibrationBuffers?.[currentStep.id]) {
             deps.calibrationBuffers[currentStep.id].push({
-                mx: telemetry.mx,
-                my: telemetry.my,
-                mz: telemetry.mz
+                mx: decoratedTelemetry.mx_ut,  // Use µT, not raw LSB
+                my: decoratedTelemetry.my_ut,
+                mz: decoratedTelemetry.mz_ut
             });
         }
     }
