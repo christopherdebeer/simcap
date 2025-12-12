@@ -318,6 +318,11 @@ const sessionsData = [
       "raw_axes_2025-12-09T15_23_14.877Z.png",
       "orientation_3d_2025-12-09T15_23_14.877Z.png"
     ],
+    "firmware_version": null,
+    "session_type": "recording",
+    "labels": [],
+    "custom_labels": [],
+    "calibration_types": [],
     "calibration_stages_image": "calibration_stages_2025-12-09T15_23_14.877Z.png",
     "trajectory_comparison_images": {
       "raw": "trajectory_comparison_2025-12-09T15_23_14.877Z/raw_3d.png",
@@ -758,6 +763,11 @@ const sessionsData = [
       "orientation_3d_2025-12-11T13_26_33.209Z.png",
       "orientation_track_2025-12-11T13_26_33.209Z.png"
     ],
+    "firmware_version": null,
+    "session_type": "recording",
+    "labels": [],
+    "custom_labels": [],
+    "calibration_types": [],
     "calibration_stages_image": "calibration_stages_2025-12-11T13_26_33.209Z.png",
     "trajectory_comparison_images": {
       "raw": "trajectory_comparison_2025-12-11T13_26_33.209Z/raw_3d.png",
@@ -1440,6 +1450,80 @@ const sessionsData = [
       "orientation_3d_2025-12-11T16_16_16.613Z.png",
       "orientation_track_2025-12-11T16_16_16.613Z.png"
     ],
+    "firmware_version": null,
+    "session_type": "recording",
+    "labels": [
+      {
+        "start_sample": 0,
+        "end_sample": 284,
+        "labels": {
+          "pose": null,
+          "fingers": {
+            "thumb": "unknown",
+            "index": "unknown",
+            "middle": "unknown",
+            "ring": "unknown",
+            "pinky": "unknown"
+          },
+          "motion": "static",
+          "calibration": "none",
+          "custom": []
+        }
+      },
+      {
+        "start_sample": 285,
+        "end_sample": 569,
+        "labels": {
+          "pose": null,
+          "fingers": {
+            "thumb": "unknown",
+            "index": "unknown",
+            "middle": "unknown",
+            "ring": "unknown",
+            "pinky": "unknown"
+          },
+          "motion": "static",
+          "calibration": "none",
+          "custom": []
+        }
+      },
+      {
+        "start_sample": 570,
+        "end_sample": 853,
+        "labels": {
+          "pose": null,
+          "fingers": {
+            "thumb": "unknown",
+            "index": "unknown",
+            "middle": "unknown",
+            "ring": "unknown",
+            "pinky": "unknown"
+          },
+          "motion": "static",
+          "calibration": "none",
+          "custom": []
+        }
+      },
+      {
+        "start_sample": 854,
+        "end_sample": 1137,
+        "labels": {
+          "pose": null,
+          "fingers": {
+            "thumb": "unknown",
+            "index": "unknown",
+            "middle": "unknown",
+            "ring": "unknown",
+            "pinky": "unknown"
+          },
+          "motion": "static",
+          "calibration": "none",
+          "custom": []
+        }
+      }
+    ],
+    "custom_labels": [],
+    "calibration_types": [],
     "calibration_stages_image": "calibration_stages_2025-12-11T16_16_16.613Z.png",
     "trajectory_comparison_images": {
       "raw": "trajectory_comparison_2025-12-11T16_16_16.613Z/raw_3d.png",
@@ -1912,6 +1996,29 @@ const sessionsData = [
       "orientation_3d_2025-12-11T18_34_21.070Z.png",
       "orientation_track_2025-12-11T18_34_21.070Z.png"
     ],
+    "firmware_version": null,
+    "session_type": "recording",
+    "labels": [
+      {
+        "start_sample": 0,
+        "end_sample": 768,
+        "labels": {
+          "pose": null,
+          "fingers": {
+            "thumb": "unknown",
+            "index": "unknown",
+            "middle": "unknown",
+            "ring": "unknown",
+            "pinky": "unknown"
+          },
+          "motion": "static",
+          "calibration": "none",
+          "custom": []
+        }
+      }
+    ],
+    "custom_labels": [],
+    "calibration_types": [],
     "calibration_stages_image": "calibration_stages_2025-12-11T18_34_21.070Z.png",
     "trajectory_comparison_images": {
       "raw": "trajectory_comparison_2025-12-11T18_34_21.070Z/raw_3d.png",
@@ -2894,6 +3001,46 @@ const sessionsData = [
       "orientation_3d_2025-12-11T18_41_08.248Z.png",
       "orientation_track_2025-12-11T18_41_08.248Z.png"
     ],
+    "firmware_version": null,
+    "session_type": "recording",
+    "labels": [
+      {
+        "start_sample": 0,
+        "end_sample": 1102,
+        "labels": {
+          "pose": null,
+          "fingers": {
+            "thumb": "unknown",
+            "index": "unknown",
+            "middle": "unknown",
+            "ring": "unknown",
+            "pinky": "unknown"
+          },
+          "motion": "static",
+          "calibration": "none",
+          "custom": []
+        }
+      },
+      {
+        "start_sample": 1103,
+        "end_sample": 1615,
+        "labels": {
+          "pose": null,
+          "fingers": {
+            "thumb": "unknown",
+            "index": "unknown",
+            "middle": "unknown",
+            "ring": "unknown",
+            "pinky": "unknown"
+          },
+          "motion": "static",
+          "calibration": "none",
+          "custom": []
+        }
+      }
+    ],
+    "custom_labels": [],
+    "calibration_types": [],
     "calibration_stages_image": "calibration_stages_2025-12-11T18_41_08.248Z.png",
     "trajectory_comparison_images": {
       "raw": "trajectory_comparison_2025-12-11T18_41_08.248Z/raw_3d.png",
@@ -2902,6 +3049,147 @@ const sessionsData = [
       "filtered": "trajectory_comparison_2025-12-11T18_41_08.248Z/filtered_3d.png",
       "combined": "trajectory_comparison_2025-12-11T18_41_08.248Z/combined_overlay.png",
       "statistics": "trajectory_comparison_2025-12-11T18_41_08.248Z/statistics.png"
+    }
+  },
+  {
+    "filename": "2025-12-12T09:13:53.772Z.json",
+    "timestamp": "2025-12-12T09:13:53.772Z",
+    "duration": 4.18,
+    "composite_image": "composite_2025-12-12T09:13:53.772Z.png",
+    "windows": [
+      {
+        "window_num": 1,
+        "time_start": 0.0,
+        "time_end": 1.0,
+        "filename": "window_001.png",
+        "filepath": "windows_2025-12-12T09:13:53.772Z/window_001.png",
+        "color": "#676767",
+        "accel_mag_mean": 8129.873265847343,
+        "gyro_mag_mean": 438.65979090227165,
+        "images": {
+          "timeseries_accel": "windows_2025-12-12T09:13:53.772Z/window_001/timeseries_accel.png",
+          "timeseries_gyro": "windows_2025-12-12T09:13:53.772Z/window_001/timeseries_gyro.png",
+          "timeseries_mag": "windows_2025-12-12T09:13:53.772Z/window_001/timeseries_mag.png",
+          "trajectory_accel_3d": "windows_2025-12-12T09:13:53.772Z/window_001/trajectory_accel_3d.png",
+          "trajectory_gyro_3d": "windows_2025-12-12T09:13:53.772Z/window_001/trajectory_gyro_3d.png",
+          "trajectory_mag_3d": "windows_2025-12-12T09:13:53.772Z/window_001/trajectory_mag_3d.png",
+          "signature": "windows_2025-12-12T09:13:53.772Z/window_001/signature.png",
+          "stats": "windows_2025-12-12T09:13:53.772Z/window_001/stats.png",
+          "trajectory_comparison": "windows_2025-12-12T09:13:53.772Z/window_001/trajectory_combined.png",
+          "trajectory_combined_3d": "windows_2025-12-12T09:13:53.772Z/window_001/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-12T09:13:53.772Z/window_001/trajectory_raw.png",
+          "iron": "windows_2025-12-12T09:13:53.772Z/window_001/trajectory_iron.png",
+          "filtered": "windows_2025-12-12T09:13:53.772Z/window_001/trajectory_filtered.png",
+          "combined": "windows_2025-12-12T09:13:53.772Z/window_001/trajectory_combined.png",
+          "statistics": "windows_2025-12-12T09:13:53.772Z/window_001/trajectory_stats.png"
+        }
+      },
+      {
+        "window_num": 2,
+        "time_start": 1.0,
+        "time_end": 2.0,
+        "filename": "window_002.png",
+        "filepath": "windows_2025-12-12T09:13:53.772Z/window_002.png",
+        "color": "#676767",
+        "accel_mag_mean": 8131.736576437838,
+        "gyro_mag_mean": 429.0941430033725,
+        "images": {
+          "timeseries_accel": "windows_2025-12-12T09:13:53.772Z/window_002/timeseries_accel.png",
+          "timeseries_gyro": "windows_2025-12-12T09:13:53.772Z/window_002/timeseries_gyro.png",
+          "timeseries_mag": "windows_2025-12-12T09:13:53.772Z/window_002/timeseries_mag.png",
+          "trajectory_accel_3d": "windows_2025-12-12T09:13:53.772Z/window_002/trajectory_accel_3d.png",
+          "trajectory_gyro_3d": "windows_2025-12-12T09:13:53.772Z/window_002/trajectory_gyro_3d.png",
+          "trajectory_mag_3d": "windows_2025-12-12T09:13:53.772Z/window_002/trajectory_mag_3d.png",
+          "signature": "windows_2025-12-12T09:13:53.772Z/window_002/signature.png",
+          "stats": "windows_2025-12-12T09:13:53.772Z/window_002/stats.png",
+          "trajectory_comparison": "windows_2025-12-12T09:13:53.772Z/window_002/trajectory_combined.png",
+          "trajectory_combined_3d": "windows_2025-12-12T09:13:53.772Z/window_002/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-12T09:13:53.772Z/window_002/trajectory_raw.png",
+          "iron": "windows_2025-12-12T09:13:53.772Z/window_002/trajectory_iron.png",
+          "filtered": "windows_2025-12-12T09:13:53.772Z/window_002/trajectory_filtered.png",
+          "combined": "windows_2025-12-12T09:13:53.772Z/window_002/trajectory_combined.png",
+          "statistics": "windows_2025-12-12T09:13:53.772Z/window_002/trajectory_stats.png"
+        }
+      },
+      {
+        "window_num": 3,
+        "time_start": 2.0,
+        "time_end": 3.0,
+        "filename": "window_003.png",
+        "filepath": "windows_2025-12-12T09:13:53.772Z/window_003.png",
+        "color": "#676767",
+        "accel_mag_mean": 8134.3160601456175,
+        "gyro_mag_mean": 428.17414668467273,
+        "images": {
+          "timeseries_accel": "windows_2025-12-12T09:13:53.772Z/window_003/timeseries_accel.png",
+          "timeseries_gyro": "windows_2025-12-12T09:13:53.772Z/window_003/timeseries_gyro.png",
+          "timeseries_mag": "windows_2025-12-12T09:13:53.772Z/window_003/timeseries_mag.png",
+          "trajectory_accel_3d": "windows_2025-12-12T09:13:53.772Z/window_003/trajectory_accel_3d.png",
+          "trajectory_gyro_3d": "windows_2025-12-12T09:13:53.772Z/window_003/trajectory_gyro_3d.png",
+          "trajectory_mag_3d": "windows_2025-12-12T09:13:53.772Z/window_003/trajectory_mag_3d.png",
+          "signature": "windows_2025-12-12T09:13:53.772Z/window_003/signature.png",
+          "stats": "windows_2025-12-12T09:13:53.772Z/window_003/stats.png",
+          "trajectory_comparison": "windows_2025-12-12T09:13:53.772Z/window_003/trajectory_combined.png",
+          "trajectory_combined_3d": "windows_2025-12-12T09:13:53.772Z/window_003/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-12T09:13:53.772Z/window_003/trajectory_raw.png",
+          "iron": "windows_2025-12-12T09:13:53.772Z/window_003/trajectory_iron.png",
+          "filtered": "windows_2025-12-12T09:13:53.772Z/window_003/trajectory_filtered.png",
+          "combined": "windows_2025-12-12T09:13:53.772Z/window_003/trajectory_combined.png",
+          "statistics": "windows_2025-12-12T09:13:53.772Z/window_003/trajectory_stats.png"
+        }
+      },
+      {
+        "window_num": 4,
+        "time_start": 3.0,
+        "time_end": 4.0,
+        "filename": "window_004.png",
+        "filepath": "windows_2025-12-12T09:13:53.772Z/window_004.png",
+        "color": "#676767",
+        "accel_mag_mean": 8133.508562448105,
+        "gyro_mag_mean": 427.3686062739902,
+        "images": {
+          "timeseries_accel": "windows_2025-12-12T09:13:53.772Z/window_004/timeseries_accel.png",
+          "timeseries_gyro": "windows_2025-12-12T09:13:53.772Z/window_004/timeseries_gyro.png",
+          "timeseries_mag": "windows_2025-12-12T09:13:53.772Z/window_004/timeseries_mag.png",
+          "trajectory_accel_3d": "windows_2025-12-12T09:13:53.772Z/window_004/trajectory_accel_3d.png",
+          "trajectory_gyro_3d": "windows_2025-12-12T09:13:53.772Z/window_004/trajectory_gyro_3d.png",
+          "trajectory_mag_3d": "windows_2025-12-12T09:13:53.772Z/window_004/trajectory_mag_3d.png",
+          "signature": "windows_2025-12-12T09:13:53.772Z/window_004/signature.png",
+          "stats": "windows_2025-12-12T09:13:53.772Z/window_004/stats.png",
+          "trajectory_comparison": "windows_2025-12-12T09:13:53.772Z/window_004/trajectory_combined.png",
+          "trajectory_combined_3d": "windows_2025-12-12T09:13:53.772Z/window_004/trajectory_combined_3d.png"
+        },
+        "trajectory_images": {
+          "raw": "windows_2025-12-12T09:13:53.772Z/window_004/trajectory_raw.png",
+          "iron": "windows_2025-12-12T09:13:53.772Z/window_004/trajectory_iron.png",
+          "filtered": "windows_2025-12-12T09:13:53.772Z/window_004/trajectory_filtered.png",
+          "combined": "windows_2025-12-12T09:13:53.772Z/window_004/trajectory_combined.png",
+          "statistics": "windows_2025-12-12T09:13:53.772Z/window_004/trajectory_stats.png"
+        }
+      }
+    ],
+    "raw_images": [
+      "raw_axes_2025-12-12T09:13:53.772Z.png",
+      "orientation_3d_2025-12-12T09:13:53.772Z.png"
+    ],
+    "firmware_version": null,
+    "session_type": "recording",
+    "labels": [],
+    "custom_labels": [],
+    "calibration_types": [],
+    "calibration_stages_image": "calibration_stages_2025-12-12T09:13:53.772Z.png",
+    "trajectory_comparison_images": {
+      "raw": "trajectory_comparison_2025-12-12T09:13:53.772Z/raw_3d.png",
+      "iron": "trajectory_comparison_2025-12-12T09:13:53.772Z/iron_3d.png",
+      "filtered": "trajectory_comparison_2025-12-12T09:13:53.772Z/filtered_3d.png",
+      "combined": "trajectory_comparison_2025-12-12T09:13:53.772Z/combined_overlay.png",
+      "statistics": "trajectory_comparison_2025-12-12T09:13:53.772Z/statistics.png"
     }
   }
 ];
