@@ -535,10 +535,10 @@
                 createLowPassFilter
             } from './shared/sensor-config.js';
             import { TelemetryProcessor } from './shared/telemetry-processor.js';
-            import { 
-                SessionPlayback, 
-                formatTime, 
-                formatSessionDisplay 
+            import {
+                SessionPlayback,
+                formatTime,
+                formatSessionDisplay
             } from './modules/session-playback.js';
             import {
                 createGesture,
@@ -546,6 +546,12 @@
                 isGestureInferenceAvailable,
                 GESTURE_LABELS_V1
             } from './modules/gesture-inference-module.js';
+            import {
+                getBrowserLocation,
+                getDefaultLocation,
+                exportLocationMetadata,
+                formatLocation
+            } from './shared/geomagnetic-field.js';
 
             // ===== GambitClient for Frame-Based Protocol =====
             const gambitClient = new GambitClient({ debug: true });
@@ -566,6 +572,7 @@
 
             let ghToken;
             let firmwareVersion = null;  // Store firmware version for session metadata
+            let geomagneticLocation = null;  // Store geomagnetic location for session metadata
 
             let uploadTimeout;
             let sessionData = []
@@ -595,6 +602,38 @@
                     }
                 }
             });
+
+            // ===== Geomagnetic Location Detection =====
+            /**
+             * Initialize geomagnetic location
+             * Try browser geolocation first, fall back to Edinburgh default
+             */
+            async function initGeomagneticLocation() {
+                console.log('[GAMBIT] Initializing geomagnetic location...');
+
+                try {
+                    const location = await getBrowserLocation();
+                    geomagneticLocation = location.selected;
+
+                    const locationStr = formatLocation(location.selected);
+                    const fieldStr = `${location.selected.intensity.toFixed(1)} µT`;
+                    const declStr = `${location.selected.declination.toFixed(1)}°`;
+
+                    console.log(`[GAMBIT] ✓ Location detected: ${locationStr}`);
+                    console.log(`[GAMBIT] Magnetic field: ${fieldStr}, Declination: ${declStr}`);
+                } catch (error) {
+                    // Fall back to default location (Edinburgh)
+                    geomagneticLocation = getDefaultLocation();
+
+                    const locationStr = formatLocation(geomagneticLocation);
+                    console.warn('[GAMBIT] Geolocation failed, using default:', error.message);
+                    console.log(`[GAMBIT] Location: ${locationStr} (default)`);
+                    console.log(`[GAMBIT] Magnetic field: ${geomagneticLocation.intensity.toFixed(1)} µT, Declination: ${geomagneticLocation.declination.toFixed(1)}°`);
+                }
+            }
+
+            // Initialize geomagnetic location on page load
+            initGeomagneticLocation();
 
             // ===== Hand 3D Renderer =====
             let hand3DRenderer = null;
@@ -879,6 +918,7 @@
                         device: 'GAMBIT',
                         firmware_version: firmwareVersion || 'unknown',
                         calibration: calibration ? calibration.toJSON() : null,
+                        location: exportLocationMetadata(geomagneticLocation),
                         subject_id: 'unknown',
                         environment: 'unknown',
                         hand: 'unknown',

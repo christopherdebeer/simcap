@@ -159,7 +159,10 @@ export function findNearestLocations(lat, lon, maxResults = 5) {
  */
 export function getBrowserLocation(options = {}) {
     return new Promise((resolve, reject) => {
+        console.log('[Geolocation] Checking browser support...');
+
         if (!navigator.geolocation) {
+            console.error('[Geolocation] Not supported by browser');
             reject(new Error('Geolocation not supported by browser'));
             return;
         }
@@ -167,9 +170,11 @@ export function getBrowserLocation(options = {}) {
         const geoOptions = {
             enableHighAccuracy: false,
             timeout: 10000,
-            maximumAge: 300000, // 5 minutes cache
+            maximumAge: 0, // Always request fresh location
             ...options
         };
+
+        console.log('[Geolocation] Requesting position with options:', geoOptions);
 
         navigator.geolocation.getCurrentPosition(
             (position) => {
@@ -177,8 +182,11 @@ export function getBrowserLocation(options = {}) {
                 const lon = position.coords.longitude;
                 const accuracy = position.coords.accuracy;
 
+                console.log(`[Geolocation] Position received: ${lat.toFixed(4)}°, ${lon.toFixed(4)}° (±${accuracy.toFixed(0)}m)`);
+
                 // Find nearest locations
                 const nearest = findNearestLocations(lat, lon, 3);
+                console.log(`[Geolocation] Nearest location: ${nearest[0].city}, ${nearest[0].country} (${nearest[0].distance.toFixed(1)}km away)`);
 
                 resolve({
                     lat,
@@ -190,7 +198,21 @@ export function getBrowserLocation(options = {}) {
                 });
             },
             (error) => {
-                reject(error);
+                // Map geolocation error codes to readable messages
+                let errorMsg = error.message;
+                switch (error.code) {
+                    case error.PERMISSION_DENIED:
+                        errorMsg = 'Location permission denied by user';
+                        break;
+                    case error.POSITION_UNAVAILABLE:
+                        errorMsg = 'Location information unavailable';
+                        break;
+                    case error.TIMEOUT:
+                        errorMsg = 'Location request timed out';
+                        break;
+                }
+                console.warn(`[Geolocation] Error (code ${error.code}): ${errorMsg}`);
+                reject(new Error(errorMsg));
             },
             geoOptions
         );
