@@ -220,7 +220,19 @@ export function initCalibrationUI() {
             },
             (buffer) => {
                 const samples = buffer.map(s => ({x: s.mx, y: s.my, z: s.mz}));
-                return calibrationInstance.runEarthFieldCalibration(samples);
+                // Get current orientation for world-frame earth field storage
+                const currentOrientation = window.getCurrentOrientation?.();
+                let orientationQuat = null;
+                if (currentOrientation) {
+                    // Create a Quaternion object for calibration
+                    orientationQuat = new Quaternion(
+                        currentOrientation.w,
+                        currentOrientation.x,
+                        currentOrientation.y,
+                        currentOrientation.z
+                    );
+                }
+                return calibrationInstance.runEarthFieldCalibration(samples, orientationQuat);
             }
         );
         });

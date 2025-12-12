@@ -26,6 +26,14 @@ import { MagneticTrajectory } from './modules/magnetic-trajectory.js';
 window.appState = state;
 window.log = log;
 
+// Export function to get current orientation (for calibration)
+window.getCurrentOrientation = () => {
+    if (typeof imuFusion !== 'undefined' && imuFusion) {
+        return imuFusion.getQuaternion();
+    }
+    return null;
+};
+
 // DOM helper
 const $ = (id) => document.getElementById(id);
 

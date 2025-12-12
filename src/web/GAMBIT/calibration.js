@@ -265,10 +265,14 @@ class EnvironmentalCalibration {
      * Calibrate Earth field reference
      * Should be done with sensor in a known orientation (e.g., flat on table)
      *
+     * IMPORTANT: Earth field is stored in WORLD frame for proper orientation compensation.
+     * The referenceOrientation parameter is required to transform from sensor to world frame.
+     *
      * @param {Array} samples - Array of {x, y, z} readings in reference orientation
+     * @param {Quaternion} referenceOrientation - Current device orientation (from IMU fusion)
      * @returns {Object} Earth field estimate with detailed diagnostics
      */
-    runEarthFieldCalibration(samples) {
+    runEarthFieldCalibration(samples, referenceOrientation = null) {
         if (samples.length < 50) {
             throw new Error('Need at least 50 samples for Earth field calibration');
         }
@@ -276,7 +280,7 @@ class EnvironmentalCalibration {
         // Apply hard/soft iron corrections first
         const corrected = samples.map(s => this._applyIronCorrection(s));
 
-        // Average the corrected readings
+        // Average the corrected readings (in sensor frame)
         let sumX = 0, sumY = 0, sumZ = 0;
         for (const s of corrected) {
             sumX += s.x;
@@ -284,11 +288,23 @@ class EnvironmentalCalibration {
             sumZ += s.z;
         }
 
-        this.earthField = {
+        const earthFieldSensor = {
             x: sumX / corrected.length,
             y: sumY / corrected.length,
             z: sumZ / corrected.length
         };
+
+        // Transform to world frame if orientation provided
+        // R transforms from sensor to world, so: B_world = R @ B_sensor
+        if (referenceOrientation) {
+            const rotMatrix = referenceOrientation.toRotationMatrix();
+            this.earthField = rotMatrix.multiply(earthFieldSensor);
+            console.log('[Calibration] Earth field stored in WORLD frame');
+        } else {
+            // Fallback: assume sensor frame = world frame (device flat, aligned with world)
+            this.earthField = earthFieldSensor;
+            console.warn('[Calibration] No orientation provided - assuming device is flat and aligned');
+        }
 
         this.earthFieldMagnitude = Math.sqrt(
             this.earthField.x ** 2 +
@@ -556,10 +572,13 @@ class EnvironmentalCalibration {
             corrected = this.softIronMatrix.multiply(corrected);
         }
 
-        // Step 3: Subtract Earth field (rotated to current orientation)
+        // Step 3: Subtract Earth field (rotated to current sensor frame)
+        // earthField is stored in WORLD frame during calibration
+        // To subtract it, we transform world→sensor using R.T (transpose)
         if (this.earthFieldCalibrated && orientation) {
             const rotMatrix = orientation.toRotationMatrix();
-            const rotatedEarth = rotMatrix.multiply(this.earthField);
+            // R.T transforms from world frame to current sensor frame
+            const rotatedEarth = rotMatrix.transpose().multiply(this.earthField);
             corrected = {
                 x: corrected.x - rotatedEarth.x,
                 y: corrected.y - rotatedEarth.y,
