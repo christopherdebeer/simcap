@@ -181,9 +181,11 @@ class SensorDataProcessor:
             sensors['gx'][i] = sample.get('gx', 0)
             sensors['gy'][i] = sample.get('gy', 0)
             sensors['gz'][i] = sample.get('gz', 0)
-            sensors['mx'][i] = sample.get('mx', 0)
-            sensors['my'][i] = sample.get('my', 0)
-            sensors['mz'][i] = sample.get('mz', 0)
+            # Magnetometer: prefer converted µT values, fall back to raw LSB
+            # IMPORTANT: mx_ut, my_ut, mz_ut are the proper unit-converted fields
+            sensors['mx'][i] = sample.get('mx_ut', sample.get('mx', 0))
+            sensors['my'][i] = sample.get('my_ut', sample.get('my', 0))
+            sensors['mz'][i] = sample.get('mz_ut', sample.get('mz', 0))
 
             # Calibrated (iron corrected)
             if 'calibrated_mx' in sample:

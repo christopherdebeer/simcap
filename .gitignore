@@ -10,3 +10,6 @@ __pycache__/
 *.pyo
 
 *.bak
+
+# Data directory visualizations (temporary test outputs)
+data/GAMBIT/visualizations/
