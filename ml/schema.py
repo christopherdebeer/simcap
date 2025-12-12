@@ -490,7 +490,7 @@ class SessionMetadata:
     """
     Metadata for a recording session.
 
-    Stored alongside data files as {timestamp}.meta.json
+    Stored alongside data files as {timestamp}.meta.json or embedded in v2.1 JSON.
 
     Supports both V1 (single-label) and V2 (multi-label) segments.
     """
@@ -509,6 +509,10 @@ class SessionMetadata:
     magnet_config: Optional[MagnetConfig] = None
     calibration_data: Optional[Dict[str, Any]] = None
     custom_label_definitions: List[str] = field(default_factory=list)
+
+    # V2.1 extended fields
+    firmware_version: Optional[str] = None  # Device firmware version
+    session_type: str = "recording"  # recording, calibration, test
 
     def to_dict(self) -> Dict[str, Any]:
         result = {
@@ -530,6 +534,11 @@ class SessionMetadata:
             result["calibration_data"] = self.calibration_data
         if self.custom_label_definitions:
             result["custom_label_definitions"] = self.custom_label_definitions
+        # V2.1 extended fields
+        if self.firmware_version:
+            result["firmware_version"] = self.firmware_version
+        if self.session_type != "recording":
+            result["session_type"] = self.session_type
         return result
 
     @classmethod
@@ -554,7 +563,9 @@ class SessionMetadata:
             sample_rate_hz=d.get('sample_rate_hz', 50),
             magnet_config=magnet_config,
             calibration_data=d.get('calibration_data'),
-            custom_label_definitions=d.get('custom_label_definitions', [])
+            custom_label_definitions=d.get('custom_label_definitions', []),
+            firmware_version=d.get('firmware_version'),
+            session_type=d.get('session_type', 'recording')
         )
 
     def save(self, path: str):
