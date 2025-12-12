@@ -6,7 +6,7 @@
 import { state } from './state.js';
 import { log } from './logger.js';
 import { CALIBRATION_CONFIG, validateSampleCount } from '../calibration-config.js';
-
+import { formatFieldData } from '../shared/geomagnetic-field.js';
 // Callback for storing calibration session data
 let storeCalibrationSession = null;
 
@@ -55,9 +55,12 @@ export function updateCalibrationStatus() {
     const detailsText = $('calDetails');
     const saveBtn = $('saveCalibration');
 
+    const geoStr = formatFieldData(state.geomagneticLocation);
+    detailsText.textContent = `LOC: ${geoStr.location} ${geoStr.declination}  ${geoStr.intensity}. CAL: `;
+
     if (!calibrationInstance) {
         statusText.textContent = 'Not Initialized';
-        detailsText.textContent = 'Calibration module not loaded';
+        detailsText.textContent += 'Calibration module not loaded';
         saveBtn.disabled = true;
         return;
     }
@@ -75,7 +78,7 @@ export function updateCalibrationStatus() {
     if (hasEarth) steps.push('Earth');
     if (hasHardIron) steps.push('Hard Iron');
     if (hasSoftIron) steps.push('Soft Iron');
-    detailsText.textContent = steps.length ? `Complete: ${steps.join(', ')}` : 'No calibration data';
+    detailsText.textContent += steps.length ? `Complete: ${steps.join(', ')}` : 'No calibration data';
 
     saveBtn.disabled = !complete;
 

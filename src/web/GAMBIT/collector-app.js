@@ -381,7 +381,7 @@ function updateActiveLabelsDisplay() {
     const tags = [];
 
     if (state.currentLabels.pose) {
-        tags.push(`<span class="active-label-chip" onclick="removeActiveLabel('pose')" style="cursor: pointer;" title="Click to remove">${state.currentLabels.pose} ×</span>`);
+        tags.push(`<span class="active-label-chip label-type-pose" onclick="removeActiveLabel('pose')" style="cursor: pointer;" title="Click to remove">${state.currentLabels.pose} ×</span>`);
     }
 
     const fingerStates = ['thumb', 'index', 'middle', 'ring', 'pinky']
@@ -393,19 +393,19 @@ function updateActiveLabelsDisplay() {
             return '?';
         }).join('');
     if (fingerStates !== '?????') {
-        tags.push(`<span class="active-label-chip" onclick="clearFingerStates()" style="cursor: pointer;" title="Click to clear">${fingerStates} ×</span>`);
+        tags.push(`<span class="active-label-chip label-type-finger" onclick="clearFingerStates()" style="cursor: pointer;" title="Click to clear">fingers:${fingerStates} ×</span>`);
     }
 
     if (state.currentLabels.motion !== 'static') {
-        tags.push(`<span class="active-label-chip" onclick="removeActiveLabel('motion')" style="cursor: pointer;" title="Click to remove">${state.currentLabels.motion} ×</span>`);
+        tags.push(`<span class="active-label-chip label-type-motion" onclick="removeActiveLabel('motion')" style="cursor: pointer;" title="Click to remove">motion:${state.currentLabels.motion} ×</span>`);
     }
 
     if (state.currentLabels.calibration !== 'none') {
-        tags.push(`<span class="active-label-chip" onclick="removeActiveLabel('calibration')" style="cursor: pointer;" title="Click to remove">${state.currentLabels.calibration} ×</span>`);
+        tags.push(`<span class="active-label-chip label-type-calibration" onclick="removeActiveLabel('calibration')" style="cursor: pointer;" title="Click to remove">calibration:${state.currentLabels.calibration} ×</span>`);
     }
 
     (state.currentLabels.custom || []).forEach(c => {
-        tags.push(`<span class="active-label-chip" onclick="removeCustomLabel('${c}')" style="cursor: pointer;" title="Click to remove">${c} ×</span>`);
+        tags.push(`<span class="active-label-chip label-type-custom" onclick="removeCustomLabel('${c}')" style="cursor: pointer;" title="Click to remove">custom:${c} ×</span>`);
     });
 
     display.innerHTML = tags.length > 0 ? tags.join('') : '<span style="color: #666;">No labels active</span>';

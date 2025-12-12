@@ -33,7 +33,6 @@
         /* Page-specific overrides for collector */
         body {
             padding: var(--space-md);
-            max-width: 700px;
             margin: 0 auto;
             font-family: var(--font-sans);
             font-size: 14px;
@@ -82,23 +81,21 @@
         }
 
         section {
-            background: var(--bg-surface);
-            border: 1px solid var(--border);
-            border-radius: 8px;
             padding: 12px;
             margin-bottom: 12px;
         }
         section h2 {
-            margin: 0 0 10px 0;
             font-size: 1em;
-            color: var(--accent);
-            border-bottom: 1px solid var(--border);
-            padding-bottom: 5px;
+            font-family: monospace;
+            font-weight: normal;
+            text-transform: uppercase;
         }
         section h3 {
-            margin: 10px 0 5px 0;
             font-size: 0.9em;
             color: var(--fg-muted);
+            font-family: monospace;
+            font-weight: normal;
+            text-transform: uppercase;
         }
         .row {
             display: flex;
@@ -279,13 +276,19 @@
             gap: 4px;
         }
         .active-label-chip {
-            background: var(--success);
-            color: var(--bg);
+            background: var(--bg-muted);
+            color: var(--fg);
             padding: 2px 6px;
             border-radius: 3px;
             font-size: 10px;
             font-weight: 500;
         }
+
+        .active-label-chip.label-type-pose { background-color: var(--accent); }
+        .active-label-chip.label-type-finger { background-color: var(--danger); }
+        .active-label-chip.label-type-motion { background-color: var(--success);}
+        .active-label-chip.label-type-calibration { background-color: var(--bg-surface);}
+        .active-label-chip.label-type-custom { background-color: var(--bg-elevated);}
 
         .data-view {
             font-family: var(--font-mono);
@@ -350,11 +353,11 @@
         .label-item .label-tag.custom { background: var(--warning); color: var(--bg); }
         .label-item .label-tag.calibration { background: var(--danger); }
         .sample-counter {
-            font-size: 2em;
-            font-weight: bold;
-            color: var(--accent);
             text-align: center;
             padding: 10px;
+            text-transform: uppercase;
+            font-family: monospace;
+            font-weight: normal;
         }
         .progress-bar {
             height: 6px;
@@ -685,446 +688,448 @@
         <p class="subtitle">Multi-Label Data Collection for Magnetic Finger Tracking</p>
     </header>
 
-    <!-- Connection -->
-    <section>
-        <h2>Connection</h2>
-        <div class="row">
-            <button id="connectBtn" class="btn-primary">Connect Device</button>
-            <div id="statusIndicator" class="status disconnected">Disconnected</div>
-        </div>
-    </section>
-
-    <!-- Calibration Wizard -->
-    <section>
-        <h2 class="collapsible collapsed">Calibration Wizard</h2>
-        <div id="calibrationStatus" style="background: var(--bg); padding: 8px; border-radius: 4px; margin-bottom: 12px;">
-                <div style="font-size: 11px; font-weight: 500; margin-bottom: 4px;">Status: <span id="calStatusText">Not Calibrated</span></div>
-                <div style="font-size: 10px; color: var(--fg-muted);" id="calDetails">No calibration loaded</div>
+    <main>
+        <!-- Connection -->
+        <section class="card">
+            <h2>Connection</h2>
+            <div class="row">
+                <button id="connectBtn" class="btn-primary">Connect Device</button>
+                <div id="statusIndicator" class="status disconnected">Disconnected</div>
             </div>
-        <div class="collapse-content hidden">
-            <p style="font-size: 11px; color: var(--fg-muted); margin-bottom: 12px;">
-                Calibrate the magnetometer to remove environmental interference. Required for accurate magnetic finger tracking.
-            </p>
-            <!-- Step 1: Earth Field -->
-            <div id="calStep1" class="calibration-step">
-                <h3>Step 1: Earth Field Calibration</h3>
-                <p style="font-size: 11px; margin-bottom: 8px;">Hold device still, away from magnets (>50cm)</p>
+        </section>
+
+        <!-- Calibration Wizard -->
+        <section class="card">
+            <h2 class="collapsible collapsed">Calibration Wizard</h2>
+            <div id="calibrationStatus" style="background: var(--bg); padding: 8px; border-radius: 4px; margin-bottom: 12px;">
+                    <div style="font-size: 11px; font-weight: 500; margin-bottom: 4px;">Status: <span id="calStatusText">Not Calibrated</span></div>
+                    <div style="font-size: 10px; color: var(--fg-muted);" id="calDetails">No calibration loaded</div>
+                </div>
+            <div class="collapse-content hidden">
+                <p style="font-size: 11px; color: var(--fg-muted); margin-bottom: 12px;">
+                    Calibrate the magnetometer to remove environmental interference. Required for accurate magnetic finger tracking.
+                </p>
+                <!-- Step 1: Earth Field -->
+                <div id="calStep1" class="calibration-step">
+                    <h3>Step 1: Earth Field Calibration</h3>
+                    <p style="font-size: 11px; margin-bottom: 8px;">Hold device still, away from magnets (>50cm)</p>
+                    <div class="row">
+                        <button id="startEarthCal" class="btn-secondary" disabled>Start (10 seconds)</button>
+                        <div id="earthProgress" style="flex: 1;"></div>
+                    </div>
+                    <div id="earthQuality" style="font-size: 10px; margin-top: 4px;"></div>
+                    <div id="earthDiagnostics" class="cal-diagnostics" style="display: none;"></div>
+                </div>
+
+                <!-- Step 2: Hard Iron -->
+                <div id="calStep2" class="calibration-step">
+                    <h3>Step 2: Hard Iron Calibration</h3>
+                    <p style="font-size: 11px; margin-bottom: 8px;">Rotate device in figure-8 pattern covering all orientations</p>
+                    <div class="row">
+                        <button id="startHardIronCal" class="btn-secondary" disabled>Start (20 seconds)</button>
+                        <div id="hardIronProgress" style="flex: 1;"></div>
+                    </div>
+                    <div id="hardIronQuality" style="font-size: 10px; margin-top: 4px;"></div>
+                </div>
+
+                <!-- Step 3: Soft Iron -->
+                <div id="calStep3" class="calibration-step">
+                    <h3>Step 3: Soft Iron Calibration</h3>
+                    <p style="font-size: 11px; margin-bottom: 8px;">Continue rotating to capture field distortion</p>
+                    <div class="row">
+                        <button id="startSoftIronCal" class="btn-secondary" disabled>Start (20 seconds)</button>
+                        <div id="softIronProgress" style="flex: 1;"></div>
+                    </div>
+                    <div id="softIronQuality" style="font-size: 10px; margin-top: 4px;"></div>
+                </div>
+
+                <div class="row" style="margin-top: 12px;">
+                    <button id="loadCalibration" class="btn-secondary">Load from File</button>
+                    <button id="saveCalibration" class="btn-secondary" disabled>Save to File</button>
+                    <button id="resetCalibration" class="btn-danger" style="margin-left: auto;">Reset</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Session Metadata -->
+        <section class="card">
+            <h2 class="collapsible collapsed">Session Metadata</h2>
+            <div class="collapse-content hidden">
                 <div class="row">
-                    <button id="startEarthCal" class="btn-secondary" disabled>Start (10 seconds)</button>
-                    <div id="earthProgress" style="flex: 1;"></div>
-                </div>
-                <div id="earthQuality" style="font-size: 10px; margin-top: 4px;"></div>
-                <div id="earthDiagnostics" class="cal-diagnostics" style="display: none;"></div>
-            </div>
-
-            <!-- Step 2: Hard Iron -->
-            <div id="calStep2" class="calibration-step">
-                <h3>Step 2: Hard Iron Calibration</h3>
-                <p style="font-size: 11px; margin-bottom: 8px;">Rotate device in figure-8 pattern covering all orientations</p>
-                <div class="row">
-                    <button id="startHardIronCal" class="btn-secondary" disabled>Start (20 seconds)</button>
-                    <div id="hardIronProgress" style="flex: 1;"></div>
-                </div>
-                <div id="hardIronQuality" style="font-size: 10px; margin-top: 4px;"></div>
-            </div>
-
-            <!-- Step 3: Soft Iron -->
-            <div id="calStep3" class="calibration-step">
-                <h3>Step 3: Soft Iron Calibration</h3>
-                <p style="font-size: 11px; margin-bottom: 8px;">Continue rotating to capture field distortion</p>
-                <div class="row">
-                    <button id="startSoftIronCal" class="btn-secondary" disabled>Start (20 seconds)</button>
-                    <div id="softIronProgress" style="flex: 1;"></div>
-                </div>
-                <div id="softIronQuality" style="font-size: 10px; margin-top: 4px;"></div>
-            </div>
-
-            <div class="row" style="margin-top: 12px;">
-                <button id="loadCalibration" class="btn-secondary">Load from File</button>
-                <button id="saveCalibration" class="btn-secondary" disabled>Save to File</button>
-                <button id="resetCalibration" class="btn-danger" style="margin-left: auto;">Reset</button>
-            </div>
-        </div>
-    </section>
-
-    <!-- Session Metadata -->
-    <section>
-        <h2 class="collapsible collapsed">Session Metadata</h2>
-        <div class="collapse-content hidden">
-            <div class="row">
-                <div>
-                    <label>Subject ID</label>
-                    <input type="text" id="subjectId" value="user_001" />
-                </div>
-                <div>
-                    <label>Environment</label>
-                    <select id="environment">
-                        <option value="home">Home</option>
-                        <option value="office">Office</option>
-                        <option value="outdoor">Outdoor</option>
-                        <option value="lab">Lab</option>
-                    </select>
-                </div>
-            </div>
-            <div class="row">
-                <div>
-                    <label>Hand</label>
-                    <select id="hand">
-                        <option value="right">Right</option>
-                        <option value="left">Left</option>
-                        <option value="unknown">Unknown</option>
-                        <option value="none">None</option>
-                    </select>
-                </div>
-                <div>
-                    <label>Data Split</label>
-                    <select id="split">
-                        <option value="train">Train (80%)</option>
-                        <option value="validation">Validation (10%)</option>
-                        <option value="test">Test (10%)</option>
-                    </select>
-                </div>
-            </div>
-            <div class="row">
-                <div>
-                    <label>Magnet Configuration</label>
-                    <select id="magnetConfig">
-                        <option value="none">No Magnets</option>
-                        <option value="single_index">Single - Index</option>
-                        <option value="single_thumb">Single - Thumb</option>
-                        <option value="alternating">All Fingers (Alternating)</option>
-                        <option value="custom">Custom</option>
-                    </select>
-                </div>
-                <div>
-                    <label>Magnet Type</label>
-                    <select id="magnetType">
-                        <option value="6x3mm_N48">6x3mm N48</option>
-                        <option value="5x2mm_N42">5x2mm N42</option>
-                        <option value="3x1mm_N35">3x1mm N35</option>
-                        <option value="custom">Custom</option>
-                    </select>
-                </div>
-            </div>
-            <div class="row">
-                <div style="flex: 2">
-                    <label>Session Notes</label>
-                    <input type="text" id="sessionNotes" placeholder="Optional notes about this session..." />
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Multi-Label Selection -->
-    <section>
-        <h2 class="collapsible collapsed">Active Labels (Multi-Select)</h2>
-
-        <!-- Current active labels display - always visible -->
-        <div class="active-labels">
-            <label>Currently Active:</label>
-            <div class="active-labels-list" id="activeLabelsDisplay">
-                <span style="color: var(--fg-muted);">No labels selected</span>
-            </div>
-        </div>
-
-        <!-- Collapsible content - label selection buttons -->
-        <div class="collapse-content hidden">
-        <!-- Hand Pose -->
-        <div class="label-category">
-            <h4>Hand Pose</h4>
-            <div class="label-grid" id="poseButtons">
-                <button class="btn-secondary label-btn" data-pose="rest">REST</button>
-                <button class="btn-secondary label-btn" data-pose="fist">FIST</button>
-                <button class="btn-secondary label-btn" data-pose="open_palm">OPEN</button>
-                <button class="btn-secondary label-btn" data-pose="index_up">POINT</button>
-                <button class="btn-secondary label-btn" data-pose="peace">PEACE</button>
-                <button class="btn-secondary label-btn" data-pose="thumbs_up">THUMBS</button>
-                <button class="btn-secondary label-btn" data-pose="ok_sign">OK</button>
-                <button class="btn-secondary label-btn" data-pose="pinch">PINCH</button>
-                <button class="btn-secondary label-btn" data-pose="grab">GRAB</button>
-                <button class="btn-secondary label-btn" data-pose="wave">WAVE</button>
-            </div>
-        </div>
-
-        <!-- Finger States -->
-        <div class="label-category">
-            <h4>Finger States (Per-Finger)</h4>
-            <div class="finger-grid">
-                <div class="finger-col">
-                    <label>Thumb</label>
-                    <button class="btn-secondary finger-state-btn extended" data-finger="thumb" data-state="extended">EXT</button>
-                    <button class="btn-secondary finger-state-btn partial" data-finger="thumb" data-state="partial">PART</button>
-                    <button class="btn-secondary finger-state-btn flexed" data-finger="thumb" data-state="flexed">FLEX</button>
-                </div>
-                <div class="finger-col">
-                    <label>Index</label>
-                    <button class="btn-secondary finger-state-btn extended" data-finger="index" data-state="extended">EXT</button>
-                    <button class="btn-secondary finger-state-btn partial" data-finger="index" data-state="partial">PART</button>
-                    <button class="btn-secondary finger-state-btn flexed" data-finger="index" data-state="flexed">FLEX</button>
-                </div>
-                <div class="finger-col">
-                    <label>Middle</label>
-                    <button class="btn-secondary finger-state-btn extended" data-finger="middle" data-state="extended">EXT</button>
-                    <button class="btn-secondary finger-state-btn partial" data-finger="middle" data-state="partial">PART</button>
-                    <button class="btn-secondary finger-state-btn flexed" data-finger="middle" data-state="flexed">FLEX</button>
-                </div>
-                <div class="finger-col">
-                    <label>Ring</label>
-                    <button class="btn-secondary finger-state-btn extended" data-finger="ring" data-state="extended">EXT</button>
-                    <button class="btn-secondary finger-state-btn partial" data-finger="ring" data-state="partial">PART</button>
-                    <button class="btn-secondary finger-state-btn flexed" data-finger="ring" data-state="flexed">FLEX</button>
-                </div>
-                <div class="finger-col">
-                    <label>Pinky</label>
-                    <button class="btn-secondary finger-state-btn extended" data-finger="pinky" data-state="extended">EXT</button>
-                    <button class="btn-secondary finger-state-btn partial" data-finger="pinky" data-state="partial">PART</button>
-                    <button class="btn-secondary finger-state-btn flexed" data-finger="pinky" data-state="flexed">FLEX</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Motion State -->
-        <div class="label-category">
-            <h4>Motion State</h4>
-            <div class="label-grid">
-                <button class="btn-secondary label-btn active" data-motion="static">STATIC</button>
-                <button class="btn-secondary label-btn" data-motion="moving">MOVING</button>
-                <button class="btn-secondary label-btn" data-motion="transition">TRANSITION</button>
-            </div>
-        </div>
-
-        <!-- Calibration -->
-        <div class="label-category">
-            <h4>Calibration Markers</h4>
-            <div class="label-grid">
-                <button class="btn-secondary label-btn calibration" data-calibration="earth_field">EARTH FIELD</button>
-                <button class="btn-secondary label-btn calibration" data-calibration="hard_iron">HARD IRON</button>
-                <button class="btn-secondary label-btn calibration" data-calibration="soft_iron">SOFT IRON</button>
-                <button class="btn-secondary label-btn calibration" data-calibration="finger_range">FINGER RANGE</button>
-                <button class="btn-secondary label-btn calibration" data-calibration="reference_pose">REF POSE</button>
-                <button class="btn-secondary label-btn calibration" data-calibration="magnet_baseline">MAG BASELINE</button>
-            </div>
-        </div>
-
-        <!-- Custom Labels -->
-        <div class="label-category">
-            <h4>Custom Labels</h4>
-            <div class="custom-input-row">
-                <input type="text" id="customLabelInput" placeholder="Add custom label..." />
-                <button class="btn-primary btn-small" onclick="addCustomLabel()">Add</button>
-            </div>
-            <div class="custom-labels-list" id="customLabelsList"></div>
-            <div style="margin-top: 8px;">
-                <label>Quick Add Presets:</label>
-                <div class="label-grid" style="margin-top: 4px;">
-                    <button class="btn-secondary btn-tiny" onclick="addPresetLabels('phase1')">Phase 1</button>
-                    <button class="btn-secondary btn-tiny" onclick="addPresetLabels('phase2')">Phase 2</button>
-                    <button class="btn-secondary btn-tiny" onclick="addPresetLabels('quality')">Quality</button>
-                    <button class="btn-secondary btn-tiny" onclick="addPresetLabels('transitions')">Transitions</button>
-                </div>
-            </div>
-        </div>
-        </div>
-    </section>
-
-    <!-- Hand State Visualization -->
-    <section>
-        <h2 class="collapsible">Hand State Preview</h2>
-        <div class="collapse-content" style="display: flex;flex-direction: column;">
-            <!-- Mode Toggle -->
-            <div style="display: flex; justify-content: center; gap: 8px; margin-bottom: 10px;">
-                <button id="handModeLabels" class="btn-primary btn-small" onclick="setHandPreviewMode('labels')">🏷️ Labels</button>
-                <button id="handModePredictions" class="btn-secondary btn-small" onclick="setHandPreviewMode('predictions')">🎯 Predictions</button>
-            </div>
-            <!-- Mode Indicator -->
-            <div id="handModeIndicator" style="text-align: center; padding: 6px; margin-bottom: 10px; border-radius: 4px; font-size: 11px; font-weight: 500; background: var(--accent); color: var(--bg);">
-                📋 Showing: Manual Labels
-            </div>
-            <!-- Canvas container -->
-            <div style="position: relative;width: auto;margin: 0 auto;">
-                <canvas id="magTrajectoryCanvas" width="400" height="400" style="left: 1em; top: 1em; border: 1px solid #efefef; background: transparent; border-radius: 8px; position: absolute; width: 20%; z-index: 9999;"></canvas>
-                <canvas id="handCanvas3D" width="400" height="400" style="border: 1px solid var(--border); background: var(--bg); border-radius: 8px;"></canvas>
-            </div>
-            <div id="handPreviewDescription" style="text-align: center; color: var(--fg-muted); font-size: 12px; margin-top: 10px;">
-                Visual representation of manually selected finger states
-            </div>
-            <!-- Residual Magnetic Field Trajectory for canvas#magTrajectoryCanvas -->
-            <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
-                <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
-                    <button id="clearTrajectoryBtn" class="btn-secondary" style="font-size: 12px; padding: 6px 12px;">Clear Trajectory</button>
-                    <button id="pauseTrajectoryBtn" class="btn-secondary" style="font-size: 12px; padding: 6px 12px;">Pause</button>
-                </div>
-                <div style="font-size: 11px; opacity: 0.7; text-align: center;">
-                    <div>Green = Start | Red = End | Shows last <span id="trajPointCount">200</span> samples</div>
-                    <div id="trajStats" style="margin-top: 4px;">-</div>
-                </div>
-            </div>
-            <!-- Prediction confidence (only shown in predictions mode) -->
-            <div id="handPredictionInfo" style="display: none; text-align: center; margin-top: 10px; padding: 8px; background: var(--bg); border-radius: 4px;">
-                <div style="font-size: 11px; color: var(--fg-muted);">Prediction Confidence</div>
-                <div id="handPredictionConfidence" style="font-size: 16px; font-weight: bold; color: var(--accent);">--</div>
-            </div>
-            <!-- Orientation display (only shown when sensor fusion is active) -->
-            <div id="handOrientationInfo" style="display: none; text-align: center; margin-top: 10px; padding: 8px; background: var(--bg); border-radius: 4px;">
-                <div style="font-size: 11px; color: var(--fg-muted);">Hand Orientation (Sensor Fusion)</div>
-                <div id="handOrientationAngles" style="font-size: 12px; font-family: var(--font-mono); color: var(--accent); margin-top: 4px;">
-                    Roll: 0° | Pitch: 0° | Yaw: 0°
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Recording Controls -->
-    <section>
-        <h2>Recording</h2>
-        <div class="sample-counter">
-            <span id="sampleCount">0</span> samples
-        </div>
-        <div class="progress-bar">
-            <div class="fill" id="progressFill" style="width: 0%"></div>
-        </div>
-        <div class="row" style="margin-top: 10px">
-            <button id="startBtn" class="btn-success" disabled>Start Recording</button>
-            <button id="pauseBtn" class="btn-warning" disabled>Pause</button>
-            <button id="stopBtn" class="btn-danger" disabled>Stop Recording</button>
-        </div>
-        <div class="row">
-            <button id="clearBtn" class="btn-secondary" disabled>Clear Session</button>
-            <button id="exportBtn" class="btn-primary" disabled>Export Data</button>
-        </div>
-        <div class="row">
-            <button id="uploadBtn" class="btn-success" disabled>Upload to GitHub</button>
-        </div>
-        <div class="row">
-            <button id="wizardBtn" class="btn-warning" disabled title="Connect device to enable">📋 Data Collection Wizard</button>
-        </div>
-        <div class="row">
-            <button id="poseEstimationBtn" class="btn-secondary" disabled title="Connect device to enable">🎯 Enable Pose Tracking</button>
-        </div>
-        <div id="poseEstimationStatus" style="display: none; margin-top: 10px; padding: 10px; background: var(--bg); border-radius: 8px; border: 1px solid var(--border);">
-            <div>
-                <span>Pose Estimation</span>
-            <span style="color: var(--accent);">
-                Status: <span id="poseStatusText">Disabled</span>
-            </span>
-            <span style="color: var(--accent);">
-                Confidence: <span id="poseConfidenceText">0%</span>
-            </span>
-            <span style="color: var(--fg-muted);">
-                Updates: <span id="poseUpdatesText">0</span>
-            </span>
-            </div>
-        </div>
-    </section>
-
-    <!-- GitHub Sync -->
-    <section>
-        <h2 class="collapsible collapsed">GitHub Sync</h2>
-        <div class="collapse-content hidden">
-            <div class="row">
-                <div style="flex: 2">
-                    <label>GitHub Token (PAT with repo scope)</label>
-                    <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxx" />
-                </div>
-            </div>
-            <div style="font-size: 11px; color: var(--fg-muted); margin-top: 5px;">
-                Token is stored locally. Data uploads to: data/GAMBIT/labeled/
-            </div>
-        </div>
-    </section>
-
-    <!-- Labels Created -->
-    <section>
-        <h2>Labels (<span id="labelCount">0</span>)</h2>
-        <div class="labels-list" id="labelsList">
-            <div style="color: var(--fg-muted); text-align: center; padding: 10px;">
-                No labels yet. Start recording and change labels to create segments.
-            </div>
-        </div>
-    </section>
-
-    <!-- Live Data View -->
-    <section>
-        <h2 class="collapsible">Live Sensor Data</h2>
-        <div class="collapse-content">
-            <div class="data-view">
-                <div class="row">
-                    <span class="label">Acc:</span>
-                    <div class="values">
-                        <span class="value" id="ax">-</span>
-                        <span class="value" id="ay">-</span>
-                        <span class="value" id="az">-</span>
+                    <div>
+                        <label>Subject ID</label>
+                        <input type="text" id="subjectId" value="user_001" />
+                    </div>
+                    <div>
+                        <label>Environment</label>
+                        <select id="environment">
+                            <option value="home">Home</option>
+                            <option value="office">Office</option>
+                            <option value="outdoor">Outdoor</option>
+                            <option value="lab">Lab</option>
+                        </select>
                     </div>
                 </div>
                 <div class="row">
-                    <span class="label">Gyro:</span>
-                    <div class="values">
-                        <span class="value" id="gx">-</span>
-                        <span class="value" id="gy">-</span>
-                        <span class="value" id="gz">-</span>
+                    <div>
+                        <label>Hand</label>
+                        <select id="hand">
+                            <option value="right">Right</option>
+                            <option value="left">Left</option>
+                            <option value="unknown">Unknown</option>
+                            <option value="none">None</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>Data Split</label>
+                        <select id="split">
+                            <option value="train">Train (80%)</option>
+                            <option value="validation">Validation (10%)</option>
+                            <option value="test">Test (10%)</option>
+                        </select>
                     </div>
                 </div>
                 <div class="row">
-                    <span class="label">Mag:</span>
-                    <div class="values">
-                        <span class="value" id="mx">-</span>
-                        <span class="value" id="my">-</span>
-                        <span class="value" id="mz">-</span>
+                    <div>
+                        <label>Magnet Configuration</label>
+                        <select id="magnetConfig">
+                            <option value="none">No Magnets</option>
+                            <option value="single_index">Single - Index</option>
+                            <option value="single_thumb">Single - Thumb</option>
+                            <option value="alternating">All Fingers (Alternating)</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>Magnet Type</label>
+                        <select id="magnetType">
+                            <option value="6x3mm_N48">6x3mm N48</option>
+                            <option value="5x2mm_N42">5x2mm N42</option>
+                            <option value="3x1mm_N35">3x1mm N35</option>
+                            <option value="custom">Custom</option>
+                        </select>
                     </div>
                 </div>
                 <div class="row">
-                    <span class="label">Residual Mag:</span>
-                    <div class="values">
-                        <span class="value" id="fused_mx">-</span>
-                        <span class="value" id="fused_my">-</span>
-                        <span class="value" id="fused_mz">-</span>
+                    <div style="flex: 2">
+                        <label>Session Notes</label>
+                        <input type="text" id="sessionNotes" placeholder="Optional notes about this session..." />
                     </div>
                 </div>
+            </div>
+        </section>
+
+        <!-- Multi-Label Selection -->
+        <section class="card">
+            <h2 class="collapsible collapsed">Active Labels</h2>
+
+            <!-- Current active labels display - always visible -->
+            <div class="active-labels">
+                <label>Currently Active:</label>
+                <div class="active-labels-list" id="activeLabelsDisplay">
+                    <span style="color: var(--fg-muted);">No labels selected</span>
+                </div>
+            </div>
+
+            <!-- Collapsible content - label selection buttons -->
+            <div class="collapse-content hidden">
+            <!-- Hand Pose -->
+            <div class="label-category">
+                <h4>Hand Pose</h4>
+                <div class="label-grid" id="poseButtons">
+                    <button class="btn-secondary label-btn" data-pose="rest">REST</button>
+                    <button class="btn-secondary label-btn" data-pose="fist">FIST</button>
+                    <button class="btn-secondary label-btn" data-pose="open_palm">OPEN</button>
+                    <button class="btn-secondary label-btn" data-pose="index_up">POINT</button>
+                    <button class="btn-secondary label-btn" data-pose="peace">PEACE</button>
+                    <button class="btn-secondary label-btn" data-pose="thumbs_up">THUMBS</button>
+                    <button class="btn-secondary label-btn" data-pose="ok_sign">OK</button>
+                    <button class="btn-secondary label-btn" data-pose="pinch">PINCH</button>
+                    <button class="btn-secondary label-btn" data-pose="grab">GRAB</button>
+                    <button class="btn-secondary label-btn" data-pose="wave">WAVE</button>
+                </div>
+            </div>
+
+            <!-- Finger States -->
+            <div class="label-category">
+                <h4>Finger States (Per-Finger)</h4>
+                <div class="finger-grid">
+                    <div class="finger-col">
+                        <label>Thumb</label>
+                        <button class="btn-secondary finger-state-btn extended" data-finger="thumb" data-state="extended">EXT</button>
+                        <button class="btn-secondary finger-state-btn partial" data-finger="thumb" data-state="partial">PART</button>
+                        <button class="btn-secondary finger-state-btn flexed" data-finger="thumb" data-state="flexed">FLEX</button>
+                    </div>
+                    <div class="finger-col">
+                        <label>Index</label>
+                        <button class="btn-secondary finger-state-btn extended" data-finger="index" data-state="extended">EXT</button>
+                        <button class="btn-secondary finger-state-btn partial" data-finger="index" data-state="partial">PART</button>
+                        <button class="btn-secondary finger-state-btn flexed" data-finger="index" data-state="flexed">FLEX</button>
+                    </div>
+                    <div class="finger-col">
+                        <label>Middle</label>
+                        <button class="btn-secondary finger-state-btn extended" data-finger="middle" data-state="extended">EXT</button>
+                        <button class="btn-secondary finger-state-btn partial" data-finger="middle" data-state="partial">PART</button>
+                        <button class="btn-secondary finger-state-btn flexed" data-finger="middle" data-state="flexed">FLEX</button>
+                    </div>
+                    <div class="finger-col">
+                        <label>Ring</label>
+                        <button class="btn-secondary finger-state-btn extended" data-finger="ring" data-state="extended">EXT</button>
+                        <button class="btn-secondary finger-state-btn partial" data-finger="ring" data-state="partial">PART</button>
+                        <button class="btn-secondary finger-state-btn flexed" data-finger="ring" data-state="flexed">FLEX</button>
+                    </div>
+                    <div class="finger-col">
+                        <label>Pinky</label>
+                        <button class="btn-secondary finger-state-btn extended" data-finger="pinky" data-state="extended">EXT</button>
+                        <button class="btn-secondary finger-state-btn partial" data-finger="pinky" data-state="partial">PART</button>
+                        <button class="btn-secondary finger-state-btn flexed" data-finger="pinky" data-state="flexed">FLEX</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Motion State -->
+            <div class="label-category">
+                <h4>Motion State</h4>
+                <div class="label-grid">
+                    <button class="btn-secondary label-btn active" data-motion="static">STATIC</button>
+                    <button class="btn-secondary label-btn" data-motion="moving">MOVING</button>
+                    <button class="btn-secondary label-btn" data-motion="transition">TRANSITION</button>
+                </div>
+            </div>
+
+            <!-- Calibration -->
+            <div class="label-category">
+                <h4>Calibration Markers</h4>
+                <div class="label-grid">
+                    <button class="btn-secondary label-btn calibration" data-calibration="earth_field">EARTH FIELD</button>
+                    <button class="btn-secondary label-btn calibration" data-calibration="hard_iron">HARD IRON</button>
+                    <button class="btn-secondary label-btn calibration" data-calibration="soft_iron">SOFT IRON</button>
+                    <button class="btn-secondary label-btn calibration" data-calibration="finger_range">FINGER RANGE</button>
+                    <button class="btn-secondary label-btn calibration" data-calibration="reference_pose">REF POSE</button>
+                    <button class="btn-secondary label-btn calibration" data-calibration="magnet_baseline">MAG BASELINE</button>
+                </div>
+            </div>
+
+            <!-- Custom Labels -->
+            <div class="label-category">
+                <h4>Custom Labels</h4>
+                <div class="custom-input-row">
+                    <input type="text" id="customLabelInput" placeholder="Add custom label..." />
+                    <button class="btn-primary btn-small" onclick="addCustomLabel()">Add</button>
+                </div>
+                <div class="custom-labels-list" id="customLabelsList"></div>
+                <div style="margin-top: 8px;">
+                    <label>Quick Add Presets:</label>
+                    <div class="label-grid" style="margin-top: 4px;">
+                        <button class="btn-secondary btn-tiny" onclick="addPresetLabels('phase1')">Phase 1</button>
+                        <button class="btn-secondary btn-tiny" onclick="addPresetLabels('phase2')">Phase 2</button>
+                        <button class="btn-secondary btn-tiny" onclick="addPresetLabels('quality')">Quality</button>
+                        <button class="btn-secondary btn-tiny" onclick="addPresetLabels('transitions')">Transitions</button>
+                    </div>
+                </div>
+            </div>
+            </div>
+        </section>
+
+        <!-- Hand State Visualization -->
+        <section class="card">
+            <h2 class="collapsible">Hand State Preview</h2>
+            <div class="collapse-content" style="display: flex;flex-direction: column;">
+                <!-- Mode Toggle -->
+                <div style="display: flex; justify-content: center; gap: 8px; margin-bottom: 10px;">
+                    <button id="handModeLabels" class="btn-primary btn-small" onclick="setHandPreviewMode('labels')">🏷️ Labels</button>
+                    <button id="handModePredictions" class="btn-secondary btn-small" onclick="setHandPreviewMode('predictions')">🎯 Predictions</button>
+                </div>
+                <!-- Mode Indicator -->
+                <div id="handModeIndicator" style="text-align: center; padding: 6px; margin-bottom: 10px; border-radius: 4px; font-size: 11px; font-weight: 500; background: var(--bg-elevated); color: var(--fg-muted);">
+                    📋 Showing: Manual Labels
+                </div>
+                <!-- Canvas container -->
+                <div style="position: relative;width: auto;margin: 0 auto;">
+                    <canvas id="magTrajectoryCanvas" width="400" height="400" style="left: 1em; top: 1em; border: 1px solid #efefef; background: transparent; border-radius: 8px; position: absolute; width: 20%; z-index: 9999;"></canvas>
+                    <canvas id="handCanvas3D" width="400" height="400" style="border: 1px solid var(--border); background: var(--bg); border-radius: 8px;"></canvas>
+                </div>
+                <div id="handPreviewDescription" style="text-align: center; color: var(--fg-muted); font-size: 12px; margin-top: 10px;">
+                    Visual representation of manually selected finger states
+                </div>
+                <!-- Residual Magnetic Field Trajectory for canvas#magTrajectoryCanvas -->
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
+                        <button id="clearTrajectoryBtn" class="btn-secondary" style="font-size: 12px; padding: 6px 12px;">Clear Trajectory</button>
+                        <button id="pauseTrajectoryBtn" class="btn-secondary" style="font-size: 12px; padding: 6px 12px;">Pause</button>
+                    </div>
+                    <div style="font-size: 11px; opacity: 0.7; text-align: center;">
+                        <div>Green = Start | Red = End | Shows last <span id="trajPointCount">200</span> samples</div>
+                        <div id="trajStats" style="margin-top: 4px;">-</div>
+                    </div>
+                </div>
+                <!-- Prediction confidence (only shown in predictions mode) -->
+                <div id="handPredictionInfo" style="display: none; text-align: center; margin-top: 10px; padding: 8px; background: var(--bg); border-radius: 4px;">
+                    <div style="font-size: 11px; color: var(--fg-muted);">Prediction Confidence</div>
+                    <div id="handPredictionConfidence" style="font-size: 16px; font-weight: bold; color: var(--accent);">--</div>
+                </div>
+                <!-- Orientation display (only shown when sensor fusion is active) -->
+                <div id="handOrientationInfo" style="display: none; text-align: center; margin-top: 10px; padding: 8px; background: var(--bg); border-radius: 4px;">
+                    <div style="font-size: 11px; color: var(--fg-muted);">Hand Orientation (Sensor Fusion)</div>
+                    <div id="handOrientationAngles" style="font-size: 12px; font-family: var(--font-mono); color: var(--accent); margin-top: 4px;">
+                        Roll: 0° | Pitch: 0° | Yaw: 0°
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Recording Controls -->
+        <section class="card">
+            <h2>Recording</h2>
+            <div class="sample-counter">
+                <span id="sampleCount">0</span> samples
+            </div>
+            <div class="progress-bar">
+                <div class="fill" id="progressFill" style="width: 0%"></div>
+            </div>
+            <div class="row" style="margin-top: 10px">
+                <button id="startBtn" class="btn-success" disabled>Start Recording</button>
+                <button id="pauseBtn" class="btn-warning" disabled>Pause</button>
+                <button id="stopBtn" class="btn-danger" disabled>Stop Recording</button>
+            </div>
+            <div class="row">
+                <button id="clearBtn" class="btn-secondary" disabled>Clear Session</button>
+                <button id="exportBtn" class="btn-primary" disabled>Export Data</button>
+            </div>
+            <div class="row">
+                <button id="uploadBtn" class="btn-success" disabled>Upload to GitHub</button>
+            </div>
+            <div class="row">
+                <button id="wizardBtn" class="btn-warning" disabled title="Connect device to enable">📋 Data Collection Wizard</button>
+            </div>
+            <div class="row">
+                <button id="poseEstimationBtn" class="btn-secondary" disabled title="Connect device to enable">🎯 Enable Pose Tracking</button>
+            </div>
+            <div id="poseEstimationStatus" style="display: none; margin-top: 10px; padding: 10px; background: var(--bg); border-radius: 8px; border: 1px solid var(--border);">
+                <div>
+                    <span>Pose Estimation</span>
+                <span style="color: var(--accent);">
+                    Status: <span id="poseStatusText">Disabled</span>
+                </span>
+                <span style="color: var(--accent);">
+                    Confidence: <span id="poseConfidenceText">0%</span>
+                </span>
+                <span style="color: var(--fg-muted);">
+                    Updates: <span id="poseUpdatesText">0</span>
+                </span>
+                </div>
+            </div>
+        </section>
+
+        <!-- GitHub Sync -->
+        <section class="card">
+            <h2 class="collapsible collapsed">GitHub Sync</h2>
+            <div class="collapse-content hidden">
                 <div class="row">
-                    <span class="label">Residual |M|:</span>
-                    <div class="values">
-                        <span class="value" id="residual_magnitude">-</span>
+                    <div style="flex: 2">
+                        <label>GitHub Token (PAT with repo scope)</label>
+                        <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxx" />
+                    </div>
+                </div>
+                <div style="font-size: 11px; color: var(--fg-muted); margin-top: 5px;">
+                    Token is stored locally. Data uploads to: data/GAMBIT/labeled/
+                </div>
+            </div>
+        </section>
+
+        <!-- Labels Created -->
+        <section class="card">
+            <h2>Labels (<span id="labelCount">0</span>)</h2>
+            <div class="labels-list" id="labelsList">
+                <div style="color: var(--fg-muted); text-align: center; padding: 10px;">
+                    No labels yet. Start recording and change labels to create segments.
+                </div>
+            </div>
+        </section>
+
+        <!-- Live Data View -->
+        <section class="card">
+            <h2 class="collapsible">Live Sensor Data</h2>
+            <div class="collapse-content">
+                <div class="data-view">
+                    <div class="row">
+                        <span class="label">Acc:</span>
+                        <div class="values">
+                            <span class="value" id="ax">-</span>
+                            <span class="value" id="ay">-</span>
+                            <span class="value" id="az">-</span>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <span class="label">Gyro:</span>
+                        <div class="values">
+                            <span class="value" id="gx">-</span>
+                            <span class="value" id="gy">-</span>
+                            <span class="value" id="gz">-</span>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <span class="label">Mag:</span>
+                        <div class="values">
+                            <span class="value" id="mx">-</span>
+                            <span class="value" id="my">-</span>
+                            <span class="value" id="mz">-</span>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <span class="label">Residual Mag:</span>
+                        <div class="values">
+                            <span class="value" id="fused_mx">-</span>
+                            <span class="value" id="fused_my">-</span>
+                            <span class="value" id="fused_mz">-</span>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <span class="label">Residual |M|:</span>
+                        <div class="values">
+                            <span class="value" id="residual_magnitude">-</span>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </section>
+        </section>
 
 
-    <!-- Log -->
-    <section>
-        <h2 class="collapsible collapsed">Log</h2>
-        <div class="collapse-content hidden" id="logSection">
-            <div id="log"></div>
-        </div>
-    </section>
-
-    <!-- Calibration Wizard Modal -->
-    <div class="wizard-overlay" id="wizardOverlay">
-        <div class="wizard-modal">
-            <button class="wizard-close" onclick="closeWizard()">&times;</button>
-            <div class="wizard-header">
-                <h2 id="wizardTitle">Calibration Wizard</h2>
-                <div class="phase-label" id="wizardPhase">Select calibration mode</div>
+        <!-- Log -->
+        <section>
+            <h2 class="collapsible collapsed">Log</h2>
+            <div class="collapse-content hidden" id="logSection">
+                <div id="log"></div>
             </div>
-            <div class="wizard-progress">
-                <div class="wizard-progress-bar">
-                    <div class="fill" id="wizardProgressFill" style="width: 0%"></div>
+        </section>
+
+        <!-- Calibration Wizard Modal -->
+        <div class="wizard-overlay" id="wizardOverlay">
+            <div class="wizard-modal">
+                <button class="wizard-close" onclick="closeWizard()">&times;</button>
+                <div class="wizard-header">
+                    <h2 id="wizardTitle">Calibration Wizard</h2>
+                    <div class="phase-label" id="wizardPhase">Select calibration mode</div>
                 </div>
-                <div class="wizard-progress-text">
-                    <span id="wizardStepText">Step 0 of 0</span>
-                    <span id="wizardTimeText">~0s remaining</span>
+                <div class="wizard-progress">
+                    <div class="wizard-progress-bar">
+                        <div class="fill" id="wizardProgressFill" style="width: 0%"></div>
+                    </div>
+                    <div class="wizard-progress-text">
+                        <span id="wizardStepText">Step 0 of 0</span>
+                        <span id="wizardTimeText">~0s remaining</span>
+                    </div>
+                </div>
+                <div class="wizard-content" id="wizardContent">
+                    <!-- Dynamic content inserted here -->
+                </div>
+                <div class="wizard-stats" id="wizardStats">
+                    <span>📊 <span id="wizardSamples">0</span> samples</span>
+                    <span>🏷️ <span id="wizardLabels">0</span> labels</span>
                 </div>
             </div>
-            <div class="wizard-content" id="wizardContent">
-                <!-- Dynamic content inserted here -->
-            </div>
-            <div class="wizard-stats" id="wizardStats">
-                <span>📊 <span id="wizardSamples">0</span> samples</span>
-                <span>🏷️ <span id="wizardLabels">0</span> labels</span>
-            </div>
         </div>
-    </div>
+    </main>
 
     <footer class="page-footer">
         <span>SIMCAP GAMBIT Collector</span>
