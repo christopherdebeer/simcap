@@ -10,7 +10,7 @@
         <link rel="stylesheet" href="../../simcap.css">
         <!-- Eruda Dev Console for debugging -->
         <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-        <script>eruda.init();</script>
+        <script>if (typeof eruda !== 'undefined') eruda.init();</script>
         <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
         <script src="puck.js"></script>
         <script src="gambit-client.js"></script>
@@ -18,6 +18,7 @@
         <script src="calibration.js"></script>
         <script src="filters.js"></script>
         <script src="gesture-inference.js"></script>
+        <script src="hand-3d-renderer.js"></script>
         <style>
             /* Page-specific styles */
             body {
@@ -245,6 +246,132 @@
             .breadcrumb {
                 text-align: center;
             }
+
+            /* Playback controls */
+            .playback-controls {
+                display: flex;
+                flex-direction: column;
+                gap: var(--space-sm);
+            }
+
+            .session-select {
+                width: 100%;
+                padding: var(--space-xs);
+                font-size: 0.875rem;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: var(--radius-sm);
+                color: var(--fg);
+            }
+
+            .playback-buttons {
+                display: flex;
+                align-items: center;
+                gap: var(--space-sm);
+            }
+
+            .btn-sm {
+                padding: var(--space-xs) var(--space-sm);
+                font-size: 0.75rem;
+            }
+
+            .playback-status {
+                font-size: 0.75rem;
+                color: var(--fg-muted);
+                margin-left: auto;
+            }
+
+            .playback-progress {
+                display: flex;
+                align-items: center;
+                gap: var(--space-sm);
+            }
+
+            .playback-progress input[type="range"] {
+                flex: 1;
+                height: 6px;
+                -webkit-appearance: none;
+                background: var(--border);
+                border-radius: 3px;
+            }
+
+            .playback-progress input[type="range"]::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                width: 14px;
+                height: 14px;
+                background: var(--accent);
+                border-radius: 50%;
+                cursor: pointer;
+            }
+
+            .playback-progress input[type="range"]:disabled::-webkit-slider-thumb {
+                background: var(--fg-muted);
+            }
+
+            #playbackTime {
+                font-size: 0.75rem;
+                color: var(--fg-muted);
+                min-width: 80px;
+                text-align: right;
+            }
+
+            .playback-speed {
+                display: flex;
+                align-items: center;
+                gap: var(--space-sm);
+                font-size: 0.75rem;
+            }
+
+            .playback-speed select {
+                padding: 2px 4px;
+                font-size: 0.75rem;
+                background: var(--bg);
+                border: 1px solid var(--border);
+                border-radius: var(--radius-sm);
+                color: var(--fg);
+            }
+
+            #playbackCard {
+                border-color: var(--accent);
+            }
+
+            #playbackCard.playing {
+                border-color: var(--success);
+            }
+
+            /* Hand visualization */
+            .hand-canvas-container {
+                display: flex;
+                justify-content: center;
+                padding: var(--space-sm);
+            }
+
+            #handCanvas3D {
+                border: 1px solid var(--border);
+                border-radius: var(--radius);
+                background: #1a1a2e;
+                max-width: 100%;
+                height: auto;
+            }
+
+            .hand-mode-toggle {
+                display: flex;
+                align-items: center;
+                gap: var(--space-xs);
+                font-size: 0.75rem;
+                font-weight: normal;
+                cursor: pointer;
+            }
+
+            .hand-mode-toggle input {
+                margin: 0;
+            }
+
+            #handCard .card-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
         </style>
     </head>
     <body>
@@ -303,6 +430,7 @@
                     <span id="gX">0</span>
                     <span id="gY">0</span>
                     <span id="gZ">0</span>
+                    <span id="gyroStatus" style="font-size: 0.7em; color: var(--warning);">⏳</span>
                 </div>
             </div>
         </div>
@@ -333,6 +461,47 @@
                 <div class="face bottom">gyro 6</div>
             </div>
         </section>
+
+        <div class="card" id="handCard">
+            <div class="card-header">
+                Hand Orientation
+                <label class="hand-mode-toggle">
+                    <input type="checkbox" id="handOrientationToggle" checked>
+                    <span>Track IMU</span>
+                </label>
+            </div>
+            <div class="hand-canvas-container">
+                <canvas id="handCanvas3D" width="300" height="300"></canvas>
+            </div>
+        </div>
+
+        <div class="card" id="playbackCard">
+            <div class="card-header">Session Playback</div>
+            <div class="playback-controls">
+                <select id="sessionSelect" class="session-select">
+                    <option value="">-- Load sessions --</option>
+                </select>
+                <div class="playback-buttons">
+                    <button class="btn btn-sm" id="playBtn" disabled>Play</button>
+                    <button class="btn btn-sm" id="stopBtn" disabled>Stop</button>
+                    <span id="playbackStatus" class="playback-status"></span>
+                </div>
+                <div class="playback-progress">
+                    <input type="range" id="playbackSlider" min="0" max="100" value="0" disabled>
+                    <span id="playbackTime">0:00 / 0:00</span>
+                </div>
+                <div class="playback-speed">
+                    <label>Speed:</label>
+                    <select id="playbackSpeed">
+                        <option value="0.25">0.25x</option>
+                        <option value="0.5">0.5x</option>
+                        <option value="1" selected>1x</option>
+                        <option value="2">2x</option>
+                        <option value="4">4x</option>
+                    </select>
+                </div>
+            </div>
+        </div>
 
         <footer class="page-footer">
             <span>SIMCAP GAMBIT</span>
@@ -382,37 +551,88 @@
 
             // ===== Proper Orientation Estimation for Cube Visualization =====
             // Use Madgwick AHRS for fused acc+gyro orientation (for gyro cube)
-            // Lower beta = more stable but slower response (0.01-0.1 typical range)
+            // Beta controls gyro vs accel weighting: higher = more responsive, lower = more stable
+            // NOTE: With stable sensor data (Puck.accelOn fix in firmware v0.3.6),
+            // we can use standard AHRS parameters instead of jitter-compensating values
             const ahrs = new MadgwickAHRS({
-                sampleFreq: 20,  // 20Hz (firmware default)
-                beta: 0.02      // Very low filter gain for stability at rest
+                sampleFreq: 26,  // Match firmware accelOn rate (26Hz)
+                beta: 0.05      // Standard Madgwick gain (was 0.1 for jittery data)
             });
 
-            // Low-pass filter for smoothing cube rotations
-            class LowPassFilter {
-                constructor(alpha = 0.3) {
-                    this.alpha = alpha;  // 0-1, lower = smoother but more lag
-                    this.value = null;
+            // ===== Sensor Unit Conversion =====
+            // Puck.js returns RAW LSB values from the LSM6DS3 sensor
+            // We need to convert to physical units for AHRS filter
+            // See: https://learn.adafruit.com/adafruit-sensorlab-gyroscope-calibration
+            const ACCEL_SCALE = 8192;    // LSB per g (±2g range, 16-bit)
+            const GYRO_SCALE = 114.28;   // LSB per deg/s (245dps range)
+
+            // Motion detector for gyroscope bias calibration
+            // When device is stationary, we can estimate and correct gyro bias
+            // NOTE: With stable sensor data, we can use tighter thresholds
+            // Previous jitter-compensating values: accel=500, gyro=1000
+            const motionDetector = new MotionDetector({
+                accelThreshold: 200,   // LSB - std dev when stationary (~0.025g)
+                gyroThreshold: 300,    // LSB - std dev when stationary (~2.6 deg/s)
+                windowSize: 10         // samples to consider (~0.5s at 20Hz)
+            });
+
+            // Track gyroscope bias estimation state
+            let gyroBiasCalibrated = false;
+            let stationaryCount = 0;
+            const STATIONARY_SAMPLES_FOR_CALIBRATION = 20; // ~1 second at 20Hz
+
+            // ===== Hand 3D Renderer =====
+            let hand3DRenderer = null;
+            let handOrientationEnabled = true;
+
+            function initHandRenderer() {
+                const canvas = document.getElementById('handCanvas3D');
+                if (!canvas || typeof Hand3DRenderer === 'undefined') {
+                    console.warn('[Hand3D] Hand3DRenderer not available');
+                    return;
                 }
-                filter(newValue) {
-                    if (this.value === null) {
-                        this.value = newValue;
-                    } else {
-                        this.value = this.alpha * newValue + (1 - this.alpha) * this.value;
-                    }
-                    return this.value;
-                }
-                reset() {
-                    this.value = null;
+
+                // NOTE: With stable sensor data, we can use higher alpha for responsiveness
+                // Previous jitter-compensating value: orientationAlpha: 0.15
+                hand3DRenderer = new Hand3DRenderer(canvas, {
+                    backgroundColor: '#1a1a2e',
+                    orientationMode: 'sensor_fusion',
+                    orientationFiltering: true,
+                    orientationAlpha: 0.3,  // More responsive (was 0.15 for jittery data)
+                    pitchOffset: 0,
+                    yawOffset: 0,
+                    rollOffset: 0
+                });
+
+                hand3DRenderer.startAnimation();
+                console.log('[Hand3D] Renderer initialized');
+
+                // Toggle handler
+                const toggle = document.getElementById('handOrientationToggle');
+                if (toggle) {
+                    toggle.addEventListener('change', (e) => {
+                        handOrientationEnabled = e.target.checked;
+                        if (hand3DRenderer) {
+                            hand3DRenderer.setOrientationMode(
+                                handOrientationEnabled ? 'sensor_fusion' : 'static'
+                            );
+                        }
+                        console.log('[Hand3D] IMU tracking:', handOrientationEnabled ? 'ON' : 'OFF');
+                    });
                 }
             }
 
+            // LowPassFilter class is already defined in hand-3d-renderer.js
+            // Reuse it for cube smoothing
+
             // Filters for each cube axis (smooth display)
-            // Lower alpha = smoother but more lag
+            // Lower alpha = smoother but more lag, higher = more responsive
+            // NOTE: With stable sensor data (Puck.accelOn fix), we can use higher alpha
+            // Previous jitter-compensating values: acc=0.2, gyro=0.1, mag=0.2
             const cubeFilters = {
-                acc: { x: new LowPassFilter(0.2), y: new LowPassFilter(0.2), z: new LowPassFilter(0.2) },
-                gyro: { x: new LowPassFilter(0.1), y: new LowPassFilter(0.1), z: new LowPassFilter(0.1) },  // Extra smooth for gyro
-                mag: { x: new LowPassFilter(0.2), y: new LowPassFilter(0.2), z: new LowPassFilter(0.2) }
+                acc: { x: new LowPassFilter(0.4), y: new LowPassFilter(0.4), z: new LowPassFilter(0.4) },
+                gyro: { x: new LowPassFilter(0.3), y: new LowPassFilter(0.3), z: new LowPassFilter(0.3) },  // Was 0.1 for jittery data
+                mag: { x: new LowPassFilter(0.3), y: new LowPassFilter(0.3), z: new LowPassFilter(0.3) }
             };
 
             // Track last timestamp for dt calculation
@@ -588,23 +808,74 @@
                 // --- GYROSCOPE CUBE: Fused orientation using Madgwick AHRS ---
                 // This combines accelerometer (gravity) with gyroscope (rotation rate)
                 // for drift-free orientation estimation
-                const gx = prenorm.gx || 0;
-                const gy = prenorm.gy || 0;
-                const gz = prenorm.gz || 0;
-                
-                // Update AHRS with acc + gyro data
-                // Gyro values from Puck.js are in degrees/second
-                ahrs.update(ax, ay, az, gx, gy, gz, dt, true);
+
+                // Raw gyro values (LSB) - used for motion detection
+                const gx_raw = prenorm.gx || 0;
+                const gy_raw = prenorm.gy || 0;
+                const gz_raw = prenorm.gz || 0;
+
+                // Convert to physical units for AHRS filter
+                // Accel: LSB -> g's (divide by 8192)
+                // Gyro: LSB -> deg/s (divide by 114.28)
+                const ax_g = ax / ACCEL_SCALE;
+                const ay_g = ay / ACCEL_SCALE;
+                const az_g = az / ACCEL_SCALE;
+                const gx_dps = gx_raw / GYRO_SCALE;
+                const gy_dps = gy_raw / GYRO_SCALE;
+                const gz_dps = gz_raw / GYRO_SCALE;
+
+                // Update motion detector with RAW LSB values (it expects LSB thresholds)
+                const motionState = motionDetector.update(ax, ay, az, gx_raw, gy_raw, gz_raw);
+
+                // Calibrate gyroscope bias when device is stationary
+                // This removes sensor offset that causes drift
+                if (!motionState.isMoving) {
+                    stationaryCount++;
+
+                    // After being stationary for a while, update gyro bias
+                    if (stationaryCount > STATIONARY_SAMPLES_FOR_CALIBRATION) {
+                        // Pass deg/s values for bias estimation
+                        ahrs.updateGyroBias(gx_dps, gy_dps, gz_dps, true); // true = gyro in degrees
+
+                        if (!gyroBiasCalibrated) {
+                            console.log('[AHRS] Gyroscope bias calibration complete');
+                            gyroBiasCalibrated = true;
+                            // Update visual indicator
+                            const gyroStatus = document.getElementById('gyroStatus');
+                            if (gyroStatus) {
+                                gyroStatus.textContent = '✓';
+                                gyroStatus.style.color = 'var(--success)';
+                                gyroStatus.title = 'Gyroscope bias calibrated';
+                            }
+                        }
+                    }
+                } else {
+                    stationaryCount = 0;
+                }
+
+                // Update AHRS with converted values (g's and deg/s)
+                ahrs.update(ax_g, ay_g, az_g, gx_dps, gy_dps, gz_dps, dt, true);
                 
                 // Get Euler angles from AHRS
                 const euler = ahrs.getEulerAngles();
-                
+
                 // Apply low-pass filter for smooth display
                 const filteredGyroRoll = cubeFilters.gyro.x.filter(euler.roll);
                 const filteredGyroPitch = cubeFilters.gyro.y.filter(euler.pitch);
                 const filteredGyroYaw = cubeFilters.gyro.z.filter(euler.yaw);
-                
+
                 window.cubeG.style = `transform: rotateX(${filteredGyroPitch}deg) rotateY(${filteredGyroRoll}deg) rotateZ(${filteredGyroYaw}deg);`;
+
+                // Update hand 3D renderer with orientation
+                // Use stored orientation from playback if available, otherwise use live AHRS
+                if (hand3DRenderer && handOrientationEnabled) {
+                    const handEuler = {
+                        roll: prenorm.euler_roll !== undefined ? prenorm.euler_roll : euler.roll,
+                        pitch: prenorm.euler_pitch !== undefined ? prenorm.euler_pitch : euler.pitch,
+                        yaw: prenorm.euler_yaw !== undefined ? prenorm.euler_yaw : euler.yaw
+                    };
+                    hand3DRenderer.updateFromSensorFusion(handEuler);
+                }
 
                 // --- MAGNETOMETER CUBE: Shows magnetic field vector direction ---
                 // The cube rotates to point toward the magnetic field vector
@@ -939,8 +1210,306 @@
             };
 
             // Initialize on page load
-            initGestureInference();
-            
+            try {
+                initGestureInference();
+            } catch (e) {
+                console.error('[GAMBIT] Failed to init gesture inference:', e);
+            }
+
+            try {
+                initHandRenderer();
+            } catch (e) {
+                console.error('[GAMBIT] Failed to init hand renderer:', e);
+            }
+
+            // ===== Session Playback System =====
+            const MANIFEST_URL = '../../../data/GAMBIT/manifest.json';
+            const DATA_BASE_URL = '../../../data/GAMBIT/';
+
+            let playbackState = {
+                sessions: [],
+                currentSession: null,
+                samples: [],
+                currentIndex: 0,
+                isPlaying: false,
+                playbackInterval: null,
+                speed: 1
+            };
+
+            // Format seconds as M:SS
+            function formatTime(seconds) {
+                const mins = Math.floor(seconds / 60);
+                const secs = Math.floor(seconds % 60);
+                return `${mins}:${secs.toString().padStart(2, '0')}`;
+            }
+
+            // Load manifest and populate session selector
+            async function loadManifest() {
+                const select = document.getElementById('sessionSelect');
+                const status = document.getElementById('playbackStatus');
+
+                try {
+                    status.textContent = 'Loading sessions...';
+                    const response = await fetch(MANIFEST_URL);
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    const manifest = await response.json();
+                    playbackState.sessions = manifest.sessions || [];
+
+                    // Clear and populate select
+                    select.innerHTML = '<option value="">-- Select a session --</option>';
+
+                    playbackState.sessions.forEach((session, index) => {
+                        const option = document.createElement('option');
+                        option.value = index;
+
+                        // Format display text
+                        const date = new Date(session.timestamp);
+                        const dateStr = date.toLocaleDateString();
+                        const timeStr = date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+                        const duration = session.durationSec ? `${formatTime(session.durationSec)}` : '?';
+                        const samples = session.sampleCount || '?';
+
+                        option.textContent = `${dateStr} ${timeStr} - ${duration} (${samples} samples)`;
+                        select.appendChild(option);
+                    });
+
+                    status.textContent = `${playbackState.sessions.length} sessions available`;
+                    console.log('[Playback] Loaded manifest with', playbackState.sessions.length, 'sessions');
+
+                } catch (error) {
+                    console.error('[Playback] Failed to load manifest:', error);
+                    status.textContent = 'Failed to load sessions';
+                    select.innerHTML = '<option value="">-- Error loading --</option>';
+                }
+            }
+
+            // Load a specific session's data
+            async function loadSession(index) {
+                const session = playbackState.sessions[index];
+                if (!session) return;
+
+                const status = document.getElementById('playbackStatus');
+                const playBtn = document.getElementById('playBtn');
+                const slider = document.getElementById('playbackSlider');
+
+                try {
+                    status.textContent = 'Loading session...';
+                    playBtn.disabled = true;
+
+                    const url = DATA_BASE_URL + session.filename;
+                    const response = await fetch(url);
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    const data = await response.json();
+
+                    // Handle both v1.0 (array) and v2.0 (object with samples) formats
+                    if (Array.isArray(data)) {
+                        playbackState.samples = data;
+                    } else if (data.samples && Array.isArray(data.samples)) {
+                        playbackState.samples = data.samples;
+                    } else {
+                        throw new Error('Unknown data format');
+                    }
+
+                    playbackState.currentSession = session;
+                    playbackState.currentIndex = 0;
+
+                    // Enable playback controls
+                    playBtn.disabled = false;
+                    slider.disabled = false;
+                    slider.max = playbackState.samples.length - 1;
+                    slider.value = 0;
+
+                    updatePlaybackTime();
+                    status.textContent = `Loaded: ${playbackState.samples.length} samples`;
+                    console.log('[Playback] Loaded session:', session.filename, 'with', playbackState.samples.length, 'samples');
+
+                } catch (error) {
+                    console.error('[Playback] Failed to load session:', error);
+                    status.textContent = 'Failed to load session';
+                    playBtn.disabled = true;
+                    slider.disabled = true;
+                }
+            }
+
+            // Update playback time display
+            function updatePlaybackTime() {
+                const timeEl = document.getElementById('playbackTime');
+                const slider = document.getElementById('playbackSlider');
+
+                const currentSec = playbackState.currentIndex / 20; // Assuming 20Hz
+                const totalSec = playbackState.samples.length / 20;
+
+                timeEl.textContent = `${formatTime(currentSec)} / ${formatTime(totalSec)}`;
+                slider.value = playbackState.currentIndex;
+            }
+
+            // Play a single sample through the visualization
+            function playSample(sample) {
+                // Feed sample through updateData (same as live data)
+                updateData(sample);
+            }
+
+            // Start playback
+            function startPlayback() {
+                if (playbackState.samples.length === 0) return;
+                if (playbackState.isPlaying) return;
+
+                playbackState.isPlaying = true;
+
+                const playBtn = document.getElementById('playBtn');
+                const stopBtn = document.getElementById('stopBtn');
+                const card = document.getElementById('playbackCard');
+                const status = document.getElementById('playbackStatus');
+
+                playBtn.textContent = 'Pause';
+                stopBtn.disabled = false;
+                card.classList.add('playing');
+                status.textContent = 'Playing...';
+
+                // Calculate interval based on speed (base is 50ms for 20Hz)
+                const baseInterval = 50;
+                const interval = baseInterval / playbackState.speed;
+
+                playbackState.playbackInterval = setInterval(() => {
+                    if (playbackState.currentIndex >= playbackState.samples.length) {
+                        stopPlayback();
+                        return;
+                    }
+
+                    const sample = playbackState.samples[playbackState.currentIndex];
+                    playSample(sample);
+
+                    playbackState.currentIndex++;
+                    updatePlaybackTime();
+
+                }, interval);
+
+                console.log('[Playback] Started at', playbackState.speed, 'x speed');
+            }
+
+            // Pause playback
+            function pausePlayback() {
+                if (!playbackState.isPlaying) return;
+
+                playbackState.isPlaying = false;
+
+                if (playbackState.playbackInterval) {
+                    clearInterval(playbackState.playbackInterval);
+                    playbackState.playbackInterval = null;
+                }
+
+                const playBtn = document.getElementById('playBtn');
+                const card = document.getElementById('playbackCard');
+                const status = document.getElementById('playbackStatus');
+
+                playBtn.textContent = 'Play';
+                card.classList.remove('playing');
+                status.textContent = 'Paused';
+
+                console.log('[Playback] Paused at index', playbackState.currentIndex);
+            }
+
+            // Stop playback and reset to beginning
+            function stopPlayback() {
+                pausePlayback();
+
+                playbackState.currentIndex = 0;
+
+                const stopBtn = document.getElementById('stopBtn');
+                const status = document.getElementById('playbackStatus');
+
+                stopBtn.disabled = true;
+                status.textContent = 'Stopped';
+
+                updatePlaybackTime();
+                console.log('[Playback] Stopped');
+            }
+
+            // Seek to position
+            function seekTo(index) {
+                playbackState.currentIndex = Math.max(0, Math.min(index, playbackState.samples.length - 1));
+                updatePlaybackTime();
+
+                // Show the sample at this position
+                if (playbackState.samples[playbackState.currentIndex]) {
+                    playSample(playbackState.samples[playbackState.currentIndex]);
+                }
+            }
+
+            // Initialize playback controls
+            function initPlayback() {
+                const select = document.getElementById('sessionSelect');
+                const playBtn = document.getElementById('playBtn');
+                const stopBtn = document.getElementById('stopBtn');
+                const slider = document.getElementById('playbackSlider');
+                const speedSelect = document.getElementById('playbackSpeed');
+
+                // Session selection
+                select.addEventListener('change', (e) => {
+                    stopPlayback();
+                    if (e.target.value !== '') {
+                        loadSession(parseInt(e.target.value));
+                    }
+                });
+
+                // Play/Pause button
+                playBtn.addEventListener('click', () => {
+                    if (playbackState.isPlaying) {
+                        pausePlayback();
+                    } else {
+                        startPlayback();
+                    }
+                });
+
+                // Stop button
+                stopBtn.addEventListener('click', () => {
+                    stopPlayback();
+                });
+
+                // Slider seek
+                slider.addEventListener('input', (e) => {
+                    const wasPlaying = playbackState.isPlaying;
+                    if (wasPlaying) pausePlayback();
+
+                    seekTo(parseInt(e.target.value));
+                });
+
+                slider.addEventListener('change', (e) => {
+                    // Resume if was playing before seek
+                });
+
+                // Speed control
+                speedSelect.addEventListener('change', (e) => {
+                    playbackState.speed = parseFloat(e.target.value);
+
+                    // If playing, restart with new speed
+                    if (playbackState.isPlaying) {
+                        pausePlayback();
+                        startPlayback();
+                    }
+
+                    console.log('[Playback] Speed set to', playbackState.speed, 'x');
+                });
+
+                // Load manifest on init
+                loadManifest();
+            }
+
+            // Initialize playback system
+            try {
+                initPlayback();
+            } catch (e) {
+                console.error('[GAMBIT] Failed to init playback:', e);
+            }
+
         </script>
     </body>
 </html>
