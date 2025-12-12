@@ -2,7 +2,7 @@
 var FIRMWARE_INFO = {
     id: "GAMBIT",
     name: "GAMBIT IMU Telemetry",
-    version: "0.3.5",
+    version: "0.3.6",
     features: ["imu", "magnetometer", "environmental", "streaming", "logging", "framing"],
     author: "SIMCAP"
 };
@@ -257,7 +257,12 @@ function getData(count, intervalMs) {
     // Without this, each Puck.accel() call turns sensor on/off, causing
     // the gyroscope to never settle and produce extremely noisy readings.
     // See: https://forum.espruino.com/conversations/351978/
-    Puck.accelOn(hz);  // Keep sensor on at our sampling rate
+    // Note: Puck.accelOn() only accepts specific rates: 1660, 833, 416, 208, 104, 52, 26, 12.5, 1.6 Hz
+    // Use 26Hz (closest to our default 20Hz) for good balance of responsiveness and stability
+    var accelRate = 26;  // Fixed rate - LSM6DS3 doesn't support arbitrary rates
+    if (hz >= 52) accelRate = 52;
+    if (hz >= 104) accelRate = 104;
+    Puck.accelOn(accelRate);
 
     // Only set timeout for unlimited streaming (no count specified)
     // Fixed-count collection auto-stops when complete, no timeout needed
