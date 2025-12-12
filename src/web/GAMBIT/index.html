@@ -552,9 +552,11 @@
             // ===== Proper Orientation Estimation for Cube Visualization =====
             // Use Madgwick AHRS for fused acc+gyro orientation (for gyro cube)
             // Beta controls gyro vs accel weighting: higher = more responsive, lower = more stable
+            // NOTE: With stable sensor data (Puck.accelOn fix in firmware v0.3.6),
+            // we can use standard AHRS parameters instead of jitter-compensating values
             const ahrs = new MadgwickAHRS({
-                sampleFreq: 20,  // 20Hz (firmware default)
-                beta: 0.1       // Moderate filter gain - balance responsiveness and stability
+                sampleFreq: 26,  // Match firmware accelOn rate (26Hz)
+                beta: 0.05      // Standard Madgwick gain (was 0.1 for jittery data)
             });
 
             // ===== Sensor Unit Conversion =====
@@ -566,10 +568,11 @@
 
             // Motion detector for gyroscope bias calibration
             // When device is stationary, we can estimate and correct gyro bias
-            // MotionDetector uses std dev of magnitude in RAW LSB units
+            // NOTE: With stable sensor data, we can use tighter thresholds
+            // Previous jitter-compensating values: accel=500, gyro=1000
             const motionDetector = new MotionDetector({
-                accelThreshold: 500,   // LSB - std dev when stationary (~0.06g)
-                gyroThreshold: 1000,   // LSB - std dev when stationary (~9 deg/s)
+                accelThreshold: 200,   // LSB - std dev when stationary (~0.025g)
+                gyroThreshold: 300,    // LSB - std dev when stationary (~2.6 deg/s)
                 windowSize: 10         // samples to consider (~0.5s at 20Hz)
             });
 
@@ -589,11 +592,13 @@
                     return;
                 }
 
+                // NOTE: With stable sensor data, we can use higher alpha for responsiveness
+                // Previous jitter-compensating value: orientationAlpha: 0.15
                 hand3DRenderer = new Hand3DRenderer(canvas, {
                     backgroundColor: '#1a1a2e',
                     orientationMode: 'sensor_fusion',
                     orientationFiltering: true,
-                    orientationAlpha: 0.15,
+                    orientationAlpha: 0.3,  // More responsive (was 0.15 for jittery data)
                     pitchOffset: 0,
                     yawOffset: 0,
                     rollOffset: 0
@@ -621,11 +626,13 @@
             // Reuse it for cube smoothing
 
             // Filters for each cube axis (smooth display)
-            // Lower alpha = smoother but more lag
+            // Lower alpha = smoother but more lag, higher = more responsive
+            // NOTE: With stable sensor data (Puck.accelOn fix), we can use higher alpha
+            // Previous jitter-compensating values: acc=0.2, gyro=0.1, mag=0.2
             const cubeFilters = {
-                acc: { x: new LowPassFilter(0.2), y: new LowPassFilter(0.2), z: new LowPassFilter(0.2) },
-                gyro: { x: new LowPassFilter(0.1), y: new LowPassFilter(0.1), z: new LowPassFilter(0.1) },  // Extra smooth for gyro
-                mag: { x: new LowPassFilter(0.2), y: new LowPassFilter(0.2), z: new LowPassFilter(0.2) }
+                acc: { x: new LowPassFilter(0.4), y: new LowPassFilter(0.4), z: new LowPassFilter(0.4) },
+                gyro: { x: new LowPassFilter(0.3), y: new LowPassFilter(0.3), z: new LowPassFilter(0.3) },  // Was 0.1 for jittery data
+                mag: { x: new LowPassFilter(0.3), y: new LowPassFilter(0.3), z: new LowPassFilter(0.3) }
             };
 
             // Track last timestamp for dt calculation
