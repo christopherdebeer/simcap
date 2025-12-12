@@ -1,8 +1,8 @@
 {
   "hardIronOffset": {
-    "x": 4.5,
-    "y": 520.5,
-    "z": -482
+    "x": 0.06577024261911722,
+    "y": 7.607424729611225,
+    "z": -7.044723764981
   },
   "softIronMatrix": [
     1.0292649366564603,
@@ -16,13 +16,22 @@
     0.8546021091789999
   ],
   "earthField": {
-    "x": 18.11,
-    "y": 368.8,
-    "z": -284.52
+    "x": 0.2646886875182695,
+    "y": 5.390236772873429,
+    "z": -4.158433206664718
   },
-  "earthFieldMagnitude": 466.147018117675,
+  "earthFieldMagnitude": 6.813022772839447,
   "hardIronCalibrated": true,
   "softIronCalibrated": true,
   "earthFieldCalibrated": true,
-  "timestamp": "2025-12-11T13:21:12.134Z"
+  "timestamp": "2025-12-11T13:21:12.134Z",
+  "units": {
+    "hardIronOffset": "\u00b5T",
+    "earthField": "\u00b5T",
+    "earthFieldMagnitude": "\u00b5T",
+    "converted_from": "LSB",
+    "conversion_factor": 0.014615609470914937,
+    "conversion_date": "2025-12-12T13:06:30.296987Z",
+    "script": "convert_calibration_file.py"
+  }
 }
