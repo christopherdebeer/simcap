@@ -45,6 +45,64 @@ class DatasetStats:
         )
 
 
+@dataclass
+class SessionInfo:
+    """Information about a loaded session, including embedded metadata."""
+    samples: List[Dict]
+    version: str  # '1.0', '2.0', '2.1'
+    timestamp: Optional[str] = None
+    firmware_version: Optional[str] = None
+    labels: Optional[List[Dict]] = None
+    metadata: Optional[Dict] = None
+
+    @property
+    def has_embedded_metadata(self) -> bool:
+        """Check if session has embedded v2.1+ metadata."""
+        return self.version >= '2.1' and self.metadata is not None
+
+
+def load_session_raw(json_path: Path) -> SessionInfo:
+    """
+    Load raw session data with version detection and metadata extraction.
+
+    Supports three JSON formats:
+    - V1 (legacy): Array of samples directly: [{sample1}, {sample2}, ...]
+    - V2.0: Wrapper object: {version: "2.0", timestamp: "...", samples: [...]}
+    - V2.1: Wrapper with embedded metadata: {version: "2.1", samples: [...], labels: [...], metadata: {...}}
+
+    Args:
+        json_path: Path to the .json data file
+
+    Returns:
+        SessionInfo with samples, version info, and any embedded metadata
+    """
+    with open(json_path, 'r') as f:
+        raw_json = json.load(f)
+
+    if isinstance(raw_json, list):
+        # V1 format: array of samples directly
+        return SessionInfo(
+            samples=raw_json,
+            version='1.0',
+            timestamp=json_path.stem
+        )
+    elif isinstance(raw_json, dict) and 'samples' in raw_json:
+        # V2+ format: wrapper object
+        version = raw_json.get('version', '2.0')
+        metadata = raw_json.get('metadata', {})
+
+        return SessionInfo(
+            samples=raw_json['samples'],
+            version=version,
+            timestamp=raw_json.get('timestamp', json_path.stem),
+            firmware_version=metadata.get('firmware_version') if metadata else None,
+            labels=raw_json.get('labels'),
+            metadata=metadata
+        )
+    else:
+        raise ValueError(f"Unknown JSON format in {json_path}: expected array or object with 'samples' key")
+
+
 def load_session_data(json_path: Path, apply_calibration: bool = True,
                       apply_filtering: bool = True,
                       calibration_file: Optional[str] = None) -> np.ndarray:
@@ -56,9 +114,10 @@ def load_session_data(json_path: Path, apply_calibration: bool = True,
     The returned array uses the best available data:
     - filtered > calibrated > raw magnetometer values
 
-    Supports two JSON formats:
+    Supports three JSON formats:
     - V1 (legacy): Array of samples directly: [{sample1}, {sample2}, ...]
-    - V2 (new): Wrapper object: {version: "2.0", timestamp: "...", samples: [...]}
+    - V2.0: Wrapper object: {version: "2.0", timestamp: "...", samples: [...]}
+    - V2.1: Wrapper with embedded metadata: {version: "2.1", samples: [...], labels: [...], metadata: {...}}
 
     Args:
         json_path: Path to the .json data file
@@ -71,18 +130,8 @@ def load_session_data(json_path: Path, apply_calibration: bool = True,
         and 9 is the IMU features [ax, ay, az, gx, gy, gz, mx, my, mz]
         Note: mx, my, mz will be filtered/calibrated if available, otherwise raw
     """
-    with open(json_path, 'r') as f:
-        raw_json = json.load(f)
-
-    # Handle both V1 (array) and V2 (wrapper object) formats
-    if isinstance(raw_json, list):
-        # V1 format: array of samples directly
-        data = raw_json
-    elif isinstance(raw_json, dict) and 'samples' in raw_json:
-        # V2 format: wrapper object with samples array
-        data = raw_json['samples']
-    else:
-        raise ValueError(f"Unknown JSON format in {json_path}: expected array or object with 'samples' key")
+    session_info = load_session_raw(json_path)
+    data = session_info.samples
 
     # Preserve raw data, apply decorations
     if apply_calibration or apply_filtering:
@@ -140,14 +189,58 @@ def load_session_data(json_path: Path, apply_calibration: bool = True,
 
 def load_session_metadata(json_path: Path) -> Optional[SessionMetadata]:
     """
-    Load metadata for a session if it exists.
+    Load metadata for a session, checking both embedded v2.1 metadata and separate .meta.json files.
+
+    Priority:
+    1. Embedded metadata in v2.1 JSON files (preferred for new data)
+    2. Separate .meta.json file (legacy format)
 
     Args:
         json_path: Path to the .json data file
 
     Returns:
-        SessionMetadata if .meta.json exists, else None
+        SessionMetadata if available, else None
     """
+    # First, try to load embedded metadata from v2.1 format
+    try:
+        session_info = load_session_raw(json_path)
+        if session_info.has_embedded_metadata:
+            # Build SessionMetadata from embedded data
+            meta = session_info.metadata
+            embedded_labels = session_info.labels or []
+
+            # Convert embedded labels to LabeledSegmentV2 format
+            labels_v2 = []
+            for label in embedded_labels:
+                if 'labels' in label:
+                    # Already in v2 format
+                    labels_v2.append(LabeledSegmentV2.from_dict(label))
+                elif 'gesture' in label:
+                    # v1 format label
+                    labels_v2.append(LabeledSegmentV2.from_v1(LabeledSegment.from_dict(label)))
+
+            return SessionMetadata(
+                timestamp=session_info.timestamp or json_path.stem,
+                subject_id=meta.get('subject_id', 'unknown'),
+                environment=meta.get('environment', 'unknown'),
+                hand=meta.get('hand', 'unknown'),
+                split=meta.get('split', 'train'),
+                device_id=meta.get('device', 'GAMBIT'),
+                labels=[],  # v1 labels empty for v2.1 sessions
+                labels_v2=labels_v2,
+                session_notes=meta.get('notes', ''),
+                sample_rate_hz=meta.get('sample_rate', 26),
+                magnet_config=MagnetConfig.from_dict(meta['magnet_config']) if meta.get('magnet_config') else None,
+                calibration_data=meta.get('calibration'),
+                custom_label_definitions=meta.get('custom_label_definitions', []),
+                # Extended fields for v2.1
+                firmware_version=session_info.firmware_version,
+                session_type=meta.get('session_type', 'recording')
+            )
+    except Exception:
+        pass  # Fall through to legacy .meta.json loading
+
+    # Fallback: load from separate .meta.json file
     meta_path = json_path.with_suffix('.meta.json')
     if meta_path.exists():
         return SessionMetadata.load(str(meta_path))
@@ -672,6 +765,141 @@ class GambitDataset:
 
         return custom_labels
 
+    def get_available_firmware_versions(self) -> Set[str]:
+        """Get all unique firmware versions in the dataset."""
+        versions = set()
+        for json_path in sorted(self.data_dir.glob('*.json')):
+            if json_path.name.endswith('.meta.json'):
+                continue
+            try:
+                session_info = load_session_raw(json_path)
+                if session_info.firmware_version:
+                    versions.add(session_info.firmware_version)
+            except Exception:
+                pass
+        return versions
+
+    def get_available_session_types(self) -> Set[str]:
+        """Get all unique session types in the dataset."""
+        types = set()
+        for json_path in sorted(self.data_dir.glob('*.json')):
+            if json_path.name.endswith('.meta.json'):
+                continue
+            meta = load_session_metadata(json_path)
+            if meta:
+                types.add(meta.session_type)
+        return types
+
+    def get_calibration_labels(self) -> Set[str]:
+        """Get all unique calibration labels in the dataset."""
+        cal_labels = set()
+        for json_path in sorted(self.data_dir.glob('*.json')):
+            if json_path.name.endswith('.meta.json'):
+                continue
+            meta = load_session_metadata(json_path)
+            if meta:
+                for seg in meta.labels_v2:
+                    if seg.labels.calibration.value != 'none':
+                        cal_labels.add(seg.labels.calibration.value)
+        return cal_labels
+
+    def list_sessions(
+        self,
+        firmware_version: Optional[str] = None,
+        session_type: Optional[str] = None,
+        has_labels: Optional[bool] = None,
+        custom_labels: Optional[List[str]] = None,
+        calibration_type: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        List sessions with optional filtering.
+
+        Args:
+            firmware_version: Filter by firmware version (e.g., '0.3.6')
+            session_type: Filter by session type ('recording', 'calibration', 'test')
+            has_labels: Filter by whether session has labels (True/False/None for all)
+            custom_labels: Filter by presence of specific custom labels
+            calibration_type: Filter by calibration type ('earth_field', 'hard_iron', etc.)
+
+        Returns:
+            List of session info dicts with filename, metadata, and filter matches
+        """
+        sessions = []
+
+        for json_path in sorted(self.data_dir.glob('*.json')):
+            if (json_path.name.endswith('.meta.json') or
+                json_path.name.endswith('.full.json')):
+                continue
+
+            try:
+                session_info = load_session_raw(json_path)
+                meta = load_session_metadata(json_path)
+
+                # Apply filters
+                if firmware_version is not None:
+                    if session_info.firmware_version != firmware_version:
+                        continue
+
+                if session_type is not None and meta:
+                    if meta.session_type != session_type:
+                        continue
+
+                if has_labels is not None:
+                    session_has_labels = meta is not None and (bool(meta.labels) or bool(meta.labels_v2))
+                    if session_has_labels != has_labels:
+                        continue
+
+                if custom_labels is not None and meta:
+                    session_custom = set()
+                    for seg in meta.labels_v2:
+                        session_custom.update(seg.labels.custom)
+                    if not set(custom_labels).intersection(session_custom):
+                        continue
+
+                if calibration_type is not None and meta:
+                    has_cal = any(
+                        seg.labels.calibration.value == calibration_type
+                        for seg in meta.labels_v2
+                    )
+                    if not has_cal:
+                        continue
+
+                # Build session info dict
+                session_dict = {
+                    'filename': json_path.name,
+                    'path': str(json_path),
+                    'version': session_info.version,
+                    'timestamp': session_info.timestamp,
+                    'firmware_version': session_info.firmware_version,
+                    'sample_count': len(session_info.samples),
+                    'has_embedded_metadata': session_info.has_embedded_metadata,
+                }
+
+                if meta:
+                    session_dict.update({
+                        'session_type': meta.session_type,
+                        'has_labels': bool(meta.labels) or bool(meta.labels_v2),
+                        'label_count': len(meta.labels) + len(meta.labels_v2),
+                        'custom_labels': list(set(
+                            label for seg in meta.labels_v2
+                            for label in seg.labels.custom
+                        )),
+                        'calibration_types': list(set(
+                            seg.labels.calibration.value
+                            for seg in meta.labels_v2
+                            if seg.labels.calibration.value != 'none'
+                        )),
+                        'split': meta.split,
+                        'subject_id': meta.subject_id,
+                    })
+
+                sessions.append(session_dict)
+
+            except Exception as e:
+                print(f"Warning: Could not process {json_path}: {e}")
+
+        return sessions
+
     def summary(self) -> Dict[str, Any]:
         """Return summary statistics about the dataset."""
         labeled_count = 0
@@ -684,6 +912,9 @@ class GambitDataset:
             'extended': 0, 'partial': 0, 'flexed': 0, 'unknown': 0
         }
         custom_labels = set()
+        firmware_versions = {}  # Count sessions per firmware version
+        session_types = {}  # Count sessions per type
+        calibration_types = {}  # Count sessions per calibration type
 
         for json_path in sorted(self.data_dir.glob('*.json')):
             # Skip non-session files
@@ -694,6 +925,14 @@ class GambitDataset:
 
             data = load_session_data(json_path)
             total_samples += len(data)
+
+            # Load session info for firmware version
+            try:
+                session_info = load_session_raw(json_path)
+                fw_ver = session_info.firmware_version or 'unknown'
+                firmware_versions[fw_ver] = firmware_versions.get(fw_ver, 0) + 1
+            except Exception:
+                firmware_versions['unknown'] = firmware_versions.get('unknown', 0) + 1
 
             meta = load_session_metadata(json_path)
             if meta:
@@ -706,6 +945,10 @@ class GambitDataset:
                         v2_count += 1
                 else:
                     unlabeled_count += 1
+
+                # Track session type
+                sess_type = meta.session_type
+                session_types[sess_type] = session_types.get(sess_type, 0) + 1
 
                 # Count V1 gestures
                 for seg in meta.labels:
@@ -728,6 +971,11 @@ class GambitDataset:
                             finger_state_counts[state.value] += samples
 
                     custom_labels.update(seg.labels.custom)
+
+                    # Track calibration types
+                    if seg.labels.calibration.value != 'none':
+                        cal_type = seg.labels.calibration.value
+                        calibration_types[cal_type] = calibration_types.get(cal_type, 0) + 1
             else:
                 unlabeled_count += 1
 
@@ -741,6 +989,9 @@ class GambitDataset:
             'gesture_counts': gesture_counts,
             'finger_state_counts': finger_state_counts,
             'custom_labels': list(custom_labels),
+            'firmware_versions': firmware_versions,
+            'session_types': session_types,
+            'calibration_types': calibration_types,
             'stats': {
                 'mean': self.stats.mean.tolist(),
                 'std': self.stats.std.tolist()
