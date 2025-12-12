@@ -217,17 +217,31 @@ async function init() {
  * Try browser geolocation first, fall back to Edinburgh default
  */
 async function initGeomagneticLocation() {
+    console.log('[GAMBIT] Initializing geomagnetic location...');
+    log('Detecting geomagnetic location...');
+
     try {
-        log('Detecting geomagnetic location...');
         const location = await getBrowserLocation();
         state.geomagneticLocation = location.selected;
-        log(`Location: ${formatLocation(location.selected)} (auto-detected)`);
-        log(`Magnetic field: ${location.selected.intensity.toFixed(1)} µT, Declination: ${location.selected.declination.toFixed(1)}°`);
+
+        const locationStr = formatLocation(location.selected);
+        const fieldStr = `${location.selected.intensity.toFixed(1)} µT`;
+        const declStr = `${location.selected.declination.toFixed(1)}°`;
+
+        console.log(`[GAMBIT] ✓ Location detected: ${locationStr}`);
+        console.log(`[GAMBIT] Magnetic field: ${fieldStr}, Declination: ${declStr}`);
+
+        log(`Location: ${locationStr} (auto-detected, ±${location.accuracy.toFixed(0)}m)`);
+        log(`Magnetic field: ${fieldStr}, Declination: ${declStr}`);
     } catch (error) {
         // Fall back to default location (Edinburgh)
         state.geomagneticLocation = getDefaultLocation();
-        log(`Location: ${formatLocation(state.geomagneticLocation)} (default)`);
-        console.info('[Geolocation] Browser detection failed, using default:', error.message);
+
+        const locationStr = formatLocation(state.geomagneticLocation);
+        console.warn('[GAMBIT] Geolocation failed, using default:', error.message);
+
+        log(`Location: ${locationStr} (default - ${error.message})`);
+        log(`Magnetic field: ${state.geomagneticLocation.intensity.toFixed(1)} µT, Declination: ${state.geomagneticLocation.declination.toFixed(1)}°`);
     }
 }
 
