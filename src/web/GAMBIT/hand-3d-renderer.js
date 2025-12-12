@@ -5,6 +5,19 @@
  *
  * The sensor is positioned in the palm (face up), so orientation from
  * the IMU is used to rotate the hand model in 3D space.
+ * 
+ * TODO: Orientation mapping is partially complete. Current status:
+ * - Palm UP: ✓ Working
+ * - Thumb on LEFT: ✓ Working  
+ * - Fingers pointing AWAY from viewer: ✗ Still pointing TOWARD viewer
+ * - Fingers curling direction: Curling upward (should curl toward palm)
+ * 
+ * See: docs/procedures/orientation-validation-protocol.md for full details
+ * 
+ * Current mapping (2025-12-12):
+ * - pitch: euler.pitch + 90 (rotates palm from facing viewer to facing up)
+ * - yaw: euler.yaw + 180 (should flip fingers away, but base 180° Y rotation may interfere)
+ * - roll: -euler.roll + 180 (flips hand to correct chirality)
  */
 
 /**
@@ -175,7 +188,34 @@ class Hand3DRenderer {
     /**
      * Update orientation from sensor fusion (IMU Euler angles)
      * Maps IMU orientation to hand model orientation
-     * Sensor is in palm facing up, so we apply appropriate transformations
+     * 
+     * COORDINATE SYSTEM MAPPING:
+     * 
+     * Sensor coordinate frame (Puck.js with LSM6DS3/LIS3MDL):
+     * - When face-up on desk: Z points UP (toward ceiling), gravity = +1g on Z
+     * - X/Y are in the horizontal plane
+     * 
+     * Madgwick AHRS Euler angles:
+     * - Roll: rotation around X axis (tilting left/right)
+     * - Pitch: rotation around Y axis (tilting forward/back)  
+     * - Yaw: rotation around Z axis (compass heading)
+     * - When sensor is face-up and level: roll≈0, pitch≈0, yaw=arbitrary
+     * 
+     * Hand model coordinate frame:
+     * - Fingers extend in +Y direction
+     * - Palm face at +Z (toward viewer after base 180° Y rotation)
+     * - Base transform: 180° Y rotation so palm faces viewer
+     * 
+     * Desired behavior:
+     * - Sensor face-up → Palm UP (toward ceiling), fingers away from viewer
+     * - Sensor tilted forward → Fingers tilt toward viewer
+     * - Sensor tilted left → Palm tilts to face right
+     * 
+     * Mapping:
+     * - IMU pitch (forward/back tilt) → Hand pitch (fingers forward/back)
+     * - IMU roll (left/right tilt) → Hand roll (palm left/right)
+     * - IMU yaw (compass) → Hand yaw (rotation around vertical)
+     * 
      * @param {Object} euler - {roll, pitch, yaw} in degrees from Madgwick AHRS
      */
     updateFromSensorFusion(euler) {
@@ -183,14 +223,26 @@ class Hand3DRenderer {
         if (!euler) return;
 
         // Map IMU Euler angles to hand model orientation
-        // The sensor is in the palm, facing up:
-        // - IMU roll -> hand pitch (tilting forward/back)
-        // - IMU pitch -> hand roll (tilting left/right)
-        // - IMU yaw -> hand yaw (rotating around vertical axis)
+        // The hand model has a base 180° Y rotation, so we need to account for that
+        // 
+        // When sensor is face-up (roll=0, pitch=0):
+        // - We want palm facing UP (toward ceiling)
+        // - The base 180° Y rotation shows palm to viewer
+        // - We need to add 90° pitch to rotate palm from facing viewer to facing up
+        //
+        // Axis mapping:
+        // - IMU pitch → hand pitch (but inverted due to base rotation)
+        // - IMU roll → hand roll  
+        // - IMU yaw → hand yaw
+        // COORDINATE MAPPING (validated 2025-12-12):
+        // - Sensor face-up on desk → Palm UP, fingers AWAY from viewer, thumb on LEFT
+        // - pitch +90° rotates palm from facing viewer to facing up
+        // - yaw +180° rotates fingers from toward viewer to away
+        // - roll negated + 180° flips hand to correct chirality (thumb on left)
         const mappedOrientation = {
-            pitch: -euler.pitch + this.orientationOffset.pitch,  // Invert pitch for natural feel
-            yaw: euler.yaw + this.orientationOffset.yaw,
-            roll: euler.roll + this.orientationOffset.roll
+            pitch: euler.pitch + 90 + this.orientationOffset.pitch,
+            yaw: euler.yaw + 180 + this.orientationOffset.yaw,
+            roll: -euler.roll + 180 + this.orientationOffset.roll
         };
 
         this.setOrientation(mappedOrientation);

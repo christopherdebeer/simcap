@@ -84,7 +84,7 @@
                 display: flex;
                 flex-direction: column;
                 gap: var(--space-xs);
-                font-size: 1rem;
+                font-size: 0.8em;
             }
 
             .data-view > div {
@@ -104,7 +104,7 @@
 
             .data-view label {
                 flex: 0 0 auto;
-                width: 3em;
+                min-width: 7em;
                 font-weight: normal;
                 color: var(--fg-muted);
             }
@@ -421,28 +421,46 @@
             </div>
 
             <div class="card">
-                <div class="card-header">Sensor Data</div>
+                <div class="card-header">
+                    Sensor Data
+                    <select id="dataStageSelect" style="font-size: 0.75rem; padding: 2px 6px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--fg);">
+                        <option value="converted" selected>Converted (µT/g/°/s)</option>
+                        <option value="raw">Raw (LSB)</option>
+                        <option value="calibrated">Calibrated (iron corrected)</option>
+                        <option value="fused">Fused (Earth field removed)</option>
+                        <option value="filtered">Filtered (Kalman)</option>
+                    </select>
+                </div>
                 <div class="data-view">
                     <div id="battery"><progress max="100" value="0" id="b" title="0% battery"></progress></div>
                     <div id="button"><label>Btn:</label><span id="btn">0</span> <span id="count">0</span> <span id="state">0</span></div>
+                    <div class="cols">
+                        <label></label>
+                        <label>X</label>
+                        <label>Y</label>
+                        <label>Z</label>
+                    </div>
                     <div id="mag">
-                        <label>Mag:</label>
+                        <label id="magLabel">Mag (µT):</label>
                         <span id="mX">0</span>
                         <span id="mY">0</span>
                         <span id="mZ">0</span>
                     </div>
                     <div id="acc">
-                        <label>Acc:</label>
+                        <label id="accLabel">Acc (g):</label>
                         <span id="aX">0</span>
                         <span id="aY">0</span>
                         <span id="aZ">0</span>
                     </div>
                     <div id="gyr">
-                        <label>Gyro: <span id="gyroStatus" style="font-size: 0.7em; color: var(--warning);">⏳</span></label>
+                        <label id="gyrLabel">Gyro (°/s): <span id="gyroStatus" style="font-size: 0.7em; color: var(--warning);">⏳</span></label>
                         <span id="gX">0</span>
                         <span id="gY">0</span>
                         <span id="gZ">0</span>
                     </div>
+                </div>
+                <div id="dataStageInfo" style="font-size: 0.7rem; color: var(--fg-muted); text-align: center; margin-top: var(--space-xs);">
+                    Showing converted sensor values in physical units
                 </div>
             </div>
 
@@ -483,6 +501,13 @@
                 </div>
                 <div class="hand-canvas-container">
                     <canvas id="handCanvas3D" width="300" height="300"></canvas>
+                </div>
+                <div id="eulerDebug" style="font-size: 0.7rem; color: var(--fg-muted); text-align: center; margin-top: var(--space-xs); font-family: monospace;">
+                    Roll: --° | Pitch: --° | Yaw: --°
+                </div>
+                <div style="display: flex; justify-content: center; gap: var(--space-sm); margin-top: var(--space-xs);">
+                    <button class="btn btn-sm" id="resetOrientationBtn">Reset Orientation</button>
+                    <button class="btn btn-sm" id="testPoseBtn">Test Pose (Point)</button>
                 </div>
             </div>
 
@@ -576,6 +601,46 @@
 
             let uploadTimeout;
             let sessionData = []
+
+            // ===== Data Stage Selection =====
+            // Controls which processing stage is displayed in the sensor data UI
+            let currentDataStage = 'converted';  // raw, converted, calibrated, fused, filtered
+            
+            const dataStageInfo = {
+                raw: { label: 'Raw (LSB)', info: 'Raw sensor values in LSB (least significant bits) - direct from hardware', magUnit: 'LSB', accUnit: 'LSB', gyrUnit: 'LSB' },
+                converted: { label: 'Converted', info: 'Converted to physical units: µT (magnetometer), g (accelerometer), °/s (gyroscope)', magUnit: 'µT', accUnit: 'g', gyrUnit: '°/s' },
+                calibrated: { label: 'Calibrated', info: 'Iron-corrected magnetometer (hard/soft iron compensation applied)', magUnit: 'µT', accUnit: 'g', gyrUnit: '°/s' },
+                fused: { label: 'Fused', info: 'Earth field removed - shows residual magnetic field (finger magnet signal)', magUnit: 'µT', accUnit: 'g', gyrUnit: '°/s' },
+                filtered: { label: 'Filtered', info: 'Kalman filtered for noise reduction (best for visualization)', magUnit: 'µT', accUnit: 'g', gyrUnit: '°/s' }
+            };
+            
+            function updateDataStageUI() {
+                const info = dataStageInfo[currentDataStage];
+                const magLabel = document.getElementById('magLabel');
+                const accLabel = document.getElementById('accLabel');
+                const gyrLabel = document.getElementById('gyrLabel');
+                const infoEl = document.getElementById('dataStageInfo');
+                const gyroStatus = document.getElementById('gyroStatus');
+                
+                if (magLabel) magLabel.textContent = `Mag (${info.magUnit}):`;
+                if (accLabel) accLabel.textContent = `Acc (${info.accUnit}):`;
+                if (gyrLabel) {
+                    gyrLabel.innerHTML = `Gyro (${info.gyrUnit}): <span id="gyroStatus" style="font-size: 0.7em; color: var(--warning);">⏳</span>`;
+                }
+                if (infoEl) infoEl.textContent = info.info;
+            }
+            
+            // Initialize data stage selector
+            document.addEventListener('DOMContentLoaded', () => {
+                const select = document.getElementById('dataStageSelect');
+                if (select) {
+                    select.addEventListener('change', (e) => {
+                        currentDataStage = e.target.value;
+                        updateDataStageUI();
+                        console.log('[GAMBIT] Data stage:', currentDataStage);
+                    });
+                }
+            });
 
             // ===== Calibration =====
             // Initialize calibration (loads previous calibration if available)
@@ -792,30 +857,100 @@
                 window.state.innerHTML = prenorm.s || 0;
                 window.count.innerHTML = prenorm.n || 0;
 
-                // Raw sensor values display (show actual values, not normalized)
-                window.mX.innerHTML = (prenorm.mx || 0).toFixed(1);
-                window.mY.innerHTML = (prenorm.my || 0).toFixed(1);
-                window.mZ.innerHTML = (prenorm.mz || 0).toFixed(1);
-
-                window.aX.innerHTML = (prenorm.ax || 0).toFixed(3);
-                window.aY.innerHTML = (prenorm.ay || 0).toFixed(3);
-                window.aZ.innerHTML = (prenorm.az || 0).toFixed(3);
-
-                window.gX.innerHTML = (prenorm.gx || 0).toFixed(1);
-                window.gY.innerHTML = (prenorm.gy || 0).toFixed(1);
-                window.gZ.innerHTML = (prenorm.gz || 0).toFixed(1);
+                // Sensor values display based on selected data stage
+                let mx, my, mz, ax, ay, az, gx, gy, gz;
+                let magDecimals = 1, accDecimals = 3, gyrDecimals = 1;
+                
+                switch (currentDataStage) {
+                    case 'raw':
+                        // Raw LSB values from sensor
+                        mx = prenorm.mx || 0;
+                        my = prenorm.my || 0;
+                        mz = prenorm.mz || 0;
+                        ax = prenorm.ax || 0;
+                        ay = prenorm.ay || 0;
+                        az = prenorm.az || 0;
+                        gx = prenorm.gx || 0;
+                        gy = prenorm.gy || 0;
+                        gz = prenorm.gz || 0;
+                        magDecimals = 0;
+                        accDecimals = 0;
+                        gyrDecimals = 0;
+                        break;
+                    case 'calibrated':
+                        // Iron-corrected magnetometer (hard/soft iron compensation)
+                        mx = decoratedData.calibrated_mx ?? decoratedData.mx_ut ?? 0;
+                        my = decoratedData.calibrated_my ?? decoratedData.my_ut ?? 0;
+                        mz = decoratedData.calibrated_mz ?? decoratedData.mz_ut ?? 0;
+                        ax = decoratedData.ax_g || 0;
+                        ay = decoratedData.ay_g || 0;
+                        az = decoratedData.az_g || 0;
+                        gx = decoratedData.gx_dps || 0;
+                        gy = decoratedData.gy_dps || 0;
+                        gz = decoratedData.gz_dps || 0;
+                        break;
+                    case 'fused':
+                        // Earth field removed (residual = finger magnet signal)
+                        mx = decoratedData.fused_mx ?? decoratedData.calibrated_mx ?? decoratedData.mx_ut ?? 0;
+                        my = decoratedData.fused_my ?? decoratedData.calibrated_my ?? decoratedData.my_ut ?? 0;
+                        mz = decoratedData.fused_mz ?? decoratedData.calibrated_mz ?? decoratedData.mz_ut ?? 0;
+                        ax = decoratedData.ax_g || 0;
+                        ay = decoratedData.ay_g || 0;
+                        az = decoratedData.az_g || 0;
+                        gx = decoratedData.gx_dps || 0;
+                        gy = decoratedData.gy_dps || 0;
+                        gz = decoratedData.gz_dps || 0;
+                        break;
+                    case 'filtered':
+                        // Kalman filtered (best for visualization)
+                        mx = decoratedData.filtered_mx ?? decoratedData.fused_mx ?? decoratedData.mx_ut ?? 0;
+                        my = decoratedData.filtered_my ?? decoratedData.fused_my ?? decoratedData.my_ut ?? 0;
+                        mz = decoratedData.filtered_mz ?? decoratedData.fused_mz ?? decoratedData.mz_ut ?? 0;
+                        ax = decoratedData.ax_g || 0;
+                        ay = decoratedData.ay_g || 0;
+                        az = decoratedData.az_g || 0;
+                        gx = decoratedData.gx_dps || 0;
+                        gy = decoratedData.gy_dps || 0;
+                        gz = decoratedData.gz_dps || 0;
+                        break;
+                    case 'converted':
+                    default:
+                        // Converted to physical units (default)
+                        mx = decoratedData.mx_ut || 0;
+                        my = decoratedData.my_ut || 0;
+                        mz = decoratedData.mz_ut || 0;
+                        ax = decoratedData.ax_g || 0;
+                        ay = decoratedData.ay_g || 0;
+                        az = decoratedData.az_g || 0;
+                        gx = decoratedData.gx_dps || 0;
+                        gy = decoratedData.gy_dps || 0;
+                        gz = decoratedData.gz_dps || 0;
+                        break;
+                }
+                
+                // Update display
+                window.mX.innerHTML = mx.toFixed(magDecimals);
+                window.mY.innerHTML = my.toFixed(magDecimals);
+                window.mZ.innerHTML = mz.toFixed(magDecimals);
+                window.aX.innerHTML = ax.toFixed(accDecimals);
+                window.aY.innerHTML = ay.toFixed(accDecimals);
+                window.aZ.innerHTML = az.toFixed(accDecimals);
+                window.gX.innerHTML = gx.toFixed(gyrDecimals);
+                window.gY.innerHTML = gy.toFixed(gyrDecimals);
+                window.gZ.innerHTML = gz.toFixed(gyrDecimals);
 
                 // ===== CUBE VISUALIZATION =====
                 // Get orientation from telemetry processor
                 const euler = telemetryProcessor.getEulerAngles() || { roll: 0, pitch: 0, yaw: 0 };
 
                 // --- ACCELEROMETER CUBE: Tilt from gravity ---
-                const ax = prenorm.ax || 0;
-                const ay = prenorm.ay || 0;
-                const az = prenorm.az || 0;
+                // Use raw values for cube visualization (always)
+                const cubeAx = prenorm.ax || 0;
+                const cubeAy = prenorm.ay || 0;
+                const cubeAz = prenorm.az || 0;
                 
-                const accRoll = Math.atan2(ay, az) * (180 / Math.PI);
-                const accPitch = Math.atan2(-ax, Math.sqrt(ay * ay + az * az)) * (180 / Math.PI);
+                const accRoll = Math.atan2(cubeAy, cubeAz) * (180 / Math.PI);
+                const accPitch = Math.atan2(-cubeAx, Math.sqrt(cubeAy * cubeAy + cubeAz * cubeAz)) * (180 / Math.PI);
                 
                 const filteredAccRoll = cubeFilters.acc.x.filter(accRoll);
                 const filteredAccPitch = cubeFilters.acc.y.filter(accPitch);
@@ -840,16 +975,23 @@
                     hand3DRenderer.updateFromSensorFusion(handEuler);
                 }
 
+                // Update Euler debug display
+                const eulerDebug = document.getElementById('eulerDebug');
+                if (eulerDebug && euler) {
+                    eulerDebug.textContent = `Roll: ${euler.roll.toFixed(1)}° | Pitch: ${euler.pitch.toFixed(1)}° | Yaw: ${euler.yaw.toFixed(1)}°`;
+                }
+
                 // --- MAGNETOMETER CUBE: Shows magnetic field vector direction ---
-                const mx = prenorm.mx || 0;
-                const my = prenorm.my || 0;
-                const mz = prenorm.mz || 0;
+                // Use raw values for cube visualization (always)
+                const cubeMx = prenorm.mx || 0;
+                const cubeMy = prenorm.my || 0;
+                const cubeMz = prenorm.mz || 0;
                 
-                const magAzimuth = Math.atan2(my, mx) * (180 / Math.PI);
-                const magMagnitude = Math.sqrt(mx * mx + my * my + mz * mz);
+                const magAzimuth = Math.atan2(cubeMy, cubeMx) * (180 / Math.PI);
+                const magMagnitude = Math.sqrt(cubeMx * cubeMx + cubeMy * cubeMy + cubeMz * cubeMz);
                 const magElevation = magMagnitude > 0.1 ? 
-                    Math.asin(mz / magMagnitude) * (180 / Math.PI) : 0;
-                const magRoll = Math.atan2(mx, Math.sqrt(my * my + mz * mz)) * (180 / Math.PI);
+                    Math.asin(cubeMz / magMagnitude) * (180 / Math.PI) : 0;
+                const magRoll = Math.atan2(cubeMx, Math.sqrt(cubeMy * cubeMy + cubeMz * cubeMz)) * (180 / Math.PI);
                 
                 const filteredMagAzimuth = cubeFilters.mag.z.filter(magAzimuth);
                 const filteredMagElevation = cubeFilters.mag.x.filter(magElevation);
@@ -1138,6 +1280,57 @@
             } catch (e) {
                 console.error('[GAMBIT] Failed to init hand renderer:', e);
             }
+
+            // ===== Reset Orientation Button =====
+            // Allows user to re-initialize the AHRS from current accelerometer reading
+            document.getElementById('resetOrientationBtn')?.addEventListener('click', () => {
+                console.log('[GAMBIT] Resetting orientation...');
+                telemetryProcessor.reset();
+                if (hand3DRenderer) {
+                    hand3DRenderer.resetOrientation();
+                }
+                // Reset cube filters too
+                Object.values(cubeFilters).forEach(filterSet => {
+                    Object.values(filterSet).forEach(filter => filter.reset());
+                });
+                console.log('[GAMBIT] Orientation reset complete');
+            });
+
+            // ===== Test Pose Button =====
+            // Shows pointing pose (index finger extended only) to help verify orientation
+            let testPoseActive = false;
+            document.getElementById('testPoseBtn')?.addEventListener('click', () => {
+                testPoseActive = !testPoseActive;
+                const btn = document.getElementById('testPoseBtn');
+                
+                if (hand3DRenderer) {
+                    if (testPoseActive) {
+                        // Pointing pose: index extended, others flexed
+                        hand3DRenderer.setFingerPoses({
+                            thumb: 2,   // Flexed
+                            index: 0,   // Extended (pointing)
+                            middle: 2,  // Flexed
+                            ring: 2,    // Flexed
+                            pinky: 2    // Flexed
+                        });
+                        btn.textContent = 'Reset Pose';
+                        btn.style.background = 'var(--success)';
+                        console.log('[GAMBIT] Test pose: POINTING (index extended)');
+                    } else {
+                        // All fingers extended (open hand)
+                        hand3DRenderer.setFingerPoses({
+                            thumb: 0,
+                            index: 0,
+                            middle: 0,
+                            ring: 0,
+                            pinky: 0
+                        });
+                        btn.textContent = 'Test Pose (Point)';
+                        btn.style.background = '';
+                        console.log('[GAMBIT] Test pose: OPEN HAND');
+                    }
+                }
+            });
 
             // ===== Session Playback System (using module) =====
             let sessionPlayback = null;
