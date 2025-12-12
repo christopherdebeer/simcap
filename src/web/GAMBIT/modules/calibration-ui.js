@@ -7,6 +7,17 @@ import { state } from './state.js';
 import { log } from './logger.js';
 import { CALIBRATION_CONFIG, validateSampleCount } from '../calibration-config.js';
 
+// Callback for storing calibration session data
+let storeCalibrationSession = null;
+
+/**
+ * Set callback for storing calibration sessions
+ * @param {Function} callback - Function(samples, stepName, result) to store calibration data
+ */
+export function setStoreSessionCallback(callback) {
+    storeCalibrationSession = callback;
+}
+
 // Single calibration instance used for both wizard and real-time correction
 export let calibrationInstance = null;
 export let calibrationInterval = null;
@@ -136,6 +147,11 @@ export async function runCalibrationStep(stepName, sampleHandler, completionHand
             const calibResult = completionHandler(buffer);
             sampleHandler(calibResult);
             log(`${stepName} complete: ${buffer.length} samples, quality=${calibResult.quality?.toFixed(2) || 'N/A'}`);
+
+            // Store calibration session data for export/upload
+            if (storeCalibrationSession && buffer.length > 0) {
+                storeCalibrationSession(buffer, stepName, calibResult);
+            }
         } catch (error) {
             log(`Error: ${error.message}`);
             qualityDiv.textContent = `❌ Failed: ${error.message}`;

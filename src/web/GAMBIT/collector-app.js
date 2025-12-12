@@ -9,11 +9,12 @@ import {
     initCalibration,
     updateCalibrationStatus,
     initCalibrationUI,
-    calibrationInstance
+    calibrationInstance,
+    setStoreSessionCallback as setCalibrationSessionCallback
 } from './modules/calibration-ui.js';
 import { onTelemetry, setDependencies as setTelemetryDeps, resetIMU } from './modules/telemetry-handler.js';
 import { setCallbacks as setConnectionCallbacks, initConnectionUI } from './modules/connection-manager.js';
-import { setCallbacks as setRecordingCallbacks, initRecordingUI, startRecording } from './modules/recording-controls.js';
+import { setCallbacks as setRecordingCallbacks, initRecordingUI, startRecording, pauseRecording, resumeRecording } from './modules/recording-controls.js';
 import {
     initWizard,
     setDependencies as setWizardDeps,
@@ -43,9 +44,11 @@ const magFilter = new KalmanFilter3D({
     measurementNoise: 1.0
 });
 
+// NOTE: With stable sensor data (Puck.accelOn fix in firmware v0.3.6),
+// we can use standard AHRS parameters instead of jitter-compensating values
 const imuFusion = new MadgwickAHRS({
-    sampleFreq: 50,
-    beta: 0.02  // Reduced from 0.1 to 0.02 for stable orientation (matches index.html cube stability)
+    sampleFreq: 26,  // Match firmware accelOn rate (26Hz, not 50Hz)
+    beta: 0.05       // Standard Madgwick gain (was 0.02 for jittery data)
 });
 
 // Pose estimation state
@@ -130,10 +133,14 @@ async function init() {
     initConnectionUI($('connectBtn'));
     initRecordingUI({
         start: $('startBtn'),
+        pause: $('pauseBtn'),
         stop: $('stopBtn'),
         clear: $('clearBtn')
     });
     initCalibrationUI();
+
+    // Set up calibration session storage callback
+    setCalibrationSessionCallback(storeCalibrationSessionData);
 
     // Initialize label management
     initLabelManagement();
@@ -162,8 +169,27 @@ async function init() {
     // Try to load GitHub token
     try {
         ghToken = localStorage.getItem('gh_token');
+        const tokenInput = $('ghToken');
         if (ghToken) {
             log('GitHub token loaded');
+            // Populate the token input if it exists
+            if (tokenInput) {
+                tokenInput.value = ghToken;
+            }
+        }
+        // Add change handler for token input
+        if (tokenInput) {
+            tokenInput.addEventListener('change', (e) => {
+                ghToken = e.target.value;
+                if (ghToken) {
+                    localStorage.setItem('gh_token', ghToken);
+                    log('GitHub token saved');
+                } else {
+                    localStorage.removeItem('gh_token');
+                    log('GitHub token cleared');
+                }
+                updateUI();
+            });
         }
     } catch (e) {
         console.warn('Failed to load GitHub token:', e);
@@ -193,7 +219,10 @@ function updateUI() {
 
     // Status indicator
     if (statusIndicator) {
-        if (state.recording) {
+        if (state.recording && state.paused) {
+            statusIndicator.className = 'status connected';  // Yellow-ish for paused
+            statusIndicator.textContent = 'Paused';
+        } else if (state.recording) {
             statusIndicator.className = 'status recording';
             statusIndicator.textContent = 'Recording...';
         } else if (state.connected) {
@@ -208,6 +237,15 @@ function updateUI() {
     // Buttons
     if (connectBtn) connectBtn.textContent = state.connected ? 'Disconnect' : 'Connect Device';
     if (startBtn) startBtn.disabled = !state.connected || state.recording;
+
+    // Pause button - only enabled during recording
+    const pauseBtn = $('pauseBtn');
+    if (pauseBtn) {
+        pauseBtn.disabled = !state.recording;
+        pauseBtn.textContent = state.paused ? 'Resume' : 'Pause';
+        pauseBtn.className = state.paused ? 'btn-success' : 'btn-warning';
+    }
+
     if (stopBtn) stopBtn.disabled = !state.recording;
     if (clearBtn) clearBtn.disabled = state.sessionData.length === 0 || state.recording;
     if (exportBtn) exportBtn.disabled = state.sessionData.length === 0 || state.recording;
@@ -374,8 +412,9 @@ function removeCustomLabel(label) {
     const index = state.currentLabels.custom.indexOf(label);
     if (index !== -1) {
         state.currentLabels.custom.splice(index, 1);
-        log(`Custom label removed: ${label}`);
+        log(`Custom label deactivated: ${label}`);
         onLabelsChanged();
+        renderCustomLabels();  // Update the custom labels list to reflect active state
     }
 }
 
@@ -494,7 +533,7 @@ function onLabelsChanged() {
 }
 
 /**
- * Add custom label
+ * Add custom label to definitions (but don't activate it)
  */
 function addCustomLabel() {
     const input = $('customLabelInput');
@@ -503,17 +542,69 @@ function addCustomLabel() {
     const value = input.value.trim();
     if (!value) return;
 
-    if (!state.currentLabels.custom.includes(value)) {
-        state.currentLabels.custom.push(value);
-        onLabelsChanged();
-        log(`Custom label added: ${value}`);
+    // Add to definitions if not already present
+    if (!state.customLabelDefinitions.includes(value)) {
+        state.customLabelDefinitions.push(value);
+        saveCustomLabels();
+        renderCustomLabels();
+        log(`Custom label defined: ${value}`);
     }
     input.value = '';
-    updateActiveLabelsDisplay();
 }
 
 /**
- * Add preset labels
+ * Toggle a custom label's active state
+ * @param {string} label - The label to toggle
+ */
+function toggleCustomLabel(label) {
+    const index = state.currentLabels.custom.indexOf(label);
+    if (index === -1) {
+        // Activate the label
+        state.currentLabels.custom.push(label);
+        log(`Custom label activated: ${label}`);
+    } else {
+        // Deactivate the label
+        state.currentLabels.custom.splice(index, 1);
+        log(`Custom label deactivated: ${label}`);
+    }
+    onLabelsChanged();
+    renderCustomLabels();
+}
+
+/**
+ * Delete a custom label definition
+ * @param {string} label - The label to delete
+ */
+function deleteCustomLabelDef(label) {
+    // Remove from definitions
+    const defIndex = state.customLabelDefinitions.indexOf(label);
+    if (defIndex !== -1) {
+        state.customLabelDefinitions.splice(defIndex, 1);
+    }
+    // Also remove from active if present
+    const activeIndex = state.currentLabels.custom.indexOf(label);
+    if (activeIndex !== -1) {
+        state.currentLabels.custom.splice(activeIndex, 1);
+        onLabelsChanged();
+    }
+    saveCustomLabels();
+    renderCustomLabels();
+    log(`Custom label deleted: ${label}`);
+}
+
+/**
+ * Save custom label definitions to localStorage
+ */
+function saveCustomLabels() {
+    try {
+        localStorage.setItem('gambit_custom_labels', JSON.stringify(state.customLabelDefinitions));
+    } catch (e) {
+        console.error('Failed to save custom labels:', e);
+    }
+}
+
+/**
+ * Add preset labels to definitions (doesn't activate them)
  */
 function addPresetLabels(preset) {
     const presets = {
@@ -524,15 +615,18 @@ function addPresetLabels(preset) {
     };
 
     const labels = presets[preset] || [];
+    let addedCount = 0;
     labels.forEach(label => {
-        if (!state.currentLabels.custom.includes(label)) {
-            state.currentLabels.custom.push(label);
+        if (!state.customLabelDefinitions.includes(label)) {
+            state.customLabelDefinitions.push(label);
+            addedCount++;
         }
     });
-    
-    if (labels.length > 0) {
-        onLabelsChanged();
-        log(`Added ${labels.length} preset labels: ${labels.join(', ')}`);
+
+    if (addedCount > 0) {
+        saveCustomLabels();
+        renderCustomLabels();
+        log(`Added ${addedCount} preset label definitions: ${labels.join(', ')}`);
     }
 }
 
@@ -544,18 +638,37 @@ function loadCustomLabels() {
         const saved = localStorage.getItem('gambit_custom_labels');
         if (saved) {
             state.customLabelDefinitions = JSON.parse(saved);
-            renderCustomLabels();
         }
     } catch (e) {
         console.error('Failed to load custom labels:', e);
     }
+    // Always render (shows empty state if no labels)
+    renderCustomLabels();
 }
 
 /**
- * Render custom labels (stub - implement if needed)
+ * Render custom labels with toggle and delete controls
  */
 function renderCustomLabels() {
-    // TODO: Implement custom label rendering if needed
+    const container = $('customLabelsList');
+    if (!container) return;
+
+    if (state.customLabelDefinitions.length === 0) {
+        container.innerHTML = '<span style="color: var(--fg-muted); font-size: 11px;">No custom labels defined</span>';
+        return;
+    }
+
+    container.innerHTML = state.customLabelDefinitions.map(label => {
+        const isActive = state.currentLabels.custom.includes(label);
+        return `
+            <div class="custom-label-tag ${isActive ? 'active' : ''}"
+                 onclick="window.toggleCustomLabel('${label}')"
+                 title="Click to ${isActive ? 'deactivate' : 'activate'}">
+                <span>${label}</span>
+                <span class="remove" onclick="event.stopPropagation(); window.deleteCustomLabelDef('${label}')" title="Delete">×</span>
+            </div>
+        `;
+    }).join('');
 }
 
 /**
@@ -1117,6 +1230,178 @@ function initExport() {
     if (exportBtn) {
         exportBtn.addEventListener('click', exportData);
     }
+
+    // Initialize upload functionality
+    const uploadBtn = $('uploadBtn');
+    if (uploadBtn) {
+        uploadBtn.addEventListener('click', uploadToGitHub);
+    }
+}
+
+/**
+ * Store calibration session data for export/upload
+ * @param {Array} samples - Raw calibration samples
+ * @param {string} stepName - Calibration step name (EARTH_FIELD, HARD_IRON, SOFT_IRON)
+ * @param {Object} result - Calibration result with quality metrics
+ */
+function storeCalibrationSessionData(samples, stepName, result) {
+    // Map step name to calibration label format
+    const calibrationLabels = {
+        'EARTH_FIELD': 'earth_field',
+        'HARD_IRON': 'hard_iron',
+        'SOFT_IRON': 'soft_iron'
+    };
+
+    const calibrationLabel = calibrationLabels[stepName] || stepName.toLowerCase();
+    const startIndex = state.sessionData.length;
+
+    // Add timestamp to each sample and store
+    const timestamp = Date.now();
+    samples.forEach((sample, i) => {
+        state.sessionData.push({
+            ...sample,
+            timestamp: timestamp + (i * (1000 / 26)),  // Approximate timestamp at 26Hz
+            calibration_step: stepName
+        });
+    });
+
+    // Create a label segment for this calibration
+    const segment = {
+        start_sample: startIndex,
+        end_sample: state.sessionData.length,
+        labels: {
+            pose: null,
+            fingers: {
+                thumb: 'unknown',
+                index: 'unknown',
+                middle: 'unknown',
+                ring: 'unknown',
+                pinky: 'unknown'
+            },
+            motion: 'static',
+            calibration: calibrationLabel,
+            custom: ['calibration_session', `cal_${calibrationLabel}`]
+        },
+        metadata: {
+            session_type: 'calibration',
+            calibration_step: stepName,
+            quality: result.quality,
+            sample_count: samples.length,
+            result_summary: result.quality ? {
+                quality: result.quality.toFixed(3),
+                magnitude: result.magnitude?.toFixed(2),
+                avgDeviation: result.avgDeviation?.toFixed(2)
+            } : null
+        }
+    };
+
+    state.labels.push(segment);
+
+    log(`Calibration session stored: ${samples.length} samples for ${stepName}`);
+    updateUI();
+}
+
+/**
+ * Upload data to GitHub
+ */
+async function uploadToGitHub() {
+    if (state.sessionData.length === 0) {
+        log('No data to upload');
+        return;
+    }
+
+    if (!ghToken) {
+        log('Error: No GitHub token configured');
+        return;
+    }
+
+    const uploadBtn = $('uploadBtn');
+    const originalText = uploadBtn.textContent;
+
+    try {
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = 'Uploading...';
+        log('Uploading to GitHub...');
+
+        // Build export data with metadata
+        const exportData = buildExportData();
+
+        // Create filename with timestamp
+        const timestamp = new Date().toISOString().replace(/:/g, '_');
+        const filename = `${timestamp}.json`;
+        const content = JSON.stringify(exportData, null, 2);
+
+        // GitHub API endpoint
+        const endpoint = `https://api.github.com/repos/christopherdebeer/simcap/contents/data/GAMBIT/${filename}`;
+
+        // Base64 encode content
+        const b64Content = btoa(unescape(encodeURIComponent(content)));
+
+        const response = await fetch(endpoint, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `token ${ghToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                message: `GAMBIT Data ingest ${filename}`,
+                content: b64Content
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || `HTTP ${response.status}`);
+        }
+
+        const result = await response.json();
+        log(`Uploaded: ${result.content?.name || filename}`);
+
+    } catch (e) {
+        console.error('[GAMBIT] Upload failed:', e);
+        log(`Upload failed: ${e.message}`);
+    } finally {
+        uploadBtn.disabled = state.sessionData.length === 0 || state.recording || !ghToken;
+        uploadBtn.textContent = originalText;
+    }
+}
+
+/**
+ * Build export data object with metadata
+ * @param {Object} options - Optional overrides for metadata
+ * @returns {Object} Export data object
+ */
+function buildExportData(options = {}) {
+    // Get session metadata from form fields
+    const subjectId = $('subjectId')?.value || 'unknown';
+    const environment = $('environment')?.value || 'unknown';
+    const hand = $('hand')?.value || 'unknown';
+    const split = $('split')?.value || 'train';
+    const magnetConfig = $('magnetConfig')?.value || 'none';
+    const magnetType = $('magnetType')?.value || 'unknown';
+    const sessionNotes = $('sessionNotes')?.value || '';
+
+    return {
+        version: '2.1',
+        timestamp: new Date().toISOString(),
+        samples: state.sessionData,
+        labels: state.labels,
+        metadata: {
+            sample_rate: 26,  // Match firmware accelOn rate
+            device: 'GAMBIT',
+            firmware_version: state.firmwareVersion || 'unknown',
+            calibration: calibrationInstance ? calibrationInstance.toJSON() : null,
+            subject_id: subjectId,
+            environment: environment,
+            hand: hand,
+            split: split,
+            magnet_config: magnetConfig,
+            magnet_type: magnetType,
+            notes: sessionNotes,
+            session_type: options.sessionType || 'recording',
+            ...options
+        }
+    };
 }
 
 /**
@@ -1128,19 +1413,9 @@ function exportData() {
         return;
     }
 
-    const exportData = {
-        version: '2.0',
-        timestamp: new Date().toISOString(),
-        samples: state.sessionData,
-        labels: state.labels,
-        metadata: {
-            sample_rate: 50,
-            device: 'GAMBIT',
-            calibration: calibrationInstance ? calibrationInstance.toJSON() : null
-        }
-    };
+    const data = buildExportData();
 
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -1196,7 +1471,7 @@ if (document.readyState === 'loading') {
     init();
 }
 
-// Export for debugging
+// Export for debugging and onclick handlers
 window.appState = state;
 window.log = log;
 window.updateUI = updateUI;
@@ -1205,3 +1480,5 @@ window.addPresetLabels = addPresetLabels;
 window.removeActiveLabel = removeActiveLabel;
 window.clearFingerStates = clearFingerStates;
 window.removeCustomLabel = removeCustomLabel;
+window.toggleCustomLabel = toggleCustomLabel;
+window.deleteCustomLabelDef = deleteCustomLabelDef;
