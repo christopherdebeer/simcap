@@ -20,6 +20,8 @@
         <script src="filters.js"></script>
         <script src="gesture-inference.js"></script>
         <script src="hand-3d-renderer.js"></script>
+        <!-- Three.js for skeletal hand visualization -->
+        <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
         <style>
             /* Page-specific styles */
             body {
@@ -511,6 +513,24 @@
                 </div>
             </div>
 
+            <div class="card" id="threeHandCard">
+                <div class="card-header">
+                    Three.js Hand (Skeleton)
+                    <label class="hand-mode-toggle">
+                        <input type="checkbox" id="threeHandToggle" checked>
+                        <span>Track IMU</span>
+                    </label>
+                </div>
+                <div id="threeHandContainer" style="width: 300px; height: 300px; margin: 0 auto;"></div>
+                <div id="threeEulerDebug" style="font-size: 0.7rem; color: var(--fg-muted); text-align: center; margin-top: var(--space-xs); font-family: monospace;">
+                    Roll: --° | Pitch: --° | Yaw: --°
+                </div>
+                <div style="display: flex; justify-content: center; gap: var(--space-sm); margin-top: var(--space-xs);">
+                    <button class="btn btn-sm" id="threeResetBtn">Reset Orientation</button>
+                    <button class="btn btn-sm" id="threeTestCurlBtn">Test Curl</button>
+                </div>
+            </div>
+
             <div class="card" id="playbackCard">
                 <div class="card-header">Session Playback</div>
                 <div class="playback-controls">
@@ -577,6 +597,7 @@
                 exportLocationMetadata,
                 formatLocation
             } from './shared/geomagnetic-field.js';
+            import { ThreeJSHandSkeleton } from './shared/threejs-hand-skeleton.js';
 
             // ===== GambitClient for Frame-Based Protocol =====
             const gambitClient = new GambitClient({ debug: true });
@@ -738,6 +759,80 @@
                         }
                         console.log('[Hand3D] IMU tracking:', handOrientationEnabled ? 'ON' : 'OFF');
                     });
+                }
+            }
+
+            // ===== Three.js Hand Skeleton =====
+            let threeHandSkeleton = null;
+            let threeHandEnabled = true;
+
+            function initThreeHandSkeleton() {
+                const container = document.getElementById('threeHandContainer');
+                if (!container || typeof THREE === 'undefined') {
+                    console.warn('[ThreeHand] Three.js or container not available');
+                    return;
+                }
+
+                try {
+                    threeHandSkeleton = new ThreeJSHandSkeleton(container, {
+                        width: 300,
+                        height: 300,
+                        backgroundColor: 0x1a1a2e,
+                        lerpFactor: 0.15
+                    });
+
+                    // Set initial orientation offsets to match sensor-to-hand mapping
+                    // These may need adjustment based on how sensor is mounted
+                    threeHandSkeleton.setOrientationOffsets({
+                        roll: 180,    // Flip for correct chirality
+                        pitch: 90,    // Palm facing up when flat
+                        yaw: 180      // Fingers away from viewer
+                    });
+
+                    console.log('[ThreeHand] Skeleton initialized');
+
+                    // Toggle handler
+                    const toggle = document.getElementById('threeHandToggle');
+                    if (toggle) {
+                        toggle.addEventListener('change', (e) => {
+                            threeHandEnabled = e.target.checked;
+                            console.log('[ThreeHand] IMU tracking:', threeHandEnabled ? 'ON' : 'OFF');
+                        });
+                    }
+
+                    // Reset button
+                    const resetBtn = document.getElementById('threeResetBtn');
+                    if (resetBtn) {
+                        resetBtn.addEventListener('click', () => {
+                            if (threeHandSkeleton) {
+                                threeHandSkeleton.resetOrientation();
+                                console.log('[ThreeHand] Orientation reset');
+                            }
+                        });
+                    }
+
+                    // Test curl button
+                    const curlBtn = document.getElementById('threeTestCurlBtn');
+                    let testCurlState = 0;
+                    if (curlBtn) {
+                        curlBtn.addEventListener('click', () => {
+                            if (threeHandSkeleton) {
+                                testCurlState = (testCurlState + 1) % 4;
+                                const curlAmounts = [0, 0.33, 0.66, 1.0];
+                                const curl = curlAmounts[testCurlState];
+                                threeHandSkeleton.setFingerCurls({
+                                    thumb: curl,
+                                    index: curl,
+                                    middle: curl,
+                                    ring: curl,
+                                    pinky: curl
+                                });
+                                console.log('[ThreeHand] Test curl:', curl);
+                            }
+                        });
+                    }
+                } catch (err) {
+                    console.error('[ThreeHand] Failed to initialize:', err);
                 }
             }
 
@@ -966,19 +1061,29 @@
 
                 // Update hand 3D renderer with orientation
                 // Use stored orientation from playback if available, otherwise use live AHRS
+                const handEuler = {
+                    roll: prenorm.euler_roll !== undefined ? prenorm.euler_roll : euler.roll,
+                    pitch: prenorm.euler_pitch !== undefined ? prenorm.euler_pitch : euler.pitch,
+                    yaw: prenorm.euler_yaw !== undefined ? prenorm.euler_yaw : euler.yaw
+                };
+
                 if (hand3DRenderer && handOrientationEnabled) {
-                    const handEuler = {
-                        roll: prenorm.euler_roll !== undefined ? prenorm.euler_roll : euler.roll,
-                        pitch: prenorm.euler_pitch !== undefined ? prenorm.euler_pitch : euler.pitch,
-                        yaw: prenorm.euler_yaw !== undefined ? prenorm.euler_yaw : euler.yaw
-                    };
                     hand3DRenderer.updateFromSensorFusion(handEuler);
                 }
 
-                // Update Euler debug display
+                // Update Three.js hand skeleton with orientation
+                if (threeHandSkeleton && threeHandEnabled) {
+                    threeHandSkeleton.updateOrientation(handEuler);
+                }
+
+                // Update Euler debug displays
                 const eulerDebug = document.getElementById('eulerDebug');
                 if (eulerDebug && euler) {
                     eulerDebug.textContent = `Roll: ${euler.roll.toFixed(1)}° | Pitch: ${euler.pitch.toFixed(1)}° | Yaw: ${euler.yaw.toFixed(1)}°`;
+                }
+                const threeEulerDebug = document.getElementById('threeEulerDebug');
+                if (threeEulerDebug && euler) {
+                    threeEulerDebug.textContent = `Roll: ${euler.roll.toFixed(1)}° | Pitch: ${euler.pitch.toFixed(1)}° | Yaw: ${euler.yaw.toFixed(1)}°`;
                 }
 
                 // --- MAGNETOMETER CUBE: Shows magnetic field vector direction ---
@@ -1279,6 +1384,12 @@
                 initHandRenderer();
             } catch (e) {
                 console.error('[GAMBIT] Failed to init hand renderer:', e);
+            }
+
+            try {
+                initThreeHandSkeleton();
+            } catch (e) {
+                console.error('[GAMBIT] Failed to init Three.js hand:', e);
             }
 
             // ===== Reset Orientation Button =====
