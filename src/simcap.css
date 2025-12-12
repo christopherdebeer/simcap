@@ -188,6 +188,17 @@ a:hover {
     color: var(--fg-muted);
 }
 
+main {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+}
+
+main > .card {
+    flex-grow: 1;
+}
+
 /* ===== Cards ===== */
 .card {
     background: var(--bg-surface);
@@ -207,7 +218,6 @@ a:hover {
     padding-bottom: var(--space-sm);
     border-bottom: 1px solid var(--border);
     margin-bottom: var(--space-md);
-
 }
 
 /* ===== Buttons ===== */
