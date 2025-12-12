@@ -56,6 +56,7 @@ export async function stopRecording() {
     if (closeCurrentLabel) closeCurrentLabel();
 
     state.recording = false;
+    state.paused = false;
     state.currentLabelStart = null;
     log('Recording stopped');
 
@@ -67,6 +68,38 @@ export async function stopRecording() {
             console.error('[GAMBIT] Failed to stop streaming:', e);
         }
     }
+
+    if (updateUI) updateUI();
+}
+
+/**
+ * Pause recording (keeps streaming but stops storing data)
+ */
+export function pauseRecording() {
+    if (!state.recording || state.paused) {
+        return;
+    }
+
+    // Close current label segment before pausing
+    if (closeCurrentLabel) closeCurrentLabel();
+
+    state.paused = true;
+    log('Recording paused');
+
+    if (updateUI) updateUI();
+}
+
+/**
+ * Resume recording from pause
+ */
+export function resumeRecording() {
+    if (!state.recording || !state.paused) {
+        return;
+    }
+
+    state.paused = false;
+    state.currentLabelStart = state.sessionData.length;
+    log('Recording resumed');
 
     if (updateUI) updateUI();
 }
@@ -88,14 +121,29 @@ export function clearSession(confirm = true) {
 }
 
 /**
+ * Toggle pause/resume
+ */
+export function togglePause() {
+    if (state.paused) {
+        resumeRecording();
+    } else {
+        pauseRecording();
+    }
+}
+
+/**
  * Initialize recording UI controls
- * @param {Object} buttons - Button elements {start, stop, clear}
+ * @param {Object} buttons - Button elements {start, pause, stop, clear}
  */
 export function initRecordingUI(buttons) {
     if (!buttons) return;
 
     if (buttons.start) {
         buttons.start.addEventListener('click', startRecording);
+    }
+
+    if (buttons.pause) {
+        buttons.pause.addEventListener('click', togglePause);
     }
 
     if (buttons.stop) {

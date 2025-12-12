@@ -45,6 +45,8 @@ export async function connect() {
         // Handle firmware info
         state.gambitClient.on('firmware', (info) => {
             console.log('[GAMBIT] Firmware info:', info);
+            // Store firmware version for session metadata
+            state.firmwareVersion = info.version;
             // Check compatibility with minimum version 0.1.0
             const compat = state.gambitClient.checkCompatibility('0.1.0');
             if (!compat.compatible) {

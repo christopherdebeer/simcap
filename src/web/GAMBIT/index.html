@@ -12,6 +12,7 @@
         <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
         <script>if (typeof eruda !== 'undefined') eruda.init();</script>
         <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
+        <!-- Load non-module scripts first (they define globals) -->
         <script src="puck.js"></script>
         <script src="gambit-client.js"></script>
         <script src="kalman.js"></script>
@@ -70,10 +71,8 @@
 
             .controls {
                 display: flex;
-                flex-wrap: wrap;
                 gap: var(--space-md);
-                justify-content: center;
-                align-items: center;
+                flex-direction: column;
             }
 
             input#token:not(:placeholder-shown) {
@@ -100,7 +99,7 @@
                 text-align: center;
                 font-weight: bold;
                 flex: 1;
-                max-width: 5em;
+                min-width: 5em;
             }
 
             .data-view label {
@@ -114,8 +113,10 @@
                 perspective: 550px;
                 display: flex;
                 justify-content: space-evenly;
-                padding: var(--space-lg) 0;
+                align-items: center;
                 font-size: 15px;
+                gap: 2em;
+                flex-direction: row;
             }
 
             .cube {
@@ -372,6 +373,16 @@
                 justify-content: space-between;
                 align-items: center;
             }
+
+            main {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 1em;
+            }
+
+            main > .card { 
+                flex-grow: 1;
+            }
         </style>
     </head>
     <body>
@@ -384,132 +395,157 @@
             <p class="subtitle">Gyroscope Accelerometer Magnetometer Baseline Inferrence Telemetry</p>
         </header>
         
-        <div class="controls">
-            <button class="btn" id="connect">Connect</button>
-            <button class="btn" disabled id="getdata">Get data</button>
-            <input id="token" type="password" placeholder="GitHub token"/>
-        </div>
+        <main>
+            <div class="card controls">
+                <button class="btn" id="connect">Connect</button>
+                <button class="btn" disabled id="getdata">Get data</button>
+                <input id="token" type="password" placeholder="GitHub token"/>
+            </div>
 
-        <div class="card">
-            <div class="card-header">
-                Gesture Inference
-                <span class="model-status" id="modelStatus">
-                    <span class="status-dot"></span>
-                    <span>Loading model...</span>
-                </span>
-            </div>
-            <div class="gesture-display" id="gestureDisplay">
-                <div class="gesture-name" id="gestureName">--</div>
-                <div class="confidence" id="gestureConfidence">Waiting for data...</div>
-                <div class="inference-time" id="inferenceTime"></div>
-            </div>
-            <div class="gesture-probabilities" id="gestureProbabilities">
-                <!-- Populated by JS -->
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-header">Sensor Data</div>
-            <div class="data-view">
-                <div id="battery"><progress max="100" value="0" id="b" title="0% battery"></progress></div>
-                <div id="button"><label>Btn:</label><span id="btn">0</span> <span id="count">0</span> <span id="state">0</span></div>
-                <div id="mag">
-                    <label>Mag:</label>
-                    <span id="mX">0</span>
-                    <span id="mY">0</span>
-                    <span id="mZ">0</span>
+            <div class="card">
+                <div class="card-header">
+                    Gesture Inference
+                    <span class="model-status" id="modelStatus">
+                        <span class="status-dot"></span>
+                        <span>Loading model...</span>
+                    </span>
                 </div>
-                <div id="acc">
-                    <label>Acc:</label>
-                    <span id="aX">0</span>
-                    <span id="aY">0</span>
-                    <span id="aZ">0</span>
+                <div class="gesture-display" id="gestureDisplay">
+                    <div class="gesture-name" id="gestureName">--</div>
+                    <div class="confidence" id="gestureConfidence">Waiting for data...</div>
+                    <div class="inference-time" id="inferenceTime"></div>
                 </div>
-                <div id="gyr">
-                    <label>Gyro:</label>
-                    <span id="gX">0</span>
-                    <span id="gY">0</span>
-                    <span id="gZ">0</span>
-                    <span id="gyroStatus" style="font-size: 0.7em; color: var(--warning);">⏳</span>
+                <div class="gesture-probabilities" id="gestureProbabilities">
+                    <!-- Populated by JS -->
                 </div>
             </div>
-        </div>
 
-        <section id="three-d">
-            <div id="cubeM" class="cube">
-                <div class="face front">mag 1</div>
-                <div class="face back">mag 2</div>
-                <div class="face right">mag 3</div>
-                <div class="face left">mag 4</div>
-                <div class="face top">mag 5</div>
-                <div class="face bottom">mag 6</div>
-            </div>
-            <div id="cubeA" class="cube">
-                <div class="face front">acc 1</div>
-                <div class="face back">acc 2</div>
-                <div class="face right">acc 3</div>
-                <div class="face left">acc 4</div>
-                <div class="face top">acc 5</div>
-                <div class="face bottom">acc 6</div>
-            </div>
-            <div id="cubeG" class="cube">
-                <div class="face front">gyro 1</div>
-                <div class="face back">gyro 2</div>
-                <div class="face right">gyro 3</div>
-                <div class="face left">gyro 4</div>
-                <div class="face top">gyro 5</div>
-                <div class="face bottom">gyro 6</div>
-            </div>
-        </section>
-
-        <div class="card" id="handCard">
-            <div class="card-header">
-                Hand Orientation
-                <label class="hand-mode-toggle">
-                    <input type="checkbox" id="handOrientationToggle" checked>
-                    <span>Track IMU</span>
-                </label>
-            </div>
-            <div class="hand-canvas-container">
-                <canvas id="handCanvas3D" width="300" height="300"></canvas>
-            </div>
-        </div>
-
-        <div class="card" id="playbackCard">
-            <div class="card-header">Session Playback</div>
-            <div class="playback-controls">
-                <select id="sessionSelect" class="session-select">
-                    <option value="">-- Load sessions --</option>
-                </select>
-                <div class="playback-buttons">
-                    <button class="btn btn-sm" id="playBtn" disabled>Play</button>
-                    <button class="btn btn-sm" id="stopBtn" disabled>Stop</button>
-                    <span id="playbackStatus" class="playback-status"></span>
+            <div class="card">
+                <div class="card-header">Sensor Data</div>
+                <div class="data-view">
+                    <div id="battery"><progress max="100" value="0" id="b" title="0% battery"></progress></div>
+                    <div id="button"><label>Btn:</label><span id="btn">0</span> <span id="count">0</span> <span id="state">0</span></div>
+                    <div id="mag">
+                        <label>Mag:</label>
+                        <span id="mX">0</span>
+                        <span id="mY">0</span>
+                        <span id="mZ">0</span>
+                    </div>
+                    <div id="acc">
+                        <label>Acc:</label>
+                        <span id="aX">0</span>
+                        <span id="aY">0</span>
+                        <span id="aZ">0</span>
+                    </div>
+                    <div id="gyr">
+                        <label>Gyro: <span id="gyroStatus" style="font-size: 0.7em; color: var(--warning);">⏳</span></label>
+                        <span id="gX">0</span>
+                        <span id="gY">0</span>
+                        <span id="gZ">0</span>
+                    </div>
                 </div>
-                <div class="playback-progress">
-                    <input type="range" id="playbackSlider" min="0" max="100" value="0" disabled>
-                    <span id="playbackTime">0:00 / 0:00</span>
+            </div>
+
+            <section id="three-d" class="card">
+                <div id="cubeM" class="cube">
+                    <div class="face front">mag 1</div>
+                    <div class="face back">mag 2</div>
+                    <div class="face right">mag 3</div>
+                    <div class="face left">mag 4</div>
+                    <div class="face top">mag 5</div>
+                    <div class="face bottom">mag 6</div>
                 </div>
-                <div class="playback-speed">
-                    <label>Speed:</label>
-                    <select id="playbackSpeed">
-                        <option value="0.25">0.25x</option>
-                        <option value="0.5">0.5x</option>
-                        <option value="1" selected>1x</option>
-                        <option value="2">2x</option>
-                        <option value="4">4x</option>
+                <div id="cubeA" class="cube">
+                    <div class="face front">acc 1</div>
+                    <div class="face back">acc 2</div>
+                    <div class="face right">acc 3</div>
+                    <div class="face left">acc 4</div>
+                    <div class="face top">acc 5</div>
+                    <div class="face bottom">acc 6</div>
+                </div>
+                <div id="cubeG" class="cube">
+                    <div class="face front">gyro 1</div>
+                    <div class="face back">gyro 2</div>
+                    <div class="face right">gyro 3</div>
+                    <div class="face left">gyro 4</div>
+                    <div class="face top">gyro 5</div>
+                    <div class="face bottom">gyro 6</div>
+                </div>
+            </section>
+
+            <div class="card" id="handCard">
+                <div class="card-header">
+                    Hand Orientation
+                    <label class="hand-mode-toggle">
+                        <input type="checkbox" id="handOrientationToggle" checked>
+                        <span>Track IMU</span>
+                    </label>
+                </div>
+                <div class="hand-canvas-container">
+                    <canvas id="handCanvas3D" width="300" height="300"></canvas>
+                </div>
+            </div>
+
+            <div class="card" id="playbackCard">
+                <div class="card-header">Session Playback</div>
+                <div class="playback-controls">
+                    <select id="sessionSelect" class="session-select">
+                        <option value="">-- Load sessions --</option>
                     </select>
+                    <div class="playback-buttons">
+                        <button class="btn btn-sm" id="playBtn" disabled>Play</button>
+                        <button class="btn btn-sm" id="stopBtn" disabled>Stop</button>
+                        <span id="playbackStatus" class="playback-status"></span>
+                    </div>
+                    <div class="playback-progress">
+                        <input type="range" id="playbackSlider" min="0" max="100" value="0" disabled>
+                        <span id="playbackTime">0:00 / 0:00</span>
+                    </div>
+                    <div class="playback-speed">
+                        <label>Speed:</label>
+                        <select id="playbackSpeed">
+                            <option value="0.25">0.25x</option>
+                            <option value="0.5">0.5x</option>
+                            <option value="1" selected>1x</option>
+                            <option value="2">2x</option>
+                            <option value="4">4x</option>
+                        </select>
+                    </div>
                 </div>
             </div>
-        </div>
-
+        </main>
         <footer class="page-footer">
             <span>SIMCAP GAMBIT</span>
             <a href="collector.html">Collector</a>
             <a href="synth.html">Synth</a>
         </footer>
 
-        <script>
+        <script type="module">
+            // ===== Import shared modules =====
+            import {
+                ACCEL_SCALE,
+                GYRO_SCALE,
+                STATIONARY_SAMPLES_FOR_CALIBRATION,
+                accelLsbToG,
+                gyroLsbToDps,
+                createMadgwickAHRS,
+                createKalmanFilter3D,
+                createMotionDetector,
+                createGyroBiasState,
+                createLowPassFilter
+            } from './shared/sensor-config.js';
+            import { TelemetryProcessor } from './shared/telemetry-processor.js';
+            import { 
+                SessionPlayback, 
+                formatTime, 
+                formatSessionDisplay 
+            } from './modules/session-playback.js';
+            import {
+                createGesture,
+                createGestureUI,
+                isGestureInferenceAvailable,
+                GESTURE_LABELS_V1
+            } from './modules/gesture-inference-module.js';
 
             // ===== GambitClient for Frame-Based Protocol =====
             const gambitClient = new GambitClient({ debug: true });
@@ -529,11 +565,12 @@
             }
 
             let ghToken;
+            let firmwareVersion = null;  // Store firmware version for session metadata
 
             let uploadTimeout;
             let sessionData = []
 
-            // ===== Calibration and 3D Filtering =====
+            // ===== Calibration =====
             // Initialize calibration (loads previous calibration if available)
             const calibration = new EnvironmentalCalibration();
             try {
@@ -543,43 +580,21 @@
                 console.log('No previous calibration found');
             }
 
-            // Initialize 3D Kalman filter for proper magnetometer filtering
-            const magFilter3D = new KalmanFilter3D({
-                processNoise: 0.1,
-                measurementNoise: 1.0
+            // ===== Telemetry Processor (shared module) =====
+            // Handles: unit conversion, IMU fusion, gyro bias calibration, mag calibration, filtering
+            const telemetryProcessor = new TelemetryProcessor({
+                calibration: calibration,
+                onGyroBiasCalibrated: () => {
+                    console.log('[AHRS] Gyroscope bias calibration complete');
+                    // Update visual indicator
+                    const gyroStatus = document.getElementById('gyroStatus');
+                    if (gyroStatus) {
+                        gyroStatus.textContent = '✓';
+                        gyroStatus.style.color = 'var(--success)';
+                        gyroStatus.title = 'Gyroscope bias calibrated';
+                    }
+                }
             });
-
-            // ===== Proper Orientation Estimation for Cube Visualization =====
-            // Use Madgwick AHRS for fused acc+gyro orientation (for gyro cube)
-            // Beta controls gyro vs accel weighting: higher = more responsive, lower = more stable
-            // NOTE: With stable sensor data (Puck.accelOn fix in firmware v0.3.6),
-            // we can use standard AHRS parameters instead of jitter-compensating values
-            const ahrs = new MadgwickAHRS({
-                sampleFreq: 26,  // Match firmware accelOn rate (26Hz)
-                beta: 0.05      // Standard Madgwick gain (was 0.1 for jittery data)
-            });
-
-            // ===== Sensor Unit Conversion =====
-            // Puck.js returns RAW LSB values from the LSM6DS3 sensor
-            // We need to convert to physical units for AHRS filter
-            // See: https://learn.adafruit.com/adafruit-sensorlab-gyroscope-calibration
-            const ACCEL_SCALE = 8192;    // LSB per g (±2g range, 16-bit)
-            const GYRO_SCALE = 114.28;   // LSB per deg/s (245dps range)
-
-            // Motion detector for gyroscope bias calibration
-            // When device is stationary, we can estimate and correct gyro bias
-            // NOTE: With stable sensor data, we can use tighter thresholds
-            // Previous jitter-compensating values: accel=500, gyro=1000
-            const motionDetector = new MotionDetector({
-                accelThreshold: 200,   // LSB - std dev when stationary (~0.025g)
-                gyroThreshold: 300,    // LSB - std dev when stationary (~2.6 deg/s)
-                windowSize: 10         // samples to consider (~0.5s at 20Hz)
-            });
-
-            // Track gyroscope bias estimation state
-            let gyroBiasCalibrated = false;
-            let stationaryCount = 0;
-            const STATIONARY_SAMPLES_FOR_CALIBRATION = 20; // ~1 second at 20Hz
 
             // ===== Hand 3D Renderer =====
             let hand3DRenderer = null;
@@ -595,7 +610,7 @@
                 // NOTE: With stable sensor data, we can use higher alpha for responsiveness
                 // Previous jitter-compensating value: orientationAlpha: 0.15
                 hand3DRenderer = new Hand3DRenderer(canvas, {
-                    backgroundColor: '#1a1a2e',
+                    backgroundColor: '#efefef',
                     orientationMode: 'sensor_fusion',
                     orientationFiltering: true,
                     orientationAlpha: 0.3,  // More responsive (was 0.15 for jittery data)
@@ -648,7 +663,7 @@
                 uploadTimeout = setTimeout(function() {
                     if (sessionData.length > 0) {
                         console.log("Uploading to gh");
-                        ghPutData(JSON.stringify(sessionData));
+                        ghPutData(sessionData);  // Pass array directly, ghPutData wraps in v2.1 schema
                         sessionData = [];
                     }
                 }, 1000);
@@ -667,6 +682,7 @@
 
             gambitClient.on('firmware', function(fw) {
                 console.log('[GambitClient] Firmware:', fw);
+                firmwareVersion = fw.version || 'unknown';
             });
 
             var minMaxs = {}
@@ -719,43 +735,12 @@
             }
 
             function updateData(prenorm) {
-                // IMPORTANT: Preserve raw data, only DECORATE with processed fields
-                const decoratedData = {...prenorm};
-
-                // Apply calibration if available (adds calibrated_ fields)
-                if (calibration.hasCalibration('earth_field') &&
-                    calibration.hasCalibration('hard_iron') &&
-                    calibration.hasCalibration('soft_iron')) {
-                    try {
-                        const corrected = calibration.correct({
-                            x: prenorm.mx,
-                            y: prenorm.my,
-                            z: prenorm.mz
-                        });
-                        decoratedData.calibrated_mx = corrected.x;
-                        decoratedData.calibrated_my = corrected.y;
-                        decoratedData.calibrated_mz = corrected.z;
-                    } catch (e) {
-                        // Calibration failed, skip
-                    }
-                }
-
-                // Apply 3D Kalman filtering (adds filtered_ fields)
-                try {
-                    const filteredMag = magFilter3D.update({
-                        x: decoratedData.calibrated_mx || prenorm.mx,
-                        y: decoratedData.calibrated_my || prenorm.my,
-                        z: decoratedData.calibrated_mz || prenorm.mz
-                    });
-                    decoratedData.filtered_mx = filteredMag.x;
-                    decoratedData.filtered_my = filteredMag.y;
-                    decoratedData.filtered_mz = filteredMag.z;
-                } catch (e) {
-                    // Filtering failed, skip
-                }
+                // Process telemetry through shared TelemetryProcessor
+                // This handles: unit conversion, IMU fusion, gyro bias, calibration, filtering
+                const decoratedData = telemetryProcessor.process(prenorm);
 
                 // Store decorated data (raw + calibrated + filtered fields)
-                sessionData.push(decoratedData)
+                sessionData.push(decoratedData);
 
                 // ===== Update UI displays =====
                 // Battery
@@ -781,85 +766,24 @@
                 window.gY.innerHTML = (prenorm.gy || 0).toFixed(1);
                 window.gZ.innerHTML = (prenorm.gz || 0).toFixed(1);
 
-                // ===== PROPER CUBE VISUALIZATION =====
-                // Calculate time delta for AHRS
-                const now = Date.now();
-                const dt = lastTimestamp ? (now - lastTimestamp) / 1000 : 0.05; // Default 50ms
-                lastTimestamp = now;
+                // ===== CUBE VISUALIZATION =====
+                // Get orientation from telemetry processor
+                const euler = telemetryProcessor.getEulerAngles() || { roll: 0, pitch: 0, yaw: 0 };
 
                 // --- ACCELEROMETER CUBE: Tilt from gravity ---
-                // Calculate roll and pitch from accelerometer (gravity vector)
-                // This shows device orientation relative to gravity
                 const ax = prenorm.ax || 0;
                 const ay = prenorm.ay || 0;
                 const az = prenorm.az || 0;
                 
-                // Roll: rotation around X-axis (tilting left/right)
-                // Pitch: rotation around Y-axis (tilting forward/back)
                 const accRoll = Math.atan2(ay, az) * (180 / Math.PI);
                 const accPitch = Math.atan2(-ax, Math.sqrt(ay * ay + az * az)) * (180 / Math.PI);
                 
-                // Apply low-pass filter for smooth display
                 const filteredAccRoll = cubeFilters.acc.x.filter(accRoll);
                 const filteredAccPitch = cubeFilters.acc.y.filter(accPitch);
                 
                 window.cubeA.style = `transform: rotateX(${filteredAccPitch}deg) rotateY(${filteredAccRoll}deg) rotateZ(0deg);`;
 
-                // --- GYROSCOPE CUBE: Fused orientation using Madgwick AHRS ---
-                // This combines accelerometer (gravity) with gyroscope (rotation rate)
-                // for drift-free orientation estimation
-
-                // Raw gyro values (LSB) - used for motion detection
-                const gx_raw = prenorm.gx || 0;
-                const gy_raw = prenorm.gy || 0;
-                const gz_raw = prenorm.gz || 0;
-
-                // Convert to physical units for AHRS filter
-                // Accel: LSB -> g's (divide by 8192)
-                // Gyro: LSB -> deg/s (divide by 114.28)
-                const ax_g = ax / ACCEL_SCALE;
-                const ay_g = ay / ACCEL_SCALE;
-                const az_g = az / ACCEL_SCALE;
-                const gx_dps = gx_raw / GYRO_SCALE;
-                const gy_dps = gy_raw / GYRO_SCALE;
-                const gz_dps = gz_raw / GYRO_SCALE;
-
-                // Update motion detector with RAW LSB values (it expects LSB thresholds)
-                const motionState = motionDetector.update(ax, ay, az, gx_raw, gy_raw, gz_raw);
-
-                // Calibrate gyroscope bias when device is stationary
-                // This removes sensor offset that causes drift
-                if (!motionState.isMoving) {
-                    stationaryCount++;
-
-                    // After being stationary for a while, update gyro bias
-                    if (stationaryCount > STATIONARY_SAMPLES_FOR_CALIBRATION) {
-                        // Pass deg/s values for bias estimation
-                        ahrs.updateGyroBias(gx_dps, gy_dps, gz_dps, true); // true = gyro in degrees
-
-                        if (!gyroBiasCalibrated) {
-                            console.log('[AHRS] Gyroscope bias calibration complete');
-                            gyroBiasCalibrated = true;
-                            // Update visual indicator
-                            const gyroStatus = document.getElementById('gyroStatus');
-                            if (gyroStatus) {
-                                gyroStatus.textContent = '✓';
-                                gyroStatus.style.color = 'var(--success)';
-                                gyroStatus.title = 'Gyroscope bias calibrated';
-                            }
-                        }
-                    }
-                } else {
-                    stationaryCount = 0;
-                }
-
-                // Update AHRS with converted values (g's and deg/s)
-                ahrs.update(ax_g, ay_g, az_g, gx_dps, gy_dps, gz_dps, dt, true);
-                
-                // Get Euler angles from AHRS
-                const euler = ahrs.getEulerAngles();
-
-                // Apply low-pass filter for smooth display
+                // --- GYROSCOPE CUBE: Fused orientation from TelemetryProcessor ---
                 const filteredGyroRoll = cubeFilters.gyro.x.filter(euler.roll);
                 const filteredGyroPitch = cubeFilters.gyro.y.filter(euler.pitch);
                 const filteredGyroYaw = cubeFilters.gyro.z.filter(euler.yaw);
@@ -878,36 +802,20 @@
                 }
 
                 // --- MAGNETOMETER CUBE: Shows magnetic field vector direction ---
-                // The cube rotates to point toward the magnetic field vector
-                // This responds to both heading changes AND tilting the device
                 const mx = prenorm.mx || 0;
                 const my = prenorm.my || 0;
                 const mz = prenorm.mz || 0;
                 
-                // Calculate spherical coordinates of the magnetic field vector
-                // This gives us the direction the field is pointing in 3D space
-                
-                // Azimuth (heading) - rotation around Z axis (compass direction)
-                // atan2(y, x) gives angle in XY plane
                 const magAzimuth = Math.atan2(my, mx) * (180 / Math.PI);
-                
-                // Elevation (pitch) - rotation around Y axis (how much field points up/down)
-                // This is the angle from the horizontal plane
                 const magMagnitude = Math.sqrt(mx * mx + my * my + mz * mz);
                 const magElevation = magMagnitude > 0.1 ? 
                     Math.asin(mz / magMagnitude) * (180 / Math.PI) : 0;
-                
-                // Roll based on the ratio of X to Y components (tilt indication)
-                // This helps show when the device is tilted sideways
                 const magRoll = Math.atan2(mx, Math.sqrt(my * my + mz * mz)) * (180 / Math.PI);
                 
-                // Apply low-pass filter for smooth display
                 const filteredMagAzimuth = cubeFilters.mag.z.filter(magAzimuth);
                 const filteredMagElevation = cubeFilters.mag.x.filter(magElevation);
                 const filteredMagRoll = cubeFilters.mag.y.filter(magRoll);
                 
-                // Apply rotations: first azimuth (Z), then elevation (X), then roll (Y)
-                // This makes the cube "point" toward the magnetic field vector
                 window.cubeM.style = `transform: rotateZ(${-filteredMagAzimuth}deg) rotateX(${filteredMagElevation}deg) rotateY(${filteredMagRoll}deg);`;
             }
 
@@ -953,15 +861,36 @@
             const getEndpoint = (opts,file) => `https://api.github.com/repos/${opts.username}/${opts.repository}/contents/${file}`
 
 
-            async function ghPutData(content) {
+            async function ghPutData(rawSessionData) {
 
                 if (!ghToken) {
                     console.log("ghToken not found. skipping upload.")
                     return;
-                } else {
-
                 }
 
+                // Build v2.1 schema export data (consistent with collector-app.js)
+                const exportData = {
+                    version: '2.1',
+                    timestamp: new Date().toISOString(),
+                    samples: rawSessionData,
+                    labels: [],  // index.html doesn't support labeling
+                    metadata: {
+                        sample_rate: 26,  // Match firmware accelOn rate
+                        device: 'GAMBIT',
+                        firmware_version: firmwareVersion || 'unknown',
+                        calibration: calibration ? calibration.toJSON() : null,
+                        subject_id: 'unknown',
+                        environment: 'unknown',
+                        hand: 'unknown',
+                        split: 'train',
+                        magnet_config: 'none',
+                        magnet_type: 'unknown',
+                        notes: '',
+                        session_type: 'streaming'  // Distinguishes from collector's 'recording'
+                    }
+                };
+
+                const content = JSON.stringify(exportData, null, 2);
                 const d = new Date()
                 const filename = `${d.toISOString()}.json`
 
@@ -1068,106 +997,54 @@
                 }
             }
 
-            // ===== Gesture Inference =====
+            // ===== Gesture Inference (using module) =====
             let gestureInference = null;
+            let gestureUI = null;
 
-            // Initialize gesture inference
+            // Initialize gesture inference using the module
             async function initGestureInference() {
                 console.log('=== GAMBIT Gesture Inference Initialization ===');
-                console.log('Current URL:', window.location.href);
-                console.log('Page loaded at:', new Date().toISOString());
+
+                // Create UI controller using the module helper
+                gestureUI = createGestureUI({
+                    statusEl: document.getElementById('modelStatus'),
+                    nameEl: document.getElementById('gestureName'),
+                    confidenceEl: document.getElementById('gestureConfidence'),
+                    timeEl: document.getElementById('inferenceTime'),
+                    displayEl: document.getElementById('gestureDisplay'),
+                    probabilitiesEl: document.getElementById('gestureProbabilities')
+                });
+
+                // Check if gesture inference is available (requires gesture-inference.js loaded)
+                if (!isGestureInferenceAvailable()) {
+                    console.warn('[GAMBIT] Gesture inference not available');
+                    gestureUI.setStatus('error', 'Gesture inference not loaded');
+                    return;
+                }
 
                 try {
-                    console.log('Creating gesture inference instance...');
-
-                    gestureInference = createGestureInference('v1', {
+                    // Create gesture inference using the module wrapper
+                    gestureInference = createGesture('v1', {
                         confidenceThreshold: 0.3,
                         onPrediction: (result) => {
-                            console.log('[GAMBIT] Prediction callback triggered:', result.gesture, result.confidence);
-                            updateGestureDisplay(result);
+                            console.log('[GAMBIT] Prediction:', result.gesture, result.confidence.toFixed(2));
+                            gestureUI.updatePrediction(result);
                         },
                         onReady: () => {
-                            console.log('[GAMBIT] ✓ Model ready callback triggered');
-                            const status = document.getElementById('modelStatus');
-                            status.classList.add('ready');
-                            status.querySelector('span:last-child').textContent = 'Model ready (v1)';
-                            initProbabilityBars();
-                            console.log('[GAMBIT] UI updated to show model ready state');
+                            console.log('[GAMBIT] ✓ Model ready');
+                            gestureUI.setStatus('ready', 'Model ready (v1)');
+                            gestureUI.initProbabilityBars(gestureInference.labels);
                         },
                         onError: (error) => {
-                            console.error('[GAMBIT] ✗ Error callback triggered');
-                            console.error('[GAMBIT] Error details:', {
-                                name: error.name,
-                                message: error.message,
-                                stack: error.stack
-                            });
-                            const status = document.getElementById('modelStatus');
-                            status.querySelector('span:last-child').textContent = 'Model error: ' + error.message;
+                            console.error('[GAMBIT] Model error:', error.message);
+                            gestureUI.setStatus('error', 'Model error: ' + error.message);
                         }
                     });
 
-                    console.log('[GAMBIT] Gesture inference instance created, starting model load...');
-                    const loadSuccess = await gestureInference.load();
-
-                    if (loadSuccess) {
-                        console.log('[GAMBIT] ✓ Model load completed successfully');
-                    } else {
-                        console.error('[GAMBIT] ✗ Model load returned false');
-                    }
+                    await gestureInference.load();
                 } catch (error) {
-                    console.error('[GAMBIT] ✗ FAILED TO INITIALIZE GESTURE INFERENCE');
-                    console.error('[GAMBIT] Error type:', error.name);
-                    console.error('[GAMBIT] Error message:', error.message);
-                    console.error('[GAMBIT] Full error object:', error);
-                    console.error('[GAMBIT] Stack trace:', error.stack);
-
-                    const status = document.getElementById('modelStatus');
-                    status.querySelector('span:last-child').textContent = 'Model unavailable: ' + error.message;
-                }
-
-                console.log('=== Gesture Inference Initialization Complete ===');
-            }
-
-            // Initialize probability bars
-            function initProbabilityBars() {
-                const container = document.getElementById('gestureProbabilities');
-                const labels = gestureInference.labels;
-                
-                container.innerHTML = labels.map(label => `
-                    <div class="prob-item">
-                        <div class="prob-label">${label.replace('_', ' ')}</div>
-                        <div class="prob-bar">
-                            <div class="prob-fill" id="prob-${label}" style="width: 0%"></div>
-                        </div>
-                    </div>
-                `).join('');
-            }
-
-            // Update gesture display
-            function updateGestureDisplay(result) {
-                const display = document.getElementById('gestureDisplay');
-                const name = document.getElementById('gestureName');
-                const confidence = document.getElementById('gestureConfidence');
-                const time = document.getElementById('inferenceTime');
-
-                // Update main display
-                name.textContent = result.gesture.replace('_', ' ');
-                confidence.textContent = `${(result.confidence * 100).toFixed(1)}% confidence`;
-                time.textContent = `${result.inferenceTime.toFixed(1)}ms inference`;
-
-                // Highlight if high confidence
-                if (result.confidence > 0.7) {
-                    display.classList.add('active');
-                } else {
-                    display.classList.remove('active');
-                }
-
-                // Update probability bars
-                for (const [label, prob] of Object.entries(result.probabilities)) {
-                    const bar = document.getElementById(`prob-${label}`);
-                    if (bar) {
-                        bar.style.width = `${prob * 100}%`;
-                    }
+                    console.error('[GAMBIT] Failed to initialize gesture inference:', error);
+                    gestureUI.setStatus('error', 'Model unavailable: ' + error.message);
                 }
             }
 
@@ -1222,285 +1099,183 @@
                 console.error('[GAMBIT] Failed to init hand renderer:', e);
             }
 
-            // ===== Session Playback System =====
-            const MANIFEST_URL = '../../../data/GAMBIT/manifest.json';
-            const DATA_BASE_URL = '../../../data/GAMBIT/';
+            // ===== Session Playback System (using module) =====
+            let sessionPlayback = null;
 
-            let playbackState = {
-                sessions: [],
-                currentSession: null,
-                samples: [],
-                currentIndex: 0,
-                isPlaying: false,
-                playbackInterval: null,
-                speed: 1
+            // UI elements for playback
+            const playbackElements = {
+                select: null,
+                playBtn: null,
+                stopBtn: null,
+                slider: null,
+                timeEl: null,
+                statusEl: null,
+                card: null,
+                speedSelect: null
             };
 
-            // Format seconds as M:SS
-            function formatTime(seconds) {
-                const mins = Math.floor(seconds / 60);
-                const secs = Math.floor(seconds % 60);
-                return `${mins}:${secs.toString().padStart(2, '0')}`;
+            // Update UI based on playback state
+            function updatePlaybackUI(state) {
+                if (!playbackElements.timeEl) return;
+
+                // Update time display
+                playbackElements.timeEl.textContent = 
+                    `${formatTime(state.currentTime)} / ${formatTime(state.duration)}`;
+                
+                // Update slider
+                if (playbackElements.slider) {
+                    playbackElements.slider.value = state.currentIndex;
+                }
+
+                // Update button states
+                if (playbackElements.playBtn) {
+                    playbackElements.playBtn.textContent = state.isPlaying ? 'Pause' : 'Play';
+                }
+
+                // Update card styling
+                if (playbackElements.card) {
+                    if (state.isPlaying) {
+                        playbackElements.card.classList.add('playing');
+                    } else {
+                        playbackElements.card.classList.remove('playing');
+                    }
+                }
+
+                // Update status text
+                if (playbackElements.statusEl) {
+                    if (state.isPlaying) {
+                        playbackElements.statusEl.textContent = 'Playing...';
+                    } else if (state.currentIndex === 0 && !state.isPlaying) {
+                        playbackElements.statusEl.textContent = state.session ? 
+                            `Loaded: ${state.totalSamples} samples` : 'Stopped';
+                    } else {
+                        playbackElements.statusEl.textContent = 'Paused';
+                    }
+                }
+
+                // Update stop button
+                if (playbackElements.stopBtn) {
+                    playbackElements.stopBtn.disabled = state.currentIndex === 0 && !state.isPlaying;
+                }
             }
 
-            // Load manifest and populate session selector
-            async function loadManifest() {
-                const select = document.getElementById('sessionSelect');
-                const status = document.getElementById('playbackStatus');
+            // Populate session selector
+            function populateSessionSelect(sessions) {
+                if (!playbackElements.select) return;
 
-                try {
-                    status.textContent = 'Loading sessions...';
-                    const response = await fetch(MANIFEST_URL);
+                playbackElements.select.innerHTML = '<option value="">-- Select a session --</option>';
 
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}`);
+                sessions.forEach((session, index) => {
+                    const option = document.createElement('option');
+                    option.value = index;
+                    option.textContent = formatSessionDisplay(session);
+                    playbackElements.select.appendChild(option);
+                });
+
+                if (playbackElements.statusEl) {
+                    playbackElements.statusEl.textContent = `${sessions.length} sessions available`;
+                }
+            }
+
+            // Initialize playback system using the module
+            async function initPlayback() {
+                // Cache UI elements
+                playbackElements.select = document.getElementById('sessionSelect');
+                playbackElements.playBtn = document.getElementById('playBtn');
+                playbackElements.stopBtn = document.getElementById('stopBtn');
+                playbackElements.slider = document.getElementById('playbackSlider');
+                playbackElements.timeEl = document.getElementById('playbackTime');
+                playbackElements.statusEl = document.getElementById('playbackStatus');
+                playbackElements.card = document.getElementById('playbackCard');
+                playbackElements.speedSelect = document.getElementById('playbackSpeed');
+
+                // Create SessionPlayback instance using the module
+                sessionPlayback = new SessionPlayback({
+                    manifestUrl: '../../../data/GAMBIT/manifest.json',
+                    dataBaseUrl: '../../../data/GAMBIT/',
+                    sampleRate: 20,
+                    
+                    // Feed samples through updateData (same as live data)
+                    onSample: (sample) => {
+                        updateData(sample);
+                    },
+                    
+                    // Update UI on state changes
+                    onStateChange: (state) => {
+                        updatePlaybackUI(state);
+                    },
+                    
+                    // Handle manifest loaded
+                    onManifestLoaded: (sessions) => {
+                        populateSessionSelect(sessions);
+                    },
+                    
+                    // Handle session loaded
+                    onSessionLoaded: ({ session, sampleCount, duration }) => {
+                        if (playbackElements.playBtn) {
+                            playbackElements.playBtn.disabled = false;
+                        }
+                        if (playbackElements.slider) {
+                            playbackElements.slider.disabled = false;
+                            playbackElements.slider.max = sampleCount - 1;
+                            playbackElements.slider.value = 0;
+                        }
+                    },
+                    
+                    // Handle errors
+                    onError: (error) => {
+                        console.error('[Playback] Error:', error);
+                        if (playbackElements.statusEl) {
+                            playbackElements.statusEl.textContent = 'Error: ' + error.message;
+                        }
                     }
+                });
 
-                    const manifest = await response.json();
-                    playbackState.sessions = manifest.sessions || [];
-
-                    // Clear and populate select
-                    select.innerHTML = '<option value="">-- Select a session --</option>';
-
-                    playbackState.sessions.forEach((session, index) => {
-                        const option = document.createElement('option');
-                        option.value = index;
-
-                        // Format display text
-                        const date = new Date(session.timestamp);
-                        const dateStr = date.toLocaleDateString();
-                        const timeStr = date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
-                        const duration = session.durationSec ? `${formatTime(session.durationSec)}` : '?';
-                        const samples = session.sampleCount || '?';
-
-                        option.textContent = `${dateStr} ${timeStr} - ${duration} (${samples} samples)`;
-                        select.appendChild(option);
+                // Wire up UI controls
+                if (playbackElements.select) {
+                    playbackElements.select.addEventListener('change', async (e) => {
+                        sessionPlayback.stop();
+                        if (e.target.value !== '') {
+                            playbackElements.statusEl.textContent = 'Loading session...';
+                            playbackElements.playBtn.disabled = true;
+                            await sessionPlayback.loadSession(parseInt(e.target.value));
+                        }
                     });
-
-                    status.textContent = `${playbackState.sessions.length} sessions available`;
-                    console.log('[Playback] Loaded manifest with', playbackState.sessions.length, 'sessions');
-
-                } catch (error) {
-                    console.error('[Playback] Failed to load manifest:', error);
-                    status.textContent = 'Failed to load sessions';
-                    select.innerHTML = '<option value="">-- Error loading --</option>';
                 }
-            }
 
-            // Load a specific session's data
-            async function loadSession(index) {
-                const session = playbackState.sessions[index];
-                if (!session) return;
+                if (playbackElements.playBtn) {
+                    playbackElements.playBtn.addEventListener('click', () => {
+                        sessionPlayback.toggle();
+                    });
+                }
 
-                const status = document.getElementById('playbackStatus');
-                const playBtn = document.getElementById('playBtn');
-                const slider = document.getElementById('playbackSlider');
+                if (playbackElements.stopBtn) {
+                    playbackElements.stopBtn.addEventListener('click', () => {
+                        sessionPlayback.stop();
+                    });
+                }
 
+                if (playbackElements.slider) {
+                    playbackElements.slider.addEventListener('input', (e) => {
+                        sessionPlayback.pause();
+                        sessionPlayback.seekTo(parseInt(e.target.value));
+                    });
+                }
+
+                if (playbackElements.speedSelect) {
+                    playbackElements.speedSelect.addEventListener('change', (e) => {
+                        sessionPlayback.setSpeed(parseFloat(e.target.value));
+                    });
+                }
+
+                // Load manifest
                 try {
-                    status.textContent = 'Loading session...';
-                    playBtn.disabled = true;
-
-                    const url = DATA_BASE_URL + session.filename;
-                    const response = await fetch(url);
-
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}`);
-                    }
-
-                    const data = await response.json();
-
-                    // Handle both v1.0 (array) and v2.0 (object with samples) formats
-                    if (Array.isArray(data)) {
-                        playbackState.samples = data;
-                    } else if (data.samples && Array.isArray(data.samples)) {
-                        playbackState.samples = data.samples;
-                    } else {
-                        throw new Error('Unknown data format');
-                    }
-
-                    playbackState.currentSession = session;
-                    playbackState.currentIndex = 0;
-
-                    // Enable playback controls
-                    playBtn.disabled = false;
-                    slider.disabled = false;
-                    slider.max = playbackState.samples.length - 1;
-                    slider.value = 0;
-
-                    updatePlaybackTime();
-                    status.textContent = `Loaded: ${playbackState.samples.length} samples`;
-                    console.log('[Playback] Loaded session:', session.filename, 'with', playbackState.samples.length, 'samples');
-
+                    playbackElements.statusEl.textContent = 'Loading sessions...';
+                    await sessionPlayback.loadManifest();
                 } catch (error) {
-                    console.error('[Playback] Failed to load session:', error);
-                    status.textContent = 'Failed to load session';
-                    playBtn.disabled = true;
-                    slider.disabled = true;
+                    playbackElements.statusEl.textContent = 'Failed to load sessions';
+                    playbackElements.select.innerHTML = '<option value="">-- Error loading --</option>';
                 }
-            }
-
-            // Update playback time display
-            function updatePlaybackTime() {
-                const timeEl = document.getElementById('playbackTime');
-                const slider = document.getElementById('playbackSlider');
-
-                const currentSec = playbackState.currentIndex / 20; // Assuming 20Hz
-                const totalSec = playbackState.samples.length / 20;
-
-                timeEl.textContent = `${formatTime(currentSec)} / ${formatTime(totalSec)}`;
-                slider.value = playbackState.currentIndex;
-            }
-
-            // Play a single sample through the visualization
-            function playSample(sample) {
-                // Feed sample through updateData (same as live data)
-                updateData(sample);
-            }
-
-            // Start playback
-            function startPlayback() {
-                if (playbackState.samples.length === 0) return;
-                if (playbackState.isPlaying) return;
-
-                playbackState.isPlaying = true;
-
-                const playBtn = document.getElementById('playBtn');
-                const stopBtn = document.getElementById('stopBtn');
-                const card = document.getElementById('playbackCard');
-                const status = document.getElementById('playbackStatus');
-
-                playBtn.textContent = 'Pause';
-                stopBtn.disabled = false;
-                card.classList.add('playing');
-                status.textContent = 'Playing...';
-
-                // Calculate interval based on speed (base is 50ms for 20Hz)
-                const baseInterval = 50;
-                const interval = baseInterval / playbackState.speed;
-
-                playbackState.playbackInterval = setInterval(() => {
-                    if (playbackState.currentIndex >= playbackState.samples.length) {
-                        stopPlayback();
-                        return;
-                    }
-
-                    const sample = playbackState.samples[playbackState.currentIndex];
-                    playSample(sample);
-
-                    playbackState.currentIndex++;
-                    updatePlaybackTime();
-
-                }, interval);
-
-                console.log('[Playback] Started at', playbackState.speed, 'x speed');
-            }
-
-            // Pause playback
-            function pausePlayback() {
-                if (!playbackState.isPlaying) return;
-
-                playbackState.isPlaying = false;
-
-                if (playbackState.playbackInterval) {
-                    clearInterval(playbackState.playbackInterval);
-                    playbackState.playbackInterval = null;
-                }
-
-                const playBtn = document.getElementById('playBtn');
-                const card = document.getElementById('playbackCard');
-                const status = document.getElementById('playbackStatus');
-
-                playBtn.textContent = 'Play';
-                card.classList.remove('playing');
-                status.textContent = 'Paused';
-
-                console.log('[Playback] Paused at index', playbackState.currentIndex);
-            }
-
-            // Stop playback and reset to beginning
-            function stopPlayback() {
-                pausePlayback();
-
-                playbackState.currentIndex = 0;
-
-                const stopBtn = document.getElementById('stopBtn');
-                const status = document.getElementById('playbackStatus');
-
-                stopBtn.disabled = true;
-                status.textContent = 'Stopped';
-
-                updatePlaybackTime();
-                console.log('[Playback] Stopped');
-            }
-
-            // Seek to position
-            function seekTo(index) {
-                playbackState.currentIndex = Math.max(0, Math.min(index, playbackState.samples.length - 1));
-                updatePlaybackTime();
-
-                // Show the sample at this position
-                if (playbackState.samples[playbackState.currentIndex]) {
-                    playSample(playbackState.samples[playbackState.currentIndex]);
-                }
-            }
-
-            // Initialize playback controls
-            function initPlayback() {
-                const select = document.getElementById('sessionSelect');
-                const playBtn = document.getElementById('playBtn');
-                const stopBtn = document.getElementById('stopBtn');
-                const slider = document.getElementById('playbackSlider');
-                const speedSelect = document.getElementById('playbackSpeed');
-
-                // Session selection
-                select.addEventListener('change', (e) => {
-                    stopPlayback();
-                    if (e.target.value !== '') {
-                        loadSession(parseInt(e.target.value));
-                    }
-                });
-
-                // Play/Pause button
-                playBtn.addEventListener('click', () => {
-                    if (playbackState.isPlaying) {
-                        pausePlayback();
-                    } else {
-                        startPlayback();
-                    }
-                });
-
-                // Stop button
-                stopBtn.addEventListener('click', () => {
-                    stopPlayback();
-                });
-
-                // Slider seek
-                slider.addEventListener('input', (e) => {
-                    const wasPlaying = playbackState.isPlaying;
-                    if (wasPlaying) pausePlayback();
-
-                    seekTo(parseInt(e.target.value));
-                });
-
-                slider.addEventListener('change', (e) => {
-                    // Resume if was playing before seek
-                });
-
-                // Speed control
-                speedSelect.addEventListener('change', (e) => {
-                    playbackState.speed = parseFloat(e.target.value);
-
-                    // If playing, restart with new speed
-                    if (playbackState.isPlaying) {
-                        pausePlayback();
-                        startPlayback();
-                    }
-
-                    console.log('[Playback] Speed set to', playbackState.speed, 'x');
-                });
-
-                // Load manifest on init
-                loadManifest();
             }
 
             // Initialize playback system
