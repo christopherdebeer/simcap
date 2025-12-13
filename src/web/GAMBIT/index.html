@@ -614,35 +614,84 @@
                     </div>
                 </details>
 
-                <!-- Validation Panel - User feedback statements -->
+                <!-- Calibration Panel - Structured observation system -->
                 <details open style="margin-top: var(--space-sm); padding: var(--space-xs); border: 1px solid var(--accent); border-radius: var(--radius-sm); background: rgba(0,100,255,0.05);">
                     <summary style="cursor: pointer; font-size: 0.75rem; font-weight: bold; padding: var(--space-xs); color: var(--accent);">
-                        📋 Validation Checklist (verify these!)
+                        🔬 Calibration System
                     </summary>
-                    <div id="validationPanel" style="padding: var(--space-sm); font-size: 0.7rem; font-family: monospace;">
+                    <div id="calibrationPanel" style="padding: var(--space-sm); font-size: 0.7rem; font-family: monospace;">
+
+                        <!-- Current State Display -->
                         <div style="margin-bottom: var(--space-sm); padding: var(--space-xs); background: var(--bg); border-radius: var(--radius-sm);">
-                            <strong>Current Sensor State:</strong>
-                            <div id="sensorStateDesc">Waiting for data...</div>
+                            <strong>Live Sensor State:</strong>
+                            <div id="sensorStateDesc" style="margin-top: 4px;">Waiting for data...</div>
                         </div>
+
+                        <!-- Reference Pose Selector -->
                         <div style="margin-bottom: var(--space-sm);">
-                            <strong>Expected Hand Behavior:</strong>
-                            <div id="expectedBehavior" style="color: var(--success);">--</div>
+                            <label style="font-weight: bold; display: block; margin-bottom: 4px;">
+                                1. Select Reference Pose:
+                            </label>
+                            <select id="referencePoseSelect" style="width: 100%; padding: 4px; font-size: 0.7rem;">
+                                <option value="">-- Select a pose --</option>
+                                <option value="FLAT_PALM_UP">Flat, Palm Up (baseline)</option>
+                                <option value="PITCH_FORWARD_45">Pitch Forward 45° (test pitch)</option>
+                                <option value="PITCH_BACKWARD_45">Pitch Backward 45° (confirm pitch)</option>
+                                <option value="ROLL_LEFT_45">Roll Left 45° (test roll)</option>
+                                <option value="ROLL_RIGHT_45">Roll Right 45° (confirm roll)</option>
+                                <option value="YAW_CW_90">Yaw Clockwise 90° (test yaw)</option>
+                                <option value="YAW_CCW_90">Yaw Counter-CW 90° (confirm yaw)</option>
+                            </select>
                         </div>
-                        <div style="border-top: 1px solid var(--border); padding-top: var(--space-sm);">
-                            <strong>Please verify:</strong>
-                            <ul id="validationChecklist" style="margin: var(--space-xs) 0; padding-left: 1.5em; list-style: none;">
-                                <li>[ ] Hand model matches physical device orientation</li>
-                            </ul>
+
+                        <!-- Pose Instructions -->
+                        <div id="poseInstructions" style="margin-bottom: var(--space-sm); padding: var(--space-xs); background: rgba(255,255,0,0.1); border-radius: var(--radius-sm); display: none;">
+                            <strong>2. Position Device:</strong>
+                            <ul id="poseInstructionsList" style="margin: 4px 0; padding-left: 1.2em;"></ul>
                         </div>
-                        <div style="margin-top: var(--space-sm); padding: var(--space-xs); background: var(--bg); border-radius: var(--radius-sm);">
-                            <strong>Quick Tests:</strong>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 4px;">
-                                <button class="btn btn-sm" id="testFlat" style="font-size: 0.65rem;">1. Flat on desk</button>
-                                <button class="btn btn-sm" id="testTipFwd" style="font-size: 0.65rem;">2. Tip forward</button>
-                                <button class="btn btn-sm" id="testTipLeft" style="font-size: 0.65rem;">3. Tip left</button>
-                                <button class="btn btn-sm" id="testRotateCW" style="font-size: 0.65rem;">4. Rotate CW</button>
+
+                        <!-- Validation Questions -->
+                        <div id="validationQuestions" style="margin-bottom: var(--space-sm); display: none;">
+                            <strong>3. What do you observe?</strong>
+                            <div id="questionsList" style="margin-top: 4px; padding: var(--space-xs); background: var(--bg); border-radius: var(--radius-sm);"></div>
+                        </div>
+
+                        <!-- Capture Button -->
+                        <div style="margin-bottom: var(--space-sm); display: flex; gap: var(--space-xs);">
+                            <button class="btn btn-sm" id="captureObservation" style="flex: 1; background: var(--success);" disabled>
+                                📸 Capture Observation
+                            </button>
+                            <button class="btn btn-sm" id="resetCalibration" style="flex: 0 0 auto;">
+                                🗑️ Reset
+                            </button>
+                        </div>
+
+                        <!-- Observations Log -->
+                        <details style="margin-bottom: var(--space-sm);">
+                            <summary style="cursor: pointer; font-size: 0.65rem; color: var(--fg-muted);">
+                                Observations (<span id="observationCount">0</span>)
+                            </summary>
+                            <div id="observationLog" style="max-height: 100px; overflow-y: auto; font-size: 0.6rem; background: var(--bg); padding: 4px; border-radius: var(--radius-sm);">
+                                No observations yet.
                             </div>
+                        </details>
+
+                        <!-- Analysis Results -->
+                        <div id="calibrationAnalysis" style="margin-bottom: var(--space-sm); padding: var(--space-xs); background: rgba(0,255,0,0.1); border-radius: var(--radius-sm); display: none;">
+                            <strong>Analysis:</strong>
+                            <div id="analysisResults"></div>
                         </div>
+
+                        <!-- Export Button -->
+                        <div style="display: flex; gap: var(--space-xs);">
+                            <button class="btn btn-sm" id="exportObservations" style="flex: 1;">
+                                📤 Export JSON
+                            </button>
+                            <button class="btn btn-sm" id="applyRecommendation" style="flex: 1; display: none;">
+                                ✅ Apply Fix
+                            </button>
+                        </div>
+
                     </div>
                 </details>
             </div>
@@ -817,6 +866,12 @@
             } from './shared/geomagnetic-field.js';
             import { ThreeJSHandSkeleton } from './shared/threejs-hand-skeleton.js';
             import { describeExpectedPose, getValidationTestCases } from './shared/orientation-model.js';
+            import {
+                REFERENCE_POSES,
+                createObservation,
+                ObservationStore,
+                getCalibrationSequence
+            } from './shared/orientation-calibration.js';
 
             // ===== GambitClient for Frame-Based Protocol =====
             const gambitClient = new GambitClient({ debug: true });
@@ -1193,95 +1248,269 @@
                     // Initialize with default signs (pitch negated based on model)
                     updateAxisSigns();
 
-                    // ===== VALIDATION PANEL QUICK TESTS =====
-                    document.getElementById('testFlat')?.addEventListener('click', () => {
-                        const checklist = document.getElementById('validationChecklist');
-                        if (checklist) {
-                            checklist.innerHTML = `
-                                <li>[ ] Palm should face UP (toward ceiling)</li>
-                                <li>[ ] Fingers should point AWAY from you</li>
-                                <li>[ ] Thumb should be on LEFT (right hand)</li>
-                            `;
-                        }
-                    });
-
-                    document.getElementById('testTipFwd')?.addEventListener('click', () => {
-                        const checklist = document.getElementById('validationChecklist');
-                        if (checklist) {
-                            checklist.innerHTML = `
-                                <li>[ ] Tip device FORWARD (fingers toward floor)</li>
-                                <li>[ ] Hand fingers should also point DOWN</li>
-                                <li>[ ] If fingers go UP, PITCH is inverted!</li>
-                            `;
-                        }
-                    });
-
-                    document.getElementById('testTipLeft')?.addEventListener('click', () => {
-                        const checklist = document.getElementById('validationChecklist');
-                        if (checklist) {
-                            checklist.innerHTML = `
-                                <li>[ ] Tilt device LEFT (pinky side down)</li>
-                                <li>[ ] Hand pinky side should also go DOWN</li>
-                                <li>[ ] If opposite side goes down, ROLL is inverted!</li>
-                            `;
-                        }
-                    });
-
-                    document.getElementById('testRotateCW')?.addEventListener('click', () => {
-                        const checklist = document.getElementById('validationChecklist');
-                        if (checklist) {
-                            checklist.innerHTML = `
-                                <li>[ ] Rotate device CLOCKWISE (viewed from above)</li>
-                                <li>[ ] Hand should rotate CLOCKWISE too</li>
-                                <li>[ ] If CCW, YAW is inverted!</li>
-                            `;
-                        }
-                    });
-
                 } catch (err) {
                     console.error('[ThreeHand] Failed to initialize:', err);
                 }
             }
 
-            // ===== VALIDATION PANEL UPDATE =====
-            // Update validation panel with real-time sensor state description
-            function updateValidationPanel(euler) {
+            // ===== CALIBRATION SYSTEM =====
+            const observationStore = new ObservationStore();
+            let currentCalibrationPose = null;
+            let currentUserAnswers = {};
+            let latestSensorData = null;
+            let latestAhrsOutput = null;
+
+            // Initialize calibration UI
+            function initCalibrationUI() {
+                const poseSelect = document.getElementById('referencePoseSelect');
+                const captureBtn = document.getElementById('captureObservation');
+                const resetBtn = document.getElementById('resetCalibration');
+                const exportBtn = document.getElementById('exportObservations');
+                const applyBtn = document.getElementById('applyRecommendation');
+
+                // Pose selection handler
+                poseSelect?.addEventListener('change', (e) => {
+                    const poseId = e.target.value;
+                    if (poseId && REFERENCE_POSES[poseId]) {
+                        selectCalibrationPose(poseId);
+                    } else {
+                        clearCalibrationPose();
+                    }
+                });
+
+                // Capture button
+                captureBtn?.addEventListener('click', captureCurrentObservation);
+
+                // Reset button
+                resetBtn?.addEventListener('click', () => {
+                    observationStore.clear();
+                    currentUserAnswers = {};
+                    updateObservationLog();
+                    updateAnalysis();
+                    poseSelect.value = '';
+                    clearCalibrationPose();
+                });
+
+                // Export button
+                exportBtn?.addEventListener('click', exportObservationsToFile);
+
+                // Apply recommendation button
+                applyBtn?.addEventListener('click', applyCalibrationRecommendation);
+            }
+
+            function selectCalibrationPose(poseId) {
+                currentCalibrationPose = REFERENCE_POSES[poseId];
+                currentUserAnswers = {};
+
+                // Show instructions
+                const instructionsDiv = document.getElementById('poseInstructions');
+                const instructionsList = document.getElementById('poseInstructionsList');
+                if (instructionsDiv && instructionsList) {
+                    instructionsList.innerHTML = currentCalibrationPose.instructions
+                        .map(i => `<li>${i}</li>`).join('');
+                    instructionsDiv.style.display = 'block';
+                }
+
+                // Show validation questions
+                const questionsDiv = document.getElementById('validationQuestions');
+                const questionsList = document.getElementById('questionsList');
+                if (questionsDiv && questionsList) {
+                    questionsList.innerHTML = currentCalibrationPose.validationQuestions
+                        .map(q => `
+                            <label style="display: flex; align-items: center; gap: 6px; margin: 4px 0; cursor: pointer;">
+                                <input type="checkbox" class="calibration-question" data-qid="${q.id}">
+                                <span>${q.question}</span>
+                            </label>
+                        `).join('');
+                    questionsDiv.style.display = 'block';
+
+                    // Add change handlers
+                    questionsList.querySelectorAll('.calibration-question').forEach(cb => {
+                        cb.addEventListener('change', (e) => {
+                            currentUserAnswers[e.target.dataset.qid] = e.target.checked;
+                            updateCaptureButton();
+                        });
+                    });
+                }
+
+                updateCaptureButton();
+            }
+
+            function clearCalibrationPose() {
+                currentCalibrationPose = null;
+                currentUserAnswers = {};
+                document.getElementById('poseInstructions').style.display = 'none';
+                document.getElementById('validationQuestions').style.display = 'none';
+                updateCaptureButton();
+            }
+
+            function updateCaptureButton() {
+                const btn = document.getElementById('captureObservation');
+                if (btn) {
+                    // Enable if pose selected and at least one answer given
+                    const hasAnswers = Object.keys(currentUserAnswers).some(k => currentUserAnswers[k]);
+                    btn.disabled = !currentCalibrationPose || !hasAnswers;
+                }
+            }
+
+            function captureCurrentObservation() {
+                if (!currentCalibrationPose || !latestAhrsOutput) {
+                    console.warn('[Calibration] Missing pose or sensor data');
+                    return;
+                }
+
+                // Get current mapping config from UI
+                const mappingConfig = {
+                    negateRoll: document.getElementById('negateRollToggle')?.checked || false,
+                    negatePitch: document.getElementById('negatePitchToggle')?.checked || false,
+                    negateYaw: document.getElementById('negateYawToggle')?.checked || false,
+                    rollOffset: parseInt(document.getElementById('rollOffsetSlider')?.value) || 180,
+                    pitchOffset: parseInt(document.getElementById('pitchOffsetSlider')?.value) || 180,
+                    yawOffset: parseInt(document.getElementById('yawOffsetSlider')?.value) || -180,
+                    eulerOrder: 'YXZ'
+                };
+
+                // Get render state from ThreeJS skeleton
+                let renderState = { x: 0, y: 0, z: 0, order: 'YXZ' };
+                if (threeHandSkeleton && threeHandSkeleton.handGroup) {
+                    const rot = threeHandSkeleton.handGroup.rotation;
+                    renderState = { x: rot.x, y: rot.y, z: rot.z, order: rot.order };
+                }
+
+                // Create observation
+                const observation = createObservation(
+                    currentCalibrationPose.id,
+                    latestSensorData || { ax: 0, ay: 0, az: 0, gx: 0, gy: 0, gz: 0 },
+                    latestAhrsOutput,
+                    renderState,
+                    currentUserAnswers,
+                    mappingConfig
+                );
+
+                observationStore.add(observation);
+                console.log('[Calibration] Observation captured:', observation);
+
+                // Update UI
+                updateObservationLog();
+                updateAnalysis();
+
+                // Reset for next observation
+                document.querySelectorAll('.calibration-question').forEach(cb => cb.checked = false);
+                currentUserAnswers = {};
+                updateCaptureButton();
+            }
+
+            function updateObservationLog() {
+                const countEl = document.getElementById('observationCount');
+                const logEl = document.getElementById('observationLog');
+                const observations = observationStore.getAll();
+
+                if (countEl) countEl.textContent = observations.length;
+
+                if (logEl) {
+                    if (observations.length === 0) {
+                        logEl.innerHTML = 'No observations yet.';
+                    } else {
+                        logEl.innerHTML = observations.map((obs, i) => `
+                            <div style="border-bottom: 1px solid var(--border); padding: 2px 0;">
+                                <strong>#${i + 1}</strong> ${obs.referencePose.name}<br>
+                                AHRS: r=${obs.ahrs.euler.roll.toFixed(1)}° p=${obs.ahrs.euler.pitch.toFixed(1)}° y=${obs.ahrs.euler.yaw.toFixed(1)}°<br>
+                                ${obs.userObservations.derivedState.matchesExpected ?
+                                    '<span style="color: green;">✓ Matches expected</span>' :
+                                    '<span style="color: orange;">⚠ Issues detected</span>'}
+                            </div>
+                        `).join('');
+                    }
+                }
+            }
+
+            function updateAnalysis() {
+                const analysisDiv = document.getElementById('calibrationAnalysis');
+                const resultsEl = document.getElementById('analysisResults');
+                const applyBtn = document.getElementById('applyRecommendation');
+
+                const observations = observationStore.getAll();
+                if (observations.length < 2) {
+                    analysisDiv.style.display = 'none';
+                    applyBtn.style.display = 'none';
+                    return;
+                }
+
+                const analysis = observationStore.analyzeAll();
+                analysisDiv.style.display = 'block';
+
+                let html = `<div style="margin-top: 4px;">`;
+                html += `<div>Observations: ${analysis.totalObservations}</div>`;
+                html += `<div style="margin-top: 4px;"><strong>Recommended settings:</strong></div>`;
+                html += `<div>• Negate Pitch: ${analysis.negatePitch ? 'YES' : 'NO'} (confidence: ${(analysis.confidence.pitch * 100).toFixed(0)}%)</div>`;
+                html += `<div>• Negate Roll: ${analysis.negateRoll ? 'YES' : 'NO'} (confidence: ${(analysis.confidence.roll * 100).toFixed(0)}%)</div>`;
+                html += `<div>• Negate Yaw: ${analysis.negateYaw ? 'YES' : 'NO'} (confidence: ${(analysis.confidence.yaw * 100).toFixed(0)}%)</div>`;
+                html += `</div>`;
+
+                resultsEl.innerHTML = html;
+
+                // Show apply button if we have recommendations
+                applyBtn.style.display = 'block';
+                window._calibrationRecommendation = analysis;
+            }
+
+            function applyCalibrationRecommendation() {
+                const rec = window._calibrationRecommendation;
+                if (!rec) return;
+
+                document.getElementById('negateRollToggle').checked = rec.negateRoll;
+                document.getElementById('negatePitchToggle').checked = rec.negatePitch;
+                document.getElementById('negateYawToggle').checked = rec.negateYaw;
+
+                // Trigger update
+                if (threeHandSkeleton) {
+                    threeHandSkeleton.setAxisSigns({
+                        negateRoll: rec.negateRoll,
+                        negatePitch: rec.negatePitch,
+                        negateYaw: rec.negateYaw
+                    });
+                }
+
+                console.log('[Calibration] Applied recommendation:', rec);
+            }
+
+            function exportObservationsToFile() {
+                const data = observationStore.export();
+                const json = JSON.stringify(data, null, 2);
+                const blob = new Blob([json], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `calibration-${data.sessionId}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                console.log('[Calibration] Exported:', data);
+            }
+
+            // Update sensor state display
+            function updateCalibrationSensorDisplay(euler, sensorData) {
+                latestAhrsOutput = euler;
+                latestSensorData = sensorData;
+
                 const sensorStateDesc = document.getElementById('sensorStateDesc');
-                const expectedBehavior = document.getElementById('expectedBehavior');
-
-                if (!sensorStateDesc || !expectedBehavior || !euler) return;
-
-                const desc = describeExpectedPose(euler);
+                if (!sensorStateDesc || !euler) return;
 
                 sensorStateDesc.innerHTML = `
-                    Roll: ${desc.sensor.roll}° (${desc.physical.roll})<br>
-                    Pitch: ${desc.sensor.pitch}° (${desc.physical.pitch})<br>
-                    Yaw: ${desc.sensor.yaw}° (${desc.physical.yaw})
+                    <div><strong>AHRS Euler:</strong> roll=${euler.roll.toFixed(1)}° pitch=${euler.pitch.toFixed(1)}° yaw=${euler.yaw.toFixed(1)}°</div>
+                    ${sensorData ? `<div><strong>Accel:</strong> x=${(sensorData.ax||0).toFixed(2)} y=${(sensorData.ay||0).toFixed(2)} z=${(sensorData.az||0).toFixed(2)}</div>` : ''}
                 `;
+            }
 
-                // Generate expected behavior text
-                let expected = [];
-                if (Math.abs(euler.roll) < 15 && Math.abs(euler.pitch) < 15) {
-                    expected.push('Palm should face UP');
-                }
-                if (euler.pitch < -20) {
-                    expected.push('Fingers should point DOWN');
-                } else if (euler.pitch > 20) {
-                    expected.push('Fingers should point UP');
-                }
-                if (euler.roll < -20) {
-                    expected.push('Pinky side should be DOWN');
-                } else if (euler.roll > 20) {
-                    expected.push('Thumb side should be DOWN');
-                }
-                if (Math.abs(euler.yaw) > 30) {
-                    const dir = euler.yaw > 0 ? 'clockwise' : 'counter-clockwise';
-                    expected.push(`Hand rotated ${dir}`);
-                }
+            // Initialize calibration UI on page load
+            setTimeout(initCalibrationUI, 100);
 
-                expectedBehavior.innerHTML = expected.length > 0 ?
-                    expected.join('<br>') :
-                    'Hand should be palm-up, level';
+            // Legacy validation panel update (kept for compatibility)
+            function updateValidationPanel(euler) {
+                updateCalibrationSensorDisplay(euler, latestSensorData);
             }
 
             // LowPassFilter class is already defined in hand-3d-renderer.js
@@ -1524,7 +1753,8 @@
                     threeHandSkeleton.updateOrientation(handEuler);
                 }
 
-                // Update validation panel with current sensor state
+                // Update calibration system with current sensor state
+                latestSensorData = { ax, ay, az, gx, gy, gz, mx, my, mz };
                 updateValidationPanel(handEuler);
 
                 // Update Euler debug displays
