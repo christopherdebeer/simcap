@@ -529,6 +529,63 @@
                     <button class="btn btn-sm" id="threeResetBtn">Reset Orientation</button>
                     <button class="btn btn-sm" id="threeTestCurlBtn">Test Curl</button>
                 </div>
+
+                <!-- Debug Offset Controls -->
+                <details style="margin-top: var(--space-sm); padding: var(--space-xs); border: 1px solid var(--border); border-radius: var(--radius-sm);">
+                    <summary style="cursor: pointer; font-size: 0.75rem; font-weight: bold; padding: var(--space-xs);">
+                        🔧 Debug: Offset Override
+                    </summary>
+                    <div style="padding: var(--space-sm); display: flex; flex-direction: column; gap: var(--space-sm);">
+                        <!-- Roll Offset -->
+                        <div style="display: flex; flex-direction: column; gap: 2px;">
+                            <label style="font-size: 0.7rem; color: var(--fg-muted); display: flex; justify-content: space-between;">
+                                <span>Roll Offset:</span>
+                                <span id="rollOffsetValue">180°</span>
+                            </label>
+                            <input type="range" id="rollOffsetSlider" min="-180" max="180" value="180" step="1"
+                                   style="width: 100%;">
+                        </div>
+
+                        <!-- Pitch Offset -->
+                        <div style="display: flex; flex-direction: column; gap: 2px;">
+                            <label style="font-size: 0.7rem; color: var(--fg-muted); display: flex; justify-content: space-between;">
+                                <span>Pitch Offset:</span>
+                                <span id="pitchOffsetValue">90°</span>
+                            </label>
+                            <input type="range" id="pitchOffsetSlider" min="-180" max="180" value="90" step="1"
+                                   style="width: 100%;">
+                        </div>
+
+                        <!-- Yaw Offset -->
+                        <div style="display: flex; flex-direction: column; gap: 2px;">
+                            <label style="font-size: 0.7rem; color: var(--fg-muted); display: flex; justify-content: space-between;">
+                                <span>Yaw Offset:</span>
+                                <span id="yawOffsetValue">180°</span>
+                            </label>
+                            <input type="range" id="yawOffsetSlider" min="-180" max="180" value="180" step="1"
+                                   style="width: 100%;">
+                        </div>
+
+                        <!-- Preset Buttons -->
+                        <div style="display: flex; gap: var(--space-xs); margin-top: var(--space-xs);">
+                            <button class="btn btn-sm" id="threeOffsetReset" style="flex: 1;">Reset to Default</button>
+                            <button class="btn btn-sm" id="threeOffsetZero" style="flex: 1;">Zero All</button>
+                        </div>
+
+                        <!-- Test Orientation Buttons -->
+                        <div style="border-top: 1px solid var(--border); padding-top: var(--space-sm); margin-top: var(--space-xs);">
+                            <div style="font-size: 0.7rem; font-weight: bold; margin-bottom: var(--space-xs); color: var(--fg-muted);">
+                                Test Poses:
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-xs);">
+                                <button class="btn btn-sm" id="testPalmUp">Palm Up</button>
+                                <button class="btn btn-sm" id="testPalmDown">Palm Down</button>
+                                <button class="btn btn-sm" id="testFingersUp">Fingers Up</button>
+                                <button class="btn btn-sm" id="testFingersForward">Fingers Forward</button>
+                            </div>
+                        </div>
+                    </div>
+                </details>
             </div>
 
             <div class="card" id="playbackCard">
@@ -902,10 +959,10 @@
                         });
                     }
 
-                    // Reset button
-                    const resetBtn = document.getElementById('threeResetBtn');
-                    if (resetBtn) {
-                        resetBtn.addEventListener('click', () => {
+                    // Reset orientation button
+                    const orientationResetBtn = document.getElementById('threeResetBtn');
+                    if (orientationResetBtn) {
+                        orientationResetBtn.addEventListener('click', () => {
                             if (threeHandSkeleton) {
                                 threeHandSkeleton.resetOrientation();
                                 console.log('[ThreeHand] Orientation reset');
@@ -933,6 +990,92 @@
                             }
                         });
                     }
+
+                    // ===== DEBUG OFFSET CONTROLS =====
+                    // Real-time offset adjustment for debugging orientation mapping
+                    const rollSlider = document.getElementById('rollOffsetSlider');
+                    const pitchSlider = document.getElementById('pitchOffsetSlider');
+                    const yawSlider = document.getElementById('yawOffsetSlider');
+                    const rollValue = document.getElementById('rollOffsetValue');
+                    const pitchValue = document.getElementById('pitchOffsetValue');
+                    const yawValue = document.getElementById('yawOffsetValue');
+
+                    function updateOffsets() {
+                        if (threeHandSkeleton && rollSlider && pitchSlider && yawSlider) {
+                            const offsets = {
+                                roll: parseFloat(rollSlider.value),
+                                pitch: parseFloat(pitchSlider.value),
+                                yaw: parseFloat(yawSlider.value)
+                            };
+                            threeHandSkeleton.setOrientationOffsets(offsets);
+
+                            // Update display values
+                            if (rollValue) rollValue.textContent = `${offsets.roll}°`;
+                            if (pitchValue) pitchValue.textContent = `${offsets.pitch}°`;
+                            if (yawValue) yawValue.textContent = `${offsets.yaw}°`;
+
+                            console.log('[ThreeHand] Offsets updated:', offsets);
+                        }
+                    }
+
+                    // Slider event listeners
+                    if (rollSlider) rollSlider.addEventListener('input', updateOffsets);
+                    if (pitchSlider) pitchSlider.addEventListener('input', updateOffsets);
+                    if (yawSlider) yawSlider.addEventListener('input', updateOffsets);
+
+                    // Reset to default button (180, 90, 180)
+                    const offsetResetBtn = document.getElementById('threeOffsetReset');
+                    if (offsetResetBtn) {
+                        offsetResetBtn.addEventListener('click', () => {
+                            if (rollSlider) rollSlider.value = 180;
+                            if (pitchSlider) pitchSlider.value = 90;
+                            if (yawSlider) yawSlider.value = 180;
+                            updateOffsets();
+                            console.log('[ThreeHand] Offsets reset to default');
+                        });
+                    }
+
+                    // Zero all button
+                    const offsetZeroBtn = document.getElementById('threeOffsetZero');
+                    if (offsetZeroBtn) {
+                        offsetZeroBtn.addEventListener('click', () => {
+                            if (rollSlider) rollSlider.value = 0;
+                            if (pitchSlider) pitchSlider.value = 0;
+                            if (yawSlider) yawSlider.value = 0;
+                            updateOffsets();
+                            console.log('[ThreeHand] Offsets zeroed');
+                        });
+                    }
+
+                    // Test pose buttons - simulate specific orientations
+                    document.getElementById('testPalmUp')?.addEventListener('click', () => {
+                        if (threeHandSkeleton) {
+                            threeHandSkeleton.updateOrientation({ roll: 0, pitch: 0, yaw: 0 });
+                            console.log('[ThreeHand] Test: Palm Up (roll=0, pitch=0, yaw=0)');
+                        }
+                    });
+
+                    document.getElementById('testPalmDown')?.addEventListener('click', () => {
+                        if (threeHandSkeleton) {
+                            threeHandSkeleton.updateOrientation({ roll: 180, pitch: 0, yaw: 0 });
+                            console.log('[ThreeHand] Test: Palm Down (roll=180, pitch=0, yaw=0)');
+                        }
+                    });
+
+                    document.getElementById('testFingersUp')?.addEventListener('click', () => {
+                        if (threeHandSkeleton) {
+                            threeHandSkeleton.updateOrientation({ roll: 0, pitch: -90, yaw: 0 });
+                            console.log('[ThreeHand] Test: Fingers Up (roll=0, pitch=-90, yaw=0)');
+                        }
+                    });
+
+                    document.getElementById('testFingersForward')?.addEventListener('click', () => {
+                        if (threeHandSkeleton) {
+                            threeHandSkeleton.updateOrientation({ roll: 0, pitch: 0, yaw: 90 });
+                            console.log('[ThreeHand] Test: Fingers Forward (roll=0, pitch=0, yaw=90)');
+                        }
+                    });
+
                 } catch (err) {
                     console.error('[ThreeHand] Failed to initialize:', err);
                 }
