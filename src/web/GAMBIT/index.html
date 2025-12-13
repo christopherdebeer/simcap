@@ -593,6 +593,56 @@
                                 <button class="btn btn-sm" id="testFingersForward">Fingers Forward</button>
                             </div>
                         </div>
+
+                        <!-- Axis Sign Toggle -->
+                        <div style="border-top: 1px solid var(--border); padding-top: var(--space-sm); margin-top: var(--space-xs);">
+                            <div style="font-size: 0.7rem; font-weight: bold; margin-bottom: var(--space-xs); color: var(--fg-muted);">
+                                Axis Sign (toggle to fix inversions):
+                            </div>
+                            <div style="display: flex; gap: var(--space-sm); flex-wrap: wrap;">
+                                <label style="font-size: 0.7rem; display: flex; align-items: center; gap: 4px;">
+                                    <input type="checkbox" id="negateRollToggle"> Negate Roll
+                                </label>
+                                <label style="font-size: 0.7rem; display: flex; align-items: center; gap: 4px;">
+                                    <input type="checkbox" id="negatePitchToggle" checked> Negate Pitch
+                                </label>
+                                <label style="font-size: 0.7rem; display: flex; align-items: center; gap: 4px;">
+                                    <input type="checkbox" id="negateYawToggle"> Negate Yaw
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Validation Panel - User feedback statements -->
+                <details open style="margin-top: var(--space-sm); padding: var(--space-xs); border: 1px solid var(--accent); border-radius: var(--radius-sm); background: rgba(0,100,255,0.05);">
+                    <summary style="cursor: pointer; font-size: 0.75rem; font-weight: bold; padding: var(--space-xs); color: var(--accent);">
+                        📋 Validation Checklist (verify these!)
+                    </summary>
+                    <div id="validationPanel" style="padding: var(--space-sm); font-size: 0.7rem; font-family: monospace;">
+                        <div style="margin-bottom: var(--space-sm); padding: var(--space-xs); background: var(--bg); border-radius: var(--radius-sm);">
+                            <strong>Current Sensor State:</strong>
+                            <div id="sensorStateDesc">Waiting for data...</div>
+                        </div>
+                        <div style="margin-bottom: var(--space-sm);">
+                            <strong>Expected Hand Behavior:</strong>
+                            <div id="expectedBehavior" style="color: var(--success);">--</div>
+                        </div>
+                        <div style="border-top: 1px solid var(--border); padding-top: var(--space-sm);">
+                            <strong>Please verify:</strong>
+                            <ul id="validationChecklist" style="margin: var(--space-xs) 0; padding-left: 1.5em; list-style: none;">
+                                <li>[ ] Hand model matches physical device orientation</li>
+                            </ul>
+                        </div>
+                        <div style="margin-top: var(--space-sm); padding: var(--space-xs); background: var(--bg); border-radius: var(--radius-sm);">
+                            <strong>Quick Tests:</strong>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 4px;">
+                                <button class="btn btn-sm" id="testFlat" style="font-size: 0.65rem;">1. Flat on desk</button>
+                                <button class="btn btn-sm" id="testTipFwd" style="font-size: 0.65rem;">2. Tip forward</button>
+                                <button class="btn btn-sm" id="testTipLeft" style="font-size: 0.65rem;">3. Tip left</button>
+                                <button class="btn btn-sm" id="testRotateCW" style="font-size: 0.65rem;">4. Rotate CW</button>
+                            </div>
+                        </div>
                     </div>
                 </details>
             </div>
@@ -766,6 +816,7 @@
                 formatLocation
             } from './shared/geomagnetic-field.js';
             import { ThreeJSHandSkeleton } from './shared/threejs-hand-skeleton.js';
+            import { describeExpectedPose, getValidationTestCases } from './shared/orientation-model.js';
 
             // ===== GambitClient for Frame-Based Protocol =====
             const gambitClient = new GambitClient({ debug: true });
@@ -1114,9 +1165,123 @@
                         }
                     });
 
+                    // ===== AXIS SIGN TOGGLES =====
+                    // Allow user to toggle axis negation to fix inversions
+                    const negateRollToggle = document.getElementById('negateRollToggle');
+                    const negatePitchToggle = document.getElementById('negatePitchToggle');
+                    const negateYawToggle = document.getElementById('negateYawToggle');
+
+                    function updateAxisSigns() {
+                        if (threeHandSkeleton) {
+                            threeHandSkeleton.setAxisSigns({
+                                negateRoll: negateRollToggle?.checked || false,
+                                negatePitch: negatePitchToggle?.checked || false,
+                                negateYaw: negateYawToggle?.checked || false
+                            });
+                            console.log('[ThreeHand] Axis signs:', {
+                                negateRoll: negateRollToggle?.checked,
+                                negatePitch: negatePitchToggle?.checked,
+                                negateYaw: negateYawToggle?.checked
+                            });
+                        }
+                    }
+
+                    negateRollToggle?.addEventListener('change', updateAxisSigns);
+                    negatePitchToggle?.addEventListener('change', updateAxisSigns);
+                    negateYawToggle?.addEventListener('change', updateAxisSigns);
+
+                    // Initialize with default signs (pitch negated based on model)
+                    updateAxisSigns();
+
+                    // ===== VALIDATION PANEL QUICK TESTS =====
+                    document.getElementById('testFlat')?.addEventListener('click', () => {
+                        const checklist = document.getElementById('validationChecklist');
+                        if (checklist) {
+                            checklist.innerHTML = `
+                                <li>[ ] Palm should face UP (toward ceiling)</li>
+                                <li>[ ] Fingers should point AWAY from you</li>
+                                <li>[ ] Thumb should be on LEFT (right hand)</li>
+                            `;
+                        }
+                    });
+
+                    document.getElementById('testTipFwd')?.addEventListener('click', () => {
+                        const checklist = document.getElementById('validationChecklist');
+                        if (checklist) {
+                            checklist.innerHTML = `
+                                <li>[ ] Tip device FORWARD (fingers toward floor)</li>
+                                <li>[ ] Hand fingers should also point DOWN</li>
+                                <li>[ ] If fingers go UP, PITCH is inverted!</li>
+                            `;
+                        }
+                    });
+
+                    document.getElementById('testTipLeft')?.addEventListener('click', () => {
+                        const checklist = document.getElementById('validationChecklist');
+                        if (checklist) {
+                            checklist.innerHTML = `
+                                <li>[ ] Tilt device LEFT (pinky side down)</li>
+                                <li>[ ] Hand pinky side should also go DOWN</li>
+                                <li>[ ] If opposite side goes down, ROLL is inverted!</li>
+                            `;
+                        }
+                    });
+
+                    document.getElementById('testRotateCW')?.addEventListener('click', () => {
+                        const checklist = document.getElementById('validationChecklist');
+                        if (checklist) {
+                            checklist.innerHTML = `
+                                <li>[ ] Rotate device CLOCKWISE (viewed from above)</li>
+                                <li>[ ] Hand should rotate CLOCKWISE too</li>
+                                <li>[ ] If CCW, YAW is inverted!</li>
+                            `;
+                        }
+                    });
+
                 } catch (err) {
                     console.error('[ThreeHand] Failed to initialize:', err);
                 }
+            }
+
+            // ===== VALIDATION PANEL UPDATE =====
+            // Update validation panel with real-time sensor state description
+            function updateValidationPanel(euler) {
+                const sensorStateDesc = document.getElementById('sensorStateDesc');
+                const expectedBehavior = document.getElementById('expectedBehavior');
+
+                if (!sensorStateDesc || !expectedBehavior || !euler) return;
+
+                const desc = describeExpectedPose(euler);
+
+                sensorStateDesc.innerHTML = `
+                    Roll: ${desc.sensor.roll}° (${desc.physical.roll})<br>
+                    Pitch: ${desc.sensor.pitch}° (${desc.physical.pitch})<br>
+                    Yaw: ${desc.sensor.yaw}° (${desc.physical.yaw})
+                `;
+
+                // Generate expected behavior text
+                let expected = [];
+                if (Math.abs(euler.roll) < 15 && Math.abs(euler.pitch) < 15) {
+                    expected.push('Palm should face UP');
+                }
+                if (euler.pitch < -20) {
+                    expected.push('Fingers should point DOWN');
+                } else if (euler.pitch > 20) {
+                    expected.push('Fingers should point UP');
+                }
+                if (euler.roll < -20) {
+                    expected.push('Pinky side should be DOWN');
+                } else if (euler.roll > 20) {
+                    expected.push('Thumb side should be DOWN');
+                }
+                if (Math.abs(euler.yaw) > 30) {
+                    const dir = euler.yaw > 0 ? 'clockwise' : 'counter-clockwise';
+                    expected.push(`Hand rotated ${dir}`);
+                }
+
+                expectedBehavior.innerHTML = expected.length > 0 ?
+                    expected.join('<br>') :
+                    'Hand should be palm-up, level';
             }
 
             // LowPassFilter class is already defined in hand-3d-renderer.js
@@ -1358,6 +1523,9 @@
                 if (threeHandSkeleton && threeHandEnabled) {
                     threeHandSkeleton.updateOrientation(handEuler);
                 }
+
+                // Update validation panel with current sensor state
+                updateValidationPanel(handEuler);
 
                 // Update Euler debug displays
                 const eulerDebug = document.getElementById('eulerDebug');
