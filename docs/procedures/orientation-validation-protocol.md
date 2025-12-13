@@ -6,12 +6,40 @@ This document describes the procedure for validating that the GAMBIT sensor orie
 
 ## Coordinate System Conventions
 
-### Sensor Coordinate Frame (Puck.js with LSM6DS3/LIS3MDL)
+### Sensor Placement on Hand
+
+The Puck.js is positioned on the **back of the hand** with:
+- **Battery (bottom)**: Facing the palm (skin side)
+- **LEDs (top)**: Facing away from palm, toward fingers
+- **MQBT42Q module/aerial**: Facing toward the wrist
+- **Opposite the MQBT42Q**: Facing toward fingers
+
+### Accelerometer & Gyroscope Axes (LSM6DS3)
+
+| Axis | Sensor Definition | Hand Anatomy (Positive Direction) |
+|------|-------------------|-----------------------------------|
+| +X   | Toward aerial/MQBT42Q | Toward WRIST |
+| +Y   | Toward IR LEDs | Toward FINGERS |
+| +Z   | Into PCB (toward battery) | INTO PALM |
 
 When the sensor is placed **face-up on a flat surface**:
 - **Z axis**: Points UP (toward ceiling), gravity = +1g on Z
 - **X/Y axes**: In the horizontal plane
 - **Accelerometer reading**: `az ≈ +1.0g`, `ax ≈ 0`, `ay ≈ 0`
+
+### Magnetometer Axes (LIS3MDL) - **CRITICAL: TRANSPOSED X/Y**
+
+The magnetometer has **swapped X and Y axes** relative to accelerometer/gyroscope:
+
+| Axis | Sensor Definition | Hand Anatomy (Positive Direction) |
+|------|-------------------|-----------------------------------|
+| +X   | Toward IR LEDs | Toward FINGERS (= Accel +Y) |
+| +Y   | Toward aerial/MQBT42Q | Toward WRIST (= Accel +X) |
+| +Z   | Into PCB (toward battery) | INTO PALM (= Accel +Z) |
+
+**⚠️ WARNING**: Current implementation does NOT align magnetometer axes to accelerometer frame.
+This affects Earth field subtraction when using orientation-dependent calibration.
+See TODO [SENSOR-001] in `GAMBIT/index.html` and [SENSOR-003] in `calibration.js`.
 
 ### Madgwick AHRS Euler Angles
 
@@ -135,12 +163,35 @@ When the sensor is placed **face-up on a flat surface**:
 
 ### Axis Mapping (in updateFromSensorFusion)
 
+**Current implementation in `hand-3d-renderer.js`:**
+
 ```javascript
 const mappedOrientation = {
-    pitch: -euler.pitch + 90 + this.orientationOffset.pitch,  // +90° for palm up
-    yaw: euler.yaw + this.orientationOffset.yaw,
-    roll: euler.roll + this.orientationOffset.roll
+    pitch: euler.pitch + 90 + this.orientationOffset.pitch,   // palm up when sensor level
+    yaw: euler.yaw + 180 + this.orientationOffset.yaw,        // fingers away from viewer
+    roll: -euler.roll + 180 + this.orientationOffset.roll     // correct chirality
 };
 ```
 
-The +90° pitch offset rotates the hand from "palm facing viewer" (default) to "palm facing up" (desired when sensor is face-up).
+**Current implementation in `threejs-hand-skeleton.js`:**
+
+```javascript
+// Offsets set during initialization:
+setOrientationOffsets({ roll: 180, pitch: 90, yaw: 180 });
+
+// Applied in render loop:
+const roll = (currentOrientation.roll + offsets.roll) * (Math.PI / 180);
+const pitch = (currentOrientation.pitch + offsets.pitch) * (Math.PI / 180);
+const yaw = (currentOrientation.yaw + offsets.yaw) * (Math.PI / 180);
+handGroup.rotation.set(pitch, yaw, roll, "YXZ");
+```
+
+The offsets rotate the hand from "palm facing viewer" (default) to "palm facing up" (desired when sensor is face-up).
+
+### TODO Items
+
+- **[SENSOR-001]**: Magnetometer axis alignment not implemented (see `GAMBIT/index.html`)
+- **[SENSOR-002]**: Create `magAlignToAccelFrame()` utility function (see `shared/sensor-units.js`)
+- **[SENSOR-003]**: Calibration uses unaligned magnetometer data (see `calibration.js`)
+- **[ORIENT-001]**: Validate both renderers produce consistent orientation
+- **[ORIENT-002]**: Document expected behavior for each test pose

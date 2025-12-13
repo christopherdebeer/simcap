@@ -566,6 +566,108 @@
         </footer>
 
         <script type="module">
+            /**
+             * =====================================================================
+             * SENSOR-TO-HAND ORIENTATION MAPPING DOCUMENTATION
+             * =====================================================================
+             *
+             * This file uses sensor data from a Puck.js device to drive 3D hand
+             * visualization. Understanding the coordinate systems is CRITICAL.
+             *
+             * SENSOR PLACEMENT:
+             * - Puck.js positioned on BACK of hand (battery side toward palm)
+             * - MQBT42Q module/aerial facing toward WRIST
+             * - LEDs facing toward FINGERS
+             *
+             * =====================================================================
+             * COORDINATE FRAME DEFINITIONS
+             * =====================================================================
+             *
+             * ACCELEROMETER & GYROSCOPE AXES (LSM6DS3):
+             * ┌─────────────────────────────────────────────────────────────────┐
+             * │  +X axis → toward WRIST (aerial/MQBT42Q direction)              │
+             * │  +Y axis → toward FINGERS (IR LED direction)                    │
+             * │  +Z axis → INTO PALM (toward battery, perpendicular to PCB)     │
+             * └─────────────────────────────────────────────────────────────────┘
+             *
+             * MAGNETOMETER AXES (LIS3MDL) - **TRANSPOSED X/Y**:
+             * ┌─────────────────────────────────────────────────────────────────┐
+             * │  +X axis → toward FINGERS (same as Accel +Y)                    │
+             * │  +Y axis → toward WRIST (same as Accel +X)                      │
+             * │  +Z axis → INTO PALM (same as Accel +Z)                         │
+             * └─────────────────────────────────────────────────────────────────┘
+             *
+             * THREE.JS HAND MODEL COORDINATE FRAME:
+             * ┌─────────────────────────────────────────────────────────────────┐
+             * │  +X axis → toward PINKY (thumb on -X, right hand)               │
+             * │  +Y axis → FINGER EXTENSION direction (fingers grow in +Y)      │
+             * │  +Z axis → PALM NORMAL (toward viewer when palm faces camera)   │
+             * └─────────────────────────────────────────────────────────────────┘
+             *
+             * =====================================================================
+             * CRITICAL: MAGNETOMETER AXIS TRANSPOSITION
+             * =====================================================================
+             *
+             * The magnetometer (LIS3MDL) has X and Y axes SWAPPED relative to the
+             * accelerometer/gyroscope (LSM6DS3). This is a HARDWARE characteristic.
+             *
+             * To align magnetometer data with accel/gyro coordinate frame:
+             *   aligned_mx = raw_my  (mag Y becomes accel-frame X)
+             *   aligned_my = raw_mx  (mag X becomes accel-frame Y)
+             *   aligned_mz = raw_mz  (Z remains the same)
+             *
+             * TODO: [SENSOR-001] Magnetometer axis alignment not implemented
+             *   - Current code uses raw magnetometer axes without swapping
+             *   - Affects: calibration.js (hard/soft iron, earth field)
+             *   - Affects: Any future magnetometer-based orientation fusion
+             *   - See: docs/procedures/orientation-validation-protocol.md
+             *   - Priority: HIGH if using mag for orientation, LOW if mag-only for finger tracking
+             *
+             * TODO: [SENSOR-002] Create magAlignToAccelFrame() utility function
+             *   - Location: shared/sensor-units.js
+             *   - Should swap X/Y and document the transformation
+             *
+             * =====================================================================
+             * ORIENTATION MAPPING (Sensor → Hand Visualization)
+             * =====================================================================
+             *
+             * Madgwick AHRS produces Euler angles in SENSOR coordinate frame:
+             *   - Roll: rotation around sensor X (wrist-finger axis)
+             *   - Pitch: rotation around sensor Y (left-right axis)
+             *   - Yaw: rotation around sensor Z (palm normal)
+             *
+             * CURRENT MAPPING (hand-3d-renderer.js updateFromSensorFusion):
+             *   hand_pitch = sensor_pitch + 90°   (palm up when sensor level)
+             *   hand_yaw   = sensor_yaw + 180°    (fingers away from viewer)
+             *   hand_roll  = -sensor_roll + 180°  (correct chirality)
+             *
+             * CURRENT MAPPING (threejs-hand-skeleton.js):
+             *   Offsets: { roll: 180°, pitch: 90°, yaw: 180° }
+             *   Applied as: rotation.set(pitch, yaw, roll, "YXZ")
+             *
+             * TODO: [ORIENT-001] Validate both renderers produce consistent orientation
+             *   - hand-3d-renderer.js uses canvas 2D with custom matrix math
+             *   - threejs-hand-skeleton.js uses Three.js Euler with "YXZ" order
+             *   - Different Euler conventions may cause subtle differences
+             *
+             * TODO: [ORIENT-002] Document expected behavior for each test pose
+             *   - See: docs/procedures/orientation-validation-protocol.md
+             *   - Need to verify: forward tilt, backward tilt, left/right roll, yaw
+             *
+             * =====================================================================
+             * REFERENCE LINKS
+             * =====================================================================
+             *
+             * - Sensor specs: shared/sensor-units.js
+             * - Orientation filter: filters.js (MadgwickAHRS)
+             * - Telemetry pipeline: shared/telemetry-processor.js
+             * - Calibration: calibration.js
+             * - Hand renderers: hand-3d-renderer.js, shared/threejs-hand-skeleton.js
+             * - Validation: docs/procedures/orientation-validation-protocol.md
+             *
+             * =====================================================================
+             */
+
             // ===== Import shared modules =====
             import {
                 ACCEL_SCALE,
