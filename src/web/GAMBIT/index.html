@@ -959,10 +959,10 @@
                         });
                     }
 
-                    // Reset button
-                    const resetBtn = document.getElementById('threeResetBtn');
-                    if (resetBtn) {
-                        resetBtn.addEventListener('click', () => {
+                    // Reset orientation button
+                    const orientationResetBtn = document.getElementById('threeResetBtn');
+                    if (orientationResetBtn) {
+                        orientationResetBtn.addEventListener('click', () => {
                             if (threeHandSkeleton) {
                                 threeHandSkeleton.resetOrientation();
                                 console.log('[ThreeHand] Orientation reset');
@@ -1024,9 +1024,9 @@
                     if (yawSlider) yawSlider.addEventListener('input', updateOffsets);
 
                     // Reset to default button (180, 90, 180)
-                    const resetBtn = document.getElementById('threeOffsetReset');
-                    if (resetBtn) {
-                        resetBtn.addEventListener('click', () => {
+                    const offsetResetBtn = document.getElementById('threeOffsetReset');
+                    if (offsetResetBtn) {
+                        offsetResetBtn.addEventListener('click', () => {
                             if (rollSlider) rollSlider.value = 180;
                             if (pitchSlider) pitchSlider.value = 90;
                             if (yawSlider) yawSlider.value = 180;
@@ -1036,9 +1036,9 @@
                     }
 
                     // Zero all button
-                    const zeroBtn = document.getElementById('threeOffsetZero');
-                    if (zeroBtn) {
-                        zeroBtn.addEventListener('click', () => {
+                    const offsetZeroBtn = document.getElementById('threeOffsetZero');
+                    if (offsetZeroBtn) {
+                        offsetZeroBtn.addEventListener('click', () => {
                             if (rollSlider) rollSlider.value = 0;
                             if (pitchSlider) pitchSlider.value = 0;
                             if (yawSlider) yawSlider.value = 0;
