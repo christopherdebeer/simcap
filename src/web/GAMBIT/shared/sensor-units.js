@@ -281,6 +281,53 @@ export function validateRawSensorUnits(raw) {
     };
 }
 
+// ===== Magnetometer Axis Alignment =====
+
+/**
+ * TODO: [SENSOR-002] Align magnetometer axes to accelerometer/gyroscope frame
+ *
+ * The LIS3MDL magnetometer has TRANSPOSED X/Y axes relative to LSM6DS3:
+ *
+ *   Magnetometer native:  +X → fingers, +Y → wrist, +Z → palm
+ *   Accel/Gyro native:    +X → wrist,   +Y → fingers, +Z → palm
+ *
+ * This function swaps X and Y to align magnetometer data with the
+ * accelerometer/gyroscope coordinate frame used by the IMU fusion.
+ *
+ * WHEN TO USE:
+ *   - Before passing magnetometer data to calibration (if calibration
+ *     will be used with orientation-dependent operations)
+ *   - Before any operation that combines mag data with orientation
+ *
+ * WHEN NOT TO USE:
+ *   - For standalone magnetometer operations (hard/soft iron cal)
+ *   - When consistency with historical data is required
+ *
+ * @param {Object} raw - {mx, my, mz} in magnetometer native frame
+ * @returns {Object} {mx, my, mz} in accelerometer/gyroscope frame
+ */
+export function magAlignToAccelFrame(raw) {
+    // Swap X and Y to align with accelerometer frame
+    return {
+        mx: raw.my,  // Mag +Y (wrist) → Accel +X (wrist)
+        my: raw.mx,  // Mag +X (fingers) → Accel +Y (fingers)
+        mz: raw.mz   // Z unchanged (into palm)
+    };
+}
+
+/**
+ * Convert magnetometer from LSB to µT AND align to accel frame
+ *
+ * @param {Object} raw - {mx, my, mz} in LSB
+ * @returns {Object} {mx, my, mz} in µT, aligned to accel/gyro frame
+ */
+export function convertMagToMicroTeslaAligned(raw) {
+    // First convert to µT
+    const converted = convertMagToMicroTesla(raw);
+    // Then align axes
+    return magAlignToAccelFrame(converted);
+}
+
 // ===== Default Export =====
 
 export default {
@@ -301,6 +348,10 @@ export default {
     convertAccelToG,
     convertGyroToDps,
     convertMagToMicroTesla,
+
+    // Magnetometer axis alignment
+    magAlignToAccelFrame,
+    convertMagToMicroTeslaAligned,
 
     // Metadata and validation
     getSensorUnitMetadata,
