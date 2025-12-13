@@ -136,6 +136,9 @@ export class ThreeJSHandSkeleton {
     // Offsets (degrees)
     this.orientationOffsets = { roll: 0, pitch: 0, yaw: 0 };
 
+    // Hand chirality ('left' or 'right')
+    this.handedness = options.handedness ?? 'right';
+
     // Finger curl state (0-1 for each finger)
     this.fingerCurls = { thumb: 0, index: 0, middle: 0, ring: 0, pinky: 0 };
 
@@ -149,6 +152,7 @@ export class ThreeJSHandSkeleton {
     this._initScene();
     this._createHandSkeleton();
     this._applyVisualizationVisibility(); // apply initial visibility toggles
+    this._applyHandedness(); // apply initial handedness
     this._startRenderLoop();
   }
 
@@ -424,6 +428,40 @@ export class ThreeJSHandSkeleton {
       this._render();
     };
     animate();
+  }
+
+  /**
+   * Apply hand chirality (mirror for left/right hand)
+   */
+  _applyHandedness() {
+    if (!this.handGroup) return;
+
+    // Mirror the hand along X axis for left hand
+    // Right hand: scale.x = 1 (no mirror)
+    // Left hand: scale.x = -1 (mirrored)
+    this.handGroup.scale.x = this.handedness === 'left' ? -1 : 1;
+  }
+
+  /**
+   * Set hand chirality
+   * @param {string} hand - 'left' or 'right'
+   */
+  setHandedness(hand) {
+    if (hand !== 'left' && hand !== 'right') {
+      console.warn('[ThreeHand] Invalid handedness:', hand);
+      return;
+    }
+
+    this.handedness = hand;
+    this._applyHandedness();
+  }
+
+  /**
+   * Get current handedness
+   * @returns {string} 'left' or 'right'
+   */
+  getHandedness() {
+    return this.handedness;
   }
 
   /**
