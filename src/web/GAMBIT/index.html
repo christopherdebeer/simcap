@@ -536,6 +536,15 @@
                         🔧 Debug: Offset Override
                     </summary>
                     <div style="padding: var(--space-sm); display: flex; flex-direction: column; gap: var(--space-sm);">
+                        <!-- Hand Chirality -->
+                        <div style="display: flex; align-items: center; justify-content: space-between; padding: var(--space-xs); background: var(--bg); border-radius: var(--radius-sm);">
+                            <label style="font-size: 0.7rem; color: var(--fg-muted);">Hand:</label>
+                            <div style="display: flex; gap: var(--space-xs);">
+                                <button class="btn btn-sm" id="handLeft" style="padding: 2px 8px;">Left</button>
+                                <button class="btn btn-sm" id="handRight" style="padding: 2px 8px; background: var(--success);">Right</button>
+                            </div>
+                        </div>
+
                         <!-- Roll Offset -->
                         <div style="display: flex; flex-direction: column; gap: 2px;">
                             <label style="font-size: 0.7rem; color: var(--fg-muted); display: flex; justify-content: space-between;">
@@ -550,9 +559,9 @@
                         <div style="display: flex; flex-direction: column; gap: 2px;">
                             <label style="font-size: 0.7rem; color: var(--fg-muted); display: flex; justify-content: space-between;">
                                 <span>Pitch Offset:</span>
-                                <span id="pitchOffsetValue">90°</span>
+                                <span id="pitchOffsetValue">180°</span>
                             </label>
-                            <input type="range" id="pitchOffsetSlider" min="-180" max="180" value="90" step="1"
+                            <input type="range" id="pitchOffsetSlider" min="-180" max="180" value="180" step="1"
                                    style="width: 100%;">
                         </div>
 
@@ -560,9 +569,9 @@
                         <div style="display: flex; flex-direction: column; gap: 2px;">
                             <label style="font-size: 0.7rem; color: var(--fg-muted); display: flex; justify-content: space-between;">
                                 <span>Yaw Offset:</span>
-                                <span id="yawOffsetValue">180°</span>
+                                <span id="yawOffsetValue">-180°</span>
                             </label>
-                            <input type="range" id="yawOffsetSlider" min="-180" max="180" value="180" step="1"
+                            <input type="range" id="yawOffsetSlider" min="-180" max="180" value="-180" step="1"
                                    style="width: 100%;">
                         </div>
 
@@ -937,15 +946,16 @@
                         width: 300,
                         height: 300,
                         backgroundColor: 0x1a1a2e,
-                        lerpFactor: 0.15
+                        lerpFactor: 0.15,
+                        handedness: 'right'  // Default to right hand
                     });
 
                     // Set initial orientation offsets to match sensor-to-hand mapping
-                    // These may need adjustment based on how sensor is mounted
+                    // Correct offsets determined through testing: roll: 180, pitch: 180, yaw: -180
                     threeHandSkeleton.setOrientationOffsets({
-                        roll: 180,    // Flip for correct chirality
-                        pitch: 90,    // Palm facing up when flat
-                        yaw: 180      // Fingers away from viewer
+                        roll: 180,
+                        pitch: 180,
+                        yaw: -180
                     });
 
                     console.log('[ThreeHand] Skeleton initialized');
@@ -1023,13 +1033,13 @@
                     if (pitchSlider) pitchSlider.addEventListener('input', updateOffsets);
                     if (yawSlider) yawSlider.addEventListener('input', updateOffsets);
 
-                    // Reset to default button (180, 90, 180)
+                    // Reset to default button (180, 180, -180)
                     const offsetResetBtn = document.getElementById('threeOffsetReset');
                     if (offsetResetBtn) {
                         offsetResetBtn.addEventListener('click', () => {
                             if (rollSlider) rollSlider.value = 180;
-                            if (pitchSlider) pitchSlider.value = 90;
-                            if (yawSlider) yawSlider.value = 180;
+                            if (pitchSlider) pitchSlider.value = 180;
+                            if (yawSlider) yawSlider.value = -180;
                             updateOffsets();
                             console.log('[ThreeHand] Offsets reset to default');
                         });
@@ -1045,6 +1055,34 @@
                             updateOffsets();
                             console.log('[ThreeHand] Offsets zeroed');
                         });
+                    }
+
+                    // Hand chirality buttons
+                    const handLeftBtn = document.getElementById('handLeft');
+                    const handRightBtn = document.getElementById('handRight');
+
+                    function setHandChirality(hand) {
+                        if (threeHandSkeleton) {
+                            threeHandSkeleton.setHandedness(hand);
+
+                            // Update button styles
+                            if (hand === 'left') {
+                                if (handLeftBtn) handLeftBtn.style.background = 'var(--success)';
+                                if (handRightBtn) handRightBtn.style.background = '';
+                            } else {
+                                if (handLeftBtn) handLeftBtn.style.background = '';
+                                if (handRightBtn) handRightBtn.style.background = 'var(--success)';
+                            }
+
+                            console.log('[ThreeHand] Hand set to:', hand);
+                        }
+                    }
+
+                    if (handLeftBtn) {
+                        handLeftBtn.addEventListener('click', () => setHandChirality('left'));
+                    }
+                    if (handRightBtn) {
+                        handRightBtn.addEventListener('click', () => setHandChirality('right'));
                     }
 
                     // Test pose buttons - simulate specific orientations
