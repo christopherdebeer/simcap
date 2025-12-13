@@ -10,26 +10,36 @@
  * SENSOR FRAME (Puck.js Accel/Gyro - LSM6DS3):
  *   +X → toward WRIST
  *   +Y → toward FINGERS
- *   +Z → INTO PALM
+ *   +Z → INTO PALM (toward ceiling when palm-up)
  *
  * HAND MODEL FRAME (Three.js):
  *   +X → toward PINKY (thumb on -X, right hand)
  *   +Y → FINGER EXTENSION direction
  *   +Z → PALM NORMAL (toward viewer when palm faces camera)
  *
- * MAPPING STRATEGY:
- * When sensor is FLAT (face up, palm up):
- *   - Sensor Z points UP (ceiling) → Hand +Z should point UP
- *   - Need 90° pitch offset to rotate palm from facing viewer to facing up
- *   - Need 180° yaw offset to point fingers away from viewer
- *   - Need 180° roll offset for correct hand chirality
+ * =====================================================================
+ * ORIENTATION MAPPING (corrected 2025-12-13)
+ * =====================================================================
+ *
+ * Based on first-principles analysis in shared/orientation-model.js
+ *
+ * User observations with device flat on desk:
+ *   - Palm UP: ✓ Correct (view from above)
+ *   - Forward/back tilt: Was INVERTED → Fixed by NEGATING pitch
+ *   - Left/right tilt: Was INVERTED → Fixed by UN-negating roll
+ *   - Rotation while flat: ✓ Correct (yaw unchanged)
+ *
+ * AXIS SIGN CONFIGURATION (default):
+ *   negateRoll: false   (was true - caused inversion)
+ *   negatePitch: true   (was false - caused inversion)
+ *   negateYaw: false    (correct - no change needed)
+ *
+ * OFFSETS (degrees):
+ *   rollOffset: 180°
+ *   pitchOffset: 180°
+ *   yawOffset: -180°
  *
  * EULER ORDER: "YXZ" (Yaw → Pitch → Roll)
- *   - This matches typical gimbal lock avoidance for up-facing orientations
- *
- * Roll is NEGATED to match hand-3d-renderer.js:
- *   roll: -euler.roll + offset
- * This ensures both renderers respond consistently to sensor input.
  *
  * =====================================================================
  */
@@ -135,6 +145,17 @@ export class ThreeJSHandSkeleton {
 
     // Offsets (degrees)
     this.orientationOffsets = { roll: 0, pitch: 0, yaw: 0 };
+
+    // Axis sign configuration (for fixing inversions)
+    // Based on orientation-model.js analysis:
+    // - negateRoll: false (UN-negate to fix left/right inversion)
+    // - negatePitch: true (NEGATE to fix forward/back inversion)
+    // - negateYaw: false (keep as is, works correctly)
+    this.axisSigns = {
+        negateRoll: options.negateRoll ?? false,
+        negatePitch: options.negatePitch ?? true,
+        negateYaw: options.negateYaw ?? false
+    };
 
     // Hand chirality ('left' or 'right')
     this.handedness = options.handedness ?? 'right';
@@ -394,13 +415,30 @@ export class ThreeJSHandSkeleton {
     );
 
     const offsets = this.orientationOffsets || { roll: 0, pitch: 0, yaw: 0 };
+    const signs = this.axisSigns || { negateRoll: false, negatePitch: true, negateYaw: false };
 
-    // Match hand-3d-renderer.js mapping for consistency:
-    // - Roll is NEGATED to align sensor X axis (toward wrist) with hand model Z axis
-    // - See docs/procedures/orientation-validation-protocol.md for coordinate systems
-    const roll = (-this.currentOrientation.roll + offsets.roll) * (Math.PI / 180);
-    const pitch = (this.currentOrientation.pitch + offsets.pitch) * (Math.PI / 180);
-    const yaw = (this.currentOrientation.yaw + offsets.yaw) * (Math.PI / 180);
+    // Apply configurable axis signs to fix inversions
+    // Based on orientation-model.js first-principles analysis:
+    //
+    // OLD MAPPING (inverted pitch & roll):
+    //   roll = -roll_sensor + offset   (was negated, but inverted)
+    //   pitch = pitch_sensor + offset  (not negated, but inverted)
+    //   yaw = yaw_sensor + offset      (correct)
+    //
+    // NEW MAPPING (corrected):
+    //   roll = roll_sensor + offset    (UN-negate to fix left/right)
+    //   pitch = -pitch_sensor + offset (NEGATE to fix forward/back)
+    //   yaw = yaw_sensor + offset      (keep same)
+    //
+    // The axis signs are now configurable so users can toggle them in the UI
+    // to validate the model empirically.
+    const sensorRoll = this.currentOrientation.roll;
+    const sensorPitch = this.currentOrientation.pitch;
+    const sensorYaw = this.currentOrientation.yaw;
+
+    const roll = ((signs.negateRoll ? -sensorRoll : sensorRoll) + offsets.roll) * (Math.PI / 180);
+    const pitch = ((signs.negatePitch ? -sensorPitch : sensorPitch) + offsets.pitch) * (Math.PI / 180);
+    const yaw = ((signs.negateYaw ? -sensorYaw : sensorYaw) + offsets.yaw) * (Math.PI / 180);
 
     this.handGroup.rotation.set(
       pitch, // X
@@ -408,6 +446,26 @@ export class ThreeJSHandSkeleton {
       roll,  // Z
       "YXZ"
     );
+  }
+
+  /**
+   * Set axis sign configuration for orientation mapping
+   * Use this to fix inversions by toggling which axes are negated
+   *
+   * @param {Object} signs - { negateRoll, negatePitch, negateYaw }
+   */
+  setAxisSigns(signs) {
+    if (signs.negateRoll !== undefined) this.axisSigns.negateRoll = signs.negateRoll;
+    if (signs.negatePitch !== undefined) this.axisSigns.negatePitch = signs.negatePitch;
+    if (signs.negateYaw !== undefined) this.axisSigns.negateYaw = signs.negateYaw;
+  }
+
+  /**
+   * Get current axis sign configuration
+   * @returns {Object} { negateRoll, negatePitch, negateYaw }
+   */
+  getAxisSigns() {
+    return { ...this.axisSigns };
   }
 
   _render() {

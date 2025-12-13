@@ -3,21 +3,23 @@
  * Real-time 3D hand visualization with joint-level control
  * Supports pose labels and orientation from IMU sensor fusion
  *
- * The sensor is positioned in the palm (face up), so orientation from
+ * The sensor is positioned on the back of the hand, so orientation from
  * the IMU is used to rotate the hand model in 3D space.
- * 
- * TODO: Orientation mapping is partially complete. Current status:
- * - Palm UP: ✓ Working
- * - Thumb on LEFT: ✓ Working  
- * - Fingers pointing AWAY from viewer: ✗ Still pointing TOWARD viewer
- * - Fingers curling direction: Curling upward (should curl toward palm)
- * 
- * See: docs/procedures/orientation-validation-protocol.md for full details
- * 
- * Current mapping (2025-12-12):
- * - pitch: euler.pitch + 90 (rotates palm from facing viewer to facing up)
- * - yaw: euler.yaw + 180 (should flip fingers away, but base 180° Y rotation may interfere)
- * - roll: -euler.roll + 180 (flips hand to correct chirality)
+ *
+ * ORIENTATION MAPPING (corrected 2025-12-13):
+ * Based on first-principles analysis in shared/orientation-model.js
+ *
+ * User observation results:
+ * - Palm UP (flat on desk): ✓ Working
+ * - Thumb on LEFT (right hand): ✓ Working
+ * - Forward/back tilt: ✓ Fixed (pitch negated)
+ * - Left/right tilt: ✓ Fixed (roll un-negated)
+ * - Rotation while flat: ✓ Working (yaw unchanged)
+ *
+ * Mapping formula:
+ * - pitch: -euler.pitch + 90 (NEGATE pitch to fix forward/back inversion)
+ * - yaw: euler.yaw + 180 (rotates fingers away from viewer)
+ * - roll: euler.roll + 180 (UN-negate to fix left/right inversion)
  */
 
 /**
@@ -234,15 +236,26 @@ class Hand3DRenderer {
         // - IMU pitch → hand pitch (but inverted due to base rotation)
         // - IMU roll → hand roll  
         // - IMU yaw → hand yaw
-        // COORDINATE MAPPING (validated 2025-12-12):
-        // - Sensor face-up on desk → Palm UP, fingers AWAY from viewer, thumb on LEFT
-        // - pitch +90° rotates palm from facing viewer to facing up
-        // - yaw +180° rotates fingers from toward viewer to away
-        // - roll negated + 180° flips hand to correct chirality (thumb on left)
+        // COORDINATE MAPPING (corrected 2025-12-13 based on orientation-model.js):
+        //
+        // User observations with device on desk:
+        // - Flat on desk (palm up): correct view from above
+        // - Tip forward/back: INVERTED (needed to negate pitch)
+        // - Tilt left/right: INVERTED (needed to UN-negate roll)
+        // - Rotate while flat: CORRECT (yaw unchanged)
+        //
+        // OLD MAPPING (inverted):
+        //   pitch = euler.pitch + 90
+        //   roll = -euler.roll + 180
+        //
+        // NEW MAPPING (corrected):
+        //   pitch = -euler.pitch + 90  (NEGATE pitch to fix forward/back)
+        //   roll = euler.roll + 180    (UN-negate roll to fix left/right)
+        //
         const mappedOrientation = {
-            pitch: euler.pitch + 90 + this.orientationOffset.pitch,
+            pitch: -euler.pitch + 90 + this.orientationOffset.pitch,
             yaw: euler.yaw + 180 + this.orientationOffset.yaw,
-            roll: -euler.roll + 180 + this.orientationOffset.roll
+            roll: euler.roll + 180 + this.orientationOffset.roll
         };
 
         this.setOrientation(mappedOrientation);
