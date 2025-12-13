@@ -8,6 +8,35 @@
  *   const calibration = new EnvironmentalCalibration();
  *   await calibration.runHardIronCalibration(collectSamples);
  *   const corrected = calibration.correct(rawMag, orientation);
+ *
+ * =====================================================================
+ * TODO: [SENSOR-003] Magnetometer Axis Alignment Required
+ * =====================================================================
+ *
+ * The LIS3MDL magnetometer has TRANSPOSED X/Y axes relative to the
+ * LSM6DS3 accelerometer/gyroscope:
+ *
+ *   Magnetometer:  +X → fingers, +Y → wrist, +Z → palm
+ *   Accel/Gyro:    +X → wrist,   +Y → fingers, +Z → palm
+ *
+ * CURRENT STATE: This calibration module receives magnetometer data
+ * WITHOUT axis alignment. The hard iron offset and Earth field vectors
+ * are stored in the magnetometer's native coordinate frame, which does
+ * NOT match the IMU orientation quaternion's coordinate frame.
+ *
+ * IMPACT:
+ *   - Earth field subtraction (correct() method) may produce incorrect
+ *     residuals because orientation is in accel/gyro frame but Earth
+ *     field reference is in magnetometer frame
+ *   - Hard/soft iron calibration itself is self-consistent (calibrates
+ *     in mag frame, corrects in mag frame) so finger tracking still works
+ *
+ * RECOMMENDED FIX:
+ *   1. Align mag data to accel frame BEFORE passing to calibration
+ *   2. OR add axis swap inside this module for orientation-dependent ops
+ *
+ * See: GAMBIT/index.html for full coordinate system documentation
+ * =====================================================================
  */
 
 /**

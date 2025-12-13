@@ -1,25 +1,37 @@
 /**
- * Three.js Hand Skeleton Module (fixed)
+ * Three.js Hand Skeleton Module
  *
- * Fixes:
- * 1) “Two wireframes connected at wrist / different orientations”
- *    - You were drawing TWO visualizations:
- *      A) your custom joints+cylinders (_createBoneVisualization)
- *      B) THREE.SkeletonHelper (debug lines)
- *    - BUT you parented SkeletonHelper under the rotating handGroup, which can
- *      make it appear “double transformed” / misaligned.
- *    - Fix: add SkeletonHelper to the scene (not handGroup) and call update().
+ * Provides 3D skeletal hand visualization driven by IMU sensor orientation.
  *
- * 2) “360/0 transitions spin the long way”
- *    - Fix: lerp angles along shortest path (wrap-aware).
+ * =====================================================================
+ * COORDINATE SYSTEM MAPPING (Sensor → Hand Model)
+ * =====================================================================
  *
- * Optional:
- * - Toggle visibility of helper lines vs custom joints/cylinders.
+ * SENSOR FRAME (Puck.js Accel/Gyro - LSM6DS3):
+ *   +X → toward WRIST
+ *   +Y → toward FINGERS
+ *   +Z → INTO PALM
  *
- * Coordinate System:
- * - Fingers extend in +Y direction
- * - Palm faces +Z (towards viewer when neutral)
- * - Thumb on -X side (right hand)
+ * HAND MODEL FRAME (Three.js):
+ *   +X → toward PINKY (thumb on -X, right hand)
+ *   +Y → FINGER EXTENSION direction
+ *   +Z → PALM NORMAL (toward viewer when palm faces camera)
+ *
+ * MAPPING STRATEGY:
+ * When sensor is FLAT (face up, palm up):
+ *   - Sensor Z points UP (ceiling) → Hand +Z should point UP
+ *   - Need 90° pitch offset to rotate palm from facing viewer to facing up
+ *   - Need 180° yaw offset to point fingers away from viewer
+ *   - Need 180° roll offset for correct hand chirality
+ *
+ * EULER ORDER: "YXZ" (Yaw → Pitch → Roll)
+ *   - This matches typical gimbal lock avoidance for up-facing orientations
+ *
+ * Roll is NEGATED to match hand-3d-renderer.js:
+ *   roll: -euler.roll + offset
+ * This ensures both renderers respond consistently to sensor input.
+ *
+ * =====================================================================
  */
 
 const THREE = window.THREE;
@@ -360,7 +372,7 @@ export class ThreeJSHandSkeleton {
   }
 
   _applyOrientation() {
-    // FIX: wrap-aware shortest-path lerp for all axes (degrees)
+    // Wrap-aware shortest-path lerp for all axes (degrees)
     this.currentOrientation.roll = lerpAngleDeg(
       this.currentOrientation.roll,
       this.targetOrientation.roll,
@@ -379,7 +391,10 @@ export class ThreeJSHandSkeleton {
 
     const offsets = this.orientationOffsets || { roll: 0, pitch: 0, yaw: 0 };
 
-    const roll = (this.currentOrientation.roll + offsets.roll) * (Math.PI / 180);
+    // Match hand-3d-renderer.js mapping for consistency:
+    // - Roll is NEGATED to align sensor X axis (toward wrist) with hand model Z axis
+    // - See docs/procedures/orientation-validation-protocol.md for coordinate systems
+    const roll = (-this.currentOrientation.roll + offsets.roll) * (Math.PI / 180);
     const pitch = (this.currentOrientation.pitch + offsets.pitch) * (Math.PI / 180);
     const yaw = (this.currentOrientation.yaw + offsets.yaw) * (Math.PI / 180);
 
@@ -395,9 +410,9 @@ export class ThreeJSHandSkeleton {
     this._applyOrientation();
     this._applyFingerCurls();
 
-    // Keep helper aligned with bones (especially if helper is in scene)
+    // Update bone world matrices before rendering
+    // SkeletonHelper updates automatically via onBeforeRender in Three.js r160+
     if (this.wristBone) this.wristBone.updateWorldMatrix(true, true);
-    if (this.skeletonHelper) this.skeletonHelper.update();
 
     this.renderer.render(this.scene, this.camera);
   }
