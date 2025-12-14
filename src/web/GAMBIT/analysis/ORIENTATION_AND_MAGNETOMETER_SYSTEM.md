@@ -131,17 +131,17 @@ However, this information is **conditional** on knowing:
 │                                                                              │
 │  updateFromSensorFusion(euler):                                             │
 │  ┌──────────────────────────────────────────────────────────────────────┐   │
-│  │ AXIS MAPPING (corrected 2025-12-14):                                 │   │
+│  │ AXIS MAPPING (corrected 2025-12-14 v2 based on calibration data):   │   │
 │  │                                                                      │   │
-│  │   AHRS ZYX Convention:              Renderer Axes:                   │   │
-│  │   - roll  = X axis rotation    ──▶  pitch (RotX)                     │   │
-│  │   - pitch = Y axis rotation    ──▶  yaw   (RotY)                     │   │
-│  │   - yaw   = Z axis rotation    ──▶  roll  (RotZ)                     │   │
+│  │   Physical Movement:               Visual Effect:     Renderer:      │   │
+│  │   - Roll (tilt pinky down)    ──▶  hand tilts L/R ──▶ RotY (yaw)    │   │
+│  │   - Pitch (tilt fingers)      ──▶  fingers nod    ──▶ RotX (pitch)  │   │
+│  │   - Yaw (rotate while flat)   ──▶  hand spins     ──▶ RotZ (roll)   │   │
 │  │                                                                      │   │
 │  │   mappedOrientation = {                                              │   │
-│  │     pitch: -euler.roll + 90,   // AHRS.roll(X) → renderer.pitch(X)  │   │
-│  │     yaw:   euler.pitch + 180,  // AHRS.pitch(Y) → renderer.yaw(Y)   │   │
-│  │     roll:  euler.yaw + 180     // AHRS.yaw(Z) → renderer.roll(Z)    │   │
+│  │     pitch: -euler.pitch,      // AHRS.pitch → renderer.pitch (RotX) │   │
+│  │     yaw:   euler.roll,        // AHRS.roll → renderer.yaw (RotY)    │   │
+│  │     roll:  euler.yaw          // AHRS.yaw → renderer.roll (RotZ)    │   │
 │  │   }                                                                  │   │
 │  └──────────────────────────────────────────────────────────────────────┘   │
 │                                                                              │
@@ -178,28 +178,45 @@ When AHRS extracts Euler angles using ZYX convention but the renderer was applyi
 2. The renderer's axis labels (pitch, yaw, roll) didn't match AHRS axis labels
 3. Rotation order affects how individual angles combine
 
-**The Fix:**
+**The Fix (V2 - based on calibration observations):**
 
-| Component | Before (Wrong) | After (Correct) |
-|-----------|---------------|-----------------|
-| renderer.pitch → | AHRS pitch | AHRS roll (both are X-axis rotations) |
-| renderer.yaw → | AHRS yaw | AHRS pitch (both are Y-axis rotations) |
-| renderer.roll → | AHRS roll | AHRS yaw (both are Z-axis rotations) |
-| Rotation order | YXZ | ZYX (matches AHRS) |
+The confusion arose from conflating AHRS axis names (roll/pitch/yaw as X/Y/Z rotations)
+with physical movement names (roll/pitch/yaw as what pilots call these motions).
+
+| Physical Motion | AHRS Value | Visual Effect | Renderer Rotation |
+|-----------------|------------|---------------|-------------------|
+| Roll (tilt L/R) | euler.roll | Hand tilts | RotY (renderer.yaw) |
+| Pitch (nod) | euler.pitch | Fingers tilt | RotX (renderer.pitch) |
+| Yaw (spin) | euler.yaw | Hand spins | RotZ (renderer.roll) |
+
+Key insight: The renderer variable names (pitch/yaw/roll) don't match their rotation
+axes (RotX/RotY/RotZ) in the intuitive way. `renderer.yaw` applies RotY, etc.
 
 ### Validation Results
 
-After the fix, calibration observations show:
+**Pre-V2 fix observations (for reference):**
 
-| Pose | Expected | Visual Result |
-|------|----------|---------------|
-| FLAT_PALM_UP | Baseline | ✓ Correct |
-| PITCH_FORWARD_45 | Pitch only | ✓ Correct |
-| PITCH_BACKWARD_45 | Pitch only | ✓ Correct |
-| ROLL_LEFT_45 | Roll only | Testing needed |
-| ROLL_RIGHT_45 | Roll only | Testing needed |
-| YAW_CW_90 | Yaw only | Testing needed |
-| YAW_CCW_90 | Yaw only | Testing needed |
+| Pose | AHRS Response | Visual Result | Issue |
+|------|---------------|---------------|-------|
+| FLAT_PALM_UP | Baseline | Unknown | Baseline |
+| PITCH_FORWARD_45 | pitch=-34° | Coupled | Coupling visible |
+| PITCH_BACKWARD_45 | pitch=+44° | ✓ Correct | Working |
+| ROLL_LEFT_45 | roll=+48° | ✗ Wrong axis | Roll→RotX was wrong |
+| ROLL_RIGHT_45 | roll=-33° | ✗ Wrong axis | Roll→RotX was wrong |
+| YAW_CW_90 | yaw=-69° | ✗ Wrong axis | +180 offset issue |
+| YAW_CCW_90 | yaw=+112° | ✗ Wrong axis | +180 offset issue |
+
+**After V2 fix (needs validation):**
+
+| Pose | Expected Visual | Status |
+|------|-----------------|--------|
+| FLAT_PALM_UP | Palm up, fingers away | To test |
+| PITCH_FORWARD_45 | Fingers point down | To test |
+| PITCH_BACKWARD_45 | Fingers point up | To test |
+| ROLL_LEFT_45 | Pinky down, thumb up | To test |
+| ROLL_RIGHT_45 | Thumb down, pinky up | To test |
+| YAW_CW_90 | Fingers point left | To test |
+| YAW_CCW_90 | Fingers point right | To test |
 
 ---
 
