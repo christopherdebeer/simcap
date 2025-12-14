@@ -6,20 +6,26 @@
  * The sensor is positioned on the back of the hand, so orientation from
  * the IMU is used to rotate the hand model in 3D space.
  *
- * ORIENTATION MAPPING (corrected 2025-12-13):
- * Based on first-principles analysis in shared/orientation-model.js
+ * ORIENTATION MAPPING (corrected 2025-12-14):
+ * Based on calibration analysis revealing axis mismatch between AHRS and renderer.
  *
- * User observation results:
- * - Palm UP (flat on desk): ✓ Working
- * - Thumb on LEFT (right hand): ✓ Working
- * - Forward/back tilt: ✓ Fixed (pitch negated)
- * - Left/right tilt: ✓ Fixed (roll un-negated)
- * - Rotation while flat: ✓ Working (yaw unchanged)
+ * AHRS ZYX Euler Convention:
+ *   - roll = X axis rotation (left/right tilt, a.k.a. bank)
+ *   - pitch = Y axis rotation (forward/back tilt, a.k.a. elevation)
+ *   - yaw = Z axis rotation (rotation while flat, a.k.a. heading)
  *
- * Mapping formula:
- * - pitch: -euler.pitch + 90 (NEGATE pitch to fix forward/back inversion)
- * - yaw: euler.yaw + 180 (rotates fingers away from viewer)
- * - roll: euler.roll + 180 (UN-negate to fix left/right inversion)
+ * Renderer Axis Assignments:
+ *   - renderer.pitch → RotX (X axis rotation)
+ *   - renderer.yaw → RotY (Y axis rotation)
+ *   - renderer.roll → RotZ (Z axis rotation)
+ *
+ * CORRECT AXIS MAPPING (matching axis types):
+ *   - renderer.pitch (X) = AHRS.roll (X)   → -euler.roll + 90
+ *   - renderer.yaw (Y) = AHRS.pitch (Y)    → euler.pitch + 180
+ *   - renderer.roll (Z) = AHRS.yaw (Z)     → euler.yaw + 180
+ *
+ * ROTATION ORDER: ZYX intrinsic (Z first, Y second, X third)
+ * This matches how AHRS decomposes the quaternion into Euler angles.
  */
 
 /**
@@ -236,26 +242,29 @@ class Hand3DRenderer {
         // - IMU pitch → hand pitch (but inverted due to base rotation)
         // - IMU roll → hand roll  
         // - IMU yaw → hand yaw
-        // COORDINATE MAPPING (corrected 2025-12-13 based on orientation-model.js):
+        // COORDINATE MAPPING (corrected 2025-12-14 based on calibration analysis):
         //
-        // User observations with device on desk:
-        // - Flat on desk (palm up): correct view from above
-        // - Tip forward/back: INVERTED (needed to negate pitch)
-        // - Tilt left/right: INVERTED (needed to UN-negate roll)
-        // - Rotate while flat: CORRECT (yaw unchanged)
+        // AHRS ZYX Euler convention:
+        //   - roll = X axis rotation (left/right tilt)
+        //   - pitch = Y axis rotation (forward/back tilt)
+        //   - yaw = Z axis rotation (rotation while flat)
         //
-        // OLD MAPPING (inverted):
-        //   pitch = euler.pitch + 90
-        //   roll = -euler.roll + 180
+        // Renderer axis assignments (via RotX, RotY, RotZ):
+        //   - renderer.pitch → RotX (X axis rotation)
+        //   - renderer.yaw → RotY (Y axis rotation)
+        //   - renderer.roll → RotZ (Z axis rotation)
         //
-        // NEW MAPPING (corrected):
-        //   pitch = -euler.pitch + 90  (NEGATE pitch to fix forward/back)
-        //   roll = euler.roll + 180    (UN-negate roll to fix left/right)
+        // CORRECT AXIS MAPPING:
+        //   - renderer.pitch (X) = AHRS.roll (X)   - same axis
+        //   - renderer.yaw (Y) = AHRS.pitch (Y)    - same axis
+        //   - renderer.roll (Z) = AHRS.yaw (Z)     - same axis
+        //
+        // With 90° offset for palm-up baseline and 180° base flip compensation:
         //
         const mappedOrientation = {
-            pitch: -euler.pitch + 90 + this.orientationOffset.pitch,
-            yaw: euler.yaw + 180 + this.orientationOffset.yaw,
-            roll: euler.roll + 180 + this.orientationOffset.roll
+            pitch: -euler.roll + 90 + this.orientationOffset.pitch,   // AHRS roll (X) → renderer pitch (X)
+            yaw: euler.pitch + 180 + this.orientationOffset.yaw,      // AHRS pitch (Y) → renderer yaw (Y)
+            roll: euler.yaw + 180 + this.orientationOffset.roll       // AHRS yaw (Z) → renderer roll (Z)
         };
 
         this.setOrientation(mappedOrientation);
@@ -325,10 +334,20 @@ class Hand3DRenderer {
 
         // Hand transform - start with 180° Y rotation so palm faces viewer by default
         // Then apply user orientation on top
+        //
+        // ROTATION ORDER (ZYX intrinsic to match AHRS convention):
+        // After axis mapping in updateFromSensorFusion():
+        //   - pitch = X axis rotation (from AHRS roll)
+        //   - yaw = Y axis rotation (from AHRS pitch)
+        //   - roll = Z axis rotation (from AHRS yaw)
+        //
+        // Apply in ZYX order: Z first, then Y, then X
+        // This matches how AHRS decomposes the quaternion
+        //
         let handM = this._matRotY(Math.PI); // Base flip to show palm
-        handM = this._matMul(handM, this._matRotY(yaw));
-        handM = this._matMul(handM, this._matRotX(pitch));
-        handM = this._matMul(handM, this._matRotZ(roll));
+        handM = this._matMul(handM, this._matRotZ(roll));   // Z rotation first (yaw/heading)
+        handM = this._matMul(handM, this._matRotY(yaw));    // Y rotation second (pitch/elevation)
+        handM = this._matMul(handM, this._matRotX(pitch));  // X rotation third (roll/bank)
 
         const lines = [];
         const pts = [];
