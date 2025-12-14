@@ -26,6 +26,11 @@ import {
     getSensorUnitMetadata
 } from './sensor-units.js';
 
+import {
+    getDefaultLocation,
+    getBrowserLocation
+} from './geomagnetic-field.js';
+
 /**
  * TelemetryProcessor class
  * 
@@ -46,36 +51,102 @@ export class TelemetryProcessor {
      * @param {Function} [options.onProcessed] - Callback for processed telemetry
      * @param {Function} [options.onOrientationUpdate] - Callback for orientation updates
      * @param {Function} [options.onGyroBiasCalibrated] - Callback when gyro bias is calibrated
+     * @param {boolean} [options.useMagnetometer=true] - Enable 9-DOF fusion with magnetometer
+     * @param {number} [options.magTrust=0.5] - Magnetometer trust factor (0-1)
      */
     constructor(options = {}) {
         this.options = options;
-        
+
         // Calibration instance (external, for magnetometer correction)
         this.calibration = options.calibration || null;
-        
+
         // Create signal processing components
         this.imuFusion = createMadgwickAHRS();
         this.magFilter = createKalmanFilter3D();
         this.motionDetector = createMotionDetector();
-        
+
         // Gyroscope bias calibration state
         this.gyroBiasState = createGyroBiasState();
-        
+
         // IMU initialization state
         this.imuInitialized = false;
-        
+
+        // 9-DOF magnetometer fusion configuration
+        this.useMagnetometer = options.useMagnetometer !== false; // Default: enabled
+        this.magTrust = options.magTrust ?? 0.5; // Default: moderate trust
+        this.geomagneticRef = null;
+
+        // Initialize magnetometer trust on AHRS
+        this.imuFusion.setMagTrust(this.magTrust);
+
+        // Initialize geomagnetic reference (async, uses default until browser location available)
+        this._initGeomagneticReference();
+
         // Timing
         this.lastTimestamp = null;
-        
+
         // Callbacks
         this.onProcessed = options.onProcessed || null;
         this.onOrientationUpdate = options.onOrientationUpdate || null;
         this.onGyroBiasCalibrated = options.onGyroBiasCalibrated || null;
-        
+
         // Debug logging flags (to avoid spam)
         this._loggedCalibrationMissing = false;
         this._loggedOrientationMissing = false;
         this._loggedEarthCalibrationMissing = false;
+        this._loggedMagFusion = false;
+    }
+
+    /**
+     * Initialize geomagnetic reference from location
+     * Uses browser geolocation if available, falls back to default
+     */
+    async _initGeomagneticReference() {
+        // Start with default location immediately
+        const defaultLoc = getDefaultLocation();
+        this._setGeomagneticRef(defaultLoc);
+        console.log('[TelemetryProcessor] Using default geomagnetic reference:', defaultLoc.city);
+
+        // Try to get browser location (async, updates if successful)
+        try {
+            const browserLoc = await getBrowserLocation({ timeout: 5000 });
+            this._setGeomagneticRef(browserLoc);
+            console.log('[TelemetryProcessor] Updated geomagnetic reference from browser location:', browserLoc.city);
+        } catch (e) {
+            console.debug('[TelemetryProcessor] Browser location unavailable, using default:', e.message);
+        }
+    }
+
+    /**
+     * Set geomagnetic reference on AHRS
+     * @param {Object} location - Location with horizontal, vertical, declination fields
+     */
+    _setGeomagneticRef(location) {
+        if (location) {
+            this.geomagneticRef = {
+                horizontal: location.horizontal,
+                vertical: location.vertical,
+                declination: location.declination
+            };
+            this.imuFusion.setGeomagneticReference(this.geomagneticRef);
+        }
+    }
+
+    /**
+     * Set magnetometer trust factor
+     * @param {number} trust - 0.0 (ignore mag) to 1.0 (full trust)
+     */
+    setMagTrust(trust) {
+        this.magTrust = Math.max(0, Math.min(1, trust));
+        this.imuFusion.setMagTrust(this.magTrust);
+    }
+
+    /**
+     * Enable/disable magnetometer fusion
+     * @param {boolean} enabled
+     */
+    setMagnetometerEnabled(enabled) {
+        this.useMagnetometer = enabled;
     }
     
     /**
@@ -189,16 +260,41 @@ export class TelemetryProcessor {
                 console.log('[TelemetryProcessor] IMU initialized from accelerometer');
             }
         }
-        
-        // Update orientation estimate (pass g's and deg/s)
+
+        // Update orientation estimate
         if (this.imuInitialized) {
-            this.imuFusion.update(ax_g, ay_g, az_g, gx_dps, gy_dps, gz_dps, dt, true);
+            // Check if we should use 9-DOF magnetometer fusion
+            const magDataValid = mx_ut !== 0 || my_ut !== 0 || mz_ut !== 0;
+
+            if (this.useMagnetometer && magDataValid && this.geomagneticRef) {
+                // 9-DOF fusion with magnetometer for absolute yaw reference
+                // Pass hard iron offset from calibration if available
+                if (this.calibration?.hardIronCalibrated && this.calibration.hardIronOffset) {
+                    this.imuFusion.setHardIronOffset(this.calibration.hardIronOffset);
+                }
+
+                // Use updateWithMag for 9-DOF fusion
+                this.imuFusion.updateWithMag(
+                    ax_g, ay_g, az_g,
+                    gx_dps, gy_dps, gz_dps,
+                    mx_ut, my_ut, mz_ut,
+                    dt, true, true // gyroInDegrees=true, applyHardIron=true
+                );
+
+                if (!this._loggedMagFusion) {
+                    console.log('[TelemetryProcessor] Using 9-DOF fusion with magnetometer (trust:', this.magTrust, ')');
+                    this._loggedMagFusion = true;
+                }
+            } else {
+                // 6-DOF fusion (gyro + accel only)
+                this.imuFusion.update(ax_g, ay_g, az_g, gx_dps, gy_dps, gz_dps, dt, true);
+            }
         }
-        
+
         // Get current orientation
         const orientation = this.imuInitialized ? this.imuFusion.getQuaternion() : null;
         const euler = this.imuInitialized ? this.imuFusion.getEulerAngles() : null;
-        
+
         // Add orientation to decorated telemetry
         if (orientation) {
             decorated.orientation_w = orientation.w;
@@ -211,7 +307,18 @@ export class TelemetryProcessor {
             decorated.euler_pitch = euler.pitch;
             decorated.euler_yaw = euler.yaw;
         }
-        
+
+        // Add magnetometer residual from AHRS (for finger magnet sensing prep)
+        if (this.useMagnetometer && this.imuInitialized) {
+            const magResidual = this.imuFusion.getMagResidual();
+            if (magResidual) {
+                decorated.ahrs_mag_residual_x = magResidual.x;
+                decorated.ahrs_mag_residual_y = magResidual.y;
+                decorated.ahrs_mag_residual_z = magResidual.z;
+                decorated.ahrs_mag_residual_magnitude = this.imuFusion.getMagResidualMagnitude();
+            }
+        }
+
         // Notify orientation update
         if (this.onOrientationUpdate && euler) {
             this.onOrientationUpdate(euler, orientation);
@@ -320,7 +427,8 @@ export class TelemetryProcessor {
         this._loggedCalibrationMissing = false;
         this._loggedOrientationMissing = false;
         this._loggedEarthCalibrationMissing = false;
-        
+        this._loggedMagFusion = false;
+
         console.log('[TelemetryProcessor] Reset complete');
     }
     
