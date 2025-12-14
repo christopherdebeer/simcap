@@ -344,10 +344,27 @@ class Hand3DRenderer {
         // Apply in ZYX order: Z first, then Y, then X
         // This matches how AHRS decomposes the quaternion
         //
+        // PIVOT POINT: Rotate around sensor position (center of palm)
+        // The sensor is mounted on the palm, so rotations should pivot there,
+        // not at the wrist. This is achieved by:
+        // 1. Apply base flip first (constant transform)
+        // 2. For user rotations: translate sensor to origin, rotate, translate back
+        //
+        // After the base 180° Y flip, the sensor position [0, 0.15, 0.12] becomes [0, 0.15, -0.12]
+        // (Z is negated by the Y rotation)
+        //
+        const sensorPivot = [0, 0.15, -0.12];  // Sensor position AFTER base flip
+
+        // Build transform: base flip, then pivot-centered user rotations
+        // With post-multiplication (M = M × R), rotations are in local/object space
         let handM = this._matRotY(Math.PI); // Base flip to show palm
+
+        // Pivot to sensor, apply user rotations, pivot back
+        handM = this._matMul(handM, this._matTrans(-sensorPivot[0], -sensorPivot[1], -sensorPivot[2]));
         handM = this._matMul(handM, this._matRotZ(roll));   // Z rotation first (yaw/heading)
         handM = this._matMul(handM, this._matRotY(yaw));    // Y rotation second (pitch/elevation)
         handM = this._matMul(handM, this._matRotX(pitch));  // X rotation third (roll/bank)
+        handM = this._matMul(handM, this._matTrans(sensorPivot[0], sensorPivot[1], sensorPivot[2]));
 
         const lines = [];
         const pts = [];
