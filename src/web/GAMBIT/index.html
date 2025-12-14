@@ -868,9 +868,14 @@
             import { describeExpectedPose, getValidationTestCases } from './shared/orientation-model.js';
             import {
                 REFERENCE_POSES,
+                ANSWER_OPTIONS,
+                COUPLING_TYPES,
                 createObservation,
                 ObservationStore,
-                getCalibrationSequence
+                getCalibrationSequence,
+                generateDiagnosticReport,
+                quaternionToEuler,
+                testEulerOrders
             } from './shared/orientation-calibration.js';
 
             // ===== GambitClient for Frame-Based Protocol =====
@@ -1259,6 +1264,7 @@
             let currentUserAnswers = {};
             let latestSensorData = null;
             let latestAhrsOutput = null;
+            let baselineAhrsOutput = null;  // Stored from FLAT_PALM_UP pose
 
             // Initialize calibration UI
             function initCalibrationUI() {
@@ -1285,10 +1291,12 @@
                 resetBtn?.addEventListener('click', () => {
                     observationStore.clear();
                     currentUserAnswers = {};
+                    baselineAhrsOutput = null;  // Clear baseline
                     updateObservationLog();
                     updateAnalysis();
                     poseSelect.value = '';
                     clearCalibrationPose();
+                    console.log('[Calibration] Reset - baseline cleared');
                 });
 
                 // Export button
@@ -1311,23 +1319,78 @@
                     instructionsDiv.style.display = 'block';
                 }
 
-                // Show validation questions
+                // Show validation questions with multi-choice options
                 const questionsDiv = document.getElementById('validationQuestions');
                 const questionsList = document.getElementById('questionsList');
                 if (questionsDiv && questionsList) {
-                    questionsList.innerHTML = currentCalibrationPose.validationQuestions
-                        .map(q => `
-                            <label style="display: flex; align-items: center; gap: 6px; margin: 4px 0; cursor: pointer;">
-                                <input type="checkbox" class="calibration-question" data-qid="${q.id}">
-                                <span>${q.question}</span>
-                            </label>
-                        `).join('');
+                    let questionsHtml = '';
+
+                    // Render each validation question
+                    currentCalibrationPose.validationQuestions.forEach(q => {
+                        if (q.type === 'position') {
+                            // Simple yes/no/mostly for static position questions
+                            questionsHtml += `
+                                <div style="margin: 8px 0; padding: 6px; background: rgba(255,255,255,0.03); border-radius: 4px;">
+                                    <div style="font-weight: bold; margin-bottom: 4px;">${q.question}</div>
+                                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                        <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                                            <input type="radio" name="q_${q.id}" class="calibration-radio" data-qid="${q.id}" value="yes">
+                                            <span>Yes</span>
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                                            <input type="radio" name="q_${q.id}" class="calibration-radio" data-qid="${q.id}" value="mostly">
+                                            <span>Mostly</span>
+                                        </label>
+                                        <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                                            <input type="radio" name="q_${q.id}" class="calibration-radio" data-qid="${q.id}" value="no">
+                                            <span>No</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            `;
+                        } else if (q.type === 'direction' && q.options) {
+                            // Multi-choice for direction/movement questions
+                            questionsHtml += `
+                                <div style="margin: 8px 0; padding: 6px; background: rgba(255,255,255,0.03); border-radius: 4px;">
+                                    <div style="font-weight: bold; margin-bottom: 4px;">${q.question}</div>
+                                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                                        ${q.options.map(opt => `
+                                            <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                                                <input type="radio" name="q_${q.id}" class="calibration-radio" data-qid="${q.id}" value="${opt.value}">
+                                                <span>${opt.label}</span>
+                                            </label>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            `;
+                        }
+                    });
+
+                    // Add coupling question if present
+                    if (currentCalibrationPose.couplingQuestion) {
+                        const cq = currentCalibrationPose.couplingQuestion;
+                        questionsHtml += `
+                            <div style="margin: 8px 0; padding: 6px; background: rgba(255,200,0,0.1); border-radius: 4px; border-left: 3px solid rgba(255,200,0,0.5);">
+                                <div style="font-weight: bold; margin-bottom: 4px;">${cq.question}</div>
+                                <div style="display: flex; flex-direction: column; gap: 4px;">
+                                    ${cq.options.map(opt => `
+                                        <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                                            <input type="radio" name="q_coupling" class="calibration-radio" data-qid="coupling" value="${opt.value}">
+                                            <span>${opt.label}</span>
+                                        </label>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        `;
+                    }
+
+                    questionsList.innerHTML = questionsHtml;
                     questionsDiv.style.display = 'block';
 
-                    // Add change handlers
-                    questionsList.querySelectorAll('.calibration-question').forEach(cb => {
-                        cb.addEventListener('change', (e) => {
-                            currentUserAnswers[e.target.dataset.qid] = e.target.checked;
+                    // Add change handlers for all radio buttons
+                    questionsList.querySelectorAll('.calibration-radio').forEach(radio => {
+                        radio.addEventListener('change', (e) => {
+                            currentUserAnswers[e.target.dataset.qid] = e.target.value;
                             updateCaptureButton();
                         });
                     });
@@ -1347,8 +1410,8 @@
             function updateCaptureButton() {
                 const btn = document.getElementById('captureObservation');
                 if (btn) {
-                    // Enable if pose selected and at least one answer given
-                    const hasAnswers = Object.keys(currentUserAnswers).some(k => currentUserAnswers[k]);
+                    // Enable if pose selected and primary question answered
+                    const hasAnswers = Object.keys(currentUserAnswers).length > 0;
                     btn.disabled = !currentCalibrationPose || !hasAnswers;
                 }
             }
@@ -1377,25 +1440,38 @@
                     renderState = { x: rot.x, y: rot.y, z: rot.z, order: rot.order };
                 }
 
-                // Create observation
+                // Store baseline if this is FLAT_PALM_UP pose
+                if (currentCalibrationPose.id === 'FLAT_PALM_UP') {
+                    baselineAhrsOutput = { ...latestAhrsOutput };
+                    console.log('[Calibration] Baseline stored:', baselineAhrsOutput);
+                }
+
+                // Create observation (v2 with baseline support)
                 const observation = createObservation(
                     currentCalibrationPose.id,
                     latestSensorData || { ax: 0, ay: 0, az: 0, gx: 0, gy: 0, gz: 0 },
                     latestAhrsOutput,
                     renderState,
                     currentUserAnswers,
-                    mappingConfig
+                    mappingConfig,
+                    baselineAhrsOutput  // Pass baseline for delta analysis
                 );
 
                 observationStore.add(observation);
                 console.log('[Calibration] Observation captured:', observation);
+
+                // Generate diagnostic report if coupling detected
+                if (observation.analysis?.coupling?.type !== 'none') {
+                    const report = generateDiagnosticReport(observation);
+                    console.log('[Calibration] Diagnostic report:', report);
+                }
 
                 // Update UI
                 updateObservationLog();
                 updateAnalysis();
 
                 // Reset for next observation
-                document.querySelectorAll('.calibration-question').forEach(cb => cb.checked = false);
+                document.querySelectorAll('.calibration-radio').forEach(r => r.checked = false);
                 currentUserAnswers = {};
                 updateCaptureButton();
             }
@@ -1409,17 +1485,38 @@
 
                 if (logEl) {
                     if (observations.length === 0) {
-                        logEl.innerHTML = 'No observations yet.';
+                        logEl.innerHTML = 'No observations yet. Start with FLAT_PALM_UP to set baseline.';
                     } else {
-                        logEl.innerHTML = observations.map((obs, i) => `
-                            <div style="border-bottom: 1px solid var(--border); padding: 2px 0;">
-                                <strong>#${i + 1}</strong> ${obs.referencePose.name}<br>
-                                AHRS: r=${obs.ahrs.euler.roll.toFixed(1)}° p=${obs.ahrs.euler.pitch.toFixed(1)}° y=${obs.ahrs.euler.yaw.toFixed(1)}°<br>
-                                ${obs.userObservations.derivedState.matchesExpected ?
-                                    '<span style="color: green;">✓ Matches expected</span>' :
-                                    '<span style="color: orange;">⚠ Issues detected</span>'}
-                            </div>
-                        `).join('');
+                        logEl.innerHTML = observations.map((obs, i) => {
+                            const coupling = obs.analysis?.coupling;
+                            const couplingColor = !coupling || coupling.type === 'none' ? 'green' :
+                                coupling.type === 'partial' ? 'orange' : 'red';
+                            const couplingText = !coupling || coupling.type === 'none' ? 'OK' :
+                                coupling.type === 'partial' ? 'PARTIAL' :
+                                coupling.type === 'wrong_primary' ? 'WRONG AXIS' :
+                                coupling.type === 'all_coupled' ? 'ALL COUPLED' : coupling.type;
+
+                            // Show delta from baseline if available
+                            let deltaInfo = '';
+                            if (obs.ahrs?.deltaFromBaseline) {
+                                const d = obs.ahrs.deltaFromBaseline;
+                                deltaInfo = `<div style="font-size: 0.55rem; color: var(--fg-muted);">
+                                    Δ r=${d.roll.toFixed(1)}° p=${d.pitch.toFixed(1)}° y=${d.yaw.toFixed(1)}°
+                                </div>`;
+                            }
+
+                            return `
+                                <div style="border-bottom: 1px solid var(--border); padding: 4px 0;">
+                                    <strong>#${i + 1}</strong> ${obs.referencePose.name}
+                                    <span style="color: ${couplingColor}; float: right; font-size: 0.6rem;">${couplingText}</span><br>
+                                    <span style="font-size: 0.55rem;">AHRS: r=${obs.ahrs.euler.roll.toFixed(1)}° p=${obs.ahrs.euler.pitch.toFixed(1)}° y=${obs.ahrs.euler.yaw.toFixed(1)}°</span>
+                                    ${deltaInfo}
+                                    ${obs.userObservations.derivedState.matchesExpected ?
+                                        '<span style="color: green; font-size: 0.6rem;">✓ Correct</span>' :
+                                        '<span style="color: orange; font-size: 0.6rem;">⚠ Issue</span>'}
+                                </div>
+                            `;
+                        }).join('');
                     }
                 }
             }
@@ -1430,7 +1527,7 @@
                 const applyBtn = document.getElementById('applyRecommendation');
 
                 const observations = observationStore.getAll();
-                if (observations.length < 2) {
+                if (observations.length < 1) {
                     analysisDiv.style.display = 'none';
                     applyBtn.style.display = 'none';
                     return;
@@ -1439,9 +1536,39 @@
                 const analysis = observationStore.analyzeAll();
                 analysisDiv.style.display = 'block';
 
+                // Count coupling issues
+                let couplingCount = 0;
+                let wrongAxisCount = 0;
+                observations.forEach(obs => {
+                    if (obs.analysis?.coupling?.type === 'all_coupled' || obs.analysis?.coupling?.type === 'partial') {
+                        couplingCount++;
+                    }
+                    if (obs.analysis?.coupling?.type === 'wrong_primary') {
+                        wrongAxisCount++;
+                    }
+                });
+
                 let html = `<div style="margin-top: 4px;">`;
                 html += `<div>Observations: ${analysis.totalObservations}</div>`;
-                html += `<div style="margin-top: 4px;"><strong>Recommended settings:</strong></div>`;
+
+                // Show coupling warning if detected
+                if (couplingCount > 0 || wrongAxisCount > 0) {
+                    html += `<div style="margin-top: 6px; padding: 6px; background: rgba(255,100,0,0.15); border-radius: 4px; border-left: 3px solid orange;">`;
+                    html += `<strong style="color: orange;">⚠ Axis Issues Detected:</strong>`;
+                    if (couplingCount > 0) {
+                        html += `<div>• Coupling detected in ${couplingCount} observation(s)</div>`;
+                    }
+                    if (wrongAxisCount > 0) {
+                        html += `<div>• Wrong axis response in ${wrongAxisCount} observation(s)</div>`;
+                    }
+                    html += `<div style="font-size: 0.6rem; margin-top: 4px; color: var(--fg-muted);">
+                        This suggests Euler order mismatch or axis permutation issues.
+                        Consider testing different Euler orders or sensor axis mapping.
+                    </div>`;
+                    html += `</div>`;
+                }
+
+                html += `<div style="margin-top: 6px;"><strong>Axis Sign Recommendations:</strong></div>`;
                 html += `<div>• Negate Pitch: ${analysis.negatePitch ? 'YES' : 'NO'} (confidence: ${(analysis.confidence.pitch * 100).toFixed(0)}%)</div>`;
                 html += `<div>• Negate Roll: ${analysis.negateRoll ? 'YES' : 'NO'} (confidence: ${(analysis.confidence.roll * 100).toFixed(0)}%)</div>`;
                 html += `<div>• Negate Yaw: ${analysis.negateYaw ? 'YES' : 'NO'} (confidence: ${(analysis.confidence.yaw * 100).toFixed(0)}%)</div>`;
@@ -1449,8 +1576,9 @@
 
                 resultsEl.innerHTML = html;
 
-                // Show apply button if we have recommendations
-                applyBtn.style.display = 'block';
+                // Show apply button if we have recommendations with decent confidence
+                const hasConfidence = analysis.confidence.pitch > 0.3 || analysis.confidence.roll > 0.3 || analysis.confidence.yaw > 0.3;
+                applyBtn.style.display = hasConfidence && couplingCount === 0 ? 'block' : 'none';
                 window._calibrationRecommendation = analysis;
             }
 
