@@ -6,26 +6,19 @@
  * The sensor is positioned on the back of the hand, so orientation from
  * the IMU is used to rotate the hand model in 3D space.
  *
- * ORIENTATION MAPPING (corrected 2025-12-14):
- * Based on calibration analysis revealing axis mismatch between AHRS and renderer.
+ * ORIENTATION MAPPING (corrected 2025-12-14 v2):
+ * Based on calibration observations showing roll/yaw visual axis errors.
  *
- * AHRS ZYX Euler Convention:
- *   - roll = X axis rotation (left/right tilt, a.k.a. bank)
- *   - pitch = Y axis rotation (forward/back tilt, a.k.a. elevation)
- *   - yaw = Z axis rotation (rotation while flat, a.k.a. heading)
+ * Physical Movements → AHRS Reports → Renderer:
+ *   - Physical ROLL (tilt pinky/thumb) → AHRS roll → renderer.yaw → RotY
+ *   - Physical PITCH (tilt fingers)    → AHRS pitch → renderer.pitch → RotX
+ *   - Physical YAW (spin while flat)   → AHRS yaw → renderer.roll → RotZ
  *
- * Renderer Axis Assignments:
- *   - renderer.pitch → RotX (X axis rotation)
- *   - renderer.yaw → RotY (Y axis rotation)
- *   - renderer.roll → RotZ (Z axis rotation)
- *
- * CORRECT AXIS MAPPING (matching axis types):
- *   - renderer.pitch (X) = AHRS.roll (X)   → -euler.roll + 90
- *   - renderer.yaw (Y) = AHRS.pitch (Y)    → euler.pitch + 180
- *   - renderer.roll (Z) = AHRS.yaw (Z)     → euler.yaw + 180
+ * The key insight: AHRS roll/pitch/yaw names match physical movements,
+ * but the renderer variable names (pitch/yaw/roll) map to different
+ * rotation axes (RotX/RotY/RotZ) than their names suggest.
  *
  * ROTATION ORDER: ZYX intrinsic (Z first, Y second, X third)
- * This matches how AHRS decomposes the quaternion into Euler angles.
  */
 
 /**
