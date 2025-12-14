@@ -259,7 +259,7 @@ class Hand3DRenderer {
         //
         const mappedOrientation = {
             pitch: -euler.pitch + this.orientationOffset.pitch,  // AHRS pitch → RotX (finger tilt)
-            yaw: euler.roll + this.orientationOffset.yaw,        // AHRS roll → RotY (hand tilt left/right)
+            yaw: -euler.roll + this.orientationOffset.yaw,       // AHRS roll → RotY (hand tilt L/R) - negated for correct direction
             roll: euler.yaw + this.orientationOffset.roll        // AHRS yaw → RotZ (hand spin)
         };
 

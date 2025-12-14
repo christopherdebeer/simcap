@@ -438,9 +438,14 @@ export class ThreeJSHandSkeleton {
     const sensorPitch = this.currentOrientation.pitch; // Physical pitch
     const sensorYaw = this.currentOrientation.yaw;     // Physical yaw
 
-    // Swap roll/yaw to correct axis assignment
+    // Swap roll/yaw to correct axis assignment, with direction corrections
+    // Note: After axis swap, the sign configs apply to the NEW sources:
+    //   - negatePitch applies to sensorPitch (unchanged)
+    //   - negateYaw config now controls sensorRoll direction (for RotY)
+    //   - negateRoll config now controls sensorYaw direction (for RotZ)
+    // Roll needs negation for correct left/right tilt direction
     const pitch = ((signs.negatePitch ? -sensorPitch : sensorPitch) + offsets.pitch) * (Math.PI / 180);
-    const yaw = ((signs.negateYaw ? -sensorRoll : sensorRoll) + offsets.yaw) * (Math.PI / 180);    // sensor ROLL → RotY
+    const yaw = (((signs.negateYaw ? 1 : -1) * sensorRoll) + offsets.yaw) * (Math.PI / 180);    // sensor ROLL → RotY (default: negated)
     const roll = ((signs.negateRoll ? -sensorYaw : sensorYaw) + offsets.roll) * (Math.PI / 180);  // sensor YAW → RotZ
 
     this.handGroup.rotation.set(
