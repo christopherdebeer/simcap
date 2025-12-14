@@ -24,29 +24,43 @@
  * there are 6 × 2³ = 48 possible axis mappings per transformation stage.
  *
  * =============================================================================
- * AXIS COUPLING PROBLEM
+ * AXIS COUPLING - EXPECTED BEHAVIOR vs ACTUAL PROBLEM
  * =============================================================================
  *
- * When we observe that rotating around ONE physical axis causes MULTIPLE
- * Euler angles to change, this indicates one of:
+ * CRITICAL INSIGHT: When we observe that rotating around ONE physical axis
+ * causes MULTIPLE AHRS Euler angles to change, this is OFTEN EXPECTED BEHAVIOR
+ * due to Euler order differences, NOT a calibration problem.
  *
- *   1. AXIS PERMUTATION: The Euler angle "pitch" might actually be measuring
- *      what we call "roll" physically. Need to test all 6 permutations.
+ * WHY AHRS COUPLING IS EXPECTED:
+ * -----------------------------
+ * The MadgwickAHRS filter extracts Euler angles using ZYX (aerospace) convention.
+ * Three.js applies rotations using YXZ order (its default).
  *
- *   2. EULER ORDER MISMATCH: Different extraction orders (ZYX, YXZ, XYZ, etc.)
- *      produce different Euler angles from the same quaternion. If the
- *      AHRS uses ZYX but we apply YXZ, the mapping will be wrong.
+ * The SAME quaternion rotation produces DIFFERENT Euler angle values when
+ * extracted with different orders. For example, a pure 45° pitch rotation:
+ *   - ZYX extraction might give: roll=30°, pitch=35°, yaw=20°
+ *   - YXZ extraction might give: roll=0°, pitch=45°, yaw=0°
  *
- *   3. GIMBAL LOCK: Near ±90° pitch, roll and yaw become coupled and can
- *      exchange values wildly. This is a fundamental Euler angle limitation.
+ * This "coupling" in ZYX values is mathematically correct - when these
+ * coupled ZYX angles are applied with YXZ order, they produce the same
+ * rotation as the original quaternion.
  *
- *   4. SENSOR AXIS MISALIGNMENT: The physical sensor axes may not align
- *      with our assumed orientation model.
+ * THE KEY TEST IS VISUAL CORRECTNESS:
+ * ----------------------------------
+ * If the 3D hand model VISUALLY matches the physical device orientation,
+ * then the mapping is CORRECT, regardless of what the raw AHRS Euler angles show.
  *
- * The solution requires:
- *   a) Capturing observations that can distinguish these cases
- *   b) Testing multiple hypothesis configurations
- *   c) Finding the configuration that eliminates coupling
+ * AHRS coupling + Visual correct = Expected behavior (no problem)
+ * AHRS coupling + Visual wrong   = Real axis mapping problem
+ *
+ * ACTUAL PROBLEMS TO DETECT:
+ * -------------------------
+ *   1. VISUAL AXIS INVERSION: Hand moves opposite to physical movement
+ *   2. VISUAL AXIS SWAP: Wrong axis responds visually (pitch causes roll, etc.)
+ *   3. GIMBAL LOCK: Near ±90° pitch, erratic visual behavior
+ *   4. SENSOR MISALIGNMENT: Consistent visual offset from expected
+ *
+ * The solution focuses on VISUAL validation, not AHRS angle analysis.
  *
  * =============================================================================
  * COORDINATE FRAMES
@@ -191,14 +205,32 @@ export const ANSWER_OPTIONS = {
 
 /**
  * Axis coupling observation structure
- * Captures when expected single-axis movement affects multiple axes
+ *
+ * IMPORTANT: AHRS coupling is EXPECTED due to Euler order differences (ZYX vs YXZ).
+ * What matters is VISUAL correctness, not AHRS angle independence.
+ *
+ * These types describe AHRS angle behavior, but the real validation
+ * comes from user-reported VISUAL behavior.
  */
 export const COUPLING_TYPES = {
     NONE: 'none',                    // Expected single axis moved correctly
-    PARTIAL: 'partial',              // Expected axis moved, but others too
+    PARTIAL: 'partial',              // Expected axis moved, but others too (EXPECTED in AHRS!)
     WRONG_PRIMARY: 'wrong_primary',  // Different axis was primary mover
     SWAPPED: 'swapped',              // Two axes appear swapped
-    ALL_COUPLED: 'all_coupled'       // All three axes moved together
+    ALL_COUPLED: 'all_coupled'       // All three axes moved together (EXPECTED in AHRS!)
+};
+
+/**
+ * Visual validation status - this is what actually matters
+ * AHRS coupling is expected; visual correctness is the real test
+ */
+export const VISUAL_STATUS = {
+    CORRECT: 'correct',              // Visual matches physical (all good, even if AHRS shows coupling)
+    INVERTED: 'inverted',            // Visual moves opposite to physical
+    WRONG_AXIS: 'wrong_axis',        // Different axis responds visually
+    COUPLED: 'coupled',              // Multiple visual axes respond (rare, indicates real problem)
+    ERRATIC: 'erratic',              // Unstable visual behavior (gimbal lock?)
+    UNKNOWN: 'unknown'               // Not yet validated
 };
 
 /**
@@ -611,8 +643,26 @@ export function createObservation(poseId, sensorData, ahrsOutput, renderState, u
         };
     }
 
-    // Analyze axis coupling from AHRS data
-    const couplingAnalysis = analyzeAxisCoupling(pose, ahrsOutput, deltaFromBaseline);
+    // Extract visual status from user answers (the PRIMARY question determines visual correctness)
+    const primaryQuestion = pose.validationQuestions[0];
+    let visualStatus = VISUAL_STATUS.UNKNOWN;
+    if (primaryQuestion && userAnswers[primaryQuestion.id]) {
+        const answer = userAnswers[primaryQuestion.id];
+        if (answer === 'correct' || answer === 'mostly_correct') {
+            visualStatus = VISUAL_STATUS.CORRECT;
+        } else if (answer === 'opposite') {
+            visualStatus = VISUAL_STATUS.INVERTED;
+        } else if (answer === 'wrong_axis') {
+            visualStatus = VISUAL_STATUS.WRONG_AXIS;
+        } else if (answer === 'coupled' || answer === 'multiple') {
+            visualStatus = VISUAL_STATUS.COUPLED;
+        } else if (answer === 'erratic') {
+            visualStatus = VISUAL_STATUS.ERRATIC;
+        }
+    }
+
+    // Analyze axis coupling from AHRS data (with visual validation context)
+    const couplingAnalysis = analyzeAxisCoupling(pose, ahrsOutput, deltaFromBaseline, visualStatus);
 
     return {
         // Metadata
@@ -702,24 +752,43 @@ export function createObservation(poseId, sensorData, ahrsOutput, renderState, u
         userObservations: {
             answers: userAnswers,
             couplingAnswer: userAnswers.coupling || null,
+            visualStatus,  // The derived visual validation status
             derivedState: deriveStateFromAnswersV2(userAnswers, pose)
         },
 
         // Analysis
         analysis: {
-            ...analyzeObservationV2(pose, ahrsOutput, userAnswers),
-            coupling: couplingAnalysis
+            ...analyzeObservationV2(pose, ahrsOutput, userAnswers, visualStatus),
+            coupling: couplingAnalysis,
+            // Summary: Is this observation showing correct behavior?
+            visualValidationPassed: visualStatus === VISUAL_STATUS.CORRECT,
+            ahrsCouplingIsExpected: couplingAnalysis.isExpectedBehavior,
+            hasRealProblem: couplingAnalysis.isRealProblem || visualStatus === VISUAL_STATUS.INVERTED || visualStatus === VISUAL_STATUS.WRONG_AXIS
         }
     };
 }
 
 /**
  * Analyze axis coupling from AHRS data
- * Determines if rotating around one physical axis causes unexpected changes in other Euler angles
+ *
+ * IMPORTANT: AHRS coupling is EXPECTED due to Euler order differences (ZYX extraction
+ * vs YXZ application). This function analyzes AHRS angles for diagnostic purposes,
+ * but the real validation is VISUAL correctness reported by the user.
+ *
+ * @param {Object} pose - Reference pose definition
+ * @param {Object} ahrsOutput - AHRS Euler angles
+ * @param {Object} deltaFromBaseline - Change from baseline pose
+ * @param {string} visualStatus - User-reported visual validation status (optional)
+ * @returns {Object} Coupling analysis with visual override
  */
-function analyzeAxisCoupling(pose, ahrsOutput, deltaFromBaseline) {
+function analyzeAxisCoupling(pose, ahrsOutput, deltaFromBaseline, visualStatus = null) {
     if (!pose.primaryAxis || !deltaFromBaseline) {
-        return { type: COUPLING_TYPES.NONE, details: 'No baseline or not a movement pose' };
+        return {
+            type: COUPLING_TYPES.NONE,
+            details: 'No baseline or not a movement pose',
+            isExpectedBehavior: true,
+            visualOverride: null
+        };
     }
 
     const SIGNIFICANT_THRESHOLD = 15;  // degrees
@@ -738,7 +807,7 @@ function analyzeAxisCoupling(pose, ahrsOutput, deltaFromBaseline) {
     const other0Moved = deltas[otherAxes[0]] > SIGNIFICANT_THRESHOLD;
     const other1Moved = deltas[otherAxes[1]] > SIGNIFICANT_THRESHOLD;
 
-    // Determine coupling type
+    // Determine coupling type (in AHRS angle space)
     let type;
     let details;
 
@@ -766,13 +835,33 @@ function analyzeAxisCoupling(pose, ahrsOutput, deltaFromBaseline) {
         details = 'Unknown state';
     }
 
+    // Determine if AHRS coupling is expected behavior
+    // AHRS coupling (PARTIAL or ALL_COUPLED) is EXPECTED due to Euler order differences
+    // Only a problem if VISUAL also shows wrong behavior
+    const ahrsShowsCoupling = type === COUPLING_TYPES.PARTIAL || type === COUPLING_TYPES.ALL_COUPLED;
+    const visualIsCorrect = visualStatus === VISUAL_STATUS.CORRECT || visualStatus === 'correct';
+    const visualHasProblem = visualStatus && visualStatus !== VISUAL_STATUS.CORRECT && visualStatus !== 'correct' && visualStatus !== VISUAL_STATUS.UNKNOWN;
+
+    // AHRS coupling + visual correct = expected behavior, no problem
+    // AHRS coupling + visual wrong = real mapping problem
+    const isExpectedBehavior = ahrsShowsCoupling && visualIsCorrect;
+    const isRealProblem = ahrsShowsCoupling && visualHasProblem;
+
     return {
         type,
         details,
         deltas,
         expectedPrimaryAxis: primaryAxis,
         primaryAxisMoved: primaryMoved,
-        otherAxesMoved: { [otherAxes[0]]: other0Moved, [otherAxes[1]]: other1Moved }
+        otherAxesMoved: { [otherAxes[0]]: other0Moved, [otherAxes[1]]: other1Moved },
+        // New fields for visual validation
+        ahrsShowsCoupling,
+        isExpectedBehavior,
+        isRealProblem,
+        visualStatus,
+        note: ahrsShowsCoupling
+            ? 'AHRS coupling is EXPECTED due to Euler order differences (ZYX→YXZ). Check VISUAL correctness.'
+            : null
     };
 }
 
@@ -822,15 +911,25 @@ function deriveStateFromAnswersV2(answers, pose) {
 }
 
 /**
- * Analyze observation for calibration insights (v2 with coupling)
+ * Analyze observation for calibration insights (v2 with coupling and visual validation)
+ *
+ * IMPORTANT: This function now considers VISUAL validation status when generating suggestions.
+ * AHRS coupling is EXPECTED and should not generate warnings if visual is correct.
+ *
+ * @param {Object} pose - Reference pose
+ * @param {Object} ahrsOutput - AHRS Euler angles
+ * @param {Object} userAnswers - User's answers to validation questions
+ * @param {string} visualStatus - Derived visual validation status
+ * @returns {Object} Analysis with suggestions
  */
-function analyzeObservationV2(pose, ahrsOutput, userAnswers) {
+function analyzeObservationV2(pose, ahrsOutput, userAnswers, visualStatus = null) {
     const analysis = {
         angleDeviations: {},
         axisIssues: [],
         suggestions: [],
         couplingDetected: false,
-        primaryAxisStatus: null
+        primaryAxisStatus: null,
+        visualStatus
     };
 
     // Check angle deviations from expected
@@ -847,7 +946,7 @@ function analyzeObservationV2(pose, ahrsOutput, userAnswers) {
         }
     }
 
-    // Analyze multi-choice answers
+    // Analyze multi-choice answers (VISUAL feedback from user)
     for (const q of pose.validationQuestions) {
         const answer = userAnswers[q.id];
         if (!answer || !q.axis) continue;
@@ -856,36 +955,52 @@ function analyzeObservationV2(pose, ahrsOutput, userAnswers) {
             analysis.axisIssues.push({
                 axis: q.axis,
                 issue: 'inverted',
-                evidence: `User reported ${q.axis} shows opposite direction`
+                evidence: `User reported ${q.axis} shows opposite direction VISUALLY`
             });
-            analysis.suggestions.push(`${q.axis.toUpperCase()} axis appears INVERTED - toggle negate${capitalize(q.axis)}`);
+            analysis.suggestions.push(`${q.axis.toUpperCase()} axis appears VISUALLY INVERTED - toggle negate${capitalize(q.axis)}`);
         } else if (answer === 'wrong_axis') {
             analysis.axisIssues.push({
                 axis: q.axis,
                 issue: 'wrong_axis',
-                evidence: `User reported wrong axis responded to ${pose.primaryAxis} movement`
+                evidence: `User reported wrong axis responded VISUALLY to ${pose.primaryAxis} movement`
             });
-            analysis.suggestions.push(`AXIS PERMUTATION suspected: ${pose.primaryAxis} movement affected ${q.axis} instead`);
+            analysis.suggestions.push(`VISUAL AXIS SWAP: ${pose.primaryAxis} movement affected ${q.axis} VISUALLY - check axis permutation`);
             analysis.couplingDetected = true;
-        } else if (answer === 'coupled') {
+        } else if (answer === 'coupled' || answer === 'multiple') {
+            // Visual coupling is rare and indicates a real problem
             analysis.couplingDetected = true;
-            analysis.suggestions.push('COUPLING detected: Multiple axes respond to single-axis physical movement');
-        } else if (answer === 'correct') {
+            analysis.suggestions.push('VISUAL COUPLING: Multiple axes respond visually - this indicates a real mapping problem');
+        } else if (answer === 'correct' || answer === 'mostly_correct') {
             analysis.primaryAxisStatus = 'correct';
         }
     }
 
-    // Analyze coupling question
+    // Analyze coupling question (asks about AHRS behavior, not visual)
+    // IMPORTANT: AHRS coupling is EXPECTED and not a problem if visual is correct
     if (userAnswers.coupling) {
         const couplingValue = userAnswers.coupling;
         if (couplingValue !== 'none') {
             analysis.couplingDetected = true;
-            if (couplingValue === 'wrong_primary') {
-                analysis.suggestions.push('AXIS SWAP: The expected axis did NOT respond - consider Euler order or axis permutation');
-            } else if (couplingValue === 'all_coupled') {
-                analysis.suggestions.push('FULL COUPLING: All axes respond together - likely Euler order mismatch or sensor alignment issue');
-            } else if (couplingValue === 'swapped') {
-                analysis.suggestions.push('AXIS SWAP at gimbal lock: Roll and Yaw appear swapped near 90° pitch');
+
+            // Only suggest fixes if visual is NOT correct
+            const visualIsCorrect = visualStatus === VISUAL_STATUS.CORRECT || visualStatus === 'correct';
+
+            if (visualIsCorrect) {
+                // AHRS coupling with visual correct = expected behavior
+                analysis.suggestions.push(
+                    'ℹ️ AHRS coupling detected but VISUAL is correct - this is EXPECTED behavior due to Euler order differences (ZYX→YXZ)'
+                );
+            } else {
+                // AHRS coupling with visual wrong = real problem
+                if (couplingValue === 'wrong_primary') {
+                    analysis.suggestions.push('AXIS SWAP: The expected axis did NOT respond visually - check axis permutation or sign');
+                } else if (couplingValue === 'all_coupled') {
+                    analysis.suggestions.push('FULL COUPLING with visual issues - check sensor alignment or Euler order configuration');
+                } else if (couplingValue === 'swapped') {
+                    analysis.suggestions.push('AXIS SWAP at gimbal lock: Roll and Yaw appear swapped near 90° pitch');
+                } else {
+                    analysis.suggestions.push('Coupling detected with visual issues - investigate axis mapping');
+                }
             }
         }
     }
@@ -1075,6 +1190,10 @@ export function analyzeGimbalLock(q) {
 /**
  * Generate diagnostic report comparing AHRS output with physical expectations
  *
+ * IMPORTANT: This report now distinguishes between AHRS coupling (expected) and
+ * visual issues (real problems). AHRS coupling is not flagged as an issue if
+ * visual validation passed.
+ *
  * @param {Object} observation - Full observation record
  * @returns {Object} Diagnostic report
  */
@@ -1082,17 +1201,32 @@ export function generateDiagnosticReport(observation) {
     const report = {
         timestamp: new Date().toISOString(),
         pose: observation.referencePose.id,
+        visualStatus: observation.userObservations?.visualStatus || VISUAL_STATUS.UNKNOWN,
         issues: [],
-        recommendations: []
+        recommendations: [],
+        info: []  // Non-issue informational items
     };
 
-    // Check for coupling
+    const visualIsCorrect = report.visualStatus === VISUAL_STATUS.CORRECT || report.visualStatus === 'correct';
+
+    // Check for AHRS coupling
     if (observation.analysis?.coupling?.type !== COUPLING_TYPES.NONE) {
-        report.issues.push({
-            type: 'coupling',
-            severity: 'high',
-            details: observation.analysis.coupling.details
-        });
+        if (visualIsCorrect) {
+            // AHRS coupling with visual correct = expected, just informational
+            report.info.push({
+                type: 'ahrs_coupling_expected',
+                details: observation.analysis.coupling.details,
+                note: 'AHRS coupling is EXPECTED due to Euler order differences (ZYX→YXZ). Visual is correct, so no action needed.'
+            });
+        } else {
+            // AHRS coupling with visual issues = real problem
+            report.issues.push({
+                type: 'coupling_with_visual_issue',
+                severity: 'high',
+                details: observation.analysis.coupling.details,
+                visualStatus: report.visualStatus
+            });
+        }
     }
 
     // If quaternion available, test Euler orders
@@ -1120,24 +1254,25 @@ export function generateDiagnosticReport(observation) {
         }
     }
 
-    // Check user-reported issues
+    // Check user-reported VISUAL issues (these are the real problems)
     if (observation.userObservations?.derivedState) {
         const derived = observation.userObservations.derivedState;
 
-        if (derived.coupling && derived.coupling !== 'none') {
+        // Only flag coupling if it's VISUAL coupling (rare, indicates real problem)
+        if (derived.coupling && derived.coupling === 'visual') {
             report.issues.push({
-                type: 'user_reported_coupling',
+                type: 'visual_coupling',
                 severity: 'high',
-                details: `User observed ${derived.coupling} coupling behavior`
+                details: 'User observed multiple axes responding VISUALLY to single-axis movement'
             });
         }
 
         for (const axis of ['pitch', 'roll', 'yaw']) {
             if (derived[`${axis}WrongAxis`]) {
                 report.issues.push({
-                    type: 'wrong_axis',
+                    type: 'visual_wrong_axis',
                     severity: 'high',
-                    details: `${axis} movement triggered wrong axis response`
+                    details: `${axis} movement triggered wrong VISUAL axis response`
                 });
                 report.recommendations.push({
                     type: 'axis_permutation',
@@ -1145,8 +1280,28 @@ export function generateDiagnosticReport(observation) {
                     confidence: 'medium'
                 });
             }
+            if (derived[`${axis}Inverted`]) {
+                report.issues.push({
+                    type: 'visual_inverted',
+                    severity: 'high',
+                    details: `${axis} axis appears VISUALLY INVERTED`
+                });
+                report.recommendations.push({
+                    type: 'invert_axis',
+                    recommendation: `Toggle negate${axis.charAt(0).toUpperCase() + axis.slice(1)} to fix ${axis} inversion`,
+                    confidence: 'high'
+                });
+            }
         }
     }
+
+    // Summary
+    report.summary = {
+        visualValidationPassed: visualIsCorrect,
+        hasRealProblems: report.issues.length > 0,
+        ahrsCouplingIsExpected: report.info.some(i => i.type === 'ahrs_coupling_expected'),
+        actionRequired: !visualIsCorrect || report.issues.some(i => i.severity === 'high')
+    };
 
     return report;
 }
@@ -1253,6 +1408,7 @@ export default {
     REFERENCE_POSES,
     ANSWER_OPTIONS,
     COUPLING_TYPES,
+    VISUAL_STATUS,
     AXIS_PERMUTATIONS,
     EULER_ORDERS,
     createObservation,
