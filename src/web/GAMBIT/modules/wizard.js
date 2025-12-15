@@ -3,14 +3,21 @@
  * Guided multi-step data collection with automatic label application
  */
 
+import { loadTemplate, parseStepLabels as parseTemplateLabels, getAvailableTemplates } from './template-loader.js';
+
 // Wizard state
 const wizard = {
     active: false,
     mode: null,
     currentStep: 0,
     steps: [],
-    phase: null,  // 'transition' | 'hold'
-    phaseStart: null
+    phase: null,  // 'transition' | 'hold' (legacy) OR 'preview' | 'prepare' | 'record' (template-based)
+    phaseStart: null,
+    template: null,  // Loaded template object (for template-based mode)
+    paused: false,
+    pausedAt: null,
+    sessionStartIndex: 0,  // Starting sample index for this wizard session
+    stepsCompleted: []  // Array of completed step indices
 };
 
 // Calibration buffers (for wizard functionality)
@@ -106,6 +113,13 @@ export function initWizard() {
     window.nextWizardStep = nextWizardStep;
     window.startWizardCollection = startWizardCollection;
     window.startWizardMode = startWizardMode;
+    window.startTemplateWizard = startTemplateWizard;
+    window.pauseWizard = pauseWizard;
+    window.resumeWizard = resumeWizard;
+    window.restartCurrentStep = restartCurrentStep;
+    window.skipCurrentStep = skipCurrentStep;
+    window.proceedToPrepare = proceedToPrepare;
+    window.readyToRecord = readyToRecord;
 }
 
 /**
@@ -142,11 +156,33 @@ function showWizardModeSelection() {
     if (timeText) timeText.textContent = '';
     if (stats) stats.style.display = 'none';
 
-    if (content) {
-        content.innerHTML = `
-            <div class="wizard-instruction">Choose a data collection mode</div>
+    // Get available templates
+    const templates = getAvailableTemplates();
 
-            <div style="font-size: 11px; color: var(--accent); margin: 10px 0 5px; font-weight: 500;">General Collection</div>
+    if (content) {
+        let html = `<div class="wizard-instruction">Choose a data collection mode</div>`;
+
+        // Template-based collection (NEW)
+        if (templates.length > 0) {
+            html += `
+                <div style="font-size: 11px; color: var(--accent); margin: 10px 0 5px; font-weight: 500;">✨ Template-Based Collection (Recommended)</div>
+                <div class="wizard-start-options">
+            `;
+            templates.forEach(template => {
+                html += `
+                    <div class="wizard-option" onclick="window.startTemplateWizard('${template.id}')" style="border-color: var(--success);">
+                        <h4>${template.name}</h4>
+                        <p>${template.id}</p>
+                        <div class="duration">Progressive tier-based training</div>
+                    </div>
+                `;
+            });
+            html += `</div>`;
+        }
+
+        // Legacy hard-coded modes
+        html += `
+            <div style="font-size: 11px; color: var(--fg-muted); margin: 10px 0 5px; font-weight: 500;">Legacy Collection Modes</div>
             <div class="wizard-start-options">
                 <div class="wizard-option" onclick="window.startWizardMode('quick')">
                     <h4>⚡ Quick Collection</h4>
@@ -160,9 +196,9 @@ function showWizardModeSelection() {
                 </div>
             </div>
 
-            <div style="font-size: 11px; color: var(--accent); margin: 15px 0 5px; font-weight: 500;">Magnetic Finger Tracking</div>
+            <div style="font-size: 11px; color: var(--fg-muted); margin: 15px 0 5px; font-weight: 500;">Magnetic Finger Tracking (Legacy)</div>
             <div class="wizard-start-options">
-                <div class="wizard-option" onclick="window.startWizardMode('ft5mag')" style="border-color: var(--success);">
+                <div class="wizard-option" onclick="window.startWizardMode('ft5mag')">
                     <h4>🧲 5 Magnets (Standard)</h4>
                     <p>All fingers with magnets - full tracking data</p>
                     <div class="duration">~85 seconds • 11 steps</div>
@@ -170,9 +206,10 @@ function showWizardModeSelection() {
             </div>
 
             <div style="margin-top: 15px; padding: 10px; background: var(--bg); border-radius: 4px; font-size: 11px; color: var(--fg-muted);">
-                <strong>Note:</strong> Complete magnetometer calibration before collecting finger tracking data. Calibration removes environmental interference to isolate magnet signals.
+                <strong>💡 Tip:</strong> Use template-based collection for progressive tier training. Complete magnetometer calibration before collecting finger tracking data.
             </div>
         `;
+        content.innerHTML = html;
     }
 }
 
@@ -577,4 +614,347 @@ async function startWizardMode(mode) {
 
     deps.log(`Wizard mode: ${mode} (${wizard.steps.length} steps)`);
     renderWizardStep();
+}
+
+// ============================================================================
+// Template-Based Wizard Functions (NEW)
+// ============================================================================
+
+/**
+ * Start template-based wizard
+ * @param {string} templateId - Template identifier
+ */
+async function startTemplateWizard(templateId) {
+    try {
+        // Load template
+        const template = await loadTemplate(templateId);
+
+        wizard.template = template;
+        wizard.mode = `template:${templateId}`;
+        wizard.currentStep = 0;
+        wizard.steps = template.steps;
+        wizard.phase = 'preview';  // Start with preview phase
+        wizard.sessionStartIndex = deps.state.sessionData.length;
+        wizard.stepsCompleted = [];
+        wizard.paused = false;
+
+        const stats = deps.$('wizardStats');
+        if (stats) stats.style.display = 'flex';
+
+        deps.log(`Template wizard: ${template.name} (${wizard.steps.length} steps)`);
+        renderTemplateStep();
+    } catch (error) {
+        deps.log(`Error loading template: ${error.message}`);
+        console.error('Template load error:', error);
+    }
+}
+
+/**
+ * Render current template step based on phase
+ */
+function renderTemplateStep() {
+    const step = wizard.steps[wizard.currentStep];
+    if (!step) {
+        // All steps complete
+        showWizardComplete();
+        return;
+    }
+
+    const title = deps.$('wizardTitle');
+    const phase = deps.$('wizardPhase');
+    const content = deps.$('wizardContent');
+    const progressFill = deps.$('wizardProgressFill');
+    const stepText = deps.$('wizardStepText');
+    const timeText = deps.$('wizardTimeText');
+    const samplesText = deps.$('wizardSamples');
+    const labelsText = deps.$('wizardLabels');
+
+    // Update progress
+    const progress = (wizard.currentStep / wizard.steps.length) * 100;
+    if (progressFill) progressFill.style.width = `${progress}%`;
+    if (stepText) stepText.textContent = `Step ${wizard.currentStep + 1} of ${wizard.steps.length}`;
+    if (samplesText) samplesText.textContent = deps.state.sessionData.length;
+    if (labelsText) labelsText.textContent = deps.state.labels.length;
+
+    // Render based on current phase
+    switch (wizard.phase) {
+        case 'preview':
+            renderPreviewPhase(step, title, phase, content, timeText);
+            break;
+        case 'prepare':
+            renderPreparePhase(step, title, phase, content, timeText);
+            break;
+        case 'record':
+            // Recording phase is handled by recordTemplateStep
+            break;
+        default:
+            wizard.phase = 'preview';
+            renderPreviewPhase(step, title, phase, content, timeText);
+    }
+}
+
+/**
+ * Render preview phase (instruction display)
+ */
+function renderPreviewPhase(step, title, phase, content, timeText) {
+    if (title) title.textContent = step.title;
+    if (phase) phase.textContent = 'Preview Instruction';
+    if (timeText) timeText.textContent = step.timing.record_duration ? `~${step.timing.record_duration}s` : '';
+
+    if (content) {
+        const instruction = step.instruction || {};
+        const icon = step.icon || '📍';
+
+        content.innerHTML = `
+            <div style="text-align: center; margin-bottom: 20px;">
+                <div style="font-size: 48px; margin-bottom: 10px;">${icon}</div>
+                <h2 style="margin: 10px 0;">${step.title}</h2>
+            </div>
+
+            <div class="wizard-instruction">${instruction.short || step.title}</div>
+
+            ${instruction.detailed ? `
+                <div class="wizard-description" style="margin-top: 15px; padding: 10px; background: var(--bg); border-radius: 4px;">
+                    ${instruction.detailed}
+                </div>
+            ` : ''}
+
+            ${step.recording_guidance?.movement_instruction ? `
+                <div style="margin-top: 15px; padding: 10px; background: var(--bg-muted); border-left: 3px solid var(--accent); border-radius: 4px;">
+                    <strong>💡 During recording:</strong><br>
+                    ${step.recording_guidance.movement_instruction}
+                </div>
+            ` : ''}
+
+            <div class="wizard-controls" style="margin-top: 20px;">
+                <button class="btn-primary" onclick="window.proceedToPrepare()">Next →</button>
+                <button class="btn-secondary" onclick="window.skipCurrentStep()">Skip</button>
+            </div>
+
+            <div class="wizard-controls" style="margin-top: 10px;">
+                <button class="btn-secondary" onclick="window.pauseWizard()">⏸️ Pause</button>
+                <button class="btn-secondary" onclick="window.closeWizard()">❌ Exit</button>
+            </div>
+        `;
+    }
+}
+
+/**
+ * Render prepare phase (adopt pose)
+ */
+function renderPreparePhase(step, title, phase, content, timeText) {
+    if (title) title.textContent = step.title;
+    if (phase) phase.textContent = 'Prepare';
+    if (timeText) timeText.textContent = step.timing.record_duration ? `~${step.timing.record_duration}s` : '';
+
+    if (content) {
+        const icon = step.icon || '📍';
+
+        content.innerHTML = `
+            <div style="text-align: center; margin-bottom: 20px;">
+                <div style="font-size: 48px; margin-bottom: 10px;">${icon}</div>
+                <h2 style="margin: 10px 0;">${step.title}</h2>
+            </div>
+
+            <div class="wizard-instruction">Adopt the pose and get ready</div>
+
+            <div class="wizard-description" style="margin-top: 15px; padding: 10px; background: var(--bg); border-radius: 4px;">
+                Take your time to adopt the pose correctly. When you're comfortable and ready to record, click the button below.
+            </div>
+
+            <div style="margin-top: 15px; padding: 10px; background: var(--bg-muted); border-left: 3px solid var(--success); border-radius: 4px; font-size: 12px;">
+                <strong>📹 Ready to record ${step.timing.record_duration || 10} seconds</strong><br>
+                You'll be asked to rotate and move your hand to capture different orientations.
+            </div>
+
+            <div class="wizard-controls" style="margin-top: 20px;">
+                <button class="btn-success" onclick="window.readyToRecord()" style="font-size: 16px; padding: 12px 24px;">
+                    🔴 Ready - Record
+                </button>
+            </div>
+
+            <div class="wizard-controls" style="margin-top: 10px;">
+                <button class="btn-secondary" onclick="window.restartCurrentStep()">↩️ Restart Step</button>
+                <button class="btn-secondary" onclick="window.skipCurrentStep()">⏭️ Skip</button>
+            </div>
+
+            <div class="wizard-controls" style="margin-top: 10px;">
+                <button class="btn-secondary" onclick="window.pauseWizard()">⏸️ Pause</button>
+                <button class="btn-secondary" onclick="window.closeWizard()">❌ Exit</button>
+            </div>
+        `;
+    }
+}
+
+/**
+ * Proceed to prepare phase
+ */
+function proceedToPrepare() {
+    wizard.phase = 'prepare';
+    renderTemplateStep();
+}
+
+/**
+ * Ready to record - start recording phase
+ */
+async function readyToRecord() {
+    wizard.phase = 'record';
+    await recordTemplateStep();
+}
+
+/**
+ * Record template step with auto-labeling
+ */
+async function recordTemplateStep() {
+    const step = wizard.steps[wizard.currentStep];
+    if (!step) return;
+
+    const recordDuration = (step.timing.record_duration || 10) * 1000; // ms
+    const stepLabels = parseTemplateLabels(step.labels);
+
+    // Start recording if not already
+    if (!deps.state.recording) {
+        await deps.startRecording();
+    }
+
+    // Apply labels from template
+    applyLabels(stepLabels);
+    closeAndStartNewLabel();
+
+    const content = deps.$('wizardContent');
+    const icon = step.icon || '📍';
+    const movementInstruction = step.recording_guidance?.movement_instruction || 'Rotate and move your hand to capture different angles';
+
+    // Show recording UI with countdown
+    await runCountdown(content, recordDuration, {
+        title: `${icon} RECORDING: ${step.title}`,
+        subtitle: movementInstruction,
+        phaseLabel: 'RECORDING',
+        phaseColor: 'var(--success)'
+    });
+
+    // Close the labeled segment
+    closeAndStartNewLabel();
+    clearLabels();
+
+    // Mark step as completed
+    wizard.stepsCompleted.push(wizard.currentStep);
+
+    // Transition: unlabeled period before next step
+    const transitionDuration = (step.timing.transition_duration || 0) * 1000;
+    if (transitionDuration > 0) {
+        await runCountdown(content, transitionDuration, {
+            title: 'Transition',
+            subtitle: 'Prepare for next pose',
+            phaseLabel: 'TRANSITION',
+            phaseColor: 'var(--warning)'
+        });
+    }
+
+    // Move to next step
+    wizard.phase = 'preview';
+    wizard.currentStep++;
+    renderTemplateStep();
+}
+
+/**
+ * Pause wizard (preserve state)
+ */
+function pauseWizard() {
+    wizard.paused = true;
+    wizard.pausedAt = Date.now();
+
+    const content = deps.$('wizardContent');
+    if (content) {
+        content.innerHTML = `
+            <div class="wizard-instruction">⏸️ Wizard Paused</div>
+            <div class="wizard-description">
+                All progress has been saved. You can resume from where you left off.
+            </div>
+            <div class="wizard-controls" style="margin-top: 20px;">
+                <button class="btn-success" onclick="window.resumeWizard()">▶️ Resume</button>
+                <button class="btn-secondary" onclick="window.closeWizard()">Exit and Save</button>
+            </div>
+        `;
+    }
+
+    deps.log('Wizard paused');
+}
+
+/**
+ * Resume wizard from pause
+ */
+function resumeWizard() {
+    wizard.paused = false;
+    wizard.pausedAt = null;
+    deps.log('Wizard resumed');
+    renderTemplateStep();
+}
+
+/**
+ * Restart current step (discard current step's data)
+ */
+function restartCurrentStep() {
+    wizard.phase = 'preview';
+    deps.log(`Restarting step ${wizard.currentStep + 1}`);
+    renderTemplateStep();
+}
+
+/**
+ * Skip current step
+ */
+function skipCurrentStep() {
+    deps.log(`Skipping step ${wizard.currentStep + 1}: ${wizard.steps[wizard.currentStep]?.title}`);
+    wizard.phase = 'preview';
+    wizard.currentStep++;
+    renderTemplateStep();
+}
+
+/**
+ * Show wizard complete screen
+ */
+function showWizardComplete() {
+    const title = deps.$('wizardTitle');
+    const phase = deps.$('wizardPhase');
+    const content = deps.$('wizardContent');
+    const progressFill = deps.$('wizardProgressFill');
+
+    if (title) title.textContent = 'Complete!';
+    if (phase) phase.textContent = 'Collection finished';
+    if (progressFill) progressFill.style.width = '100%';
+
+    if (content) {
+        const totalSamples = deps.state.sessionData.length - wizard.sessionStartIndex;
+        const totalLabels = deps.state.labels.length;
+
+        content.innerHTML = `
+            <div style="text-align: center; margin: 20px 0;">
+                <div style="font-size: 64px; margin-bottom: 20px;">✅</div>
+                <h2 style="margin: 10px 0;">Data Collection Complete!</h2>
+            </div>
+
+            <div class="wizard-complete">
+                <div class="stats" style="font-size: 14px; line-height: 1.8;">
+                    <strong>📊 Collection Summary:</strong><br>
+                    • ${totalSamples} samples collected<br>
+                    • ${totalLabels} labeled segments<br>
+                    • ${wizard.stepsCompleted.length} of ${wizard.steps.length} steps completed<br>
+                    ${wizard.template ? `• Template: ${wizard.template.name}` : ''}
+                </div>
+            </div>
+
+            <div style="margin-top: 20px; padding: 10px; background: var(--bg); border-radius: 4px; font-size: 12px;">
+                <strong>💡 Next Steps:</strong><br>
+                1. Export your data using the "Export Session Data" button<br>
+                2. Train your model using the ML pipeline<br>
+                3. Validate model accuracy before collecting more data
+            </div>
+
+            <div class="wizard-controls" style="margin-top: 20px;">
+                <button class="btn-success" onclick="closeWizard()">Done</button>
+            </div>
+        `;
+    }
+
+    deps.log(`Wizard complete: ${totalSamples} samples, ${totalLabels} labels`);
 }
