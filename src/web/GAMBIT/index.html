@@ -377,6 +377,41 @@
             main > .card { 
                 flex-grow: 1;
             }
+
+            /* Collapsible card styles using details/summary */
+            details.card {
+                flex-grow: 1;
+            }
+
+            details.card > summary {
+                cursor: pointer;
+                list-style: none;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+
+            details.card > summary::-webkit-details-marker {
+                display: none;
+            }
+
+            details.card > summary::after {
+                content: '▼';
+                font-size: 0.7em;
+                transition: transform 0.2s ease;
+                color: var(--fg-muted);
+            }
+
+            details.card:not([open]) > summary::after {
+                transform: rotate(-90deg);
+            }
+
+            details.card > summary .card-header-content {
+                display: flex;
+                align-items: center;
+                gap: var(--space-sm);
+                flex: 1;
+            }
         </style>
     </head>
     <body>
@@ -390,20 +425,32 @@
         </header>
         
         <main>
-            <div class="card controls">
+            <details class="card controls" open>
+                <summary class="card-header">
+                    <span class="card-header-content">
+                        Device
+                        <span class="model-status" id="deviceStatus">
+                            <span class="status-dot"></span>
+                            <span>Disconnected</span>
+                        </span>
+                    </span>
+                </summary>
+                <!-- TODO show status -->
                 <button class="btn" id="connect">Connect</button>
                 <button class="btn" disabled id="getdata">Get data</button>
                 <input id="token" type="password" placeholder="GitHub token"/>
-            </div>
+            </details>
 
-            <div class="card">
-                <div class="card-header">
-                    Gesture Inference
-                    <span class="model-status" id="modelStatus">
-                        <span class="status-dot"></span>
-                        <span>Loading model...</span>
+            <details class="card" open>
+                <summary class="card-header">
+                    <span class="card-header-content">
+                        Gesture Inference
+                        <span class="model-status" id="modelStatus">
+                            <span class="status-dot"></span>
+                            <span>Loading model...</span>
+                        </span>
                     </span>
-                </div>
+                </summary>
                 <div class="gesture-display" id="gestureDisplay">
                     <div class="gesture-name" id="gestureName">--</div>
                     <div class="confidence" id="gestureConfidence">Waiting for data...</div>
@@ -412,19 +459,21 @@
                 <div class="gesture-probabilities" id="gestureProbabilities">
                     <!-- Populated by JS -->
                 </div>
-            </div>
+            </details>
 
-            <div class="card">
-                <div class="card-header">
-                    Sensor Data
-                    <select id="dataStageSelect" style="font-size: 0.75rem; padding: 2px 6px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--fg);">
-                        <option value="converted" selected>Converted (µT/g/°/s)</option>
-                        <option value="raw">Raw (LSB)</option>
-                        <option value="calibrated">Calibrated (iron corrected)</option>
-                        <option value="fused">Fused (Earth field removed)</option>
-                        <option value="filtered">Filtered (Kalman)</option>
-                    </select>
-                </div>
+            <details class="card" open>
+                <summary class="card-header">
+                    <span class="card-header-content">
+                        Sensor Data
+                        <select id="dataStageSelect" style="font-size: 0.75rem; padding: 2px 6px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--fg);" onclick="event.stopPropagation()">
+                            <option value="converted" selected>Converted (µT/g/°/s)</option>
+                            <option value="raw">Raw (LSB)</option>
+                            <option value="calibrated">Calibrated (iron corrected)</option>
+                            <option value="fused">Fused (Earth field removed)</option>
+                            <option value="filtered">Filtered (Kalman)</option>
+                        </select>
+                    </span>
+                </summary>
                 <div class="data-view">
                     <div id="battery"><progress max="100" value="0" id="b" title="0% battery"></progress></div>
                     <div id="button"><label>Btn:</label><span id="btn">0</span> <span id="count">0</span> <span id="state">0</span></div>
@@ -456,10 +505,12 @@
                 <div id="dataStageInfo" style="font-size: 0.7rem; color: var(--fg-muted); text-align: center; margin-top: var(--space-xs);">
                     Showing converted sensor values in physical units
                 </div>
-            </div>
+            </details>
 
-            <section id="three-d" class="card">
-                <div id="cubeM" class="cube">
+            <details class="card" open>
+                <summary class="card-header">3D Orientation Cubes</summary>
+                <div id="three-d">
+                    <div id="cubeM" class="cube">
                     <div class="face front">mag 1</div>
                     <div class="face back">mag 2</div>
                     <div class="face right">mag 3</div>
@@ -483,17 +534,20 @@
                     <div class="face top">gyro 5</div>
                     <div class="face bottom">gyro 6</div>
                 </div>
-            </section>
-
-            <div class="card" id="threeHandCard">
-                <div class="card-header">
-                    Three.js Hand (Skeleton)
-                    <label class="hand-mode-toggle">
-                        <input type="checkbox" id="threeHandToggle" checked>
-                        <span>Track IMU</span>
-                    </label>
                 </div>
-                <div id="threeHandContainer" style="width: 300px; height: 300px; margin: 0 auto;"></div>
+            </details>
+
+            <details class="card" id="threeHandCard" open>
+                <summary class="card-header">
+                    <span class="card-header-content">
+                        Three.js Hand (Skeleton)
+                        <label class="hand-mode-toggle" onclick="event.stopPropagation()">
+                            <input type="checkbox" id="threeHandToggle" checked>
+                            <span>Track IMU</span>
+                        </label>
+                    </span>
+                </summary>
+                <div id="threeHandContainer" style="margin: 0 auto;"></div>
                 <div id="threeEulerDebug" style="font-size: 0.7rem; color: var(--fg-muted); text-align: center; margin-top: var(--space-xs); font-family: monospace;">
                     Roll: --° | Pitch: --° | Yaw: --°
                 </div>
@@ -587,8 +641,8 @@
                 </details>
 
                 <!-- Calibration Panel - Structured observation system -->
-                <details open style="margin-top: var(--space-sm); padding: var(--space-xs); border: 1px solid var(--accent); border-radius: var(--radius-sm); background: rgba(0,100,255,0.05);">
-                    <summary style="cursor: pointer; font-size: 0.75rem; font-weight: bold; padding: var(--space-xs); color: var(--accent);">
+                <details style="margin-top: var(--space-sm); padding: var(--space-xs); border: 1px solid var(--border); border-radius: var(--radius-sm);">
+                    <summary style="cursor: pointer; font-size: 0.75rem; font-weight: bold; padding: var(--space-xs); ">
                         🔬 Calibration System
                     </summary>
                     <div id="calibrationPanel" style="padding: var(--space-sm); font-size: 0.7rem; font-family: monospace;">
@@ -666,16 +720,18 @@
 
                     </div>
                 </details>
-            </div>
+            </details>
 
-            <div class="card" id="magTrajectoryCard">
-                <div class="card-header">
-                    Magnetic Residual (3D Trajectory)
-                    <label class="hand-mode-toggle">
-                        <input type="checkbox" id="magTrajectoryToggle" checked>
-                        <span>Active</span>
-                    </label>
-                </div>
+            <details class="card" id="magTrajectoryCard" open>
+                <summary class="card-header">
+                    <span class="card-header-content">
+                        Magnetic Residual (3D Trajectory)
+                        <label class="hand-mode-toggle" onclick="event.stopPropagation()">
+                            <input type="checkbox" id="magTrajectoryToggle" checked>
+                            <span>Active</span>
+                        </label>
+                    </span>
+                </summary>
                 <div style="text-align: center; padding: var(--space-sm);">
                     <canvas id="magTrajectoryCanvas" width="400" height="300" style="border: 1px solid var(--border); border-radius: var(--radius-sm); background: #ffffff;"></canvas>
                 </div>
@@ -700,10 +756,10 @@
                         <p style="margin-top: 8px;"><strong>Visualization:</strong> Isometric projection with auto-scaling. Older points fade out. Green marker = start, Red marker = end.</p>
                     </div>
                 </details>
-            </div>
+            </details>
 
-            <div class="card" id="playbackCard">
-                <div class="card-header">Session Playback</div>
+            <details class="card" id="playbackCard" open>
+                <summary class="card-header">Session Playback</summary>
                 <div class="playback-controls">
                     <select id="sessionSelect" class="session-select">
                         <option value="">-- Load sessions --</option>
@@ -728,7 +784,7 @@
                         </select>
                     </div>
                 </div>
-            </div>
+            </details>
         </main>
         <footer class="page-footer">
             <span>SIMCAP GAMBIT</span>
@@ -892,14 +948,23 @@
 
             function updateConnectionStatus(connected) {
                 console.log(`SIMCAP Device connected: ${connected}`)
+                const deviceStatus = document.getElementById('deviceStatus');
                 if (connected) {
                     window.connect.innerHTML = "Disconnect"
                     window.getdata.disabled = false
+                    if (deviceStatus) {
+                        deviceStatus.classList.add('ready');
+                        deviceStatus.querySelector('span:last-child').textContent = 'Connected';
+                    }
                 } else {
                     window.connect.innerHTML = "Connect"
                     window.getdata.disabled = true
                     isStreaming = false;
                     window.getdata.innerHTML = "Get data"
+                    if (deviceStatus) {
+                        deviceStatus.classList.remove('ready');
+                        deviceStatus.querySelector('span:last-child').textContent = 'Disconnected';
+                    }
                 }
             }
 
@@ -1025,9 +1090,9 @@
 
                 try {
                     threeHandSkeleton = new ThreeJSHandSkeleton(container, {
-                        width: 300,
+                        width: 500,
                         height: 300,
-                        backgroundColor: 0x1a1a2e,
+                        backgroundColor: 0xffffff,
                         lerpFactor: 0.15,
                         handedness: 'right'  // Default to right hand
                     });
@@ -1239,14 +1304,17 @@
 
                 try {
                     magTrajectory = new MagneticTrajectory(canvas, {
-                        maxPoints: 200,
+                        maxPoints: 150,
                         scale: 0.35,
                         autoNormalize: true,
-                        fixedBounds: null,
                         trajectoryColor: '#4ecdc4',
                         showMarkers: true,
                         showCube: true,
-                        backgroundColor: null
+                        showScaleKey: true,
+                        fixedBounds: 50,
+                        backgroundColor: null,
+                        scaleKeyPosition: 'top-right',
+                        minAlpha: 0.1, 
                     });
 
                     console.log('[MagTrajectory] Initialized');

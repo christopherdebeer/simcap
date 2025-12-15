@@ -383,8 +383,17 @@ export class ThreeJSHandSkeleton {
           const targetAngle =
             extendedAngles[index] + (flexedAngles[index] - extendedAngles[index]) * curl;
 
-          if (fingerName === "thumb" && index === 0) {
-            bone.rotation.x = FINGER_CONFIG.thumb.baseRotation.x + targetAngle;
+          if (fingerName === "thumb") {
+            // Thumb curls toward palm center, not perpendicular to palm
+            // Apply curl rotation around Z axis (after base rotation accounts for thumb orientation)
+            if (index === 0) {
+              // Base joint: preserve base rotation, add curl on Z
+              bone.rotation.x = FINGER_CONFIG.thumb.baseRotation.x;
+              bone.rotation.z = FINGER_CONFIG.thumb.baseRotation.z - targetAngle;
+            } else {
+              // Subsequent thumb joints: curl around Z
+              bone.rotation.z = 0 - targetAngle;
+            }
           } else if (index === 0 && FINGER_CONFIG[fingerName].baseRotation) {
             bone.rotation.x = targetAngle;
             bone.rotation.z = FINGER_CONFIG[fingerName].baseRotation.z;
@@ -503,9 +512,9 @@ export class ThreeJSHandSkeleton {
     if (!this.handGroup) return;
 
     // Mirror the hand along X axis for left hand
-    // Right hand: scale.x = 1 (no mirror)
-    // Left hand: scale.x = -1 (mirrored)
-    this.handGroup.scale.x = this.handedness === 'left' ? -1 : 1;
+    // Right hand: scale.x = -1 (mirrored)
+    // Left hand: scale.x = 1 (no mirror)
+    this.handGroup.scale.x = this.handedness === 'left' ? 1 : -1;
   }
 
   /**
