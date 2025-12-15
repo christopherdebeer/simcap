@@ -226,7 +226,7 @@
 
                     // Set up data listener - all data uses framing protocol
                     conn.on('data', (data) => {
-                        this._log(`Received ${data.length} bytes`);
+                        // this._log(`Received ${data.length} bytes`);
                         this.frameParser.onData(data);
                     });
 
