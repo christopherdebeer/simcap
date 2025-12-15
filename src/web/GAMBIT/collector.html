@@ -11,6 +11,8 @@
     <script>eruda.init();</script>
     <!-- TensorFlow.js for ML inference -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
+    <!-- Three.js for 3D hand skeleton visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
     <script src="puck.js"></script>
     <script src="gambit-client.js"></script>
     <script src="calibration.js"></script>
@@ -948,6 +950,7 @@
                 <div style="position: relative;width: auto;margin: 0 auto;">
                     <canvas id="magTrajectoryCanvas" width="400" height="400" style="left: 1em; top: 1em; border: 1px solid #efefef; background: transparent; border-radius: 8px; position: absolute; width: 20%; z-index: 9999;"></canvas>
                     <canvas id="handCanvas3D" width="400" height="400" style="border: 1px solid var(--border); background: var(--bg); border-radius: 8px;"></canvas>
+                    <div id="threeHandContainer" style="width: 400px; height: 400px; border: 1px solid var(--border); background: #1a1a2e; border-radius: 8px; display: none;"></div>
                 </div>
                 <div id="handPreviewDescription" style="text-align: center; color: var(--fg-muted); font-size: 12px; margin-top: 10px;">
                     Visual representation of manually selected finger states
