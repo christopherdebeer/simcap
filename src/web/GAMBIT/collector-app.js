@@ -22,6 +22,7 @@ import {
     getCalibrationBuffers
 } from './modules/wizard.js';
 import { MagneticTrajectory } from './modules/magnetic-trajectory.js';
+import { ThreeJSHandSkeleton } from './shared/threejs-hand-skeleton.js';
 import {
     getBrowserLocation,
     getDefaultLocation,
@@ -67,7 +68,7 @@ const poseState = {
 };
 
 // Hand visualization
-let hand3DRenderer = null;
+let threeHandSkeleton = null;
 let handPreviewMode = 'labels'; // 'labels' or 'predictions'
 
 // Magnetic trajectory visualization
@@ -123,6 +124,7 @@ async function init() {
         wizard: getWizardState(),
         calibrationBuffers: getCalibrationBuffers(),
         poseState: poseState,
+        threeHandSkeleton: () => threeHandSkeleton,
         updatePoseEstimation: updatePoseEstimationFromMag,
         updateUI: updateUI,
         updateMagTrajectory: updateMagneticTrajectoryFromTelemetry,
@@ -745,13 +747,6 @@ function togglePoseEstimation() {
         renderPoseEstimationOptions();
         updatePoseEstimationDisplay();
 
-        // Enable sensor fusion on 3D hand if option is set
-        if (hand3DRenderer && poseEstimationOptions.enableHandOrientation) {
-            hand3DRenderer.setOrientationMode('sensor_fusion');
-            hand3DRenderer.setOrientationFiltering(poseEstimationOptions.smoothHandOrientation);
-            hand3DRenderer.setOrientationFilterAlpha(poseEstimationOptions.handOrientationAlpha);
-            log('3D hand sensor fusion enabled');
-        }
     } else {
         log('Pose tracking disabled');
         // Hide pose estimation status section
@@ -764,12 +759,6 @@ function togglePoseEstimation() {
         poseState.confidence = 0;
         poseState.updateCount = 0;
         poseState.orientation = null;
-
-        // Reset 3D hand to static orientation
-        if (hand3DRenderer) {
-            hand3DRenderer.setOrientationMode('static');
-            log('3D hand reset to static orientation');
-        }
 
         // Hide orientation display
         const orientationInfo = $('handOrientationInfo');
@@ -873,21 +862,6 @@ function togglePoseOption(option) {
             }
             break;
 
-        case 'enableHandOrientation':
-            if (hand3DRenderer) {
-                if (poseEstimationOptions.enableHandOrientation) {
-                    hand3DRenderer.setOrientationMode('sensor_fusion');
-                } else {
-                    hand3DRenderer.setOrientationMode('static');
-                }
-            }
-            break;
-
-        case 'smoothHandOrientation':
-            if (hand3DRenderer) {
-                hand3DRenderer.setOrientationFiltering(poseEstimationOptions.smoothHandOrientation);
-            }
-            break;
     }
 
     log(`Pose option ${option}: ${poseEstimationOptions[option]}`);
@@ -899,10 +873,6 @@ function togglePoseOption(option) {
 function updateHandOrientationAlpha(value) {
     const alpha = value / 100;
     poseEstimationOptions.handOrientationAlpha = alpha;
-
-    if (hand3DRenderer) {
-        hand3DRenderer.setOrientationFilterAlpha(alpha);
-    }
 
     // Update display
     const valueDisplay = $('handOrientationAlphaValue');
@@ -990,8 +960,8 @@ function updatePoseEstimationFromMag(data) {
     }
 
     // Update 3D hand orientation from sensor fusion (every sample for smooth motion)
-    if (poseEstimationOptions.enableHandOrientation && euler && hand3DRenderer) {
-        hand3DRenderer.updateFromSensorFusion(euler);
+    if (poseEstimationOptions.enableHandOrientation && euler && threeHandSkeleton) {
+        threeHandSkeleton.updateOrientation(euler);
     }
 
     // Update display every 10 samples to avoid excessive DOM updates
@@ -1069,25 +1039,31 @@ function updatePoseEstimationDisplay() {
  * Initialize hand visualization
  */
 function initHandVisualization() {
-    // Initialize 3D renderer with sensor fusion options
-    const canvas3D = $('handCanvas3D');
-    if (canvas3D && typeof Hand3DRenderer !== 'undefined') {
-        hand3DRenderer = new Hand3DRenderer(canvas3D, {
-            backgroundColor: '#ffffff',
-            // Sensor fusion options
-            orientationMode: 'static',  // Start static, switch to sensor_fusion when pose tracking enabled
-            orientationFiltering: poseEstimationOptions.smoothHandOrientation,
-            orientationAlpha: poseEstimationOptions.handOrientationAlpha,
-            // Orientation offset to align sensor (in palm, face up) with hand model
-            // These values may need tuning based on actual sensor orientation
-            pitchOffset: 0,
-            yawOffset: 0,
-            rollOffset: 0
-        });
-        hand3DRenderer.startAnimation();
-        log('3D hand renderer initialized');
+    // Initialize Three.js hand skeleton
+    const container = $('threeHandContainer');
+    if (container && typeof THREE !== 'undefined') {
+        try {
+            threeHandSkeleton = new ThreeJSHandSkeleton(container, {
+                width: 400,
+                height: 400,
+                backgroundColor: 0x1a1a2e,
+                lerpFactor: 0.15,
+                handedness: 'right'
+            });
+
+            // Set orientation offsets to match sensor-to-hand mapping
+            threeHandSkeleton.setOrientationOffsets({
+                roll: 180,
+                pitch: 180,
+                yaw: -180
+            });
+
+            log('Three.js hand skeleton initialized');
+        } catch (err) {
+            console.error('Failed to initialize Three.js hand skeleton:', err);
+        }
     } else {
-        console.warn('3D hand renderer not available');
+        console.warn('Three.js hand skeleton not available (Three.js not loaded or container missing)');
     }
 
     // Initial update
@@ -1233,10 +1209,6 @@ function updateHandVisualization() {
         }
     }
 
-    // Update 3D renderer
-    if (hand3DRenderer) {
-        hand3DRenderer.setFingerPoses(fingerStates);
-    }
 }
 
 /**

@@ -48,9 +48,12 @@ export function initProcessor() {
     telemetryProcessor = new TelemetryProcessor({
         calibration: deps.calibrationInstance,
         onOrientationUpdate: (euler, quaternion) => {
-            // Update hand 3D renderer if available
-            if (deps.hand3DRenderer && euler) {
-                deps.hand3DRenderer.updateFromSensorFusion(euler);
+            // Update Three.js hand skeleton if available
+            if (euler) {
+                const threeSkeleton = typeof deps.threeHandSkeleton === 'function' ? deps.threeHandSkeleton() : deps.threeHandSkeleton;
+                if (threeSkeleton) {
+                    threeSkeleton.updateOrientation(euler);
+                }
             }
         },
         onGyroBiasCalibrated: () => {

@@ -1,14 +1,33 @@
 /**
- * Magnetic Trajectory Visualizer
+ * Magnetic Trajectory Visualizer v1.1.0
  * Real-time 3D visualization of residual magnetic field (finger magnet signals)
  *
  * Usage:
  *   const viz = new MagneticTrajectory(canvasElement, options);
  *   viz.addPoint(fused_mx, fused_my, fused_mz);
  *   viz.clear();
+ * 
+ * Normalization:
+ *   Uses fixed bounds based on information-theoretic SNR analysis:
+ *   - Sensor noise floor: ~1 μT (LIS3MDL)
+ *   - Earth field variation: ~10 μT
+ *   - Finger magnet signal: 14-141 μT (depending on distance/magnet size)
+ *   - Default fixedBounds: 200 μT (conservative upper bound)
+ *   
+ *   This provides consistent scaling across sessions, preserving SNR relationships.
+ *   See docs/design/magnetic-finger-tracking-analysis.md for physics details.
  */
 
 const LINE_WIDTH = 5
+
+/**
+ * Default fixed bounds for magnetometer normalization (in μT)
+ * Based on information-theoretic SNR analysis:
+ * - Max expected signal: ~150 μT (6x3mm magnet at 50mm)
+ * - Safety margin: 1.33x
+ * - Result: 200 μT provides consistent scaling while accommodating outliers
+ */
+const DEFAULT_FIXED_BOUNDS_UT = 200
 
 export class MagneticTrajectory {
     /**
@@ -16,12 +35,16 @@ export class MagneticTrajectory {
      * @param {Object} options - Configuration options
      * @param {number} options.maxPoints - Maximum number of points to keep (default: 200)
      * @param {number} options.scale - Visual scale factor (default: 0.35)
-     * @param {boolean} options.autoNormalize - Auto-normalize to fit bounds (default: true)
-     * @param {number} options.fixedBounds - Fixed bounds in µT (default: null for auto)
+     * @param {boolean} options.autoNormalize - Auto-normalize to fit bounds (default: false, uses fixedBounds)
+     * @param {number} options.fixedBounds - Fixed bounds in µT (default: 200 based on SNR analysis)
      * @param {string} options.trajectoryColor - Line color (default: '#4ecdc4')
      * @param {boolean} options.showMarkers - Show start/end markers (default: true)
      * @param {boolean} options.showCube - Show bounding cube (default: true)
      * @param {string} options.backgroundColor - Canvas background color (default: null for transparent)
+     * @param {number} options.minAlpha - Minimum alpha for oldest points (default: 0, fully transparent)
+     * @param {number} options.maxAlpha - Maximum alpha for newest points (default: 1, fully opaque)
+     * @param {boolean} options.showScaleKey - Show scale bar and units legend (default: true)
+     * @param {string} options.scaleKeyPosition - Position: 'bottom-left', 'bottom-right', 'top-left', 'top-right' (default: 'bottom-left')
      */
     constructor(canvas, options = {}) {
         this.canvas = canvas;
@@ -30,12 +53,19 @@ export class MagneticTrajectory {
         // Configuration
         this.maxPoints = options.maxPoints || 200;
         this.scale = options.scale || 0.35;
-        this.autoNormalize = options.autoNormalize !== false;
-        this.fixedBounds = options.fixedBounds || null;
+        // Default to fixed bounds (SNR-based normalization) unless explicitly set to auto
+        this.autoNormalize = options.autoNormalize === true;
+        this.fixedBounds = options.fixedBounds !== undefined ? options.fixedBounds : DEFAULT_FIXED_BOUNDS_UT;
         this.trajectoryColor = options.trajectoryColor || '#4ecdc4';
         this.showMarkers = options.showMarkers !== false;
         this.showCube = options.showCube !== false;
         this.backgroundColor = options.backgroundColor || null;
+        // Gradient fade settings: oldest points fade to minAlpha, newest to maxAlpha
+        this.minAlpha = options.minAlpha !== undefined ? options.minAlpha : 0;
+        this.maxAlpha = options.maxAlpha !== undefined ? options.maxAlpha : 1;
+        // Scale key settings
+        this.showScaleKey = options.showScaleKey !== false;
+        this.scaleKeyPosition = options.scaleKeyPosition || 'bottom-left';
 
         // Data buffer
         this.points = [];
@@ -44,6 +74,7 @@ export class MagneticTrajectory {
         this.animationFrame = null;
         this.lastRenderTime = 0;
         this.renderThrottle = 50; // ms between renders
+        this.clear();
     }
 
     /**
@@ -168,8 +199,8 @@ export class MagneticTrajectory {
             [0,4],[1,5],[2,6],[3,7]   // Z edges
         ];
 
-        this.ctx.strokeStyle = '#333';
-        this.ctx.lineWidth = LINE_WIDTH;
+        this.ctx.strokeStyle = '#33333317';
+        this.ctx.lineWidth = 1;
         this.ctx.beginPath();
 
         for (const [a, b] of edges) {
@@ -183,7 +214,8 @@ export class MagneticTrajectory {
     }
 
     /**
-     * Draw trajectory path
+     * Draw trajectory path with gradient fade
+     * Oldest points fade to minAlpha, newest points are at maxAlpha
      * @param {Array} normalizedPoints - Points normalized to [-1, 1]
      */
     drawTrajectory(normalizedPoints) {
@@ -194,57 +226,106 @@ export class MagneticTrajectory {
         this.ctx.lineCap = 'round';
         this.ctx.lineJoin = 'round';
 
-        // Draw with gradient (fade old points)
-        const gradient = this.ctx.createLinearGradient(0, 0, this.canvas.width, 0);
+        // Draw each segment individually with varying alpha
+        // This is necessary because Canvas 2D globalAlpha applies to entire stroke,
+        // not per-segment within a single path
+        const n = normalizedPoints.length;
+        const alphaRange = this.maxAlpha - this.minAlpha;
 
-        this.ctx.beginPath();
-        const [sx, sy] = this.project(...normalizedPoints[0]);
-        this.ctx.moveTo(sx, sy);
+        for (let i = 1; i < n; i++) {
+            // Calculate alpha based on position in trajectory
+            // i=1 (oldest visible segment) -> minAlpha
+            // i=n-1 (newest segment) -> maxAlpha
+            const t = (i - 1) / (n - 2 || 1);  // Normalize to [0, 1]
+            this.ctx.globalAlpha = this.minAlpha + t * alphaRange;
 
-        for (let i = 1; i < normalizedPoints.length; i++) {
-            const [px, py] = this.project(...normalizedPoints[i]);
+            // Draw this segment
+            const [x1, y1] = this.project(...normalizedPoints[i - 1]);
+            const [x2, y2] = this.project(...normalizedPoints[i]);
 
-            // Vary opacity based on age
-            const age = i / normalizedPoints.length;
-            this.ctx.globalAlpha = 0.3 + age * 0.7;
-
-            this.ctx.lineTo(px, py);
+            this.ctx.beginPath();
+            this.ctx.moveTo(x1, y1);
+            this.ctx.lineTo(x2, y2);
+            this.ctx.stroke();
         }
 
-        this.ctx.stroke();
         this.ctx.globalAlpha = 1.0;
     }
 
+    
+
     /**
-     * Draw start/end markers
-     * @param {Array} normalizedPoints - Points normalized to [-1, 1]
+     * Draw scale key showing units and bounds
+     * Displays a scale bar and the current normalization bounds in μT
      */
-    drawMarkers(normalizedPoints) {
-        if (normalizedPoints.length === 0) return;
+    drawScaleKey() {
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+        const padding = 10;
+        const barHeight = 4;
+        
+        // Calculate scale bar length (represents half the bounds, i.e., one side of the cube)
+        // The cube spans [-1, 1] which is 2 * fixedBounds in μT
+        // Scale bar represents fixedBounds/2 (quarter of full range) for readability
+        const cubeSize = Math.min(w, h) * this.scale * 2;  // Full cube width in pixels
+        const scaleBarPixels = cubeSize * 0.25;  // 25% of cube = fixedBounds/2 μT
+        const scaleBarValue = this.fixedBounds ? this.fixedBounds / 2 : 50;  // μT represented by bar
+        
+        // Determine position based on scaleKeyPosition
+        let x, y, textAlign;
+        switch (this.scaleKeyPosition) {
+            case 'top-left':
+                x = padding;
+                y = padding + 12;
+                textAlign = 'left';
+                break;
+            case 'top-right':
+                x = w - padding - scaleBarPixels;
+                y = padding + 12;
+                textAlign = 'right';
+                break;
+            case 'bottom-right':
+                x = w - padding - scaleBarPixels;
+                y = h - padding - 20;
+                textAlign = 'right';
+                break;
+            case 'bottom-left':
+            default:
+                x = padding;
+                y = h - padding - 20;
+                textAlign = 'left';
+                break;
+        }
 
-        // Start marker (green)
-        const [sx, sy] = this.project(...normalizedPoints[0]);
-        this.ctx.fillStyle = '#2ecc71';
-        this.ctx.beginPath();
-        this.ctx.arc(sx, sy, 6, 0, Math.PI * 2);
-        this.ctx.fill();
+        // Draw scale bar
+        this.ctx.fillStyle = '#666';
+        this.ctx.fillRect(x, y, scaleBarPixels, barHeight);
+        
+        // Draw end caps
+        const capHeight = 8;
+        this.ctx.fillRect(x, y - (capHeight - barHeight) / 2, 2, capHeight);
+        this.ctx.fillRect(x + scaleBarPixels - 2, y - (capHeight - barHeight) / 2, 2, capHeight);
 
-        this.ctx.fillStyle = '#fff';
-        this.ctx.font = '9px sans-serif';
+        // Draw scale value label
+        this.ctx.fillStyle = '#888';
+        this.ctx.font = '10px sans-serif';
         this.ctx.textAlign = 'center';
-        this.ctx.textBaseline = 'middle';
-        this.ctx.fillText('S', sx, sy);
+        this.ctx.textBaseline = 'top';
+        this.ctx.fillText(`${scaleBarValue} μT`, x + scaleBarPixels / 2, y + barHeight + 2);
 
-        // End marker (red) - only if we have multiple points
-        if (normalizedPoints.length > 1) {
-            const [ex, ey] = this.project(...normalizedPoints[normalizedPoints.length - 1]);
-            this.ctx.fillStyle = '#e74c3c';
-            this.ctx.beginPath();
-            this.ctx.arc(ex, ey, 6, 0, Math.PI * 2);
-            this.ctx.fill();
-
-            this.ctx.fillStyle = '#fff';
-            this.ctx.fillText('E', ex, ey);
+        // Draw bounds label below
+        if (this.fixedBounds) {
+            this.ctx.fillStyle = '#666';
+            this.ctx.font = '9px sans-serif';
+            this.ctx.textAlign = textAlign;
+            const boundsX = textAlign === 'left' ? x : x + scaleBarPixels;
+            this.ctx.fillText(`Scale: ±${this.fixedBounds} μT`, boundsX, y + barHeight + 14);
+        } else if (this.autoNormalize) {
+            this.ctx.fillStyle = '#666';
+            this.ctx.font = '9px sans-serif';
+            this.ctx.textAlign = textAlign;
+            const boundsX = textAlign === 'left' ? x : x + scaleBarPixels;
+            this.ctx.fillText('Scale: auto', boundsX, y + barHeight + 14);
         }
     }
 
@@ -274,9 +355,14 @@ export class MagneticTrajectory {
         const normalizedPoints = this.normalizePoints();
         this.drawTrajectory(normalizedPoints);
 
-        // Draw start/end markers
-        if (this.showMarkers) {
-            this.drawMarkers(normalizedPoints);
+        // // Draw start/end markers
+        // if (this.showMarkers) {
+        //     this.drawMarkers(normalizedPoints);
+        // }
+
+        // Draw scale key with units
+        if (this.showScaleKey) {
+            this.drawScaleKey();
         }
     }
 
