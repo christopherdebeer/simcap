@@ -9,7 +9,10 @@
 
 ### Phase 1: Template System Foundation
 
-**Commit:** `76cc031` - Add wizard template system (Phase 1: Foundation)
+**Commits:**
+- `76cc031` - Add wizard template system (Phase 1: Foundation)
+- `c5f3800` - Integrate template system into wizard (Phase 1: Complete)
+- `b1ee7e5` - Add comprehensive testing guide for template wizard
 
 #### Files Created:
 1. **`src/web/GAMBIT/modules/template-loader.js`** (150 lines)
@@ -25,20 +28,40 @@
    - Complete label specifications
    - Movement guidance instructions
 
+3. **`src/web/GAMBIT/modules/wizard.js`** (961 lines, +381 lines added)
+   - Template integration (import, load, execute)
+   - Three-phase UI (preview → prepare → record)
+   - Wizard controls (pause, exit, restart, skip)
+   - Auto-labeling from templates
+   - Data preservation on exit
+   - Backward compatible with legacy modes
+
+4. **`docs/TESTING_TEMPLATE_WIZARD.md`** (493 lines)
+   - Comprehensive testing guide
+   - Step-by-step test procedure
+   - Validation checks and success criteria
+   - Troubleshooting guide
+
 #### Features Implemented:
 - ✅ JSON-based template configuration
 - ✅ Template validation (required fields, data types, structure)
 - ✅ Template caching mechanism
 - ✅ Tier 1 minimal template for quick validation
 - ✅ Label parsing utilities
+- ✅ Three-phase UI (preview → prepare → record)
+- ✅ Wizard controls (pause, exit, restart, skip)
+- ✅ Auto-labeling from template specifications
+- ✅ Data preservation on exit
+- ✅ Backward compatibility with legacy modes
+- ✅ Complete testing documentation
 
 ---
 
 ## In Progress 🔨
 
-### Phase 1: Wizard.js Integration
+### Phase 1: Testing & Validation
 
-**Current Task:** Update `wizard.js` to use template loader
+**Current Task:** User testing with real hardware
 
 #### Required Changes to wizard.js:
 
@@ -131,11 +154,13 @@
 ## Git Status
 
 **Local Branch:** `claude/data-collection-wizard-plan-LRSMj`
-**Unpushed Commits:** 3
+**Unpushed Commits:** 5
 
 1. `e5965ca` - Add comprehensive data collection wizard and multi-label model plan
 2. `90bf0e7` - Revise plan: Focus on wizard-driven auto-labeling with progressive tiers
 3. `76cc031` - Add wizard template system (Phase 1: Foundation)
+4. `c5f3800` - Integrate template system into wizard (Phase 1: Complete)
+5. `b1ee7e5` - Add comprehensive testing guide for template wizard
 
 **Note:** Remote push blocked by infrastructure issues (HTTP 413). Commits are safe locally and will be pushed when infrastructure stabilizes.
 
@@ -145,11 +170,11 @@
 
 ### Phase 1 Complete When:
 - ✅ Template loader validates templates correctly
-- ⬜ Wizard.js loads and executes tier1_minimal template
-- ⬜ Three-phase UI works for all steps
-- ⬜ User can pause/exit/restart without data loss
-- ⬜ Can collect 100 samples per pose (3 poses = 300 samples total)
-- ⬜ Exported JSON has correct label segments
+- ✅ Wizard.js loads and executes tier1_minimal template
+- ✅ Three-phase UI works for all steps
+- ✅ User can pause/exit/restart without data loss
+- ⬜ Can collect 100 samples per pose (3 poses = 300 samples total) - **NEEDS USER TESTING**
+- ⬜ Exported JSON has correct label segments - **NEEDS USER TESTING**
 
 ### Phase 2 Complete When:
 - ⬜ Tier 1 model trains successfully
