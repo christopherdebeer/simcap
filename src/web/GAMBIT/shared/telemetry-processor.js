@@ -35,6 +35,11 @@ import {
     IncrementalCalibration
 } from './incremental-calibration.js';
 
+import {
+    MagnetDetector,
+    createMagnetDetector
+} from './magnet-detector.js';
+
 /**
  * TelemetryProcessor class
  * 
@@ -70,6 +75,11 @@ export class TelemetryProcessor {
         this.useIncrementalCalibration = options.useIncrementalCalibration || false;
         this.incrementalCalibration = new IncrementalCalibration({
             debug: options.incrementalCalibrationDebug || false
+        });
+        
+        // Magnet detector (detects finger magnet presence from residual magnitude)
+        this.magnetDetector = createMagnetDetector({
+            onStatusChange: options.onMagnetStatusChange || null
         });
 
         // Create signal processing components
@@ -108,6 +118,23 @@ export class TelemetryProcessor {
         this._loggedEarthCalibrationMissing = false;
         this._loggedMagFusion = false;
         this._loggedIncrementalCalibration = false;
+        this._loggedMagnetDetection = false;
+    }
+    
+    /**
+     * Get magnet detector instance
+     * @returns {MagnetDetector}
+     */
+    getMagnetDetector() {
+        return this.magnetDetector;
+    }
+    
+    /**
+     * Get current magnet detection state
+     * @returns {Object} Detection state with status, confidence, avgResidual
+     */
+    getMagnetState() {
+        return this.magnetDetector.getState();
     }
     
     /**
@@ -405,6 +432,19 @@ export class TelemetryProcessor {
                     decorated.residual_magnitude = Math.sqrt(
                         fused.x ** 2 + fused.y ** 2 + fused.z ** 2
                     );
+                    
+                    // Update magnet detector with residual
+                    const magnetState = this.magnetDetector.update(decorated.residual_magnitude);
+                    decorated.magnet_status = magnetState.status;
+                    decorated.magnet_confidence = magnetState.confidence;
+                    decorated.magnet_detected = magnetState.detected;
+                    
+                    if (magnetState.detected && !this._loggedMagnetDetection) {
+                        console.log('[TelemetryProcessor] 🧲 Finger magnets detected! Status:', magnetState.status, 
+                                    'Confidence:', (magnetState.confidence * 100).toFixed(0) + '%',
+                                    'Residual:', magnetState.avgResidual.toFixed(1), 'µT');
+                        this._loggedMagnetDetection = true;
+                    }
                 } else if (!this.calibration.earthFieldCalibrated) {
                     if (!this._loggedEarthCalibrationMissing) {
                         console.debug('[TelemetryProcessor] Earth field not calibrated - using best effort (iron-corrected only)');
@@ -455,7 +495,7 @@ export class TelemetryProcessor {
         
         // ===== Step 5b: Incremental Calibration =====
         // Feed samples to incremental calibration for live calibration building
-        if (this.useIncrementalCalibration && orientation) {
+        if (orientation) {
             this.incrementalCalibration.addSample(
                 { x: mx_ut, y: my_ut, z: mz_ut },
                 orientation
@@ -466,9 +506,10 @@ export class TelemetryProcessor {
             decorated.incremental_cal_mean_residual = this.incrementalCalibration.getMeanResidual();
             decorated.incremental_cal_earth_magnitude = this.incrementalCalibration.getEarthFieldMagnitude();
             
-            // If incremental calibration has good confidence, use it for residual calculation
-            const incCalConfidence = this.incrementalCalibration.getConfidence();
-            if (incCalConfidence > 0.3) {
+            // Compute residual if Earth field has been estimated
+            const earthMag = this.incrementalCalibration.getEarthFieldMagnitude();
+            
+            if (earthMag > 0) {
                 const incResidual = this.incrementalCalibration.computeResidual(
                     { x: mx_ut, y: my_ut, z: mz_ut },
                     orientation
@@ -478,6 +519,32 @@ export class TelemetryProcessor {
                     decorated.incremental_residual_my = incResidual.residual.y;
                     decorated.incremental_residual_mz = incResidual.residual.z;
                     decorated.incremental_residual_magnitude = incResidual.magnitude;
+                    
+                    // Update magnet detector with incremental residual (fallback when stored calibration unavailable)
+                    // IMPORTANT: Only feed detector after Earth field has been computed (earthMag > 0)
+                    // The MagnetDetector uses baseline comparison, so it will:
+                    // 1. Establish baseline from first 100 samples after Earth field is computed
+                    // 2. Detect deviations from that baseline (magnets cause +30-100 µT deviation)
+                    if (!decorated.magnet_status) {
+                        const magnetState = this.magnetDetector.update(incResidual.magnitude);
+                        decorated.magnet_status = magnetState.status;
+                        decorated.magnet_confidence = magnetState.confidence;
+                        decorated.magnet_detected = magnetState.detected;
+                        
+                        // Add baseline info to telemetry for debugging
+                        decorated.magnet_baseline_established = magnetState.baselineEstablished;
+                        decorated.magnet_baseline_residual = magnetState.baselineResidual;
+                        decorated.magnet_deviation = magnetState.deviationFromBaseline;
+                        
+                        if (magnetState.detected && !this._loggedMagnetDetection) {
+                            console.log('[TelemetryProcessor] 🧲 Finger magnets detected (incremental cal)! Status:', magnetState.status, 
+                                        'Confidence:', (magnetState.confidence * 100).toFixed(0) + '%',
+                                        'Avg Residual:', magnetState.avgResidual.toFixed(1), 'µT',
+                                        'Baseline:', magnetState.baselineResidual?.toFixed(1), 'µT',
+                                        'Deviation:', magnetState.deviationFromBaseline?.toFixed(1), 'µT');
+                            this._loggedMagnetDetection = true;
+                        }
+                    }
                 }
             }
         }
@@ -528,6 +595,10 @@ export class TelemetryProcessor {
         
         // Reset incremental calibration
         this.incrementalCalibration.reset();
+        
+        // Reset magnet detector
+        this.magnetDetector.reset();
+        this._loggedMagnetDetection = false;
 
         console.log('[TelemetryProcessor] Reset complete');
     }

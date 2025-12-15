@@ -676,6 +676,27 @@
                             </div>
                         </div>
 
+                        <!-- Magnet Detection Status -->
+                        <div id="magnetDetectionStatus" style="margin-bottom: var(--space-sm); padding: var(--space-xs); background: var(--bg); border-radius: var(--radius-sm);">
+                            <strong>🧲 Magnet Detection:</strong>
+                            <div style="margin-top: 4px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                    <span>Status:</span>
+                                    <span id="magnetStatusValue" style="font-weight: bold; color: var(--fg-muted);">--</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span>Confidence:</span>
+                                    <span id="magnetConfidenceValue" style="font-weight: bold;">0%</span>
+                                </div>
+                                <div style="background: #333; border-radius: 3px; height: 6px; margin-top: 4px;">
+                                    <div id="magnetConfidenceBar" style="height: 100%; border-radius: 3px; width: 0%; background: var(--fg-muted); transition: width 0.3s, background 0.3s;"></div>
+                                </div>
+                                <div style="font-size: 0.6rem; color: var(--fg-muted); margin-top: 4px;">
+                                    <span>Avg Residual: <span id="magnetAvgResidual">-- µT</span></span>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Current State Display -->
                         <div style="margin-bottom: var(--space-sm); padding: var(--space-xs); background: var(--bg); border-radius: var(--radius-sm);">
                             <strong>Live Sensor State:</strong>
@@ -1889,6 +1910,47 @@
              * Update calibration confidence display
              * Shows incremental calibration status and confidence metrics
              */
+            /**
+             * Update magnet detection UI display
+             */
+            function updateMagnetDetectionUI(decoratedData) {
+                const statusEl = document.getElementById('magnetStatusValue');
+                const confEl = document.getElementById('magnetConfidenceValue');
+                const barEl = document.getElementById('magnetConfidenceBar');
+                const residualEl = document.getElementById('magnetAvgResidual');
+                
+                // Get magnet state from telemetry processor
+                const magnetState = telemetryProcessor.getMagnetState();
+                if (!magnetState) return;
+                
+                // Update status text with icon
+                if (statusEl) {
+                    const icons = { none: '○', possible: '◐', likely: '◑', confirmed: '🧲' };
+                    const labels = { none: 'No Magnets', possible: 'Possible', likely: 'Likely', confirmed: 'Confirmed' };
+                    const colors = { none: '#888', possible: '#f0ad4e', likely: '#5bc0de', confirmed: '#5cb85c' };
+                    
+                    statusEl.textContent = `${icons[magnetState.status] || '?'} ${labels[magnetState.status] || '--'}`;
+                    statusEl.style.color = colors[magnetState.status] || '#888';
+                }
+                
+                // Update confidence
+                const confPct = Math.round(magnetState.confidence * 100);
+                if (confEl) confEl.textContent = `${confPct}%`;
+                
+                // Update bar
+                if (barEl) {
+                    barEl.style.width = `${confPct}%`;
+                    const colors = { none: '#888', possible: '#f0ad4e', likely: '#5bc0de', confirmed: '#5cb85c' };
+                    barEl.style.background = colors[magnetState.status] || '#888';
+                }
+                
+                // Update residual
+                if (residualEl) {
+                    residualEl.textContent = magnetState.avgResidual > 0 ? 
+                        `${magnetState.avgResidual.toFixed(1)} µT` : '-- µT';
+                }
+            }
+
             function updateCalibrationConfidenceUI() {
                 const details = incrementalCalibration.getConfidenceDetails();
                 const overall = Math.round(details.overall * 100);
@@ -2031,6 +2093,7 @@
                     if (now - lastConfidenceUpdate > CONFIDENCE_UPDATE_INTERVAL) {
                         lastConfidenceUpdate = now;
                         updateCalibrationConfidenceUI();
+                        updateMagnetDetectionUI(decoratedData);
                     }
                 }
 
