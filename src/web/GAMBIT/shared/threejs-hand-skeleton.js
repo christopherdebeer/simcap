@@ -417,33 +417,41 @@ export class ThreeJSHandSkeleton {
     const offsets = this.orientationOffsets || { roll: 0, pitch: 0, yaw: 0 };
     const signs = this.axisSigns || { negateRoll: false, negatePitch: true, negateYaw: false };
 
-    // Apply configurable axis signs to fix inversions
-    // Based on orientation-model.js first-principles analysis:
+    // AXIS MAPPING (corrected 2025-12-14 based on calibration data):
     //
-    // OLD MAPPING (inverted pitch & roll):
-    //   roll = -roll_sensor + offset   (was negated, but inverted)
-    //   pitch = pitch_sensor + offset  (not negated, but inverted)
-    //   yaw = yaw_sensor + offset      (correct)
+    // The sensor reports roll/pitch/yaw where:
+    //   - Physical roll (tilt pinky/thumb) → sensor reports as "roll"
+    //   - Physical pitch (tilt fingers) → sensor reports as "pitch"
+    //   - Physical yaw (spin while flat) → sensor reports as "yaw"
     //
-    // NEW MAPPING (corrected):
-    //   roll = roll_sensor + offset    (UN-negate to fix left/right)
-    //   pitch = -pitch_sensor + offset (NEGATE to fix forward/back)
-    //   yaw = yaw_sensor + offset      (keep same)
+    // Three.js rotation.set(x, y, z, 'YXZ') applies:
+    //   - x (pitch) → RotX → should show finger tilt
+    //   - y (yaw) → RotY → should show hand tilt left/right
+    //   - z (roll) → RotZ → should show hand spin
     //
-    // The axis signs are now configurable so users can toggle them in the UI
-    // to validate the model empirically.
-    const sensorRoll = this.currentOrientation.roll;
-    const sensorPitch = this.currentOrientation.pitch;
-    const sensorYaw = this.currentOrientation.yaw;
+    // CORRECT MAPPING (physical → visual):
+    //   - Sensor roll (physical roll) → RotY (yaw variable) → hand tilts L/R
+    //   - Sensor pitch (physical pitch) → RotX (pitch variable) → fingers tilt
+    //   - Sensor yaw (physical yaw) → RotZ (roll variable) → hand spins
+    //
+    const sensorRoll = this.currentOrientation.roll;   // Physical roll
+    const sensorPitch = this.currentOrientation.pitch; // Physical pitch
+    const sensorYaw = this.currentOrientation.yaw;     // Physical yaw
 
-    const roll = ((signs.negateRoll ? -sensorRoll : sensorRoll) + offsets.roll) * (Math.PI / 180);
+    // Swap roll/yaw to correct axis assignment, with direction corrections
+    // Note: After axis swap, the sign configs apply to the NEW sources:
+    //   - negatePitch applies to sensorPitch (unchanged)
+    //   - negateYaw config now controls sensorRoll direction (for RotY)
+    //   - negateRoll config now controls sensorYaw direction (for RotZ)
+    // Roll needs negation for correct left/right tilt direction
     const pitch = ((signs.negatePitch ? -sensorPitch : sensorPitch) + offsets.pitch) * (Math.PI / 180);
-    const yaw = ((signs.negateYaw ? -sensorYaw : sensorYaw) + offsets.yaw) * (Math.PI / 180);
+    const yaw = (((signs.negateYaw ? 1 : -1) * sensorRoll) + offsets.yaw) * (Math.PI / 180);    // sensor ROLL → RotY (default: negated)
+    const roll = ((signs.negateRoll ? -sensorYaw : sensorYaw) + offsets.roll) * (Math.PI / 180);  // sensor YAW → RotZ
 
     this.handGroup.rotation.set(
-      pitch, // X
-      yaw,   // Y
-      roll,  // Z
+      pitch, // X - finger tilt (from sensor pitch)
+      yaw,   // Y - hand tilt L/R (from sensor roll)
+      roll,  // Z - hand spin (from sensor yaw)
       "YXZ"
     );
   }

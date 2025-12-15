@@ -6,26 +6,19 @@
  * The sensor is positioned on the back of the hand, so orientation from
  * the IMU is used to rotate the hand model in 3D space.
  *
- * ORIENTATION MAPPING (corrected 2025-12-14):
- * Based on calibration analysis revealing axis mismatch between AHRS and renderer.
+ * ORIENTATION MAPPING (corrected 2025-12-14 v2):
+ * Based on calibration observations showing roll/yaw visual axis errors.
  *
- * AHRS ZYX Euler Convention:
- *   - roll = X axis rotation (left/right tilt, a.k.a. bank)
- *   - pitch = Y axis rotation (forward/back tilt, a.k.a. elevation)
- *   - yaw = Z axis rotation (rotation while flat, a.k.a. heading)
+ * Physical Movements → AHRS Reports → Renderer:
+ *   - Physical ROLL (tilt pinky/thumb) → AHRS roll → renderer.yaw → RotY
+ *   - Physical PITCH (tilt fingers)    → AHRS pitch → renderer.pitch → RotX
+ *   - Physical YAW (spin while flat)   → AHRS yaw → renderer.roll → RotZ
  *
- * Renderer Axis Assignments:
- *   - renderer.pitch → RotX (X axis rotation)
- *   - renderer.yaw → RotY (Y axis rotation)
- *   - renderer.roll → RotZ (Z axis rotation)
- *
- * CORRECT AXIS MAPPING (matching axis types):
- *   - renderer.pitch (X) = AHRS.roll (X)   → -euler.roll + 90
- *   - renderer.yaw (Y) = AHRS.pitch (Y)    → euler.pitch + 180
- *   - renderer.roll (Z) = AHRS.yaw (Z)     → euler.yaw + 180
+ * The key insight: AHRS roll/pitch/yaw names match physical movements,
+ * but the renderer variable names (pitch/yaw/roll) map to different
+ * rotation axes (RotX/RotY/RotZ) than their names suggest.
  *
  * ROTATION ORDER: ZYX intrinsic (Z first, Y second, X third)
- * This matches how AHRS decomposes the quaternion into Euler angles.
  */
 
 /**
@@ -231,40 +224,43 @@ class Hand3DRenderer {
         if (!euler) return;
 
         // Map IMU Euler angles to hand model orientation
-        // The hand model has a base 180° Y rotation, so we need to account for that
-        // 
-        // When sensor is face-up (roll=0, pitch=0):
-        // - We want palm facing UP (toward ceiling)
-        // - The base 180° Y rotation shows palm to viewer
-        // - We need to add 90° pitch to rotate palm from facing viewer to facing up
         //
-        // Axis mapping:
-        // - IMU pitch → hand pitch (but inverted due to base rotation)
-        // - IMU roll → hand roll  
-        // - IMU yaw → hand yaw
-        // COORDINATE MAPPING (corrected 2025-12-14 based on calibration analysis):
+        // COORDINATE SYSTEM ANALYSIS (revised 2025-12-14 based on calibration V2):
         //
-        // AHRS ZYX Euler convention:
-        //   - roll = X axis rotation (left/right tilt)
-        //   - pitch = Y axis rotation (forward/back tilt)
-        //   - yaw = Z axis rotation (rotation while flat)
+        // Hand model coordinates (looking at palm facing viewer):
+        //   X axis: left-right (pinky to thumb direction)
+        //   Y axis: wrist to fingers direction
+        //   Z axis: palm to back of hand (toward viewer after base flip)
         //
-        // Renderer axis assignments (via RotX, RotY, RotZ):
-        //   - renderer.pitch → RotX (X axis rotation)
-        //   - renderer.yaw → RotY (Y axis rotation)
-        //   - renderer.roll → RotZ (Z axis rotation)
+        // AHRS Euler output (from getEulerAngles() ZYX extraction):
+        //   roll  = rotation measured about sensor X axis
+        //   pitch = rotation measured about sensor Y axis
+        //   yaw   = rotation measured about sensor Z axis
         //
-        // CORRECT AXIS MAPPING:
-        //   - renderer.pitch (X) = AHRS.roll (X)   - same axis
-        //   - renderer.yaw (Y) = AHRS.pitch (Y)    - same axis
-        //   - renderer.roll (Z) = AHRS.yaw (Z)     - same axis
+        // Physical movements and what AHRS reports (verified from calibration data):
+        //   Physical ROLL  (tilt pinky/thumb down) → AHRS roll changes
+        //   Physical PITCH (tilt fingers up/down)  → AHRS pitch changes
+        //   Physical YAW   (rotate while flat)     → AHRS yaw changes
         //
-        // With 90° offset for palm-up baseline and 180° base flip compensation:
+        // Renderer rotations (in render()):
+        //   renderer.pitch → RotX (rotates around X = tilts fingers toward/away)
+        //   renderer.yaw   → RotY (rotates around Y = tilts hand left/right)
+        //   renderer.roll  → RotZ (rotates around Z = spins hand)
+        //
+        // CORRECT MAPPING (physical movement → visual result):
+        //   Physical roll  → hand tilts left/right → RotY → renderer.yaw
+        //   Physical pitch → fingers tilt          → RotX → renderer.pitch
+        //   Physical yaw   → hand spins           → RotZ → renderer.roll
+        //
+        // Therefore:
+        //   renderer.pitch = f(AHRS pitch)  - both are X-axis related for finger tilt
+        //   renderer.yaw   = f(AHRS roll)   - AHRS roll causes RotY visual
+        //   renderer.roll  = f(AHRS yaw)    - both are Z-axis related for spin
         //
         const mappedOrientation = {
-            pitch: -euler.roll + 90 + this.orientationOffset.pitch,   // AHRS roll (X) → renderer pitch (X)
-            yaw: euler.pitch + 180 + this.orientationOffset.yaw,      // AHRS pitch (Y) → renderer yaw (Y)
-            roll: euler.yaw + 180 + this.orientationOffset.roll       // AHRS yaw (Z) → renderer roll (Z)
+            pitch: -euler.pitch + this.orientationOffset.pitch,  // AHRS pitch → RotX (finger tilt)
+            yaw: -euler.roll + this.orientationOffset.yaw,       // AHRS roll → RotY (hand tilt L/R) - negated for correct direction
+            roll: euler.yaw + this.orientationOffset.roll        // AHRS yaw → RotZ (hand spin)
         };
 
         this.setOrientation(mappedOrientation);
@@ -344,10 +340,27 @@ class Hand3DRenderer {
         // Apply in ZYX order: Z first, then Y, then X
         // This matches how AHRS decomposes the quaternion
         //
+        // PIVOT POINT: Rotate around sensor position (center of palm)
+        // The sensor is mounted on the palm, so rotations should pivot there,
+        // not at the wrist. This is achieved by:
+        // 1. Apply base flip first (constant transform)
+        // 2. For user rotations: translate sensor to origin, rotate, translate back
+        //
+        // After the base 180° Y flip, the sensor position [0, 0.15, 0.12] becomes [0, 0.15, -0.12]
+        // (Z is negated by the Y rotation)
+        //
+        const sensorPivot = [0, 0.15, -0.12];  // Sensor position AFTER base flip
+
+        // Build transform: base flip, then pivot-centered user rotations
+        // With post-multiplication (M = M × R), rotations are in local/object space
         let handM = this._matRotY(Math.PI); // Base flip to show palm
+
+        // Pivot to sensor, apply user rotations, pivot back
+        handM = this._matMul(handM, this._matTrans(-sensorPivot[0], -sensorPivot[1], -sensorPivot[2]));
         handM = this._matMul(handM, this._matRotZ(roll));   // Z rotation first (yaw/heading)
         handM = this._matMul(handM, this._matRotY(yaw));    // Y rotation second (pitch/elevation)
         handM = this._matMul(handM, this._matRotX(pitch));  // X rotation third (roll/bank)
+        handM = this._matMul(handM, this._matTrans(sensorPivot[0], sensorPivot[1], sensorPivot[2]));
 
         const lines = [];
         const pts = [];

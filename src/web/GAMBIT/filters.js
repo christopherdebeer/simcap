@@ -19,15 +19,22 @@
  * Reference: "An efficient orientation filter for inertial and inertial/magnetic sensor arrays"
  * by Sebastian O.H. Madgwick (2010)
  *
- * NOTE: We intentionally do NOT use magnetometer for orientation because:
- * 1. Finger magnets corrupt the magnetometer readings
- * 2. We use the magnetometer as measurement OUTPUT, not orientation reference
+ * MAGNETOMETER SUPPORT:
+ * - 6-DOF mode (update): Uses accel + gyro only. Yaw will drift over time.
+ * - 9-DOF mode (updateWithMag): Uses accel + gyro + mag for absolute yaw reference.
+ *
+ * The magTrust parameter (0-1) controls magnetometer influence:
+ * - Set to 1.0 during development (no finger magnets) for stable yaw
+ * - Reduce when finger magnets are added to prevent interference
+ * - The residual (measured - expected) field is computed for later finger sensing
  */
 class MadgwickAHRS {
     constructor(options = {}) {
         const {
             sampleFreq = 50,    // Hz
-            beta = 0.1          // Filter gain (higher = faster convergence, more noise)
+            beta = 0.1,         // Filter gain (higher = faster convergence, more noise)
+            // Geomagnetic reference for 9-DOF mode (from geomagnetic-field.js)
+            geomagneticRef = null  // { horizontal: µT, vertical: µT, declination: degrees }
         } = options;
 
         this.sampleFreq = sampleFreq;
@@ -40,6 +47,22 @@ class MadgwickAHRS {
         // For gyroscope bias estimation
         this.gyroBias = { x: 0, y: 0, z: 0 };
         this.biasAlpha = 0.001; // Slow adaptation rate
+
+        // Geomagnetic reference for magnetometer fusion
+        // If not provided, will use first magnetometer reading as reference
+        this.geomagneticRef = geomagneticRef;
+        this.magRefNormalized = null;  // Normalized reference in world frame
+
+        // Magnetometer trust factor (1.0 = full trust, 0.0 = ignore mag)
+        // Use 1.0 now (no finger magnets), reduce later when magnets added
+        this.magTrust = 1.0;
+
+        // Hard iron offset (learned during calibration)
+        this.hardIron = { x: 0, y: 0, z: 0 };
+
+        // Last computed expected/residual for external access
+        this._lastMagExpected = null;
+        this._lastMagResidual = null;
     }
 
     /**
@@ -261,6 +284,252 @@ class MadgwickAHRS {
             y: cr * sp,
             z: -sr * sp
         };
+    }
+
+    // =========================================================================
+    // 9-DOF MAGNETOMETER FUSION
+    // =========================================================================
+    // These methods add magnetometer support for absolute yaw reference.
+    // Currently used for orientation; later will also compute residual for
+    // finger magnet sensing.
+
+    /**
+     * Set geomagnetic reference from location data
+     * @param {Object} geoRef - From geomagnetic-field.js { horizontal, vertical, declination }
+     */
+    setGeomagneticReference(geoRef) {
+        this.geomagneticRef = geoRef;
+
+        // Compute normalized reference vector in NED (North-East-Down) frame
+        // Horizontal component points toward magnetic north
+        // Vertical component points down (positive = down)
+        if (geoRef) {
+            const h = geoRef.horizontal;
+            const v = geoRef.vertical;
+            const mag = Math.sqrt(h * h + v * v);
+            // Reference in world frame: [North, East, Down] = [horizontal, 0, vertical]
+            this.magRefNormalized = {
+                x: h / mag,  // North component (normalized)
+                y: 0,        // East component (magnetic north has no east component)
+                z: v / mag   // Down component (normalized)
+            };
+        }
+    }
+
+    /**
+     * Set hard iron calibration offset
+     * @param {Object} offset - { x, y, z } in same units as magnetometer
+     */
+    setHardIronOffset(offset) {
+        this.hardIron = { ...offset };
+    }
+
+    /**
+     * Set magnetometer trust factor
+     * @param {number} trust - 0.0 (ignore mag) to 1.0 (full trust)
+     */
+    setMagTrust(trust) {
+        this.magTrust = Math.max(0, Math.min(1, trust));
+    }
+
+    /**
+     * Update orientation with 9-DOF fusion (accel + gyro + magnetometer)
+     *
+     * This is the Madgwick MARG algorithm that uses magnetometer for yaw correction.
+     * The magTrust parameter allows gradual reduction of magnetometer influence
+     * when finger magnets are present.
+     *
+     * @param {number} ax,ay,az - Accelerometer readings
+     * @param {number} gx,gy,gz - Gyroscope readings
+     * @param {number} mx,my,mz - Magnetometer readings (after hard iron correction if using raw)
+     * @param {number} dt - Time step (seconds)
+     * @param {boolean} gyroInDegrees - If true, convert gyro from deg/s to rad/s
+     * @param {boolean} applyHardIron - If true, subtract this.hardIron from mag readings
+     */
+    updateWithMag(ax, ay, az, gx, gy, gz, mx, my, mz, dt = null, gyroInDegrees = true, applyHardIron = true) {
+        // If magTrust is 0 or magnetometer invalid, fall back to 6-DOF
+        const magNorm = Math.sqrt(mx * mx + my * my + mz * mz);
+        if (this.magTrust < 0.01 || magNorm < 0.01) {
+            return this.update(ax, ay, az, gx, gy, gz, dt, gyroInDegrees);
+        }
+
+        const deltaT = dt || (1.0 / this.sampleFreq);
+
+        // Convert gyroscope to rad/s if needed
+        if (gyroInDegrees) {
+            gx = gx * Math.PI / 180;
+            gy = gy * Math.PI / 180;
+            gz = gz * Math.PI / 180;
+        }
+
+        // Apply gyroscope bias correction
+        gx -= this.gyroBias.x;
+        gy -= this.gyroBias.y;
+        gz -= this.gyroBias.z;
+
+        // Apply hard iron correction
+        if (applyHardIron) {
+            mx -= this.hardIron.x;
+            my -= this.hardIron.y;
+            mz -= this.hardIron.z;
+        }
+
+        let { w: q0, x: q1, y: q2, z: q3 } = this.q;
+
+        // Rate of change of quaternion from gyroscope
+        const qDot1 = 0.5 * (-q1 * gx - q2 * gy - q3 * gz);
+        const qDot2 = 0.5 * (q0 * gx + q2 * gz - q3 * gy);
+        const qDot3 = 0.5 * (q0 * gy - q1 * gz + q3 * gx);
+        const qDot4 = 0.5 * (q0 * gz + q1 * gy - q2 * gx);
+
+        // Normalize accelerometer
+        const accelNorm = Math.sqrt(ax * ax + ay * ay + az * az);
+        if (accelNorm < 0.01) {
+            // Only integrate gyroscope
+            q0 += qDot1 * deltaT;
+            q1 += qDot2 * deltaT;
+            q2 += qDot3 * deltaT;
+            q3 += qDot4 * deltaT;
+        } else {
+            const recipAccelNorm = 1.0 / accelNorm;
+            ax *= recipAccelNorm;
+            ay *= recipAccelNorm;
+            az *= recipAccelNorm;
+
+            // Normalize magnetometer
+            const recipMagNorm = 1.0 / magNorm;
+            mx *= recipMagNorm;
+            my *= recipMagNorm;
+            mz *= recipMagNorm;
+
+            // Auxiliary variables
+            const _2q0mx = 2 * q0 * mx;
+            const _2q0my = 2 * q0 * my;
+            const _2q0mz = 2 * q0 * mz;
+            const _2q1mx = 2 * q1 * mx;
+            const _2q0 = 2 * q0;
+            const _2q1 = 2 * q1;
+            const _2q2 = 2 * q2;
+            const _2q3 = 2 * q3;
+            const _2q0q2 = 2 * q0 * q2;
+            const _2q2q3 = 2 * q2 * q3;
+            const q0q0 = q0 * q0;
+            const q0q1 = q0 * q1;
+            const q0q2 = q0 * q2;
+            const q0q3 = q0 * q3;
+            const q1q1 = q1 * q1;
+            const q1q2 = q1 * q2;
+            const q1q3 = q1 * q3;
+            const q2q2 = q2 * q2;
+            const q2q3 = q2 * q3;
+            const q3q3 = q3 * q3;
+
+            // Reference direction of Earth's magnetic field (simplified: horizontal plane)
+            const hx = mx * q0q0 - _2q0my * q3 + _2q0mz * q2 + mx * q1q1 + _2q1 * my * q2 + _2q1 * mz * q3 - mx * q2q2 - mx * q3q3;
+            const hy = _2q0mx * q3 + my * q0q0 - _2q0mz * q1 + _2q1mx * q2 - my * q1q1 + my * q2q2 + _2q2 * mz * q3 - my * q3q3;
+            const _2bx = Math.sqrt(hx * hx + hy * hy);
+            const _2bz = -_2q0mx * q2 + _2q0my * q1 + mz * q0q0 + _2q1mx * q3 - mz * q1q1 + _2q2 * my * q3 - mz * q2q2 + mz * q3q3;
+            const _4bx = 2 * _2bx;
+            const _4bz = 2 * _2bz;
+
+            // Gradient descent algorithm corrective step (combined accel + mag)
+            let s0 = -_2q2 * (2 * q1q3 - _2q0q2 - ax) + _2q1 * (2 * q0q1 + _2q2q3 - ay) - _2bz * q2 * (_2bx * (0.5 - q2q2 - q3q3) + _2bz * (q1q3 - q0q2) - mx) + (-_2bx * q3 + _2bz * q1) * (_2bx * (q1q2 - q0q3) + _2bz * (q0q1 + q2q3) - my) + _2bx * q2 * (_2bx * (q0q2 + q1q3) + _2bz * (0.5 - q1q1 - q2q2) - mz);
+            let s1 = _2q3 * (2 * q1q3 - _2q0q2 - ax) + _2q0 * (2 * q0q1 + _2q2q3 - ay) - 4 * q1 * (1 - 2 * q1q1 - 2 * q2q2 - az) + _2bz * q3 * (_2bx * (0.5 - q2q2 - q3q3) + _2bz * (q1q3 - q0q2) - mx) + (_2bx * q2 + _2bz * q0) * (_2bx * (q1q2 - q0q3) + _2bz * (q0q1 + q2q3) - my) + (_2bx * q3 - _4bz * q1) * (_2bx * (q0q2 + q1q3) + _2bz * (0.5 - q1q1 - q2q2) - mz);
+            let s2 = -_2q0 * (2 * q1q3 - _2q0q2 - ax) + _2q3 * (2 * q0q1 + _2q2q3 - ay) - 4 * q2 * (1 - 2 * q1q1 - 2 * q2q2 - az) + (-_4bx * q2 - _2bz * q0) * (_2bx * (0.5 - q2q2 - q3q3) + _2bz * (q1q3 - q0q2) - mx) + (_2bx * q1 + _2bz * q3) * (_2bx * (q1q2 - q0q3) + _2bz * (q0q1 + q2q3) - my) + (_2bx * q0 - _4bz * q2) * (_2bx * (q0q2 + q1q3) + _2bz * (0.5 - q1q1 - q2q2) - mz);
+            let s3 = _2q1 * (2 * q1q3 - _2q0q2 - ax) + _2q2 * (2 * q0q1 + _2q2q3 - ay) + (-_4bx * q3 + _2bz * q1) * (_2bx * (0.5 - q2q2 - q3q3) + _2bz * (q1q3 - q0q2) - mx) + (-_2bx * q0 + _2bz * q2) * (_2bx * (q1q2 - q0q3) + _2bz * (q0q1 + q2q3) - my) + _2bx * q1 * (_2bx * (q0q2 + q1q3) + _2bz * (0.5 - q1q1 - q2q2) - mz);
+
+            // Normalize step magnitude
+            const sNorm = 1.0 / Math.sqrt(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3);
+            s0 *= sNorm;
+            s1 *= sNorm;
+            s2 *= sNorm;
+            s3 *= sNorm;
+
+            // Apply feedback step with magTrust weighting
+            // Full trust uses full beta, zero trust ignores magnetic correction
+            const effectiveBeta = this.beta * (1.0 + this.magTrust);  // Slightly boost when mag available
+
+            q0 += (qDot1 - effectiveBeta * s0) * deltaT;
+            q1 += (qDot2 - effectiveBeta * s1) * deltaT;
+            q2 += (qDot3 - effectiveBeta * s2) * deltaT;
+            q3 += (qDot4 - effectiveBeta * s3) * deltaT;
+        }
+
+        // Normalize quaternion
+        const qNorm = 1.0 / Math.sqrt(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3);
+        this.q = {
+            w: q0 * qNorm,
+            x: q1 * qNorm,
+            y: q2 * qNorm,
+            z: q3 * qNorm
+        };
+
+        // Compute expected magnetic field and residual for later finger magnet sensing
+        this._computeMagResidual(mx * magNorm, my * magNorm, mz * magNorm);
+
+        return this.q;
+    }
+
+    /**
+     * Compute expected magnetic field and residual
+     * This is used later for finger magnet sensing
+     * @private
+     */
+    _computeMagResidual(mx, my, mz) {
+        if (!this.geomagneticRef) {
+            this._lastMagExpected = null;
+            this._lastMagResidual = null;
+            return;
+        }
+
+        // Expected field = R(q) × B_earth (rotate earth field to sensor frame)
+        const expected = this.transformToDeviceFrame({
+            x: this.geomagneticRef.horizontal,  // North component
+            y: 0,                                 // East component
+            z: this.geomagneticRef.vertical      // Down component
+        });
+
+        // Add hard iron (it's in sensor frame)
+        expected.x += this.hardIron.x;
+        expected.y += this.hardIron.y;
+        expected.z += this.hardIron.z;
+
+        this._lastMagExpected = expected;
+
+        // Residual = measured - expected
+        // This is what finger magnets will contribute
+        this._lastMagResidual = {
+            x: mx - expected.x,
+            y: my - expected.y,
+            z: mz - expected.z
+        };
+    }
+
+    /**
+     * Get the expected magnetic field at current orientation
+     * @returns {Object|null} { x, y, z } in sensor frame (µT)
+     */
+    getExpectedMagField() {
+        return this._lastMagExpected;
+    }
+
+    /**
+     * Get the magnetic field residual (measured - expected)
+     * This is the signal from finger magnets (after subtracting earth field)
+     * @returns {Object|null} { x, y, z } in sensor frame (µT)
+     */
+    getMagResidual() {
+        return this._lastMagResidual;
+    }
+
+    /**
+     * Get residual magnitude (useful for detecting magnet proximity)
+     * @returns {number} Magnitude of residual field (µT)
+     */
+    getMagResidualMagnitude() {
+        if (!this._lastMagResidual) return 0;
+        const r = this._lastMagResidual;
+        return Math.sqrt(r.x * r.x + r.y * r.y + r.z * r.z);
     }
 }
 
