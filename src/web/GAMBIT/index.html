@@ -667,6 +667,10 @@
                                         <span>Samples: <span id="calibSamples">0</span></span>
                                         <span>Field: <span id="earthFieldMag">-- µT</span></span>
                                     </div>
+                                    <div style="display: flex; justify-content: space-between; margin-top: 2px;">
+                                        <span>Residual: <span id="meanResidual" style="font-weight: bold;">-- µT</span></span>
+                                        <span id="residualQuality" style="font-size: 0.55rem;">--</span>
+                                    </div>
                                     <div id="calibStatus" style="margin-top: 4px; color: var(--fg-muted);">Collecting samples...</div>
                                 </div>
                             </div>
@@ -1054,7 +1058,7 @@
             // ===== Incremental Calibration =====
             // Builds calibration from streaming data (more robust than stored values)
             // Validated by analyze_raw_magnetic.py: achieves < 5 µT residual
-            const incrementalCalibration = new IncrementalCalibration();
+            const incrementalCalibration = new IncrementalCalibration({ debug: true });
             let incrementalCalibrationEnabled = true;  // Use incremental by default
             let lastConfidenceUpdate = 0;
             const CONFIDENCE_UPDATE_INTERVAL = 500;  // Update UI every 500ms
@@ -1101,6 +1105,16 @@
                     console.warn('[GAMBIT] Geolocation failed, using default:', error.message);
                     console.log(`[GAMBIT] Location: ${locationStr} (default)`);
                     console.log(`[GAMBIT] Magnetic field: ${geomagneticLocation.intensity.toFixed(1)} µT, Declination: ${geomagneticLocation.declination.toFixed(1)}°`);
+                }
+                
+                // CRITICAL: Pass geomagnetic reference to incremental calibration
+                // This enables using known Earth field direction instead of estimating from incomplete data
+                if (geomagneticLocation && incrementalCalibration) {
+                    incrementalCalibration.setGeomagneticReference({
+                        horizontal: geomagneticLocation.horizontal,
+                        vertical: geomagneticLocation.vertical,
+                        declination: geomagneticLocation.declination
+                    });
                 }
             }
 
@@ -1345,7 +1359,7 @@
                         showMarkers: true,
                         showCube: true,
                         showScaleKey: true,
-                        fixedBounds: 50,
+                        fixedBounds: 150,
                         backgroundColor: null,
                         scaleKeyPosition: 'top-right',
                         minAlpha: 0.1, 
@@ -1889,6 +1903,8 @@
                 const fieldMagEl = document.getElementById('earthFieldMag');
                 const statusEl = document.getElementById('calibStatus');
                 const barEl = document.getElementById('confidenceBar');
+                const meanResidualEl = document.getElementById('meanResidual');
+                const residualQualityEl = document.getElementById('residualQuality');
 
                 if (overallEl) overallEl.textContent = `${overall}%`;
                 if (hardIronEl) hardIronEl.textContent = `${hardIron}%`;
@@ -1898,6 +1914,40 @@
                 const earthMag = details.earthField.magnitude;
                 if (fieldMagEl) {
                     fieldMagEl.textContent = earthMag > 0 ? `${earthMag.toFixed(1)} µT` : '-- µT';
+                }
+
+                // Update mean residual display (the TRUE measure of calibration quality)
+                const meanResidual = details.residual?.meanMagnitude;
+                if (meanResidualEl) {
+                    if (meanResidual !== undefined && meanResidual !== Infinity && !isNaN(meanResidual)) {
+                        meanResidualEl.textContent = `${meanResidual.toFixed(1)} µT`;
+                        // Color based on residual quality
+                        if (meanResidual < 5) {
+                            meanResidualEl.style.color = 'var(--success)';
+                        } else if (meanResidual < 10) {
+                            meanResidualEl.style.color = 'var(--warning)';
+                        } else {
+                            meanResidualEl.style.color = 'var(--error)';
+                        }
+                    } else {
+                        meanResidualEl.textContent = '-- µT';
+                        meanResidualEl.style.color = 'var(--fg-muted)';
+                    }
+                }
+
+                // Update residual quality indicator
+                if (residualQualityEl && details.residual) {
+                    const interpretation = details.residual.interpretation || '--';
+                    residualQualityEl.textContent = interpretation.toUpperCase();
+                    if (interpretation === 'excellent') {
+                        residualQualityEl.style.color = 'var(--success)';
+                    } else if (interpretation === 'good') {
+                        residualQualityEl.style.color = '#8bc34a';
+                    } else if (interpretation === 'moderate') {
+                        residualQualityEl.style.color = 'var(--warning)';
+                    } else {
+                        residualQualityEl.style.color = 'var(--error)';
+                    }
                 }
 
                 // Update progress bar
@@ -1913,22 +1963,23 @@
                     }
                 }
 
-                // Update status text
+                // Update status text - now based on residual
                 if (statusEl) {
                     const status = [];
-                    if (overall < 30) {
-                        status.push('Rotate device to collect more data');
-                    } else if (overall < 70) {
-                        status.push('Improving... keep rotating');
-                        if (details.hardIron.coverage < 0.75) {
-                            status.push(`Coverage: ${Math.round(details.hardIron.coverage * 100)}%`);
+                    if (meanResidual !== undefined && meanResidual !== Infinity && !isNaN(meanResidual)) {
+                        if (meanResidual < 5) {
+                            status.push('✓ Excellent calibration');
+                        } else if (meanResidual < 10) {
+                            status.push('Good calibration');
+                        } else if (meanResidual < 15) {
+                            status.push('Moderate - keep rotating');
+                        } else {
+                            status.push('Poor - rotate more');
                         }
+                    } else if (details.hardIron.sampleCount < 100) {
+                        status.push('Collecting samples...');
                     } else {
-                        status.push('✓ Good calibration');
-                        // Show Earth field sanity check
-                        if (earthMag < 25 || earthMag > 65) {
-                            status.push(`⚠ Field: ${earthMag.toFixed(0)} µT (expect 25-65)`);
-                        }
+                        status.push('Rotate device to calibrate');
                     }
                     statusEl.textContent = status.join(' | ');
                 }

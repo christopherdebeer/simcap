@@ -47,6 +47,8 @@ export function setDependencies(dependencies) {
 export function initProcessor() {
     telemetryProcessor = new TelemetryProcessor({
         calibration: deps.calibrationInstance,
+        useIncrementalCalibration: true,  // Enable live incremental calibration
+        incrementalCalibrationDebug: true, // Enable debug logging
         onOrientationUpdate: (euler, quaternion) => {
             // Update Three.js hand skeleton if available
             if (euler) {
@@ -60,6 +62,14 @@ export function initProcessor() {
             console.log('[TelemetryHandler] Gyroscope bias calibration complete');
         }
     });
+}
+
+/**
+ * Get incremental calibration instance
+ * @returns {IncrementalCalibration|null}
+ */
+export function getIncrementalCalibration() {
+    return telemetryProcessor?.getIncrementalCalibration() ?? null;
 }
 
 /**

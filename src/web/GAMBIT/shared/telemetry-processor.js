@@ -31,6 +31,10 @@ import {
     getBrowserLocation
 } from './geomagnetic-field.js';
 
+import {
+    IncrementalCalibration
+} from './incremental-calibration.js';
+
 /**
  * TelemetryProcessor class
  * 
@@ -53,12 +57,20 @@ export class TelemetryProcessor {
      * @param {Function} [options.onGyroBiasCalibrated] - Callback when gyro bias is calibrated
      * @param {boolean} [options.useMagnetometer=true] - Enable 9-DOF fusion with magnetometer
      * @param {number} [options.magTrust=0.5] - Magnetometer trust factor (0-1)
+     * @param {boolean} [options.useIncrementalCalibration=false] - Enable live incremental calibration
+     * @param {boolean} [options.incrementalCalibrationDebug=false] - Enable debug logging for incremental calibration
      */
     constructor(options = {}) {
         this.options = options;
 
         // Calibration instance (external, for magnetometer correction)
         this.calibration = options.calibration || null;
+        
+        // Incremental calibration (live calibration from streaming data)
+        this.useIncrementalCalibration = options.useIncrementalCalibration || false;
+        this.incrementalCalibration = new IncrementalCalibration({
+            debug: options.incrementalCalibrationDebug || false
+        });
 
         // Create signal processing components
         this.imuFusion = createMadgwickAHRS();
@@ -95,6 +107,35 @@ export class TelemetryProcessor {
         this._loggedOrientationMissing = false;
         this._loggedEarthCalibrationMissing = false;
         this._loggedMagFusion = false;
+        this._loggedIncrementalCalibration = false;
+    }
+    
+    /**
+     * Enable/disable incremental calibration
+     * @param {boolean} enabled
+     */
+    setIncrementalCalibrationEnabled(enabled) {
+        this.useIncrementalCalibration = enabled;
+        if (enabled && !this._loggedIncrementalCalibration) {
+            console.log('[TelemetryProcessor] Incremental calibration enabled');
+            this._loggedIncrementalCalibration = true;
+        }
+    }
+    
+    /**
+     * Get incremental calibration instance
+     * @returns {IncrementalCalibration}
+     */
+    getIncrementalCalibration() {
+        return this.incrementalCalibration;
+    }
+    
+    /**
+     * Reset incremental calibration
+     */
+    resetIncrementalCalibration() {
+        this.incrementalCalibration.reset();
+        console.log('[TelemetryProcessor] Incremental calibration reset');
     }
 
     /**
@@ -118,7 +159,7 @@ export class TelemetryProcessor {
     }
 
     /**
-     * Set geomagnetic reference on AHRS
+     * Set geomagnetic reference on AHRS and IncrementalCalibration
      * @param {Object} location - Location with horizontal, vertical, declination fields
      */
     _setGeomagneticRef(location) {
@@ -129,6 +170,9 @@ export class TelemetryProcessor {
                 declination: location.declination
             };
             this.imuFusion.setGeomagneticReference(this.geomagneticRef);
+            
+            // Also set on incremental calibration for known Earth field direction
+            this.incrementalCalibration.setGeomagneticReference(this.geomagneticRef);
         }
     }
 
@@ -409,6 +453,35 @@ export class TelemetryProcessor {
             );
         }
         
+        // ===== Step 5b: Incremental Calibration =====
+        // Feed samples to incremental calibration for live calibration building
+        if (this.useIncrementalCalibration && orientation) {
+            this.incrementalCalibration.addSample(
+                { x: mx_ut, y: my_ut, z: mz_ut },
+                orientation
+            );
+            
+            // Add incremental calibration metrics to decorated telemetry
+            decorated.incremental_cal_confidence = this.incrementalCalibration.getConfidence();
+            decorated.incremental_cal_mean_residual = this.incrementalCalibration.getMeanResidual();
+            decorated.incremental_cal_earth_magnitude = this.incrementalCalibration.getEarthFieldMagnitude();
+            
+            // If incremental calibration has good confidence, use it for residual calculation
+            const incCalConfidence = this.incrementalCalibration.getConfidence();
+            if (incCalConfidence > 0.3) {
+                const incResidual = this.incrementalCalibration.computeResidual(
+                    { x: mx_ut, y: my_ut, z: mz_ut },
+                    orientation
+                );
+                if (incResidual) {
+                    decorated.incremental_residual_mx = incResidual.residual.x;
+                    decorated.incremental_residual_my = incResidual.residual.y;
+                    decorated.incremental_residual_mz = incResidual.residual.z;
+                    decorated.incremental_residual_magnitude = incResidual.magnitude;
+                }
+            }
+        }
+        
         // ===== Step 6: Kalman Filtering =====
         // Use best available source: fused > calibrated > converted µT
         // IMPORTANT: Use µT values, not raw LSB
@@ -451,6 +524,10 @@ export class TelemetryProcessor {
         this._loggedOrientationMissing = false;
         this._loggedEarthCalibrationMissing = false;
         this._loggedMagFusion = false;
+        this._loggedIncrementalCalibration = false;
+        
+        // Reset incremental calibration
+        this.incrementalCalibration.reset();
 
         console.log('[TelemetryProcessor] Reset complete');
     }

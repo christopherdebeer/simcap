@@ -39,8 +39,10 @@ GYRO_SPEC = {
     'reference': 'https://www.st.com/resource/en/datasheet/lsm6ds3.pdf'
 }
 
-MAG_SPEC = {
+# Magnetometer: LIS3MDL (Puck.js v2) - LEGACY
+MAG_SPEC_LIS3MDL = {
     'sensor': 'LIS3MDL',
+    'puck_version': 'v2',
     'raw_unit': 'LSB',
     'converted_unit': 'µT',
     'range': '±4gauss',
@@ -48,14 +50,38 @@ MAG_SPEC = {
     'sensitivity': 6842,  # LSB per gauss
     'gauss_to_microtesla': 100,
     'conversion_factor': 100 / 6842,  # µT per LSB (0.014616)
-    'reference': 'https://www.st.com/resource/en/datasheet/lis3mdl.pdf',
+    'reference': 'https://www.st.com/resource/en/datasheet/lis3mdl.pdf'
+}
+
+# Magnetometer: MMC5603NJ (Puck.js v2.1a) - CURRENT
+# From datasheet: 16-bit mode = 1024 counts/Gauss
+MAG_SPEC_MMC5603NJ = {
+    'sensor': 'MMC5603NJ',
+    'puck_version': 'v2.1a',
+    'raw_unit': 'LSB',
+    'converted_unit': 'µT',
+    'range': '±30gauss',
+    'resolution': 16,  # Espruino uses 16-bit mode
+    'sensitivity': 1024,  # LSB per gauss (16-bit mode from datasheet)
+    'gauss_to_microtesla': 100,
+    'conversion_factor': 100 / 1024,  # µT per LSB (0.09765625)
+    'reference': 'src/device/GAMBIT/MMC5603NJ.pdf',
     'notes': [
         'Puck.mag() returns RAW LSB values',
         'Must multiply by conversion_factor to get µT',
         'Earth\'s magnetic field: ~25-65 µT total',
-        'Edinburgh, UK: ~50.5 µT total'
+        'Edinburgh, UK: ~50.5 µT total',
+        '16-bit mode: 1024 counts/Gauss (from datasheet page 2)',
+        'Expected ~461 LSB for 45 µT Earth field'
     ]
 }
+
+# Active magnetometer specification
+# IMPORTANT: Set this based on your Puck.js hardware version!
+# - Puck.js v2: LIS3MDL (MAG_SPEC_LIS3MDL)
+# - Puck.js v2.1a: MMC5603NJ (MAG_SPEC_MMC5603NJ)
+# Default: MMC5603NJ (Puck.js v2.1a) - most common current hardware
+MAG_SPEC = MAG_SPEC_MMC5603NJ
 
 # ===== Backward Compatibility Constants =====
 
