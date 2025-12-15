@@ -48,17 +48,10 @@ export function initProcessor() {
     telemetryProcessor = new TelemetryProcessor({
         calibration: deps.calibrationInstance,
         onOrientationUpdate: (euler, quaternion) => {
-            // Update hand 3D renderers if available
+            // Update Three.js hand skeleton if available
             if (euler) {
-                // Get current values (deps might be functions or values)
-                const hand3D = typeof deps.hand3DRenderer === 'function' ? deps.hand3DRenderer() : deps.hand3DRenderer;
                 const threeSkeleton = typeof deps.threeHandSkeleton === 'function' ? deps.threeHandSkeleton() : deps.threeHandSkeleton;
-                const useThree = typeof deps.useThreeJSRenderer === 'function' ? deps.useThreeJSRenderer() : deps.useThreeJSRenderer;
-
-                if (hand3D && !useThree) {
-                    hand3D.updateFromSensorFusion(euler);
-                }
-                if (threeSkeleton && useThree) {
+                if (threeSkeleton) {
                     threeSkeleton.updateOrientation(euler);
                 }
             }
