@@ -19,7 +19,6 @@
         <script src="calibration.js"></script>
         <script src="filters.js"></script>
         <script src="gesture-inference.js"></script>
-        <script src="hand-3d-renderer.js"></script>
         <!-- Three.js for skeletal hand visualization -->
         <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
         <style>
@@ -349,13 +348,6 @@
                 padding: var(--space-sm);
             }
 
-            #handCanvas3D {
-                border: 1px solid var(--border);
-                border-radius: var(--radius);
-                background: #1a1a2e;
-                max-width: 100%;
-                height: auto;
-            }
 
             .hand-mode-toggle {
                 display: flex;
@@ -385,6 +377,41 @@
             main > .card { 
                 flex-grow: 1;
             }
+
+            /* Collapsible card styles using details/summary */
+            details.card {
+                flex-grow: 1;
+            }
+
+            details.card > summary {
+                cursor: pointer;
+                list-style: none;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+
+            details.card > summary::-webkit-details-marker {
+                display: none;
+            }
+
+            details.card > summary::after {
+                content: '▼';
+                font-size: 0.7em;
+                transition: transform 0.2s ease;
+                color: var(--fg-muted);
+            }
+
+            details.card:not([open]) > summary::after {
+                transform: rotate(-90deg);
+            }
+
+            details.card > summary .card-header-content {
+                display: flex;
+                align-items: center;
+                gap: var(--space-sm);
+                flex: 1;
+            }
         </style>
     </head>
     <body>
@@ -398,20 +425,32 @@
         </header>
         
         <main>
-            <div class="card controls">
+            <details class="card controls" open>
+                <summary class="card-header">
+                    <span class="card-header-content">
+                        Device
+                        <span class="model-status" id="deviceStatus">
+                            <span class="status-dot"></span>
+                            <span>Disconnected</span>
+                        </span>
+                    </span>
+                </summary>
+                <!-- TODO show status -->
                 <button class="btn" id="connect">Connect</button>
                 <button class="btn" disabled id="getdata">Get data</button>
                 <input id="token" type="password" placeholder="GitHub token"/>
-            </div>
+            </details>
 
-            <div class="card">
-                <div class="card-header">
-                    Gesture Inference
-                    <span class="model-status" id="modelStatus">
-                        <span class="status-dot"></span>
-                        <span>Loading model...</span>
+            <details class="card" open>
+                <summary class="card-header">
+                    <span class="card-header-content">
+                        Gesture Inference
+                        <span class="model-status" id="modelStatus">
+                            <span class="status-dot"></span>
+                            <span>Loading model...</span>
+                        </span>
                     </span>
-                </div>
+                </summary>
                 <div class="gesture-display" id="gestureDisplay">
                     <div class="gesture-name" id="gestureName">--</div>
                     <div class="confidence" id="gestureConfidence">Waiting for data...</div>
@@ -420,19 +459,21 @@
                 <div class="gesture-probabilities" id="gestureProbabilities">
                     <!-- Populated by JS -->
                 </div>
-            </div>
+            </details>
 
-            <div class="card">
-                <div class="card-header">
-                    Sensor Data
-                    <select id="dataStageSelect" style="font-size: 0.75rem; padding: 2px 6px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--fg);">
-                        <option value="converted" selected>Converted (µT/g/°/s)</option>
-                        <option value="raw">Raw (LSB)</option>
-                        <option value="calibrated">Calibrated (iron corrected)</option>
-                        <option value="fused">Fused (Earth field removed)</option>
-                        <option value="filtered">Filtered (Kalman)</option>
-                    </select>
-                </div>
+            <details class="card" open>
+                <summary class="card-header">
+                    <span class="card-header-content">
+                        Sensor Data
+                        <select id="dataStageSelect" style="font-size: 0.75rem; padding: 2px 6px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--fg);" onclick="event.stopPropagation()">
+                            <option value="converted" selected>Converted (µT/g/°/s)</option>
+                            <option value="raw">Raw (LSB)</option>
+                            <option value="calibrated">Calibrated (iron corrected)</option>
+                            <option value="fused">Fused (Earth field removed)</option>
+                            <option value="filtered">Filtered (Kalman)</option>
+                        </select>
+                    </span>
+                </summary>
                 <div class="data-view">
                     <div id="battery"><progress max="100" value="0" id="b" title="0% battery"></progress></div>
                     <div id="button"><label>Btn:</label><span id="btn">0</span> <span id="count">0</span> <span id="state">0</span></div>
@@ -464,10 +505,12 @@
                 <div id="dataStageInfo" style="font-size: 0.7rem; color: var(--fg-muted); text-align: center; margin-top: var(--space-xs);">
                     Showing converted sensor values in physical units
                 </div>
-            </div>
+            </details>
 
-            <section id="three-d" class="card">
-                <div id="cubeM" class="cube">
+            <details class="card" open>
+                <summary class="card-header">3D Orientation Cubes</summary>
+                <div id="three-d">
+                    <div id="cubeM" class="cube">
                     <div class="face front">mag 1</div>
                     <div class="face back">mag 2</div>
                     <div class="face right">mag 3</div>
@@ -491,37 +534,20 @@
                     <div class="face top">gyro 5</div>
                     <div class="face bottom">gyro 6</div>
                 </div>
-            </section>
+                </div>
+            </details>
 
-            <div class="card" id="handCard">
-                <div class="card-header">
-                    Hand Orientation
-                    <label class="hand-mode-toggle">
-                        <input type="checkbox" id="handOrientationToggle" checked>
-                        <span>Track IMU</span>
-                    </label>
-                </div>
-                <div class="hand-canvas-container">
-                    <canvas id="handCanvas3D" width="300" height="300"></canvas>
-                </div>
-                <div id="eulerDebug" style="font-size: 0.7rem; color: var(--fg-muted); text-align: center; margin-top: var(--space-xs); font-family: monospace;">
-                    Roll: --° | Pitch: --° | Yaw: --°
-                </div>
-                <div style="display: flex; justify-content: center; gap: var(--space-sm); margin-top: var(--space-xs);">
-                    <button class="btn btn-sm" id="resetOrientationBtn">Reset Orientation</button>
-                    <button class="btn btn-sm" id="testPoseBtn">Test Pose (Point)</button>
-                </div>
-            </div>
-
-            <div class="card" id="threeHandCard">
-                <div class="card-header">
-                    Three.js Hand (Skeleton)
-                    <label class="hand-mode-toggle">
-                        <input type="checkbox" id="threeHandToggle" checked>
-                        <span>Track IMU</span>
-                    </label>
-                </div>
-                <div id="threeHandContainer" style="width: 300px; height: 300px; margin: 0 auto;"></div>
+            <details class="card" id="threeHandCard" open>
+                <summary class="card-header">
+                    <span class="card-header-content">
+                        Three.js Hand (Skeleton)
+                        <label class="hand-mode-toggle" onclick="event.stopPropagation()">
+                            <input type="checkbox" id="threeHandToggle" checked>
+                            <span>Track IMU</span>
+                        </label>
+                    </span>
+                </summary>
+                <div id="threeHandContainer" style="margin: 0 auto;"></div>
                 <div id="threeEulerDebug" style="font-size: 0.7rem; color: var(--fg-muted); text-align: center; margin-top: var(--space-xs); font-family: monospace;">
                     Roll: --° | Pitch: --° | Yaw: --°
                 </div>
@@ -615,8 +641,8 @@
                 </details>
 
                 <!-- Calibration Panel - Structured observation system -->
-                <details open style="margin-top: var(--space-sm); padding: var(--space-xs); border: 1px solid var(--accent); border-radius: var(--radius-sm); background: rgba(0,100,255,0.05);">
-                    <summary style="cursor: pointer; font-size: 0.75rem; font-weight: bold; padding: var(--space-xs); color: var(--accent);">
+                <details style="margin-top: var(--space-sm); padding: var(--space-xs); border: 1px solid var(--border); border-radius: var(--radius-sm);">
+                    <summary style="cursor: pointer; font-size: 0.75rem; font-weight: bold; padding: var(--space-xs); ">
                         🔬 Calibration System
                     </summary>
                     <div id="calibrationPanel" style="padding: var(--space-sm); font-size: 0.7rem; font-family: monospace;">
@@ -694,10 +720,46 @@
 
                     </div>
                 </details>
-            </div>
+            </details>
 
-            <div class="card" id="playbackCard">
-                <div class="card-header">Session Playback</div>
+            <details class="card" id="magTrajectoryCard" open>
+                <summary class="card-header">
+                    <span class="card-header-content">
+                        Magnetic Residual (3D Trajectory)
+                        <label class="hand-mode-toggle" onclick="event.stopPropagation()">
+                            <input type="checkbox" id="magTrajectoryToggle" checked>
+                            <span>Active</span>
+                        </label>
+                    </span>
+                </summary>
+                <div style="text-align: center; padding: var(--space-sm);">
+                    <canvas id="magTrajectoryCanvas" width="400" height="300" style="border: 1px solid var(--border); border-radius: var(--radius-sm); background: #ffffff;"></canvas>
+                </div>
+                <div id="magTrajectoryStats" style="font-size: 0.7rem; color: var(--fg-muted); text-align: center; margin-top: var(--space-xs); font-family: monospace;">
+                    Points: 0 | Magnitude: --µT (min: --, max: --, avg: --)
+                </div>
+                <div style="display: flex; justify-content: center; gap: var(--space-sm); margin-top: var(--space-xs);">
+                    <button class="btn btn-sm" id="clearMagTrajectoryBtn">Clear Trajectory</button>
+                </div>
+                <details style="margin-top: var(--space-sm); padding: var(--space-xs); border: 1px solid var(--border); border-radius: var(--radius-sm);">
+                    <summary style="cursor: pointer; font-size: 0.75rem; font-weight: bold; padding: var(--space-xs);">
+                        ℹ️ About Residual Magnetic Field
+                    </summary>
+                    <div style="padding: var(--space-sm); font-size: 0.75rem; line-height: 1.4;">
+                        <p><strong>What is shown:</strong></p>
+                        <ul style="margin: 4px 0; padding-left: 1.2em;">
+                            <li>Earth magnetic field: REMOVED (orientation-corrected)</li>
+                            <li>Hard iron distortion: REMOVED</li>
+                            <li>Soft iron distortion: REMOVED</li>
+                            <li>Result: Pure finger magnet signal in 3D</li>
+                        </ul>
+                        <p style="margin-top: 8px;"><strong>Visualization:</strong> Isometric projection with auto-scaling. Older points fade out. Green marker = start, Red marker = end.</p>
+                    </div>
+                </details>
+            </details>
+
+            <details class="card" id="playbackCard" open>
+                <summary class="card-header">Session Playback</summary>
                 <div class="playback-controls">
                     <select id="sessionSelect" class="session-select">
                         <option value="">-- Load sessions --</option>
@@ -722,7 +784,7 @@
                         </select>
                     </div>
                 </div>
-            </div>
+            </details>
         </main>
         <footer class="page-footer">
             <span>SIMCAP GAMBIT</span>
@@ -844,7 +906,8 @@
                 createKalmanFilter3D,
                 createMotionDetector,
                 createGyroBiasState,
-                createLowPassFilter
+                createLowPassFilter,
+                LowPassFilter
             } from './shared/sensor-config.js';
             import { TelemetryProcessor } from './shared/telemetry-processor.js';
             import {
@@ -865,6 +928,7 @@
                 formatLocation
             } from './shared/geomagnetic-field.js';
             import { ThreeJSHandSkeleton } from './shared/threejs-hand-skeleton.js';
+            import { MagneticTrajectory } from './modules/magnetic-trajectory.js';
             import { describeExpectedPose, getValidationTestCases } from './shared/orientation-model.js';
             import {
                 REFERENCE_POSES,
@@ -884,14 +948,23 @@
 
             function updateConnectionStatus(connected) {
                 console.log(`SIMCAP Device connected: ${connected}`)
+                const deviceStatus = document.getElementById('deviceStatus');
                 if (connected) {
                     window.connect.innerHTML = "Disconnect"
                     window.getdata.disabled = false
+                    if (deviceStatus) {
+                        deviceStatus.classList.add('ready');
+                        deviceStatus.querySelector('span:last-child').textContent = 'Connected';
+                    }
                 } else {
                     window.connect.innerHTML = "Connect"
                     window.getdata.disabled = true
                     isStreaming = false;
                     window.getdata.innerHTML = "Get data"
+                    if (deviceStatus) {
+                        deviceStatus.classList.remove('ready');
+                        deviceStatus.querySelector('span:last-child').textContent = 'Disconnected';
+                    }
                 }
             }
 
@@ -1000,50 +1073,13 @@
             // Initialize geomagnetic location on page load
             initGeomagneticLocation();
 
-            // ===== Hand 3D Renderer =====
-            let hand3DRenderer = null;
-            let handOrientationEnabled = true;
-
-            function initHandRenderer() {
-                const canvas = document.getElementById('handCanvas3D');
-                if (!canvas || typeof Hand3DRenderer === 'undefined') {
-                    console.warn('[Hand3D] Hand3DRenderer not available');
-                    return;
-                }
-
-                // NOTE: With stable sensor data, we can use higher alpha for responsiveness
-                // Previous jitter-compensating value: orientationAlpha: 0.15
-                hand3DRenderer = new Hand3DRenderer(canvas, {
-                    backgroundColor: '#efefef',
-                    orientationMode: 'sensor_fusion',
-                    orientationFiltering: true,
-                    orientationAlpha: 0.3,  // More responsive (was 0.15 for jittery data)
-                    pitchOffset: 0,
-                    yawOffset: 0,
-                    rollOffset: 0
-                });
-
-                hand3DRenderer.startAnimation();
-                console.log('[Hand3D] Renderer initialized');
-
-                // Toggle handler
-                const toggle = document.getElementById('handOrientationToggle');
-                if (toggle) {
-                    toggle.addEventListener('change', (e) => {
-                        handOrientationEnabled = e.target.checked;
-                        if (hand3DRenderer) {
-                            hand3DRenderer.setOrientationMode(
-                                handOrientationEnabled ? 'sensor_fusion' : 'static'
-                            );
-                        }
-                        console.log('[Hand3D] IMU tracking:', handOrientationEnabled ? 'ON' : 'OFF');
-                    });
-                }
-            }
-
             // ===== Three.js Hand Skeleton =====
             let threeHandSkeleton = null;
             let threeHandEnabled = true;
+
+            // ===== Magnetic Trajectory Visualization =====
+            let magTrajectory = null;
+            let magTrajectoryEnabled = true;
 
             function initThreeHandSkeleton() {
                 const container = document.getElementById('threeHandContainer');
@@ -1054,9 +1090,9 @@
 
                 try {
                     threeHandSkeleton = new ThreeJSHandSkeleton(container, {
-                        width: 300,
+                        width: 500,
                         height: 300,
-                        backgroundColor: 0x1a1a2e,
+                        backgroundColor: 0xffffff,
                         lerpFactor: 0.15,
                         handedness: 'right'  // Default to right hand
                     });
@@ -1255,6 +1291,69 @@
 
                 } catch (err) {
                     console.error('[ThreeHand] Failed to initialize:', err);
+                }
+            }
+
+            // ===== Magnetic Trajectory Visualization =====
+            function initMagneticTrajectory() {
+                const canvas = document.getElementById('magTrajectoryCanvas');
+                if (!canvas) {
+                    console.warn('[MagTrajectory] Canvas not found');
+                    return;
+                }
+
+                try {
+                    magTrajectory = new MagneticTrajectory(canvas, {
+                        maxPoints: 150,
+                        scale: 0.35,
+                        autoNormalize: true,
+                        trajectoryColor: '#4ecdc4',
+                        showMarkers: true,
+                        showCube: true,
+                        showScaleKey: true,
+                        fixedBounds: 50,
+                        backgroundColor: null,
+                        scaleKeyPosition: 'top-right',
+                        minAlpha: 0.1, 
+                    });
+
+                    console.log('[MagTrajectory] Initialized');
+
+                    // Toggle handler
+                    const toggle = document.getElementById('magTrajectoryToggle');
+                    if (toggle) {
+                        toggle.addEventListener('change', (e) => {
+                            magTrajectoryEnabled = e.target.checked;
+                            console.log('[MagTrajectory]', magTrajectoryEnabled ? 'ON' : 'OFF');
+                        });
+                    }
+
+                    // Clear button
+                    const clearBtn = document.getElementById('clearMagTrajectoryBtn');
+                    if (clearBtn) {
+                        clearBtn.addEventListener('click', () => {
+                            if (magTrajectory) {
+                                magTrajectory.clear();
+                                updateMagTrajectoryStats();
+                                console.log('[MagTrajectory] Cleared');
+                            }
+                        });
+                    }
+                } catch (err) {
+                    console.error('[MagTrajectory] Failed to initialize:', err);
+                }
+            }
+
+            // Update magnetic trajectory stats display
+            function updateMagTrajectoryStats() {
+                const statsDiv = document.getElementById('magTrajectoryStats');
+                if (!statsDiv || !magTrajectory) return;
+
+                const stats = magTrajectory.getStats();
+                if (stats.count === 0) {
+                    statsDiv.textContent = 'Points: 0 | Magnitude: --µT (min: --, max: --, avg: --)';
+                } else {
+                    statsDiv.textContent = `Points: ${stats.count} | Magnitude: ${stats.magnitude.avg.toFixed(2)}µT (min: ${stats.magnitude.min.toFixed(2)}, max: ${stats.magnitude.max.toFixed(2)}, avg: ${stats.magnitude.avg.toFixed(2)})`;
                 }
             }
 
@@ -1839,6 +1938,23 @@
                 window.gY.innerHTML = gy.toFixed(gyrDecimals);
                 window.gZ.innerHTML = gz.toFixed(gyrDecimals);
 
+                // Update calibration status indicator
+                const dataStageInfo = document.getElementById('dataStageInfo');
+                if (dataStageInfo && currentDataStage === 'fused') {
+                    if (decoratedData.fused_incomplete) {
+                        if (decoratedData.fused_uncalibrated) {
+                            dataStageInfo.innerHTML = '⚠️ <b>Best Effort:</b> Showing raw magnetic field (iron calibration missing)';
+                            dataStageInfo.style.color = '#ff9500';
+                        } else {
+                            dataStageInfo.innerHTML = '⚠️ <b>Best Effort:</b> Showing iron-corrected field (Earth field calibration missing)';
+                            dataStageInfo.style.color = '#ff9500';
+                        }
+                    } else {
+                        dataStageInfo.innerHTML = dataStages['fused'].info;
+                        dataStageInfo.style.color = 'var(--fg-muted)';
+                    }
+                }
+
                 // ===== CUBE VISUALIZATION =====
                 // Get orientation from telemetry processor
                 const euler = telemetryProcessor.getEulerAngles() || { roll: 0, pitch: 0, yaw: 0 };
@@ -1872,24 +1988,30 @@
                     yaw: prenorm.euler_yaw !== undefined ? prenorm.euler_yaw : euler.yaw
                 };
 
-                if (hand3DRenderer && handOrientationEnabled) {
-                    hand3DRenderer.updateFromSensorFusion(handEuler);
-                }
-
                 // Update Three.js hand skeleton with orientation
                 if (threeHandSkeleton && threeHandEnabled) {
                     threeHandSkeleton.updateOrientation(handEuler);
+                }
+
+                // Update magnetic trajectory with residual field
+                if (magTrajectory && magTrajectoryEnabled && decoratedData.fused_mx !== undefined) {
+                    magTrajectory.addPoint(
+                        decoratedData.fused_mx,
+                        decoratedData.fused_my,
+                        decoratedData.fused_mz
+                    );
+
+                    // Update stats every 50 points to reduce DOM updates
+                    if (magTrajectory.points && magTrajectory.points.length % 50 === 0) {
+                        updateMagTrajectoryStats();
+                    }
                 }
 
                 // Update calibration system with current sensor state
                 latestSensorData = { ax, ay, az, gx, gy, gz, mx, my, mz };
                 updateValidationPanel(handEuler);
 
-                // Update Euler debug displays
-                const eulerDebug = document.getElementById('eulerDebug');
-                if (eulerDebug && euler) {
-                    eulerDebug.textContent = `Roll: ${euler.roll.toFixed(1)}° | Pitch: ${euler.pitch.toFixed(1)}° | Yaw: ${euler.yaw.toFixed(1)}°`;
-                }
+                // Update Euler debug display
                 const threeEulerDebug = document.getElementById('threeEulerDebug');
                 if (threeEulerDebug && euler) {
                     threeEulerDebug.textContent = `Roll: ${euler.roll.toFixed(1)}° | Pitch: ${euler.pitch.toFixed(1)}° | Yaw: ${euler.yaw.toFixed(1)}°`;
@@ -2190,66 +2312,27 @@
             }
 
             try {
-                initHandRenderer();
-            } catch (e) {
-                console.error('[GAMBIT] Failed to init hand renderer:', e);
-            }
-
-            try {
                 initThreeHandSkeleton();
             } catch (e) {
                 console.error('[GAMBIT] Failed to init Three.js hand:', e);
             }
 
+            try {
+                initMagneticTrajectory();
+            } catch (e) {
+                console.error('[GAMBIT] Failed to init magnetic trajectory:', e);
+            }
+
             // ===== Reset Orientation Button =====
             // Allows user to re-initialize the AHRS from current accelerometer reading
-            document.getElementById('resetOrientationBtn')?.addEventListener('click', () => {
+            document.getElementById('threeResetBtn')?.addEventListener('click', () => {
                 console.log('[GAMBIT] Resetting orientation...');
                 telemetryProcessor.reset();
-                if (hand3DRenderer) {
-                    hand3DRenderer.resetOrientation();
-                }
                 // Reset cube filters too
                 Object.values(cubeFilters).forEach(filterSet => {
                     Object.values(filterSet).forEach(filter => filter.reset());
                 });
                 console.log('[GAMBIT] Orientation reset complete');
-            });
-
-            // ===== Test Pose Button =====
-            // Shows pointing pose (index finger extended only) to help verify orientation
-            let testPoseActive = false;
-            document.getElementById('testPoseBtn')?.addEventListener('click', () => {
-                testPoseActive = !testPoseActive;
-                const btn = document.getElementById('testPoseBtn');
-                
-                if (hand3DRenderer) {
-                    if (testPoseActive) {
-                        // Pointing pose: index extended, others flexed
-                        hand3DRenderer.setFingerPoses({
-                            thumb: 2,   // Flexed
-                            index: 0,   // Extended (pointing)
-                            middle: 2,  // Flexed
-                            ring: 2,    // Flexed
-                            pinky: 2    // Flexed
-                        });
-                        btn.textContent = 'Reset Pose';
-                        btn.style.background = 'var(--success)';
-                        console.log('[GAMBIT] Test pose: POINTING (index extended)');
-                    } else {
-                        // All fingers extended (open hand)
-                        hand3DRenderer.setFingerPoses({
-                            thumb: 0,
-                            index: 0,
-                            middle: 0,
-                            ring: 0,
-                            pinky: 0
-                        });
-                        btn.textContent = 'Test Pose (Point)';
-                        btn.style.background = '';
-                        console.log('[GAMBIT] Test pose: OPEN HAND');
-                    }
-                }
             });
 
             // ===== Session Playback System (using module) =====

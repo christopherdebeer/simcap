@@ -363,27 +363,50 @@ export class TelemetryProcessor {
                     );
                 } else if (!this.calibration.earthFieldCalibrated) {
                     if (!this._loggedEarthCalibrationMissing) {
-                        console.debug('[TelemetryProcessor] Earth field not calibrated - skipping fused fields');
+                        console.debug('[TelemetryProcessor] Earth field not calibrated - using best effort (iron-corrected only)');
                         this._loggedEarthCalibrationMissing = true;
                     }
+                    // Best effort: provide iron-corrected values as approximation
+                    // This shows the magnetic field without Earth field subtraction
+                    decorated.fused_mx = ironCorrected.x;
+                    decorated.fused_my = ironCorrected.y;
+                    decorated.fused_mz = ironCorrected.z;
+                    decorated.fused_incomplete = true; // Flag for UI to show warning
+                    decorated.residual_magnitude = Math.sqrt(
+                        ironCorrected.x ** 2 + ironCorrected.y ** 2 + ironCorrected.z ** 2
+                    );
                 } else if (!orientation) {
                     if (!this._loggedOrientationMissing) {
-                        console.debug('[TelemetryProcessor] Orientation not available - skipping fused fields');
+                        console.debug('[TelemetryProcessor] Orientation not available - using best effort (iron-corrected only)');
                         this._loggedOrientationMissing = true;
                     }
+                    // Best effort: provide iron-corrected values without orientation correction
+                    decorated.fused_mx = ironCorrected.x;
+                    decorated.fused_my = ironCorrected.y;
+                    decorated.fused_mz = ironCorrected.z;
+                    decorated.fused_incomplete = true; // Flag for UI to show warning
+                    decorated.residual_magnitude = Math.sqrt(
+                        ironCorrected.x ** 2 + ironCorrected.y ** 2 + ironCorrected.z ** 2
+                    );
                 }
             } catch (e) {
                 console.error('[TelemetryProcessor] Calibration correction failed:', e);
             }
         } else {
             if (!this._loggedCalibrationMissing) {
-                console.debug('[TelemetryProcessor] Calibration status:', {
-                    hasInstance: !!this.calibration,
-                    hardIronCalibrated: this.calibration?.hardIronCalibrated,
-                    softIronCalibrated: this.calibration?.softIronCalibrated
-                });
+                console.debug('[TelemetryProcessor] Iron calibration incomplete - using raw µT values as best effort');
                 this._loggedCalibrationMissing = true;
             }
+            // Best effort: use raw µT values when iron calibration is missing
+            // This at least shows the uncalibrated magnetic field
+            decorated.fused_mx = mx_ut;
+            decorated.fused_my = my_ut;
+            decorated.fused_mz = mz_ut;
+            decorated.fused_incomplete = true; // Flag for UI to show warning
+            decorated.fused_uncalibrated = true; // Flag indicating no iron calibration
+            decorated.residual_magnitude = Math.sqrt(
+                mx_ut ** 2 + my_ut ** 2 + mz_ut ** 2
+            );
         }
         
         // ===== Step 6: Kalman Filtering =====
