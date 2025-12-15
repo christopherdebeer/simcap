@@ -9,6 +9,7 @@ to identify where the high residual values come from.
 import json
 import numpy as np
 from pathlib import Path
+from sensor_units import MAG_SPEC
 
 
 def load_calibration(cal_path: Path) -> dict:
@@ -61,7 +62,7 @@ def diagnose_single_sample(sample: dict, cal: dict):
     if mx_raw != 0:
         conv_factor = mx_ut / mx_raw
         print(f"   Implied conversion factor: {conv_factor:.6f}")
-        print(f"   (Expected LIS3MDL factor: 0.014616)")
+        print(f"   (Expected {MAG_SPEC['sensor']} factor: {MAG_SPEC['conversion_factor']:.6f})")
 
     # Step 2: Hard iron correction
     print("\n3. HARD IRON CORRECTION:")
