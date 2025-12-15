@@ -116,41 +116,12 @@ export class IncrementalCalibration {
      * @private
      */
     _updateEarthFieldEstimate(mag, q) {
-        // Apply current hard iron correction
-        const corrected = {
-            x: mag.x - this._hardIronOffset.x,
-            y: mag.y - this._hardIronOffset.y,
-            z: mag.z - this._hardIronOffset.z
-        };
+        // NOTE: We no longer accumulate sums here because hard iron offset changes
+        // over time. Instead, we store raw samples and recompute in _computeCalibration
+        // using the current hard iron offset.
 
-        // Convert quaternion to rotation matrix (sensor to world)
-        // R transforms world->sensor, so R.T transforms sensor->world
-        const R = this._quaternionToRotationMatrix(q);
-
-        // Transform magnetometer reading to world frame
-        // mag_world = R.T @ mag_sensor (transpose for sensor->world)
-        const magWorld = {
-            x: R[0][0] * corrected.x + R[1][0] * corrected.y + R[2][0] * corrected.z,
-            y: R[0][1] * corrected.x + R[1][1] * corrected.y + R[2][1] * corrected.z,
-            z: R[0][2] * corrected.x + R[1][2] * corrected.y + R[2][2] * corrected.z
-        };
-
-        // Accumulate for running average
-        const ef = this.earthField;
-        ef.sumX += magWorld.x;
-        ef.sumY += magWorld.y;
-        ef.sumZ += magWorld.z;
-        ef.sumSqX += magWorld.x * magWorld.x;
-        ef.sumSqY += magWorld.y * magWorld.y;
-        ef.sumSqZ += magWorld.z * magWorld.z;
-        ef.sampleCount++;
-
-        // Track recent magnitude for stability metric
-        const magnitude = Math.sqrt(magWorld.x ** 2 + magWorld.y ** 2 + magWorld.z ** 2);
-        ef.recentMagnitudes.push(magnitude);
-        if (ef.recentMagnitudes.length > 100) {
-            ef.recentMagnitudes.shift();
-        }
+        // Just track sample count for minimum threshold check
+        this.earthField.sampleCount++;
     }
 
     /**
@@ -172,7 +143,6 @@ export class IncrementalCalibration {
      */
     _computeCalibration() {
         const hi = this.hardIron;
-        const ef = this.earthField;
 
         // Hard iron offset = center of min/max bounds
         if (hi.sampleCount >= this.minSamplesHardIron) {
@@ -183,22 +153,84 @@ export class IncrementalCalibration {
             };
         }
 
-        // Earth field = average of world-frame readings
-        if (ef.sampleCount >= this.minSamplesEarthField) {
-            this._earthFieldWorld = {
-                x: ef.sumX / ef.sampleCount,
-                y: ef.sumY / ef.sampleCount,
-                z: ef.sumZ / ef.sampleCount
-            };
-            this._earthFieldMagnitude = Math.sqrt(
-                this._earthFieldWorld.x ** 2 +
-                this._earthFieldWorld.y ** 2 +
-                this._earthFieldWorld.z ** 2
-            );
-        }
+        // Recompute Earth field from rolling window using CURRENT hard iron offset
+        // This fixes the issue where early samples had wrong hard iron correction
+        this._recomputeEarthFieldFromWindow();
 
         // Compute confidence metrics
         this._computeConfidence();
+    }
+
+    /**
+     * Recompute Earth field from rolling window with current hard iron
+     * @private
+     */
+    _recomputeEarthFieldFromWindow() {
+        const samples = this.recentSamples;
+        if (samples.length < this.minSamplesEarthField) {
+            return;
+        }
+
+        // Only use samples that have orientation
+        const validSamples = samples.filter(s => s.orientation && s.orientation.w !== undefined);
+        if (validSamples.length < this.minSamplesEarthField) {
+            return;
+        }
+
+        // Transform each sample to world frame using current hard iron
+        const earthVectors = [];
+        const magnitudes = [];
+
+        for (const s of validSamples) {
+            const mag = s.mag;
+            const q = s.orientation;
+
+            // Apply current hard iron correction (in magnetometer frame)
+            const corrected = {
+                x: mag.x - this._hardIronOffset.x,
+                y: mag.y - this._hardIronOffset.y,
+                z: mag.z - this._hardIronOffset.z
+            };
+
+            // CRITICAL: Align magnetometer to IMU frame before rotation
+            // Magnetometer: +X → fingers, +Y → wrist, +Z → palm
+            // Accel/Gyro:   +X → wrist,   +Y → fingers, +Z → palm
+            // So we swap X and Y to align mag to IMU frame
+            const aligned = {
+                x: corrected.y,  // mag Y becomes IMU X
+                y: corrected.x,  // mag X becomes IMU Y
+                z: corrected.z   // Z stays the same
+            };
+
+            // Convert quaternion to rotation matrix
+            const R = this._quaternionToRotationMatrix(q);
+
+            // Transform to world frame: R.T @ aligned
+            const magWorld = {
+                x: R[0][0] * aligned.x + R[1][0] * aligned.y + R[2][0] * aligned.z,
+                y: R[0][1] * aligned.x + R[1][1] * aligned.y + R[2][1] * aligned.z,
+                z: R[0][2] * aligned.x + R[1][2] * aligned.y + R[2][2] * aligned.z
+            };
+
+            earthVectors.push(magWorld);
+            magnitudes.push(Math.sqrt(magWorld.x ** 2 + magWorld.y ** 2 + magWorld.z ** 2));
+        }
+
+        // Average to get Earth field estimate
+        const n = earthVectors.length;
+        this._earthFieldWorld = {
+            x: earthVectors.reduce((sum, v) => sum + v.x, 0) / n,
+            y: earthVectors.reduce((sum, v) => sum + v.y, 0) / n,
+            z: earthVectors.reduce((sum, v) => sum + v.z, 0) / n
+        };
+        this._earthFieldMagnitude = Math.sqrt(
+            this._earthFieldWorld.x ** 2 +
+            this._earthFieldWorld.y ** 2 +
+            this._earthFieldWorld.z ** 2
+        );
+
+        // Store recent magnitudes for stability metric
+        this.earthField.recentMagnitudes = magnitudes.slice(-100);
     }
 
     /**
@@ -235,16 +267,18 @@ export class IncrementalCalibration {
         }
 
         // Earth field confidence based on:
-        // 1. Sample count
+        // 1. Sample count in rolling window
         // 2. Stability (low variance in recent magnitude estimates)
         // 3. Magnitude sanity (should be 25-65 µT)
 
         const ef = this.earthField;
-        if (ef.sampleCount < this.minSamplesEarthField) {
+        const validSamples = this.recentSamples.filter(s => s.orientation && s.orientation.w !== undefined);
+
+        if (validSamples.length < this.minSamplesEarthField) {
             this._earthFieldConfidence = 0;
         } else {
-            // Sample factor
-            const sampleFactor = Math.min(1, ef.sampleCount / 200);
+            // Sample factor: ramps to 1.0 at 200 valid samples in window
+            const sampleFactor = Math.min(1, validSamples.length / 200);
 
             // Magnitude sanity (peak at 45 µT, drops off outside 25-65 range)
             const mag = this._earthFieldMagnitude;
@@ -258,13 +292,15 @@ export class IncrementalCalibration {
             }
 
             // Stability: based on variance of recent magnitudes
-            let stability = 0;
+            let stability = 0.5; // Default moderate stability
             if (ef.recentMagnitudes.length >= 10) {
                 const mean = ef.recentMagnitudes.reduce((a, b) => a + b, 0) / ef.recentMagnitudes.length;
-                const variance = ef.recentMagnitudes.reduce((sum, m) => sum + (m - mean) ** 2, 0) / ef.recentMagnitudes.length;
-                const stdDev = Math.sqrt(variance);
-                // Good stability if std dev < 5% of mean
-                stability = Math.max(0, 1 - (stdDev / mean) * 10);
+                if (mean > 0) {
+                    const variance = ef.recentMagnitudes.reduce((sum, m) => sum + (m - mean) ** 2, 0) / ef.recentMagnitudes.length;
+                    const stdDev = Math.sqrt(variance);
+                    // Good stability if std dev < 5% of mean
+                    stability = Math.max(0, 1 - (stdDev / mean) * 10);
+                }
             }
 
             this._earthFieldConfidence = sampleFactor * Math.max(0.3, magnitudeSanity) * Math.max(0.5, stability);
@@ -380,27 +416,34 @@ export class IncrementalCalibration {
     computeResidual(mag, orientation) {
         if (!mag || !orientation) return null;
 
-        // Apply hard iron correction
+        // Apply hard iron correction (in magnetometer frame)
         const corrected = {
             x: mag.x - this._hardIronOffset.x,
             y: mag.y - this._hardIronOffset.y,
             z: mag.z - this._hardIronOffset.z
         };
 
-        // Rotate Earth field from world to sensor frame
+        // Align magnetometer to IMU frame (swap X/Y)
+        const aligned = {
+            x: corrected.y,  // mag Y becomes IMU X
+            y: corrected.x,  // mag X becomes IMU Y
+            z: corrected.z
+        };
+
+        // Rotate Earth field from world to sensor (IMU) frame
         const R = this._quaternionToRotationMatrix(orientation);
         // R transforms world->sensor directly
-        const earthSensor = {
+        const earthSensorIMU = {
             x: R[0][0] * this._earthFieldWorld.x + R[0][1] * this._earthFieldWorld.y + R[0][2] * this._earthFieldWorld.z,
             y: R[1][0] * this._earthFieldWorld.x + R[1][1] * this._earthFieldWorld.y + R[1][2] * this._earthFieldWorld.z,
             z: R[2][0] * this._earthFieldWorld.x + R[2][1] * this._earthFieldWorld.y + R[2][2] * this._earthFieldWorld.z
         };
 
-        // Residual = measured - expected
+        // Residual = measured (aligned) - expected (in IMU frame)
         const residual = {
-            x: corrected.x - earthSensor.x,
-            y: corrected.y - earthSensor.y,
-            z: corrected.z - earthSensor.z
+            x: aligned.x - earthSensorIMU.x,
+            y: aligned.y - earthSensorIMU.y,
+            z: aligned.z - earthSensorIMU.z
         };
 
         const magnitude = Math.sqrt(residual.x ** 2 + residual.y ** 2 + residual.z ** 2);
