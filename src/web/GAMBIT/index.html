@@ -19,7 +19,6 @@
         <script src="calibration.js"></script>
         <script src="filters.js"></script>
         <script src="gesture-inference.js"></script>
-        <script src="hand-3d-renderer.js"></script>
         <!-- Three.js for skeletal hand visualization -->
         <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
         <style>
@@ -349,13 +348,6 @@
                 padding: var(--space-sm);
             }
 
-            #handCanvas3D {
-                border: 1px solid var(--border);
-                border-radius: var(--radius);
-                background: #1a1a2e;
-                max-width: 100%;
-                height: auto;
-            }
 
             .hand-mode-toggle {
                 display: flex;
@@ -492,26 +484,6 @@
                     <div class="face bottom">gyro 6</div>
                 </div>
             </section>
-
-            <div class="card" id="handCard">
-                <div class="card-header">
-                    Hand Orientation
-                    <label class="hand-mode-toggle">
-                        <input type="checkbox" id="handOrientationToggle" checked>
-                        <span>Track IMU</span>
-                    </label>
-                </div>
-                <div class="hand-canvas-container">
-                    <canvas id="handCanvas3D" width="300" height="300"></canvas>
-                </div>
-                <div id="eulerDebug" style="font-size: 0.7rem; color: var(--fg-muted); text-align: center; margin-top: var(--space-xs); font-family: monospace;">
-                    Roll: --° | Pitch: --° | Yaw: --°
-                </div>
-                <div style="display: flex; justify-content: center; gap: var(--space-sm); margin-top: var(--space-xs);">
-                    <button class="btn btn-sm" id="resetOrientationBtn">Reset Orientation</button>
-                    <button class="btn btn-sm" id="testPoseBtn">Test Pose (Point)</button>
-                </div>
-            </div>
 
             <div class="card" id="threeHandCard">
                 <div class="card-header">
@@ -1034,47 +1006,6 @@
 
             // Initialize geomagnetic location on page load
             initGeomagneticLocation();
-
-            // ===== Hand 3D Renderer =====
-            let hand3DRenderer = null;
-            let handOrientationEnabled = true;
-
-            function initHandRenderer() {
-                const canvas = document.getElementById('handCanvas3D');
-                if (!canvas || typeof Hand3DRenderer === 'undefined') {
-                    console.warn('[Hand3D] Hand3DRenderer not available');
-                    return;
-                }
-
-                // NOTE: With stable sensor data, we can use higher alpha for responsiveness
-                // Previous jitter-compensating value: orientationAlpha: 0.15
-                hand3DRenderer = new Hand3DRenderer(canvas, {
-                    backgroundColor: '#efefef',
-                    orientationMode: 'sensor_fusion',
-                    orientationFiltering: true,
-                    orientationAlpha: 0.3,  // More responsive (was 0.15 for jittery data)
-                    pitchOffset: 0,
-                    yawOffset: 0,
-                    rollOffset: 0
-                });
-
-                hand3DRenderer.startAnimation();
-                console.log('[Hand3D] Renderer initialized');
-
-                // Toggle handler
-                const toggle = document.getElementById('handOrientationToggle');
-                if (toggle) {
-                    toggle.addEventListener('change', (e) => {
-                        handOrientationEnabled = e.target.checked;
-                        if (hand3DRenderer) {
-                            hand3DRenderer.setOrientationMode(
-                                handOrientationEnabled ? 'sensor_fusion' : 'static'
-                            );
-                        }
-                        console.log('[Hand3D] IMU tracking:', handOrientationEnabled ? 'ON' : 'OFF');
-                    });
-                }
-            }
 
             // ===== Three.js Hand Skeleton =====
             let threeHandSkeleton = null;
@@ -1971,10 +1902,6 @@
                     yaw: prenorm.euler_yaw !== undefined ? prenorm.euler_yaw : euler.yaw
                 };
 
-                if (hand3DRenderer && handOrientationEnabled) {
-                    hand3DRenderer.updateFromSensorFusion(handEuler);
-                }
-
                 // Update Three.js hand skeleton with orientation
                 if (threeHandSkeleton && threeHandEnabled) {
                     threeHandSkeleton.updateOrientation(handEuler);
@@ -1998,11 +1925,7 @@
                 latestSensorData = { ax, ay, az, gx, gy, gz, mx, my, mz };
                 updateValidationPanel(handEuler);
 
-                // Update Euler debug displays
-                const eulerDebug = document.getElementById('eulerDebug');
-                if (eulerDebug && euler) {
-                    eulerDebug.textContent = `Roll: ${euler.roll.toFixed(1)}° | Pitch: ${euler.pitch.toFixed(1)}° | Yaw: ${euler.yaw.toFixed(1)}°`;
-                }
+                // Update Euler debug display
                 const threeEulerDebug = document.getElementById('threeEulerDebug');
                 if (threeEulerDebug && euler) {
                     threeEulerDebug.textContent = `Roll: ${euler.roll.toFixed(1)}° | Pitch: ${euler.pitch.toFixed(1)}° | Yaw: ${euler.yaw.toFixed(1)}°`;
@@ -2303,12 +2226,6 @@
             }
 
             try {
-                initHandRenderer();
-            } catch (e) {
-                console.error('[GAMBIT] Failed to init hand renderer:', e);
-            }
-
-            try {
                 initThreeHandSkeleton();
             } catch (e) {
                 console.error('[GAMBIT] Failed to init Three.js hand:', e);
@@ -2322,53 +2239,14 @@
 
             // ===== Reset Orientation Button =====
             // Allows user to re-initialize the AHRS from current accelerometer reading
-            document.getElementById('resetOrientationBtn')?.addEventListener('click', () => {
+            document.getElementById('threeResetBtn')?.addEventListener('click', () => {
                 console.log('[GAMBIT] Resetting orientation...');
                 telemetryProcessor.reset();
-                if (hand3DRenderer) {
-                    hand3DRenderer.resetOrientation();
-                }
                 // Reset cube filters too
                 Object.values(cubeFilters).forEach(filterSet => {
                     Object.values(filterSet).forEach(filter => filter.reset());
                 });
                 console.log('[GAMBIT] Orientation reset complete');
-            });
-
-            // ===== Test Pose Button =====
-            // Shows pointing pose (index finger extended only) to help verify orientation
-            let testPoseActive = false;
-            document.getElementById('testPoseBtn')?.addEventListener('click', () => {
-                testPoseActive = !testPoseActive;
-                const btn = document.getElementById('testPoseBtn');
-                
-                if (hand3DRenderer) {
-                    if (testPoseActive) {
-                        // Pointing pose: index extended, others flexed
-                        hand3DRenderer.setFingerPoses({
-                            thumb: 2,   // Flexed
-                            index: 0,   // Extended (pointing)
-                            middle: 2,  // Flexed
-                            ring: 2,    // Flexed
-                            pinky: 2    // Flexed
-                        });
-                        btn.textContent = 'Reset Pose';
-                        btn.style.background = 'var(--success)';
-                        console.log('[GAMBIT] Test pose: POINTING (index extended)');
-                    } else {
-                        // All fingers extended (open hand)
-                        hand3DRenderer.setFingerPoses({
-                            thumb: 0,
-                            index: 0,
-                            middle: 0,
-                            ring: 0,
-                            pinky: 0
-                        });
-                        btn.textContent = 'Test Pose (Point)';
-                        btn.style.background = '';
-                        console.log('[GAMBIT] Test pose: OPEN HAND');
-                    }
-                }
             });
 
             // ===== Session Playback System (using module) =====
