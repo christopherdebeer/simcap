@@ -647,6 +647,31 @@
                     </summary>
                     <div id="calibrationPanel" style="padding: var(--space-sm); font-size: 0.7rem; font-family: monospace;">
 
+                        <!-- Incremental Calibration Confidence Display -->
+                        <div id="calibrationConfidence" style="margin-bottom: var(--space-sm); padding: var(--space-xs); background: var(--bg); border-radius: var(--radius-sm);">
+                            <strong>📊 Live Calibration:</strong>
+                            <div style="margin-top: 4px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                    <span>Overall Confidence:</span>
+                                    <span id="overallConfidence" style="font-weight: bold; color: var(--warning);">0%</span>
+                                </div>
+                                <div style="background: #333; border-radius: 3px; height: 6px; margin-bottom: 6px;">
+                                    <div id="confidenceBar" style="height: 100%; border-radius: 3px; width: 0%; background: var(--warning); transition: width 0.3s, background 0.3s;"></div>
+                                </div>
+                                <div style="font-size: 0.6rem; color: var(--fg-muted);">
+                                    <div style="display: flex; justify-content: space-between;">
+                                        <span>Hard Iron: <span id="hardIronConf">0%</span></span>
+                                        <span>Earth Field: <span id="earthFieldConf">0%</span></span>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; margin-top: 2px;">
+                                        <span>Samples: <span id="calibSamples">0</span></span>
+                                        <span>Field: <span id="earthFieldMag">-- µT</span></span>
+                                    </div>
+                                    <div id="calibStatus" style="margin-top: 4px; color: var(--fg-muted);">Collecting samples...</div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Current State Display -->
                         <div style="margin-bottom: var(--space-sm); padding: var(--space-xs); background: var(--bg); border-radius: var(--radius-sm);">
                             <strong>Live Sensor State:</strong>
@@ -910,6 +935,7 @@
                 LowPassFilter
             } from './shared/sensor-config.js';
             import { TelemetryProcessor } from './shared/telemetry-processor.js';
+            import { IncrementalCalibration } from './shared/incremental-calibration.js';
             import {
                 SessionPlayback,
                 formatTime,
@@ -1024,6 +1050,14 @@
             } catch (e) {
                 console.log('No previous calibration found');
             }
+
+            // ===== Incremental Calibration =====
+            // Builds calibration from streaming data (more robust than stored values)
+            // Validated by analyze_raw_magnetic.py: achieves < 5 µT residual
+            const incrementalCalibration = new IncrementalCalibration();
+            let incrementalCalibrationEnabled = true;  // Use incremental by default
+            let lastConfidenceUpdate = 0;
+            const CONFIDENCE_UPDATE_INTERVAL = 500;  // Update UI every 500ms
 
             // ===== Telemetry Processor (shared module) =====
             // Handles: unit conversion, IMU fusion, gyro bias calibration, mag calibration, filtering
@@ -1837,10 +1871,117 @@
                 }
             }
 
+            /**
+             * Update calibration confidence display
+             * Shows incremental calibration status and confidence metrics
+             */
+            function updateCalibrationConfidenceUI() {
+                const details = incrementalCalibration.getConfidenceDetails();
+                const overall = Math.round(details.overall * 100);
+                const hardIron = Math.round(details.hardIron.confidence * 100);
+                const earthField = Math.round(details.earthField.confidence * 100);
+
+                // Update text displays
+                const overallEl = document.getElementById('overallConfidence');
+                const hardIronEl = document.getElementById('hardIronConf');
+                const earthFieldEl = document.getElementById('earthFieldConf');
+                const samplesEl = document.getElementById('calibSamples');
+                const fieldMagEl = document.getElementById('earthFieldMag');
+                const statusEl = document.getElementById('calibStatus');
+                const barEl = document.getElementById('confidenceBar');
+
+                if (overallEl) overallEl.textContent = `${overall}%`;
+                if (hardIronEl) hardIronEl.textContent = `${hardIron}%`;
+                if (earthFieldEl) earthFieldEl.textContent = `${earthField}%`;
+                if (samplesEl) samplesEl.textContent = details.hardIron.sampleCount.toString();
+
+                const earthMag = details.earthField.magnitude;
+                if (fieldMagEl) {
+                    fieldMagEl.textContent = earthMag > 0 ? `${earthMag.toFixed(1)} µT` : '-- µT';
+                }
+
+                // Update progress bar
+                if (barEl) {
+                    barEl.style.width = `${overall}%`;
+                    // Color based on confidence level
+                    if (overall >= 70) {
+                        barEl.style.background = 'var(--success)';
+                    } else if (overall >= 40) {
+                        barEl.style.background = 'var(--warning)';
+                    } else {
+                        barEl.style.background = 'var(--error)';
+                    }
+                }
+
+                // Update status text
+                if (statusEl) {
+                    const status = [];
+                    if (overall < 30) {
+                        status.push('Rotate device to collect more data');
+                    } else if (overall < 70) {
+                        status.push('Improving... keep rotating');
+                        if (details.hardIron.coverage < 0.75) {
+                            status.push(`Coverage: ${Math.round(details.hardIron.coverage * 100)}%`);
+                        }
+                    } else {
+                        status.push('✓ Good calibration');
+                        // Show Earth field sanity check
+                        if (earthMag < 25 || earthMag > 65) {
+                            status.push(`⚠ Field: ${earthMag.toFixed(0)} µT (expect 25-65)`);
+                        }
+                    }
+                    statusEl.textContent = status.join(' | ');
+                }
+
+                // Update overall confidence color
+                if (overallEl) {
+                    if (overall >= 70) {
+                        overallEl.style.color = 'var(--success)';
+                    } else if (overall >= 40) {
+                        overallEl.style.color = 'var(--warning)';
+                    } else {
+                        overallEl.style.color = 'var(--error)';
+                    }
+                }
+            }
+
             function updateData(prenorm) {
                 // Process telemetry through shared TelemetryProcessor
                 // This handles: unit conversion, IMU fusion, gyro bias, calibration, filtering
                 const decoratedData = telemetryProcessor.process(prenorm);
+
+                // ===== Incremental Calibration Update =====
+                // Feed sample to incremental calibration if we have µT values and orientation
+                if (incrementalCalibrationEnabled && decoratedData.mx_ut !== undefined) {
+                    const mag = {
+                        x: decoratedData.mx_ut,
+                        y: decoratedData.my_ut,
+                        z: decoratedData.mz_ut
+                    };
+                    const orientation = decoratedData.orientation_w !== undefined ? {
+                        w: decoratedData.orientation_w,
+                        x: decoratedData.orientation_x,
+                        y: decoratedData.orientation_y,
+                        z: decoratedData.orientation_z
+                    } : null;
+
+                    incrementalCalibration.addSample(mag, orientation);
+
+                    // Compute incremental residual (alternative to stored calibration residual)
+                    if (orientation && incrementalCalibration.getConfidence() > 0.3) {
+                        const incResult = incrementalCalibration.computeResidual(mag, orientation);
+                        if (incResult) {
+                            decoratedData.incremental_residual_magnitude = incResult.magnitude;
+                        }
+                    }
+
+                    // Update confidence display periodically
+                    const now = performance.now();
+                    if (now - lastConfidenceUpdate > CONFIDENCE_UPDATE_INTERVAL) {
+                        lastConfidenceUpdate = now;
+                        updateCalibrationConfidenceUI();
+                    }
+                }
 
                 // Store decorated data (raw + calibrated + filtered fields)
                 sessionData.push(decoratedData);
