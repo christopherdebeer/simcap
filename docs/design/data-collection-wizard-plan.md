@@ -2,7 +2,7 @@
 
 **Author:** Claude
 **Date:** 2025-12-15
-**Status:** Proposal
+**Status:** Proposal (Revised)
 **Related Documents:**
 - [Magnetic Finger Tracking Analysis](magnetic-finger-tracking-analysis.md)
 - [Orientation & Magnetometer System](../../src/web/GAMBIT/analysis/ORIENTATION_AND_MAGNETOMETER_SYSTEM.md)
@@ -12,148 +12,314 @@
 
 ## Executive Summary
 
-This document outlines a comprehensive plan to enhance the GAMBIT data collection system to support flexible multi-label data collection with auto-labeling capabilities. The goal is to transition from fixed pose classification to a richer model that can output multiple labels simultaneously (poses, finger positions, motion states, etc.).
+This plan outlines a **progressive, wizard-driven data collection system** for training multi-label hand tracking models. The wizard guides users through pose instructions, automatically labels data during recording, and supports tiered complexity progression from simple poses to fine-grained finger tracking.
 
-### Key Objectives
+### Core Concept: Wizard-Driven Auto-Labeling
 
-1. **Enhanced Data Collection Wizard**: Guide users through collecting diverse, well-labeled data
-2. **Auto-Labeling System**: Reduce manual labeling burden using sensor-driven heuristics and ML inference
-3. **Multi-Label ML Pipeline**: Train models that output multiple predictions simultaneously
-4. **Iterative Improvement**: Enable users to collect data, train models, and use those models to improve future data collection
+**Traditional Manual Approach (Current):**
+```
+User → Manually select labels → Record data → Export
+```
+
+**New Wizard Approach:**
+```
+Wizard → Show instruction "👊 Make a fist"
+       → User adopts pose
+       → User clicks "Ready - Record"
+       → Auto-apply labels {pose: "fist", fingers: {all: "flexed"}}
+       → Record 6-10s while user rotates/moves hand
+       → Auto-save labeled segment
+       → Next instruction
+```
+
+### Key Principles
+
+1. **Zero manual labeling during wizard**: Labels are automatically applied based on the instruction given
+2. **Movement encouraged**: Users rotate/move hand during recording to capture orientation diversity (prevents overfitting)
+3. **Progressive complexity**: Start simple (whole-hand poses) → advance to complex (per-finger control)
+4. **Explicit control**: User decides when ready to record each pose
+5. **Safe exit**: Can exit wizard anytime without losing collected data
+6. **Validation gates**: Train and validate after each tier before advancing
 
 ---
 
-## Current State Analysis
+## Progressive Complexity Tiers
 
-### What Exists ✅
+### Tier 1: Basic Whole-Hand Poses
 
-#### 1. Collector Application
-- **Location**: `src/web/GAMBIT/collector.html` + `collector-app.js`
-- **Features**:
-  - Multi-label UI (poses, per-finger states, motion, calibration markers, custom labels)
-  - Manual label selection with active label display
-  - Real-time sensor visualization
-  - 3D hand visualization with sensor fusion
-  - Export to JSON with metadata
-  - GitHub upload integration
+**Goal**: Train a simple classifier on poses where all fingers are in the same state.
 
-#### 2. Data Collection Wizard
-- **Location**: `src/web/GAMBIT/modules/wizard.js`
-- **Current Capabilities**:
-  - Guided step-by-step data collection
-  - Three modes: Quick, Full, 5-Magnet Finger Tracking
-  - Two-phase approach per step: transition (unlabeled) → hold (labeled)
-  - Auto-label application based on step ID
-  - Fixed wizard templates (hard-coded steps)
+**Poses (5-8 total):**
+| Pose | Description | Finger States | Training Target |
+|------|-------------|---------------|-----------------|
+| Rest | Hand relaxed, palm down | All: unknown | Baseline |
+| Fist | Tight fist | All: flexed | Core pose |
+| Open Palm | All fingers extended, spread | All: extended | Core pose |
+| Thumbs Up | Thumb up, others flexed | Thumb: extended, Others: flexed | Simple variation |
+| Point | Index up, others flexed | Index: extended, Others: flexed | Simple variation |
 
-**Wizard Modes:**
-| Mode | Steps | Duration | Purpose |
-|------|-------|----------|---------|
-| Quick | 7 steps | ~50s | Reference poses + finger isolation |
-| Full | 13 steps | ~80s | Quick + common gestures |
-| 5-Magnet | 11 steps | ~85s | All fingers with magnets - full tracking |
+**Collection Strategy:**
+- 10 seconds per pose × 5 poses = ~50 seconds of labeled data
+- Encourage rotation/movement during each 10-second hold
+- Transition time: 5 seconds between poses (unlabeled)
 
-#### 3. ML Pipeline
-- **Location**: `ml/`
-- **Models**:
-  - `create_cnn_model_keras()`: Single-output gesture classifier (10 poses)
-  - `create_finger_tracking_model_keras()`: **Multi-output model** (5 fingers × 3 states)
-- **Training**: Supports both single-label and multi-label scenarios
-- **Data Format**: V2.1 JSON with embedded labels and metadata
+**Training:**
+- Model: Simple 5-8 class gesture classifier
+- Input: 50-sample windows (1 second @ 50Hz)
+- Output: Single pose prediction
+- Success: >85% validation accuracy
 
-**Multi-Output Model Architecture** (Already Implemented):
-```
-Input (50, 9) → Shared CNN → 5 Output Heads
-                              ├─ thumb_state (3-class softmax)
-                              ├─ index_state (3-class softmax)
-                              ├─ middle_state (3-class softmax)
-                              ├─ ring_state (3-class softmax)
-                              └─ pinky_state (3-class softmax)
-```
+**Validation Gate:**
+- Test on held-out data
+- Per-class accuracy > 75%
+- If pass → Tier 2, If fail → collect more Tier 1 data
 
-#### 4. Label Schema
-- **Pose labels**: fist, open_palm, pinch, etc. (10 fixed poses)
-- **Finger states**: extended(0), partial(1), flexed(2) per finger
-- **Motion states**: static, moving, transition
-- **Calibration markers**: earth_field, hard_iron, soft_iron, etc.
-- **Custom labels**: User-defined tags
+### Tier 2: Single-Finger Isolation
 
-### Current Limitations ⚠️
+**Goal**: Train multi-output model to predict per-finger states (one finger varies, others fixed).
 
-1. **Wizard Inflexibility**:
-   - Fixed step definitions hard-coded in `WIZARD_STEPS`
-   - Cannot easily add new poses or scenarios
-   - No support for dynamic/continuous motion sequences
-   - Limited to 2-phase (transition → hold) approach
+**Poses (10-12 total):**
+| Pose | Description | Finger States |
+|------|-------------|---------------|
+| Reference | All extended | All: extended |
+| Thumb Flex Only | Thumb flexed, others extended | Thumb: flexed, Others: extended |
+| Index Flex Only | Index flexed, others extended | Index: flexed, Others: extended |
+| Middle Flex Only | ... | ... |
+| Ring Flex Only | ... | ... |
+| Pinky Flex Only | ... | ... |
+| Thumb Extended Only | All flexed except thumb | Thumb: extended, Others: flexed |
+| ... | (mirror for other fingers) | ... |
 
-2. **No Auto-Labeling**:
-   - All labels must be manually selected
-   - No sensor-driven label suggestions
-   - No ML-assisted labeling during collection
+**Collection Strategy:**
+- 8 seconds per pose × 10 poses = ~80 seconds
+- Focus on magnetic field changes (requires calibrated magnetometer)
+- Movement encouraged but less critical than Tier 1
 
-3. **Single-Label Training Bias**:
-   - Current training scripts assume single pose per window
-   - Multi-output model exists but isn't primary workflow
-   - Data loader supports multi-label but training defaults to gesture classification
+**Training:**
+- Model: Multi-output (5 fingers × 3 states each)
+- Architecture: Shared CNN → 5 output heads
+- Output: `{thumb_state: 0-2, index_state: 0-2, ...}`
+- Success: >75% per-finger accuracy
 
-4. **No Iterative Workflow**:
-   - Cannot easily use a trained model to assist with labeling new data
-   - No "label suggestions" mode during collection
+**Validation Gate:**
+- Per-finger confusion matrices
+- Check for finger independence (index prediction not influenced by thumb state)
+- If pass → Tier 3, If fail → collect more single-finger data
+
+### Tier 3: Complex Finger Combinations
+
+**Goal**: Handle arbitrary finger combinations for real-world gestures.
+
+**Poses (15-20 total):**
+| Pose | Description | Finger States |
+|------|-------------|---------------|
+| Pinch | Thumb + index tips touching | Thumb: partial, Index: partial, Others: extended |
+| Peace | Index + middle up, others flexed | Index: extended, Middle: extended, Others: flexed |
+| OK Sign | Thumb + index circle, others extended | Thumb: partial, Index: partial, Others: extended |
+| Shaka | Thumb + pinky extended, others flexed | Thumb: extended, Pinky: extended, Others: flexed |
+| ... | Custom combinations | ... |
+
+**Collection Strategy:**
+- 6-8 seconds per pose × 15 poses = ~90-120 seconds
+- Include partial flexion states (not just 0 or 2, but 1 as well)
+- Diverse orientations critical
+
+**Training:**
+- Refine Tier 2 model with additional data
+- May need increased model capacity (more filters)
+- Consider ensemble or hierarchical approach
+
+**Deployment:**
+- Export to TensorFlow.js for browser inference
+- Real-time pose estimation in collector app
+- Use for future data collection assistance
 
 ---
 
-## Proposed Enhancements
+## Wizard User Experience
 
-### Phase 1: Enhanced Wizard System
+### Three-Phase Per Pose
 
-#### 1.1 Configurable Wizard Templates
+Each wizard step has three phases:
 
-**Goal**: Allow custom wizard configurations without code changes.
+#### Phase 1: Preview (Instruction Display)
+```
+┌─────────────────────────────────────┐
+│  Step 3 of 8                        │
+│                                     │
+│  👊 Make a Fist                     │
+│                                     │
+│  Close all fingers tightly into    │
+│  your palm. Rotate and move your   │
+│  hand in different orientations    │
+│  while recording.                   │
+│                                     │
+│  [🎯 See Example] [➡️  Next]        │
+└─────────────────────────────────────┘
+```
 
-**Implementation**:
-- Create JSON-based wizard template format
-- Store templates in `src/web/GAMBIT/wizard-templates/`
-- Load templates dynamically at runtime
+**User Actions:**
+- Read instruction
+- Optionally view example video/image
+- Click "Next" when understood
 
-**Template Format**:
+#### Phase 2: Prepare (Adopt Pose)
+```
+┌─────────────────────────────────────┐
+│  👊 Make a Fist                     │
+│                                     │
+│  🎥 Camera Preview (optional)       │
+│  [Hand visualization showing        │
+│   current sensor readings]          │
+│                                     │
+│  Take your time to adopt the pose. │
+│  When ready, click Record.          │
+│                                     │
+│  [⏸️  Pause Wizard] [🔴 Ready - Record] │
+└─────────────────────────────────────┘
+```
+
+**User Actions:**
+- Adopt the pose
+- Check preview to verify pose is correct
+- Click "Ready - Record" when comfortable
+- Or "Pause Wizard" to take a break
+
+#### Phase 3: Record (Collect Data)
+```
+┌─────────────────────────────────────┐
+│  🔴 RECORDING                        │
+│  👊 Make a Fist                     │
+│                                     │
+│  ┌───────────────────────────────┐ │
+│  │ 7.3 seconds                   │ │
+│  │ ████████████░░░░░░░░░ 73%     │ │
+│  └───────────────────────────────┘ │
+│                                     │
+│  Rotate and move your hand         │
+│  to capture different angles       │
+│                                     │
+│  [⏹️  Stop Recording]               │
+└─────────────────────────────────────┘
+```
+
+**Auto-Labeling Happens Here:**
+- Wizard applies labels: `{pose: "fist", fingers: {all: "flexed"}, motion: "moving"}`
+- Records for configured duration (default 10s)
+- User can stop early if needed
+- Labels are auto-saved with timestamp range
+
+**Movement Encouragement:**
+- Visual cue: "Rotate your hand" with directional arrows
+- Optional: Gyro feedback showing rotation coverage
+- Goal: Capture diverse orientations to prevent overfitting
+
+### Wizard Controls (Always Available)
+
+**Top Bar:**
+```
+[⏸️  Pause] [❌ Exit] [↩️  Restart Step] [⏭️  Skip]
+Progress: ████████░░░░░░░░ Step 3 of 8 (37%)
+```
+
+**Safety Features:**
+1. **Pause**: Stops wizard, preserves all data collected so far
+2. **Exit**: Closes wizard, saves session with partial data
+3. **Restart Step**: Discards current step's data, re-shows instruction
+4. **Skip**: Skips current pose (useful if physically difficult)
+
+### Data Preservation
+
+**On Exit (any time):**
+```javascript
+// All collected data is saved to session
+{
+  version: "2.1",
+  timestamp: "2025-12-15T10:30:00Z",
+  samples: [...],  // All samples collected before exit
+  labels: [...],   // All completed pose segments
+  metadata: {
+    wizard_session: {
+      template_id: "tier1_basic_poses",
+      completed_steps: [0, 1, 2],  // Steps 1-3 completed
+      incomplete_step: 3,           // Step 4 was in progress
+      exit_reason: "user_initiated"
+    }
+  }
+}
+```
+
+**User can:**
+- Export partial session as JSON
+- Resume wizard later (if implemented)
+- Use partial data for training (just fewer samples)
+
+---
+
+## Wizard Template Format
+
+### JSON Schema
+
 ```json
 {
-  "id": "magnetic_finger_tracking_full",
-  "name": "Magnetic Finger Tracking - Full Dataset",
-  "description": "Comprehensive collection for finger position tracking",
-  "duration_estimate": 120,
-  "requires_calibration": true,
-  "magnet_config": "alternating",
+  "id": "tier1_basic_poses",
+  "name": "Tier 1: Basic Hand Poses",
+  "description": "Simple whole-hand gestures for initial model training",
+  "tier": 1,
+  "estimated_duration": 80,
+  "requires_calibration": false,
+  "requirements": {
+    "magnet_config": "none",
+    "min_samples_per_pose": 250
+  },
   "steps": [
     {
-      "id": "baseline_reference",
-      "type": "static_hold",
-      "title": "Baseline Reference",
+      "id": "rest",
+      "title": "Rest Position",
       "icon": "✋",
-      "description": "Palm flat, all fingers extended together",
-      "transition_duration": 5,
-      "hold_duration": 10,
+      "instruction": {
+        "short": "Hand relaxed, palm down",
+        "detailed": "Place your hand in a natural, relaxed position with palm facing down. Fingers should be together but not tense.",
+        "example_image": "assets/poses/rest.png",
+        "example_video": "assets/poses/rest.mp4"
+      },
+      "timing": {
+        "preview_duration": null,
+        "prepare_duration": null,
+        "record_duration": 10,
+        "transition_duration": 5
+      },
       "labels": {
-        "pose": null,
+        "pose": "rest",
         "fingers": {
-          "thumb": "extended",
-          "index": "extended",
-          "middle": "extended",
-          "ring": "extended",
-          "pinky": "extended"
+          "thumb": null,
+          "index": null,
+          "middle": null,
+          "ring": null,
+          "pinky": null
         },
-        "motion": "static",
-        "custom": ["baseline", "reference_pose"]
+        "motion": "moving",
+        "custom": ["tier1", "baseline", "wizard_guided"]
+      },
+      "recording_guidance": {
+        "encourage_movement": true,
+        "movement_instruction": "Slowly rotate your hand to capture different angles - up, down, left, right",
+        "show_orientation_coverage": true
       }
     },
     {
       "id": "fist",
-      "type": "static_hold",
-      "title": "Fist (All Flexed)",
+      "title": "Fist",
       "icon": "✊",
-      "description": "Make a tight fist",
-      "transition_duration": 5,
-      "hold_duration": 6,
+      "instruction": {
+        "short": "Make a tight fist",
+        "detailed": "Close all fingers tightly into your palm. Thumb wraps over fingers. Make it as tight as comfortable.",
+        "example_image": "assets/poses/fist.png"
+      },
+      "timing": {
+        "record_duration": 10,
+        "transition_duration": 5
+      },
       "labels": {
         "pose": "fist",
         "fingers": {
@@ -163,435 +329,381 @@ Input (50, 9) → Shared CNN → 5 Output Heads
           "ring": "flexed",
           "pinky": "flexed"
         },
-        "motion": "static",
-        "custom": ["all_flexed"]
-      }
-    },
-    {
-      "id": "thumb_flex_sweep",
-      "type": "continuous_motion",
-      "title": "Thumb Flex Sweep",
-      "icon": "👍",
-      "description": "Slowly flex thumb from extended to fully flexed",
-      "duration": 8,
-      "labels": {
-        "pose": null,
-        "fingers": {
-          "thumb": "dynamic",
-          "index": "extended",
-          "middle": "extended",
-          "ring": "extended",
-          "pinky": "extended"
-        },
-        "motion": "continuous",
-        "custom": ["thumb_sweep", "continuous_flex"]
+        "motion": "moving",
+        "custom": ["tier1", "all_flexed", "wizard_guided"]
       },
-      "auto_label_hints": {
-        "use_residual_magnitude": true,
-        "finger_to_track": "thumb"
+      "recording_guidance": {
+        "encourage_movement": true,
+        "movement_instruction": "Rotate your fist - show it from all sides"
       }
     }
-  ]
-}
-```
-
-**Step Types**:
-- `static_hold`: Traditional 2-phase (transition → hold)
-- `continuous_motion`: Single phase with dynamic motion
-- `multi_pose_sequence`: Multiple holds in sequence without transitions
-- `calibration`: Special calibration sequence
-
-#### 1.2 Auto-Label Suggestions
-
-**Goal**: Reduce manual labeling using sensor-driven heuristics.
-
-**Strategies**:
-
-1. **Magnetic Residual-Based**:
-   - When magnetometer is calibrated (earth field removed)
-   - Track residual magnitude changes over time
-   - Suggest finger states based on magnitude thresholds
-
-   ```javascript
-   // Auto-label logic example
-   function suggestFingerStateFromMag(residual, baseline) {
-     const delta = Math.abs(residual - baseline);
-     if (delta < 5)  return 'extended';  // Low change
-     if (delta < 20) return 'partial';   // Medium change
-     return 'flexed';                     // High change
-   }
-   ```
-
-2. **Motion-Based**:
-   - Use gyroscope magnitude to detect static vs moving
-   - Suggest `motion: 'static'` when gyro < threshold
-   - Suggest `motion: 'moving'` when gyro > threshold
-
-3. **Orientation-Based**:
-   - Use IMU orientation (roll/pitch/yaw) to suggest hand orientation labels
-   - Example: "palm_up", "palm_down", "vertical"
-
-4. **ML Inference-Based** (Phase 2):
-   - Load previously trained model
-   - Run real-time inference
-   - Suggest labels with confidence scores
-   - User can accept/reject suggestions
-
-**UI Changes**:
-- Add "Auto-Label" toggle button
-- Show suggested labels with confidence badges
-- Allow one-click accept or manual override
-- Track auto-label vs manual-label usage for analysis
-
-#### 1.3 Enhanced Wizard UI
-
-**Features**:
-1. **Progress Timeline**:
-   - Visual timeline showing past, current, and upcoming steps
-   - Color-coded by label type (pose, finger, motion)
-
-2. **Real-Time Preview**:
-   - Show 3D hand visualization during collection
-   - Update hand pose based on current labels
-   - Show sensor fusion orientation
-
-3. **Label Confidence Indicators**:
-   - When auto-labeling is active, show confidence scores
-   - Visual feedback: green (confident), yellow (uncertain), red (conflicting)
-
-4. **Flexible Step Control**:
-   - Skip step
-   - Repeat step
-   - Extend hold duration on-the-fly
-   - Pause/resume collection
-
-### Phase 2: Multi-Label ML Pipeline
-
-#### 2.1 Enhanced Data Loader
-
-**Current State**: `ml/data_loader.py` supports multi-label but defaults to single-label
-
-**Enhancements**:
-1. **Multi-Label Window Extraction**:
-   ```python
-   def extract_multi_label_windows(session, window_size, stride):
-       """
-       Extract windows with all label types:
-       - pose (optional, 10 classes or null)
-       - fingers (5 × 3-class per finger)
-       - motion (3 classes: static, moving, transition)
-       - custom (multi-hot encoding of active tags)
-       """
-   ```
-
-2. **Smart Label Aggregation**:
-   - For windows spanning multiple labels, choose majority label
-   - Option to discard ambiguous windows
-   - Option to create "transition" class for ambiguous windows
-
-3. **Data Augmentation**:
-   - Time warping (stretch/compress windows slightly)
-   - Noise injection (simulate sensor noise)
-   - Rotation augmentation (simulate different hand orientations)
-
-#### 2.2 Multi-Output Model Architecture
-
-**Current State**: `create_finger_tracking_model_keras()` exists but is separate from main workflow
-
-**Enhancements**:
-
-1. **Unified Multi-Output Model**:
-   ```python
-   def create_multi_label_model_keras(
-       window_size=50,
-       num_features=9,
-       outputs_config={
-           'pose': {'type': 'categorical', 'num_classes': 10, 'optional': True},
-           'fingers': {'type': 'multi_finger', 'num_states': 3},
-           'motion': {'type': 'categorical', 'num_classes': 3},
-           'custom': {'type': 'multi_hot', 'num_tags': 20}
-       }
-   ):
-       """
-       Unified model with flexible output heads.
-
-       Architecture:
-         Input → Shared CNN → Output Heads:
-                              ├─ pose (10-class softmax, optional)
-                              ├─ thumb_state (3-class softmax)
-                              ├─ index_state (3-class softmax)
-                              ├─ middle_state (3-class softmax)
-                              ├─ ring_state (3-class softmax)
-                              ├─ pinky_state (3-class softmax)
-                              ├─ motion (3-class softmax)
-                              └─ custom_tags (20-class sigmoid multi-hot)
-       """
-   ```
-
-2. **Hierarchical Model** (Advanced):
-   - First predict high-level state (fist vs open vs partial)
-   - Then predict per-finger details
-   - Can improve accuracy by constraining finger combinations
-
-3. **Loss Weighting**:
-   - Allow different weights for different outputs
-   - Example: prioritize finger states over custom tags
-   - Configurable per training run
-
-#### 2.3 Training Pipeline Updates
-
-**New Training Modes**:
-
-1. **Finger-Tracking Mode** (Already exists, enhance):
-   ```bash
-   python -m ml.train \
-     --data-dir data/GAMBIT \
-     --model-type finger_tracking \
-     --epochs 50
-   ```
-
-2. **Multi-Label Mode** (New):
-   ```bash
-   python -m ml.train \
-     --data-dir data/GAMBIT \
-     --model-type multi_label \
-     --outputs pose,fingers,motion \
-     --epochs 50
-   ```
-
-3. **Custom Output Mode** (New):
-   ```bash
-   python -m ml.train \
-     --data-dir data/GAMBIT \
-     --model-type custom \
-     --config custom_model_config.json
-   ```
-
-**Evaluation Metrics**:
-- Per-output accuracy
-- Overall multi-label accuracy (all outputs correct)
-- Per-finger confusion matrices
-- Pose classification report
-- Motion state accuracy
-
-### Phase 3: Iterative Workflow
-
-#### 3.1 Model-Assisted Labeling
-
-**Workflow**:
-1. Collect initial dataset with manual labels (wizard-guided)
-2. Train first model
-3. Export model to TensorFlow.js
-4. Load model in collector application
-5. Use model to suggest labels for new data collection
-6. User reviews and corrects suggestions
-7. Retrain model with corrected data
-8. Repeat
-
-**UI Integration**:
-```javascript
-// In collector-app.js
-const labelingMode = {
-  MANUAL: 'manual',           // User selects all labels
-  SUGGEST: 'suggest',          // Model suggests, user confirms
-  AUTO: 'auto'                 // Model auto-labels (user can override)
-};
-
-// Load trained model
-const inferenceModel = await tf.loadLayersModel('models/multi_label_v1/model.json');
-
-// During data collection
-function onTelemetrySample(sample) {
-  if (labelingMode === 'SUGGEST' || labelingMode === 'AUTO') {
-    const prediction = await inferenceModel.predict(windowBuffer);
-    const suggestedLabels = decodePrediction(prediction);
-
-    if (labelingMode === 'SUGGEST') {
-      // Show suggestions, wait for user confirmation
-      showLabelSuggestions(suggestedLabels);
-    } else {
-      // Auto-apply labels
-      applyLabels(suggestedLabels);
-    }
+    // ... more steps
+  ],
+  "validation": {
+    "required_accuracy": 0.85,
+    "next_tier": "tier2_single_finger"
   }
 }
 ```
 
-#### 3.2 Active Learning
+### Template Locations
 
-**Goal**: Collect data that maximally improves the model
-
-**Strategy**:
-1. **Uncertainty Sampling**:
-   - Model outputs confidence scores
-   - When confidence is low, flag for manual review
-   - Prioritize collecting data in uncertain regions
-
-2. **Coverage Analysis**:
-   - Track which label combinations have been collected
-   - Wizard suggests under-represented scenarios
-   - Example: "You have 100 samples of 'fist' but only 5 of 'pinch' - collect more pinch data"
-
-3. **Error Analysis**:
-   - After training, identify common misclassifications
-   - Generate wizard templates targeting those scenarios
-   - Example: If model confuses "partial flex" with "extended", create targeted sweep data
+```
+src/web/GAMBIT/wizard-templates/
+├── tier1_basic_poses.json           (5-8 poses, ~80s)
+├── tier2_single_finger.json         (10-12 poses, ~100s)
+├── tier3_complex_combinations.json  (15-20 poses, ~120s)
+├── calibration_sequence.json        (mag calibration workflow)
+└── custom/
+    └── user_defined_template.json
+```
 
 ---
 
 ## Implementation Roadmap
 
-### Sprint 1: Wizard Template System (5-7 days)
+### Phase 1: Template System & UI (Week 1)
 
-**Goal**: Enable custom wizard configurations
+**Goal**: Load wizard templates from JSON, implement three-phase UI.
 
-**Tasks**:
-1. ✅ Design template JSON schema
-2. Create template loader module
-3. Update wizard.js to accept external templates
-4. Create 3-5 example templates:
-   - `basic_gestures.json`: Simple hand poses
-   - `magnetic_finger_tracking.json`: Full finger tracking
-   - `continuous_motion.json`: Dynamic sweeps
-   - `calibration_sequence.json`: Mag calibration workflow
-   - `active_learning_template.json`: Targeted data collection
-5. Add template selection UI in collector
-6. Test with existing hardware
+**Tasks:**
+1. Create JSON schema and validator
+2. Build template loader module
+3. Update wizard.js to use external templates:
+   - Parse template JSON
+   - Render three-phase UI (preview → prepare → record)
+   - Auto-apply labels from template
+4. Create tier1_basic_poses.json template (5 poses)
+5. Add wizard controls (pause, exit, restart, skip)
+6. Implement data preservation on exit
+7. Test with real data collection
 
-**Deliverables**:
-- `src/web/GAMBIT/wizard-templates/` directory
-- Template schema documentation
-- Updated wizard.js with template support
-- Template creation guide
+**Deliverables:**
+- Template loader: `src/web/GAMBIT/modules/template-loader.js`
+- Updated wizard UI with three phases
+- Tier 1 template
+- User guide: "How to create wizard templates"
 
-### Sprint 2: Auto-Labeling Foundation (5-7 days)
+**Success Criteria:**
+- Can load external templates without code changes
+- User can pause/exit/resume wizard
+- All data preserved on exit
+- Labels auto-applied correctly
 
-**Goal**: Basic auto-labeling from sensor heuristics
+### Phase 2: Movement Guidance & Coverage (Week 2)
 
-**Tasks**:
-1. Implement magnetic residual-based finger state suggestions
-2. Implement motion detection (static vs moving)
-3. Add auto-label UI toggle and confidence display
-4. Create "suggestion mode" where user confirms auto-labels
-5. Track auto-label accuracy (compare suggestions to final labels)
-6. Add auto-label metadata to exported data
+**Goal**: Encourage diverse orientations during recording.
 
-**Deliverables**:
-- Auto-labeling module (`auto-labeler.js`)
-- Updated collector UI with suggestion mode
-- Auto-label metrics in export metadata
+**Tasks:**
+1. Add orientation coverage visualization:
+   - Track euler angles (roll, pitch, yaw) during recording
+   - Show 3D sphere with visited orientations
+   - Real-time feedback: "Rotate left more"
+2. Implement movement instruction display during recording
+3. Add optional gyro-based movement validation:
+   - Warn if user is too still
+   - Suggest specific rotations
+4. Create Tier 2 template (single-finger isolation)
+5. Test with magnetic finger tracking setup
 
-### Sprint 3: Multi-Label Training Pipeline (7-10 days)
+**Deliverables:**
+- Orientation coverage module
+- Movement guidance UI
+- Tier 2 template
+- Collection quality metrics
 
-**Goal**: Train multi-output models end-to-end
+**Success Criteria:**
+- Users naturally rotate hand during recording
+- Orientation diversity metric > 80%
+- Tier 2 template works with magnetometer data
 
-**Tasks**:
-1. Update `data_loader.py` to extract multi-label windows
-2. Create `create_multi_label_model_keras()` in `model.py`
-3. Update `train.py` to support `--model-type multi_label`
-4. Implement per-output evaluation metrics
-5. Test training on existing multi-label data
-6. Export to TensorFlow.js format
-7. Create deployment guide
+### Phase 3: Multi-Label Training Pipeline (Week 3)
 
-**Deliverables**:
-- Updated ML pipeline supporting multi-label
-- Trained multi-label model (as proof of concept)
-- Evaluation report comparing single-label vs multi-label
+**Goal**: Train multi-output models on wizard-collected data.
+
+**Tasks:**
+1. Update `ml/data_loader.py`:
+   - Extract windows with multi-label support
+   - Handle optional finger states (Tier 1 has null fingers)
+   - Aggregate labels across transition zones
+2. Create `ml/train.py` workflow:
+   ```bash
+   # Tier 1: Simple classifier
+   python -m ml.train --data-dir data/GAMBIT \
+     --model-type gesture \
+     --tier 1 \
+     --epochs 50
+
+   # Tier 2: Multi-output
+   python -m ml.train --data-dir data/GAMBIT \
+     --model-type finger_tracking \
+     --tier 2 \
+     --epochs 50
+   ```
+3. Implement per-tier validation:
+   - Automatic train/val split by session
+   - Per-tier accuracy thresholds
+   - Generate validation report
+4. Export to TensorFlow.js for deployment
+
+**Deliverables:**
+- Updated ML pipeline supporting tiers
+- Training scripts for Tier 1 and Tier 2
+- Validation report generator
 - TensorFlow.js export
 
-### Sprint 4: ML-Assisted Labeling (7-10 days)
+**Success Criteria:**
+- Tier 1 model: >85% accuracy on 5-8 poses
+- Tier 2 model: >75% per-finger accuracy
+- Models export cleanly to TensorFlow.js
 
-**Goal**: Use trained models to assist data collection
+### Phase 4: Tier 3 & Deployment (Week 4)
 
-**Tasks**:
-1. Create TensorFlow.js inference module for collector
-2. Add "Load Model" UI in collector
-3. Implement real-time inference during collection
-4. Add suggestion UI with confidence scores
-5. Add accept/reject controls
-6. Create iterative training workflow guide
-7. Test full loop: collect → train → assist → retrain
+**Goal**: Complex combinations and real-world deployment.
 
-**Deliverables**:
-- ML-assisted labeling feature in collector
-- Inference performance metrics
-- Iterative training guide
-- Demo video showing workflow
+**Tasks:**
+1. Create Tier 3 template (15-20 complex poses)
+2. Collect Tier 3 dataset
+3. Train refined multi-output model
+4. Deploy to collector app:
+   - Load TensorFlow.js model
+   - Real-time inference display
+   - Confidence visualization
+5. Create end-to-end tutorial:
+   - "Zero to Trained Model in 30 Minutes"
+   - Video walkthrough
+6. Polish UI/UX based on user testing
 
-### Sprint 5: Active Learning & Polish (5-7 days)
-
-**Goal**: Intelligent data collection prioritization
-
-**Tasks**:
-1. Implement coverage analysis (track label distribution)
-2. Create wizard template generator based on coverage gaps
-3. Add uncertainty-based sampling
-4. Create dashboard showing data coverage
-5. Polish UI/UX based on user testing
-6. Write comprehensive documentation
-7. Create tutorial videos
-
-**Deliverables**:
-- Active learning module
-- Data coverage dashboard
-- Complete documentation
+**Deliverables:**
+- Tier 3 template
+- Trained Tier 3 model
+- Deployed inference in collector
 - Tutorial materials
+
+**Success Criteria:**
+- Tier 3 model handles 15-20 poses
+- Real-time inference < 50ms
+- Tutorial completable in 30 minutes
+- User feedback positive (>4/5 rating)
 
 ---
 
-## Technical Considerations
+## Technical Details
 
-### Performance Constraints
+### Auto-Labeling Logic
 
-1. **Real-Time Inference**:
-   - TensorFlow.js model must run < 50ms per prediction
-   - Use quantized models if needed
-   - Consider sliding window optimization
+**During wizard recording phase:**
 
-2. **Browser Memory**:
-   - Large datasets can exhaust browser memory
-   - Implement chunked processing for export
-   - Clear old samples periodically
+```javascript
+// In wizard.js - startWizardCollection()
+async function recordPoseWithAutoLabels(step) {
+  const labels = step.labels;  // From template JSON
+  const duration = step.timing.record_duration * 1000;  // ms
 
-3. **Model Size**:
-   - Multi-output models are larger (~200KB vs ~150KB)
-   - Use compression and quantization for deployment
-   - Consider model pruning
+  // Start recording if not already
+  if (!state.recording) {
+    await startRecording();
+  }
 
-### Data Quality
+  // Apply labels from template
+  applyLabelsFromTemplate(labels);
 
-1. **Label Consistency**:
-   - Define clear label guidelines
-   - Provide visual references for each label
-   - Track inter-rater reliability (if multiple labelers)
+  // Close previous segment and start new one
+  closeCurrentLabel();
+  state.currentLabelStart = state.sessionData.length;
 
-2. **Transition Handling**:
-   - Current wizard uses unlabeled transitions
-   - Consider labeling transitions as separate class
-   - Or discard transition windows from training
+  // Show recording UI with countdown
+  await showRecordingPhase(step, duration);
 
-3. **Calibration Dependency**:
-   - Magnetic finger tracking requires good calibration
-   - Wizard should enforce calibration check before finger tracking
-   - Include calibration quality in metadata
+  // After recording completes, close the labeled segment
+  closeCurrentLabel();
 
-### Edge Cases
+  // Clear labels for transition
+  clearLabels();
+}
 
-1. **Missing Labels**:
-   - Some windows may have pose but no finger states
-   - Model must handle optional outputs
-   - Use masked loss for missing labels
+function applyLabelsFromTemplate(labels) {
+  if (labels.pose) {
+    state.currentLabels.pose = labels.pose;
+  }
+  if (labels.fingers) {
+    state.currentLabels.fingers = {...labels.fingers};
+  }
+  if (labels.motion) {
+    state.currentLabels.motion = labels.motion;
+  }
+  if (labels.custom) {
+    state.currentLabels.custom = [...labels.custom];
+  }
+}
+```
 
-2. **Conflicting Labels**:
-   - Pose "fist" implies all fingers flexed
-   - Validate label consistency before training
-   - Auto-correct or flag conflicts
+### Movement Encouragement
 
-3. **Continuous Motion**:
-   - Hard to assign single label to moving windows
-   - Consider regression outputs (flex angle 0-1) instead of classification
-   - Or use temporal models (LSTM/Transformer)
+**Orientation Coverage Tracking:**
+
+```javascript
+class OrientationCoverageTracker {
+  constructor() {
+    this.samples = [];
+    this.coverageSphere = this.initSphere();  // Discretized sphere
+  }
+
+  addSample(euler) {
+    // Map euler angles to sphere bucket
+    const bucket = this.eulerToBucket(euler.roll, euler.pitch, euler.yaw);
+    this.coverageSphere[bucket] = true;
+    this.samples.push(euler);
+  }
+
+  getCoveragePercentage() {
+    const visited = Object.values(this.coverageSphere).filter(v => v).length;
+    const total = Object.keys(this.coverageSphere).length;
+    return visited / total;
+  }
+
+  getSuggestedMovement() {
+    // Analyze which regions are undersampled
+    // Return suggestion: "Rotate left", "Tilt forward", etc.
+  }
+}
+```
+
+**Real-time Feedback During Recording:**
+
+```
+┌─────────────────────────────────────┐
+│  🔴 RECORDING - 7.3s / 10s          │
+│                                     │
+│  Coverage: 73%  🟢🟢🟢🟡⚪          │
+│                                     │
+│  💡 Suggestion: Rotate right more  │
+└─────────────────────────────────────┘
+```
+
+### Data Quality Metrics
+
+**Per-session metadata:**
+
+```json
+{
+  "session_quality": {
+    "orientation_coverage": 0.73,
+    "orientation_diversity_score": 0.81,
+    "samples_per_pose": {
+      "fist": 487,
+      "open_palm": 512,
+      "rest": 502
+    },
+    "stillness_warnings": 2,
+    "wizard_completion": 1.0
+  }
+}
+```
+
+---
+
+## Training Workflow
+
+### Tier-Based Pipeline
+
+```bash
+# Step 1: Collect Tier 1 data (5-8 basic poses)
+# Use wizard: tier1_basic_poses.json
+# Export to: data/GAMBIT/tier1_session_001.json
+
+# Step 2: Train Tier 1 model
+python -m ml.train \
+  --data-dir data/GAMBIT \
+  --model-type gesture \
+  --filter-tier 1 \
+  --epochs 50 \
+  --output-dir ml/models/tier1
+
+# Step 3: Validate Tier 1
+python -m ml.evaluate \
+  --model ml/models/tier1/gesture_model.keras \
+  --data-dir data/GAMBIT \
+  --filter-tier 1
+
+# Output:
+# Accuracy: 0.87 (PASS - threshold 0.85)
+# Per-class accuracy:
+#   rest: 0.89
+#   fist: 0.92
+#   open_palm: 0.85
+#   thumbs_up: 0.81
+#   point: 0.88
+
+# Step 4: If validation passes, proceed to Tier 2
+# Collect Tier 2 data (single-finger isolation)
+# Use wizard: tier2_single_finger.json
+
+# Step 5: Train Tier 2 model
+python -m ml.train \
+  --data-dir data/GAMBIT \
+  --model-type finger_tracking \
+  --filter-tier 2 \
+  --epochs 50 \
+  --output-dir ml/models/tier2
+
+# Step 6: Validate Tier 2
+python -m ml.evaluate \
+  --model ml/models/tier2/finger_model.keras \
+  --data-dir data/GAMBIT \
+  --filter-tier 2
+
+# Output:
+# Overall accuracy: 0.78 (PASS - threshold 0.75)
+# Per-finger accuracy:
+#   thumb: 0.81
+#   index: 0.79
+#   middle: 0.76
+#   ring: 0.74
+#   pinky: 0.80
+
+# Step 7: Deploy to browser
+python -m ml.build convert \
+  --model ml/models/tier2/finger_model.keras \
+  --output-dir src/web/GAMBIT/models/tier2_v1
+```
+
+### Model Architecture Progression
+
+**Tier 1: Simple Classifier**
+```
+Input (50, 9) → Conv1D(32) → Conv1D(64) → Conv1D(64)
+              → GlobalAvgPool → Dense(64) → Dense(5-8)
+              → Softmax
+Output: Pose prediction
+Params: ~37K
+```
+
+**Tier 2: Multi-Output**
+```
+Input (50, 9) → [Shared CNN] → Dense(64)
+                              ├─ thumb_state (3-class softmax)
+                              ├─ index_state (3-class softmax)
+                              ├─ middle_state (3-class softmax)
+                              ├─ ring_state (3-class softmax)
+                              └─ pinky_state (3-class softmax)
+Output: Per-finger states
+Params: ~45K
+```
+
+**Tier 3: Unified Multi-Output**
+```
+Input (50, 9) → [Shared CNN] → Dense(128)
+                              ├─ pose (20-class softmax)
+                              ├─ thumb_state (3-class softmax)
+                              ├─ index_state (3-class softmax)
+                              ├─ middle_state (3-class softmax)
+                              ├─ ring_state (3-class softmax)
+                              ├─ pinky_state (3-class softmax)
+                              └─ motion (3-class softmax)
+Output: Full multi-label prediction
+Params: ~55K
+```
 
 ---
 
@@ -599,173 +711,267 @@ function onTelemetrySample(sample) {
 
 ### Data Collection
 
-- **Wizard Adoption**: % of data collected via wizard vs manual
-- **Auto-Label Accuracy**: % of auto-labels accepted without changes
-- **Collection Time**: Time to collect 1000 labeled samples (target: < 10 minutes)
-- **Label Coverage**: % of label combinations represented in dataset
+| Metric | Target | Measurement |
+|--------|--------|-------------|
+| Time to collect Tier 1 dataset | < 5 minutes | Wizard duration |
+| Orientation coverage per pose | > 70% | Sphere discretization |
+| Samples per pose | > 250 (5s @ 50Hz) | Count |
+| Wizard completion rate | > 90% | % users who finish |
+| User-initiated exits | < 10% | Track exit reasons |
 
 ### Model Performance
 
-- **Overall Accuracy**: % of windows with all labels correct
-- **Per-Output Accuracy**: Accuracy for pose, fingers, motion separately
-- **Inference Speed**: Time to run inference in browser (target: < 50ms)
-- **Model Size**: Size of deployed model (target: < 250KB quantized)
+| Metric | Tier 1 | Tier 2 | Tier 3 |
+|--------|--------|--------|--------|
+| Overall accuracy | > 85% | > 75% | > 70% |
+| Per-class minimum | > 75% | > 65% | > 60% |
+| Inference time (browser) | < 20ms | < 30ms | < 50ms |
+| Model size (quantized) | < 100KB | < 150KB | < 200KB |
 
 ### User Experience
 
-- **Labeling Efficiency**: Time saved using auto-labeling vs manual
-- **Ease of Use**: User survey ratings (1-5 scale)
-- **Error Rate**: % of mislabeled data caught in review
-- **Iteration Cycle**: Time from data collection to trained model (target: < 30 minutes)
+| Metric | Target | Measurement |
+|--------|--------|-------------|
+| Ease of use rating | > 4/5 | User survey |
+| Instructions clarity | > 4/5 | User survey |
+| Time to first trained model | < 30 min | End-to-end tutorial |
+| Error recovery success | > 95% | Track pause/resume usage |
 
 ---
 
-## Open Questions
+## Open Questions & Design Decisions
 
-1. **Continuous Motion Modeling**:
-   - Should we support regression outputs (flex angle 0-1)?
-   - Or stick to classification (extended/partial/flexed)?
-   - Consider temporal models (LSTM) for motion sequences?
+### 1. Transition Duration
 
-2. **Calibration Standardization**:
-   - Should wizard enforce calibration before finger tracking?
-   - How to handle sessions with different calibration quality?
-   - Include calibration quality metric in model input?
+**Question**: How long should unlabeled transitions be between poses?
 
-3. **Multi-User Generalization**:
-   - Train per-user models or universal model?
-   - How to handle different hand sizes?
-   - Use transfer learning from universal to personal model?
+**Options:**
+- A: 3 seconds (quick transitions, less wasted time)
+- B: 5 seconds (comfortable transitions, less data loss)
+- C: User-configurable per template
 
-4. **Label Granularity**:
-   - 3-state finger model (extended/partial/flexed) sufficient?
-   - Or need finer granularity (5-7 states)?
-   - Trade-off between detail and model complexity?
+**Recommendation**: Start with 5 seconds, make configurable per step in template.
 
-5. **Deployment Strategy**:
-   - Browser-only inference (TensorFlow.js)?
-   - Or support ESP32 on-device inference (TFLite)?
-   - Hybrid approach (browser for data collection, ESP32 for real-time control)?
+### 2. Partial Flexion Labeling
+
+**Question**: How to handle "partial" finger states in Tier 1/2?
+
+**Options:**
+- A: Tier 1/2 use only extended(0) and flexed(2), no partial(1)
+- B: Include partial(1) from the start
+- C: Introduce partial in Tier 3 only
+
+**Recommendation**: Option A for simplicity, add partial in Tier 3 when model is more robust.
+
+### 3. Movement Validation
+
+**Question**: Should wizard enforce minimum orientation coverage?
+
+**Options:**
+- A: Hard requirement - can't proceed if coverage < 60%
+- B: Soft warning - warn user but allow proceed
+- C: No enforcement - trust user to follow instructions
+
+**Recommendation**: Option B (soft warning) to avoid frustration.
+
+### 4. Model Retraining
+
+**Question**: When adding Tier 2 data, retrain from scratch or fine-tune Tier 1 model?
+
+**Options:**
+- A: Train separate models per tier
+- B: Accumulate data and retrain from scratch
+- C: Fine-tune previous tier model with new data
+
+**Recommendation**: Option B for simplicity and best accuracy.
+
+### 5. Calibration Requirement
+
+**Question**: Should Tier 2+ require magnetometer calibration?
+
+**Options:**
+- A: Strict requirement - wizard checks calibration before starting
+- B: Recommended but optional
+- C: No requirement
+
+**Recommendation**: Option A - magnetic finger tracking requires calibration for quality data.
 
 ---
 
 ## Next Steps
 
-### Immediate Actions
+### Immediate Actions (This Week)
 
-1. **Review this plan** with project stakeholders
-2. **Prioritize features** - which sprints are most valuable?
-3. **Validate technical approach** - any blockers or constraints?
-4. **Assign resources** - who will implement which components?
-5. **Set up development environment** - ensure all dependencies installed
+1. **Review this plan** - validate approach and priorities
+2. **Create Tier 1 template** - draft tier1_basic_poses.json
+3. **Prototype three-phase UI** - mockup preview → prepare → record flow
+4. **Test with existing wizard** - collect sample data to validate approach
 
-### Quick Win (1-2 days)
+### Quick Win Demo (2-3 Days)
 
-**Goal**: Demonstrate end-to-end multi-label workflow
+**Goal**: Prove the concept end-to-end
 
-**Scope**:
-1. Create one custom wizard template (JSON file)
-2. Collect 100 samples using wizard
-3. Train multi-output finger tracking model
-4. Export to TensorFlow.js
-5. Show demo of real-time inference in collector
+**Scope:**
+1. Manually create tier1_basic_poses.json (3 poses: rest, fist, open_palm)
+2. Update wizard.js to load and execute template
+3. Collect 100 samples per pose
+4. Train simple 3-class classifier
+5. Achieve >85% validation accuracy
 
-**Success**: Proves concept, builds confidence, identifies blockers
+**Success**: Demonstrates wizard → training workflow, builds confidence
+
+### Full Implementation (4 Weeks)
+
+Follow the 4-phase roadmap outlined above.
 
 ---
 
 ## Appendix
 
-### A. Template JSON Schema
+### A. Example Tier 1 Template (Minimal)
 
-```typescript
-interface WizardTemplate {
-  id: string;
-  name: string;
-  description: string;
-  duration_estimate: number;  // seconds
-  requires_calibration: boolean;
-  magnet_config: 'none' | 'single_index' | 'alternating' | 'custom';
-  steps: WizardStep[];
-}
-
-interface WizardStep {
-  id: string;
-  type: 'static_hold' | 'continuous_motion' | 'multi_pose_sequence' | 'calibration';
-  title: string;
-  icon: string;
-  description: string;
-
-  // For static_hold:
-  transition_duration?: number;
-  hold_duration?: number;
-
-  // For continuous_motion:
-  duration?: number;
-
-  // For multi_pose_sequence:
-  poses?: Array<{labels: MultiLabel, duration: number}>;
-
-  labels: MultiLabel;
-  auto_label_hints?: AutoLabelHints;
-}
-
-interface MultiLabel {
-  pose?: string | null;
-  fingers?: {
-    thumb: 'extended' | 'partial' | 'flexed' | 'dynamic' | null;
-    index: 'extended' | 'partial' | 'flexed' | 'dynamic' | null;
-    middle: 'extended' | 'partial' | 'flexed' | 'dynamic' | null;
-    ring: 'extended' | 'partial' | 'flexed' | 'dynamic' | null;
-    pinky: 'extended' | 'partial' | 'flexed' | 'dynamic' | null;
-  };
-  motion?: 'static' | 'moving' | 'continuous' | 'transition';
-  custom?: string[];
-}
-
-interface AutoLabelHints {
-  use_residual_magnitude?: boolean;
-  finger_to_track?: 'thumb' | 'index' | 'middle' | 'ring' | 'pinky';
-  confidence_threshold?: number;
-}
-```
-
-### B. Multi-Label Model Output Format
-
-```typescript
-interface MultiLabelPrediction {
-  pose: {
-    class: string;
-    confidence: number;
-    probabilities: {[pose: string]: number};
-  } | null;
-
-  fingers: {
-    thumb: {state: 0|1|2, confidence: number, probabilities: [number, number, number]};
-    index: {state: 0|1|2, confidence: number, probabilities: [number, number, number]};
-    middle: {state: 0|1|2, confidence: number, probabilities: [number, number, number]};
-    ring: {state: 0|1|2, confidence: number, probabilities: [number, number, number]};
-    pinky: {state: 0|1|2, confidence: number, probabilities: [number, number, number]};
-  };
-
-  motion: {
-    class: 'static' | 'moving' | 'transition';
-    confidence: number;
-    probabilities: {[motion: string]: number};
-  };
-
-  custom_tags: {
-    [tag: string]: {active: boolean, confidence: number};
-  };
+```json
+{
+  "id": "tier1_minimal",
+  "name": "Tier 1: Minimal (3 poses)",
+  "tier": 1,
+  "estimated_duration": 45,
+  "steps": [
+    {
+      "id": "rest",
+      "title": "Rest",
+      "icon": "✋",
+      "instruction": {"short": "Hand relaxed, palm down"},
+      "timing": {"record_duration": 10, "transition_duration": 5},
+      "labels": {
+        "pose": "rest",
+        "fingers": {"thumb": null, "index": null, "middle": null, "ring": null, "pinky": null},
+        "motion": "moving",
+        "custom": ["tier1"]
+      },
+      "recording_guidance": {"encourage_movement": true}
+    },
+    {
+      "id": "fist",
+      "title": "Fist",
+      "icon": "✊",
+      "instruction": {"short": "Make a tight fist"},
+      "timing": {"record_duration": 10, "transition_duration": 5},
+      "labels": {
+        "pose": "fist",
+        "fingers": {"thumb": "flexed", "index": "flexed", "middle": "flexed", "ring": "flexed", "pinky": "flexed"},
+        "motion": "moving",
+        "custom": ["tier1"]
+      },
+      "recording_guidance": {"encourage_movement": true}
+    },
+    {
+      "id": "open_palm",
+      "title": "Open Palm",
+      "icon": "🖐️",
+      "instruction": {"short": "Spread all fingers wide"},
+      "timing": {"record_duration": 10, "transition_duration": 0},
+      "labels": {
+        "pose": "open_palm",
+        "fingers": {"thumb": "extended", "index": "extended", "middle": "extended", "ring": "extended", "pinky": "extended"},
+        "motion": "moving",
+        "custom": ["tier1"]
+      },
+      "recording_guidance": {"encourage_movement": true}
+    }
+  ]
 }
 ```
 
-### C. Reference Documentation
+### B. Wizard State Management
 
-- [TensorFlow.js Multi-Output Models](https://www.tensorflow.org/js/guide/models_and_layers#multi-output_models)
-- [Keras Functional API](https://keras.io/guides/functional_api/)
-- [Active Learning Survey](https://arxiv.org/abs/2009.00236)
-- [Multi-Label Classification Best Practices](https://arxiv.org/abs/1502.05988)
+```javascript
+// Wizard state tracking
+const wizardState = {
+  active: false,
+  template: null,           // Loaded template object
+  currentStepIndex: 0,
+  phase: 'preview',         // 'preview' | 'prepare' | 'record'
+
+  // Data collection
+  sessionStartIndex: 0,
+  stepsCompleted: [],
+  currentStepStartIndex: null,
+
+  // Coverage tracking
+  orientationTracker: null,
+
+  // User controls
+  paused: false,
+  pausedAt: null
+};
+
+// Phase transitions
+function transitionToPhase(newPhase) {
+  wizardState.phase = newPhase;
+  renderWizardUI();
+
+  if (newPhase === 'record') {
+    startRecordingPhase();
+  }
+}
+```
+
+### C. Template Validation Schema
+
+```javascript
+const templateSchema = {
+  type: 'object',
+  required: ['id', 'name', 'tier', 'steps'],
+  properties: {
+    id: {type: 'string', pattern: '^[a-z0-9_]+$'},
+    name: {type: 'string'},
+    tier: {type: 'integer', minimum: 1, maximum: 3},
+    estimated_duration: {type: 'integer'},
+    steps: {
+      type: 'array',
+      minItems: 1,
+      items: {
+        type: 'object',
+        required: ['id', 'title', 'labels', 'timing'],
+        properties: {
+          id: {type: 'string'},
+          title: {type: 'string'},
+          icon: {type: 'string'},
+          instruction: {
+            type: 'object',
+            required: ['short'],
+            properties: {
+              short: {type: 'string'},
+              detailed: {type: 'string'},
+              example_image: {type: 'string'},
+              example_video: {type: 'string'}
+            }
+          },
+          timing: {
+            type: 'object',
+            required: ['record_duration'],
+            properties: {
+              record_duration: {type: 'number', minimum: 1},
+              transition_duration: {type: 'number', minimum: 0}
+            }
+          },
+          labels: {
+            type: 'object',
+            required: ['motion'],
+            properties: {
+              pose: {type: ['string', 'null']},
+              fingers: {type: 'object'},
+              motion: {type: 'string'},
+              custom: {type: 'array'}
+            }
+          }
+        }
+      }
+    }
+  }
+};
+```
 
 ---
 
