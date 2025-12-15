@@ -22,6 +22,7 @@ import {
     getCalibrationBuffers
 } from './modules/wizard.js';
 import { MagneticTrajectory } from './modules/magnetic-trajectory.js';
+import { ThreeJSHandSkeleton } from './shared/threejs-hand-skeleton.js';
 import {
     getBrowserLocation,
     getDefaultLocation,
@@ -68,7 +69,9 @@ const poseState = {
 
 // Hand visualization
 let hand3DRenderer = null;
+let threeHandSkeleton = null;
 let handPreviewMode = 'labels'; // 'labels' or 'predictions'
+let useThreeJSRenderer = false; // Toggle between canvas (false) and Three.js (true)
 
 // Magnetic trajectory visualization
 let magTrajectory = null;
@@ -123,6 +126,9 @@ async function init() {
         wizard: getWizardState(),
         calibrationBuffers: getCalibrationBuffers(),
         poseState: poseState,
+        hand3DRenderer: () => hand3DRenderer,
+        threeHandSkeleton: () => threeHandSkeleton,
+        useThreeJSRenderer: () => useThreeJSRenderer,
         updatePoseEstimation: updatePoseEstimationFromMag,
         updateUI: updateUI,
         updateMagTrajectory: updateMagneticTrajectoryFromTelemetry,
@@ -990,8 +996,13 @@ function updatePoseEstimationFromMag(data) {
     }
 
     // Update 3D hand orientation from sensor fusion (every sample for smooth motion)
-    if (poseEstimationOptions.enableHandOrientation && euler && hand3DRenderer) {
-        hand3DRenderer.updateFromSensorFusion(euler);
+    if (poseEstimationOptions.enableHandOrientation && euler) {
+        if (hand3DRenderer && !useThreeJSRenderer) {
+            hand3DRenderer.updateFromSensorFusion(euler);
+        }
+        if (threeHandSkeleton && useThreeJSRenderer) {
+            threeHandSkeleton.updateOrientation(euler);
+        }
     }
 
     // Update display every 10 samples to avoid excessive DOM updates
@@ -1085,9 +1096,36 @@ function initHandVisualization() {
             rollOffset: 0
         });
         hand3DRenderer.startAnimation();
-        log('3D hand renderer initialized');
+        log('3D hand renderer initialized (legacy canvas)');
     } else {
         console.warn('3D hand renderer not available');
+    }
+
+    // Initialize Three.js hand skeleton
+    const container = $('threeHandContainer');
+    if (container && typeof THREE !== 'undefined') {
+        try {
+            threeHandSkeleton = new ThreeJSHandSkeleton(container, {
+                width: 400,
+                height: 400,
+                backgroundColor: 0x1a1a2e,
+                lerpFactor: 0.15,
+                handedness: 'right'
+            });
+
+            // Set orientation offsets to match sensor-to-hand mapping
+            threeHandSkeleton.setOrientationOffsets({
+                roll: 180,
+                pitch: 180,
+                yaw: -180
+            });
+
+            log('Three.js hand skeleton initialized');
+        } catch (err) {
+            console.error('Failed to initialize Three.js hand skeleton:', err);
+        }
+    } else {
+        console.warn('Three.js hand skeleton not available (Three.js not loaded or container missing)');
     }
 
     // Initial update

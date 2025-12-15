@@ -696,6 +696,40 @@
                 </details>
             </div>
 
+            <div class="card" id="magTrajectoryCard">
+                <div class="card-header">
+                    Magnetic Residual (3D Trajectory)
+                    <label class="hand-mode-toggle">
+                        <input type="checkbox" id="magTrajectoryToggle" checked>
+                        <span>Active</span>
+                    </label>
+                </div>
+                <div style="text-align: center; padding: var(--space-sm);">
+                    <canvas id="magTrajectoryCanvas" width="400" height="300" style="border: 1px solid var(--border); border-radius: var(--radius-sm); background: #ffffff;"></canvas>
+                </div>
+                <div id="magTrajectoryStats" style="font-size: 0.7rem; color: var(--fg-muted); text-align: center; margin-top: var(--space-xs); font-family: monospace;">
+                    Points: 0 | Magnitude: --µT (min: --, max: --, avg: --)
+                </div>
+                <div style="display: flex; justify-content: center; gap: var(--space-sm); margin-top: var(--space-xs);">
+                    <button class="btn btn-sm" id="clearMagTrajectoryBtn">Clear Trajectory</button>
+                </div>
+                <details style="margin-top: var(--space-sm); padding: var(--space-xs); border: 1px solid var(--border); border-radius: var(--radius-sm);">
+                    <summary style="cursor: pointer; font-size: 0.75rem; font-weight: bold; padding: var(--space-xs);">
+                        ℹ️ About Residual Magnetic Field
+                    </summary>
+                    <div style="padding: var(--space-sm); font-size: 0.75rem; line-height: 1.4;">
+                        <p><strong>What is shown:</strong></p>
+                        <ul style="margin: 4px 0; padding-left: 1.2em;">
+                            <li>Earth magnetic field: REMOVED (orientation-corrected)</li>
+                            <li>Hard iron distortion: REMOVED</li>
+                            <li>Soft iron distortion: REMOVED</li>
+                            <li>Result: Pure finger magnet signal in 3D</li>
+                        </ul>
+                        <p style="margin-top: 8px;"><strong>Visualization:</strong> Isometric projection with auto-scaling. Older points fade out. Green marker = start, Red marker = end.</p>
+                    </div>
+                </details>
+            </div>
+
             <div class="card" id="playbackCard">
                 <div class="card-header">Session Playback</div>
                 <div class="playback-controls">
@@ -865,6 +899,7 @@
                 formatLocation
             } from './shared/geomagnetic-field.js';
             import { ThreeJSHandSkeleton } from './shared/threejs-hand-skeleton.js';
+            import { MagneticTrajectory } from './modules/magnetic-trajectory.js';
             import { describeExpectedPose, getValidationTestCases } from './shared/orientation-model.js';
             import {
                 REFERENCE_POSES,
@@ -1044,6 +1079,10 @@
             // ===== Three.js Hand Skeleton =====
             let threeHandSkeleton = null;
             let threeHandEnabled = true;
+
+            // ===== Magnetic Trajectory Visualization =====
+            let magTrajectory = null;
+            let magTrajectoryEnabled = true;
 
             function initThreeHandSkeleton() {
                 const container = document.getElementById('threeHandContainer');
@@ -1255,6 +1294,66 @@
 
                 } catch (err) {
                     console.error('[ThreeHand] Failed to initialize:', err);
+                }
+            }
+
+            // ===== Magnetic Trajectory Visualization =====
+            function initMagneticTrajectory() {
+                const canvas = document.getElementById('magTrajectoryCanvas');
+                if (!canvas) {
+                    console.warn('[MagTrajectory] Canvas not found');
+                    return;
+                }
+
+                try {
+                    magTrajectory = new MagneticTrajectory(canvas, {
+                        maxPoints: 200,
+                        scale: 0.35,
+                        autoNormalize: true,
+                        fixedBounds: null,
+                        trajectoryColor: '#4ecdc4',
+                        showMarkers: true,
+                        showCube: true,
+                        backgroundColor: null
+                    });
+
+                    console.log('[MagTrajectory] Initialized');
+
+                    // Toggle handler
+                    const toggle = document.getElementById('magTrajectoryToggle');
+                    if (toggle) {
+                        toggle.addEventListener('change', (e) => {
+                            magTrajectoryEnabled = e.target.checked;
+                            console.log('[MagTrajectory]', magTrajectoryEnabled ? 'ON' : 'OFF');
+                        });
+                    }
+
+                    // Clear button
+                    const clearBtn = document.getElementById('clearMagTrajectoryBtn');
+                    if (clearBtn) {
+                        clearBtn.addEventListener('click', () => {
+                            if (magTrajectory) {
+                                magTrajectory.clear();
+                                updateMagTrajectoryStats();
+                                console.log('[MagTrajectory] Cleared');
+                            }
+                        });
+                    }
+                } catch (err) {
+                    console.error('[MagTrajectory] Failed to initialize:', err);
+                }
+            }
+
+            // Update magnetic trajectory stats display
+            function updateMagTrajectoryStats() {
+                const statsDiv = document.getElementById('magTrajectoryStats');
+                if (!statsDiv || !magTrajectory) return;
+
+                const stats = magTrajectory.getStats();
+                if (stats.count === 0) {
+                    statsDiv.textContent = 'Points: 0 | Magnitude: --µT (min: --, max: --, avg: --)';
+                } else {
+                    statsDiv.textContent = `Points: ${stats.count} | Magnitude: ${stats.magnitude.avg.toFixed(2)}µT (min: ${stats.magnitude.min.toFixed(2)}, max: ${stats.magnitude.max.toFixed(2)}, avg: ${stats.magnitude.avg.toFixed(2)})`;
                 }
             }
 
@@ -1881,6 +1980,20 @@
                     threeHandSkeleton.updateOrientation(handEuler);
                 }
 
+                // Update magnetic trajectory with residual field
+                if (magTrajectory && magTrajectoryEnabled && decoratedData.fused_mx !== undefined) {
+                    magTrajectory.addPoint(
+                        decoratedData.fused_mx,
+                        decoratedData.fused_my,
+                        decoratedData.fused_mz
+                    );
+
+                    // Update stats every 50 points to reduce DOM updates
+                    if (magTrajectory.points && magTrajectory.points.length % 50 === 0) {
+                        updateMagTrajectoryStats();
+                    }
+                }
+
                 // Update calibration system with current sensor state
                 latestSensorData = { ax, ay, az, gx, gy, gz, mx, my, mz };
                 updateValidationPanel(handEuler);
@@ -2199,6 +2312,12 @@
                 initThreeHandSkeleton();
             } catch (e) {
                 console.error('[GAMBIT] Failed to init Three.js hand:', e);
+            }
+
+            try {
+                initMagneticTrajectory();
+            } catch (e) {
+                console.error('[GAMBIT] Failed to init magnetic trajectory:', e);
             }
 
             // ===== Reset Orientation Button =====
