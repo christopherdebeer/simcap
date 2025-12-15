@@ -1,0 +1,112 @@
+{
+  "id": "tier1_minimal",
+  "name": "Tier 1: Minimal (3 poses)",
+  "description": "Quick proof-of-concept with 3 basic hand poses for initial model training",
+  "tier": 1,
+  "estimated_duration": 45,
+  "requires_calibration": false,
+  "requirements": {
+    "magnet_config": "none",
+    "min_samples_per_pose": 250
+  },
+  "steps": [
+    {
+      "id": "rest",
+      "title": "Rest Position",
+      "icon": "✋",
+      "instruction": {
+        "short": "Hand relaxed, palm down",
+        "detailed": "Place your hand in a natural, relaxed position with palm facing down. Fingers should be together but not tense. This is your baseline reference pose."
+      },
+      "timing": {
+        "preview_duration": null,
+        "prepare_duration": null,
+        "record_duration": 10,
+        "transition_duration": 5
+      },
+      "labels": {
+        "pose": "rest",
+        "fingers": {
+          "thumb": null,
+          "index": null,
+          "middle": null,
+          "ring": null,
+          "pinky": null
+        },
+        "motion": "moving",
+        "custom": ["tier1", "baseline", "wizard_guided"]
+      },
+      "recording_guidance": {
+        "encourage_movement": true,
+        "movement_instruction": "Slowly rotate your hand to capture different angles - up, down, left, right"
+      }
+    },
+    {
+      "id": "fist",
+      "title": "Fist",
+      "icon": "✊",
+      "instruction": {
+        "short": "Make a tight fist",
+        "detailed": "Close all fingers tightly into your palm. Thumb wraps over fingers. Make it as tight as comfortable. This is a core gesture for model training."
+      },
+      "timing": {
+        "preview_duration": null,
+        "prepare_duration": null,
+        "record_duration": 10,
+        "transition_duration": 5
+      },
+      "labels": {
+        "pose": "fist",
+        "fingers": {
+          "thumb": "flexed",
+          "index": "flexed",
+          "middle": "flexed",
+          "ring": "flexed",
+          "pinky": "flexed"
+        },
+        "motion": "moving",
+        "custom": ["tier1", "all_flexed", "wizard_guided"]
+      },
+      "recording_guidance": {
+        "encourage_movement": true,
+        "movement_instruction": "Rotate your fist - show it from all sides to capture different orientations"
+      }
+    },
+    {
+      "id": "open_palm",
+      "title": "Open Palm",
+      "icon": "🖐️",
+      "instruction": {
+        "short": "Spread all fingers wide",
+        "detailed": "Extend and spread all fingers as wide as comfortable. Palm should be flat and fingers should be separated. This contrasts with the fist pose."
+      },
+      "timing": {
+        "preview_duration": null,
+        "prepare_duration": null,
+        "record_duration": 10,
+        "transition_duration": 0
+      },
+      "labels": {
+        "pose": "open_palm",
+        "fingers": {
+          "thumb": "extended",
+          "index": "extended",
+          "middle": "extended",
+          "ring": "extended",
+          "pinky": "extended"
+        },
+        "motion": "moving",
+        "custom": ["tier1", "all_extended", "wizard_guided"]
+      },
+      "recording_guidance": {
+        "encourage_movement": true,
+        "movement_instruction": "Rotate your open hand - show palm from different angles"
+      }
+    }
+  ],
+  "validation": {
+    "required_accuracy": 0.85,
+    "min_per_class_accuracy": 0.75,
+    "next_tier": "tier2_single_finger"
+  }
+}
