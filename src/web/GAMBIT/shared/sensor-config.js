@@ -183,17 +183,40 @@ export function createKalmanFilter1D(options = {}) {
 }
 
 /**
+ * Simple low-pass filter for smoothing sensor data
+ * Formula: output = alpha * newValue + (1 - alpha) * previousValue
+ */
+export class LowPassFilter {
+    constructor(alpha = 0.3) {
+        this.alpha = alpha;  // 0-1, lower = smoother but more lag
+        this.value = null;
+    }
+
+    filter(newValue) {
+        if (this.value === null) {
+            this.value = newValue;
+        } else {
+            this.value = this.alpha * newValue + (1 - this.alpha) * this.value;
+        }
+        return this.value;
+    }
+
+    reset() {
+        this.value = null;
+    }
+
+    setValue(value) {
+        this.value = value;
+    }
+}
+
+/**
  * Create a LowPassFilter instance for smoothing
- * 
+ *
  * @param {number} [alpha=0.3] - Filter coefficient (0-1, lower = smoother but more lag)
  * @returns {LowPassFilter} Configured filter instance
  */
 export function createLowPassFilter(alpha = 0.3) {
-    // LowPassFilter is expected to be globally available from hand-3d-renderer.js
-    if (typeof LowPassFilter === 'undefined') {
-        throw new Error('LowPassFilter not found. Ensure hand-3d-renderer.js is loaded.');
-    }
-    
     return new LowPassFilter(alpha);
 }
 
