@@ -1870,6 +1870,23 @@
                 window.gY.innerHTML = gy.toFixed(gyrDecimals);
                 window.gZ.innerHTML = gz.toFixed(gyrDecimals);
 
+                // Update calibration status indicator
+                const dataStageInfo = document.getElementById('dataStageInfo');
+                if (dataStageInfo && currentDataStage === 'fused') {
+                    if (decoratedData.fused_incomplete) {
+                        if (decoratedData.fused_uncalibrated) {
+                            dataStageInfo.innerHTML = '⚠️ <b>Best Effort:</b> Showing raw magnetic field (iron calibration missing)';
+                            dataStageInfo.style.color = '#ff9500';
+                        } else {
+                            dataStageInfo.innerHTML = '⚠️ <b>Best Effort:</b> Showing iron-corrected field (Earth field calibration missing)';
+                            dataStageInfo.style.color = '#ff9500';
+                        }
+                    } else {
+                        dataStageInfo.innerHTML = dataStages['fused'].info;
+                        dataStageInfo.style.color = 'var(--fg-muted)';
+                    }
+                }
+
                 // ===== CUBE VISUALIZATION =====
                 // Get orientation from telemetry processor
                 const euler = telemetryProcessor.getEulerAngles() || { roll: 0, pitch: 0, yaw: 0 };
