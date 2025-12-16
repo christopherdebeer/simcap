@@ -2342,8 +2342,40 @@
                 return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
             }
 
-            const getEndpoint = (opts,file) => `https://api.github.com/repos/${opts.username}/${opts.repository}/contents/${file}`
-
+            // GitHub LFS Upload - ensures large files are stored properly in Git LFS
+            // (Inline version of shared/github-lfs-upload.js for non-module scripts)
+            
+            async function sha256ForLFS(content) {
+                const encoder = new TextEncoder();
+                const data = encoder.encode(content);
+                const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+                const hashArray = Array.from(new Uint8Array(hashBuffer));
+                return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            }
+            
+            function createLFSPointer(oid, size) {
+                return `version https://git-lfs.github.com/spec/v1\noid sha256:${oid}\nsize ${size}\n`;
+            }
+            
+            async function getFileShaForLFS(token, owner, repo, path) {
+                const endpoint = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+                try {
+                    const response = await fetch(endpoint, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `token ${token}`,
+                            'Accept': 'application/vnd.github.v3+json'
+                        }
+                    });
+                    if (response.ok) {
+                        const data = await response.json();
+                        return data.sha;
+                    }
+                    return null;
+                } catch (e) {
+                    return null;
+                }
+            }
 
             async function ghPutData(rawSessionData) {
 
@@ -2378,41 +2410,108 @@
                 const content = JSON.stringify(exportData, null, 2);
                 const d = new Date()
                 const filename = `${d.toISOString()}.json`
+                const filePath = `data/GAMBIT/${filename}`;
+                const owner = 'christopherdebeer';
+                const repo = 'simcap';
 
-                const endpoint = getEndpoint({
-                    repository: 'simcap',
-                    username: 'christopherdebeer',
-                }, `data/GAMBIT/${filename}`)
+                console.log("ghPutData: Starting LFS upload for", filename);
 
-                const resp1 = await fetch(endpoint, {
-                    method: "GET",
-                    headers: {
-                        "Authorization": `token ${ghToken}`,
-                        'Content-Type': 'application/json'
-                    }
-                })
-                const json1 = await resp1.json()
-                console.log("ghGet response", json1)
-                const params = {
-                    method: "PUT",
-                    headers: {
-                        "Authorization": `token ${ghToken}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        sha: json1.sha,
-                        message: `GAMBIT Data ingest ${filename}`,
-                        content: b64EncodeUnicode(content)
-                    })
-                }
-                console.log("ghPutData params", params)
-                let resp2;
                 try {
-                    resp2 = await fetch(endpoint, params)
-                    var json2 = await resp2.json()
-                    console.log("ghPutData response", json2)
+                    // Calculate content hash and size for LFS
+                    const encoder = new TextEncoder();
+                    const contentBytes = encoder.encode(content);
+                    const size = contentBytes.length;
+                    const oid = await sha256ForLFS(content);
+                    
+                    console.log("ghPutData: Content hash:", oid.substring(0, 16) + "...", "Size:", size);
+
+                    // Step 1: Request LFS upload URL via Batch API
+                    const lfsEndpoint = `https://github.com/${owner}/${repo}.git/info/lfs/objects/batch`;
+                    
+                    const lfsResponse = await fetch(lfsEndpoint, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Basic ${btoa(`${owner}:${ghToken}`)}`,
+                            'Content-Type': 'application/vnd.git-lfs+json',
+                            'Accept': 'application/vnd.git-lfs+json'
+                        },
+                        body: JSON.stringify({
+                            operation: 'upload',
+                            transfers: ['basic'],
+                            objects: [{ oid: oid, size: size }]
+                        })
+                    });
+
+                    if (!lfsResponse.ok) {
+                        const errorText = await lfsResponse.text();
+                        throw new Error(`LFS Batch API error (${lfsResponse.status}): ${errorText}`);
+                    }
+
+                    const lfsData = await lfsResponse.json();
+                    const lfsObject = lfsData.objects?.[0];
+                    if (!lfsObject) {
+                        throw new Error('No LFS object in response');
+                    }
+
+                    // Step 2: Upload to LFS storage (if needed)
+                    const uploadAction = lfsObject.actions?.upload;
+                    if (uploadAction) {
+                        console.log("ghPutData: Uploading to LFS storage...");
+                        const uploadResponse = await fetch(uploadAction.href, {
+                            method: 'PUT',
+                            headers: {
+                                ...(uploadAction.header || {}),
+                                'Content-Type': 'application/octet-stream'
+                            },
+                            body: contentBytes
+                        });
+
+                        if (!uploadResponse.ok) {
+                            const errorText = await uploadResponse.text();
+                            throw new Error(`LFS upload failed (${uploadResponse.status}): ${errorText}`);
+                        }
+                        console.log("ghPutData: LFS upload complete");
+                    } else {
+                        console.log("ghPutData: File already exists in LFS storage");
+                    }
+
+                    // Step 3: Create commit with LFS pointer
+                    const pointerContent = createLFSPointer(oid, size);
+                    const pointerBase64 = btoa(pointerContent);
+                    
+                    const existingSha = await getFileShaForLFS(ghToken, owner, repo, filePath);
+                    
+                    const commitEndpoint = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`;
+                    const commitBody = {
+                        message: `GAMBIT Data ingest ${filename}`,
+                        content: pointerBase64
+                    };
+                    
+                    if (existingSha) {
+                        commitBody.sha = existingSha;
+                    }
+
+                    const commitResponse = await fetch(commitEndpoint, {
+                        method: 'PUT',
+                        headers: {
+                            'Authorization': `token ${ghToken}`,
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/vnd.github.v3+json'
+                        },
+                        body: JSON.stringify(commitBody)
+                    });
+
+                    if (!commitResponse.ok) {
+                        const errorData = await commitResponse.json();
+                        throw new Error(`Commit failed (${commitResponse.status}): ${errorData.message || JSON.stringify(errorData)}`);
+                    }
+
+                    const commitResult = await commitResponse.json();
+                    console.log("ghPutData: ✓ Upload complete!", commitResult.content?.html_url);
+                    console.log("ghPutData: LFS OID:", oid.substring(0, 16) + "...");
+
                 } catch(err) {
-                    console.log("ghPutData PUT failed", err)
+                    console.error("ghPutData: Upload failed", err);
                 }
 
             }

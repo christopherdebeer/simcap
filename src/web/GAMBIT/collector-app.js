@@ -30,6 +30,7 @@ import {
     formatLocation,
     formatFieldData
 } from './shared/geomagnetic-field.js';
+import { uploadToGitHubLFS } from './shared/github-lfs-upload.js';
 
 // Export state for global access (used by inline functions in HTML)
 window.appState = state;
@@ -1520,7 +1521,8 @@ function storeCalibrationSessionData(samples, stepName, result) {
 }
 
 /**
- * Upload data to GitHub
+ * Upload data to GitHub using LFS API
+ * This ensures large JSON files are properly stored in Git LFS
  */
 async function uploadToGitHub() {
     if (state.sessionData.length === 0) {
@@ -1539,7 +1541,7 @@ async function uploadToGitHub() {
     try {
         uploadBtn.disabled = true;
         uploadBtn.textContent = 'Uploading...';
-        log('Uploading to GitHub...');
+        log('Uploading to GitHub (LFS)...');
 
         // Build export data with metadata
         const exportData = buildExportData();
@@ -1549,31 +1551,21 @@ async function uploadToGitHub() {
         const filename = `${timestamp}.json`;
         const content = JSON.stringify(exportData, null, 2);
 
-        // GitHub API endpoint
-        const endpoint = `https://api.github.com/repos/christopherdebeer/simcap/contents/data/GAMBIT/${filename}`;
-
-        // Base64 encode content
-        const b64Content = btoa(unescape(encodeURIComponent(content)));
-
-        const response = await fetch(endpoint, {
-            method: 'PUT',
-            headers: {
-                'Authorization': `token ${ghToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                message: `GAMBIT Data ingest ${filename}`,
-                content: b64Content
-            })
+        // Upload using LFS API to properly store large files
+        const result = await uploadToGitHubLFS({
+            token: ghToken,
+            owner: 'christopherdebeer',
+            repo: 'simcap',
+            path: `data/GAMBIT/${filename}`,
+            content: content,
+            message: `GAMBIT Data ingest ${filename}`,
+            onProgress: (progress) => {
+                uploadBtn.textContent = progress.message;
+                log(`Upload: ${progress.message}`);
+            }
         });
 
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.message || `HTTP ${response.status}`);
-        }
-
-        const result = await response.json();
-        log(`Uploaded: ${result.content?.name || filename}`);
+        log(`✓ Uploaded: ${result.filename} (LFS: ${result.lfsOid?.substring(0, 8)}...)`);
 
     } catch (e) {
         console.error('[GAMBIT] Upload failed:', e);
