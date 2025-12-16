@@ -83,11 +83,26 @@ export function updateCalibrationStatus() {
 
     saveBtn.disabled = !complete;
 
-    // Hard Iron enabled immediately, Soft Iron requires Hard Iron first
+    // Hard Iron enabled immediately, Soft Iron requires Hard Iron first, Baseline requires Soft Iron
     const startHardIronBtn = $('startHardIronCal');
     const startSoftIronBtn = $('startSoftIronCal');
+    const startBaselineBtn = $('startBaselineCal');
     if (startHardIronBtn) startHardIronBtn.disabled = !state.connected;
     if (startSoftIronBtn) startSoftIronBtn.disabled = !state.connected || !hasHardIron;
+    if (startBaselineBtn) startBaselineBtn.disabled = !state.connected || !hasSoftIron;
+
+    // Show baseline status if captured
+    const baselineQuality = $('baselineQuality');
+    if (baselineQuality && calibrationInstance) {
+        const calState = calibrationInstance.getState();
+        if (calState.extendedBaselineActive) {
+            const mag = calState.extendedBaselineMagnitude;
+            const quality = mag < 60 ? 'Excellent' : mag < 80 ? 'Good' : 'Acceptable';
+            const emoji = mag < 60 ? '✅' : mag < 80 ? '⚠️' : '⚠️';
+            baselineQuality.textContent = `${emoji} ${quality} (magnitude: ${mag.toFixed(1)} µT)`;
+            baselineQuality.style.color = mag < 80 ? 'var(--success)' : 'var(--warning)';
+        }
+    }
 }
 
 /**
@@ -239,6 +254,83 @@ export function initCalibrationUI() {
                 return calibrationInstance.runSoftIronCalibration(samples);
             }
         );
+        });
+    }
+
+    // Extended Baseline Capture
+    const startBaselineCal = $('startBaselineCal');
+    if (startBaselineCal) {
+        startBaselineCal.addEventListener('click', async () => {
+            if (!state.gambitClient || !state.connected) {
+                log('Error: Not connected');
+                return;
+            }
+
+            const progressDiv = $('baselineProgress');
+            const qualityDiv = $('baselineQuality');
+
+            // Need 100 samples at ~26Hz = ~4 seconds, use 78 samples for 3 seconds
+            const sampleCount = 78;
+            const sampleRate = 26;
+
+            log('Starting Extended Baseline capture: hold hand still with fingers extended...');
+            progressDiv.textContent = 'Starting...';
+            qualityDiv.textContent = '';
+
+            // Start baseline capture mode
+            calibrationInstance.startBaselineCapture();
+
+            try {
+                const dataHandler = (sample) => {
+                    // Feed samples to baseline capture (needs orientation from AHRS)
+                    // The calibrationInstance will accumulate residuals during capture
+                    const magUT = {
+                        x: magLsbToMicroTesla(sample.mx),
+                        y: magLsbToMicroTesla(sample.my),
+                        z: magLsbToMicroTesla(sample.mz)
+                    };
+
+                    // Use current AHRS orientation if available
+                    const orientation = state.ahrs?.getQuaternion() || { w: 1, x: 0, y: 0, z: 0 };
+                    calibrationInstance.update(magUT, orientation);
+                };
+
+                state.gambitClient.on('data', dataHandler);
+
+                const result = await state.gambitClient.collectSamples(sampleCount, sampleRate);
+
+                state.gambitClient.off('data', dataHandler);
+                progressDiv.textContent = `✓ ${result.collectedCount} samples in ${(result.durationMs/1000).toFixed(1)}s`;
+
+                // End capture and get result
+                const baselineResult = calibrationInstance.endBaselineCapture();
+
+                if (baselineResult.success) {
+                    const mag = baselineResult.magnitude;
+                    const quality = baselineResult.quality.charAt(0).toUpperCase() + baselineResult.quality.slice(1);
+                    const emoji = mag < 60 ? '✅' : mag < 80 ? '⚠️' : '⚠️';
+                    qualityDiv.textContent = `${emoji} ${quality} (magnitude: ${mag.toFixed(1)} µT)`;
+                    qualityDiv.style.color = mag < 80 ? 'var(--success)' : 'var(--warning)';
+
+                    calibrationInstance.save('gambit_calibration');
+                    log(`Extended Baseline captured: ${mag.toFixed(1)} µT (${quality})`);
+                } else {
+                    qualityDiv.textContent = `❌ Failed: ${baselineResult.reason}`;
+                    qualityDiv.style.color = 'var(--danger)';
+                    if (baselineResult.suggestion) {
+                        qualityDiv.textContent += ` - ${baselineResult.suggestion}`;
+                    }
+                    log(`Baseline capture failed: ${baselineResult.reason}`);
+                }
+
+                updateCalibrationStatus();
+
+            } catch (error) {
+                log(`Error during baseline capture: ${error.message}`);
+                qualityDiv.textContent = `❌ Failed: ${error.message}`;
+                qualityDiv.style.color = 'var(--danger)';
+                progressDiv.textContent = 'Failed';
+            }
         });
     }
 

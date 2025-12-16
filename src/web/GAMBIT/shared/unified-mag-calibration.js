@@ -71,6 +71,7 @@ export class UnifiedMagCalibration {
      * @param {Object} [options.extendedBaseline=null] - Pre-computed baseline {x, y, z} in µT
      * @param {number} [options.baselineMagnitudeThreshold=100] - Max magnitude for valid baseline (µT)
      * @param {number} [options.baselineMinSamples=50] - Min samples for baseline capture (~1 second)
+     * @param {number} [options.confidenceResidualThreshold=50] - Residual threshold for 0% confidence (µT)
      */
     constructor(options = {}) {
         // Configuration
@@ -82,6 +83,10 @@ export class UnifiedMagCalibration {
         this.extendedBaselineEnabled = options.extendedBaselineEnabled !== false; // default true
         this.baselineMagnitudeThreshold = options.baselineMagnitudeThreshold || 100; // µT
         this.baselineMinSamples = options.baselineMinSamples || 50; // ~1 second at 50Hz
+
+        // Confidence calculation configuration
+        // Threshold of 50µT is more forgiving during motion (Earth field ~50µT)
+        this.confidenceResidualThreshold = options.confidenceResidualThreshold || 50; // µT
 
         // Iron calibration (from wizard)
         this.hardIronOffset = { x: 0, y: 0, z: 0 };
@@ -547,6 +552,11 @@ export class UnifiedMagCalibration {
 
     /**
      * Get confidence (0-1) based on residual magnitude
+     *
+     * Note: This measures instantaneous residual accuracy, not calibration quality.
+     * During motion, residuals naturally increase due to Earth estimate lag.
+     * See getCalibrationQuality() for orientation diversity metric.
+     *
      * @returns {number}
      */
     getConfidence() {
@@ -554,7 +564,51 @@ export class UnifiedMagCalibration {
             return Math.min(0.5, this._totalSamples / (this.minSamples * 2));
         }
         const meanResidual = this._recentResiduals.reduce((a, b) => a + b, 0) / this._recentResiduals.length;
-        return Math.max(0, Math.min(1, 1 - meanResidual / 20));
+        // Use configurable threshold (default 50µT) instead of hardcoded 20µT
+        return Math.max(0, Math.min(1, 1 - meanResidual / this.confidenceResidualThreshold));
+    }
+
+    /**
+     * Get calibration quality (0-1) based on orientation diversity
+     *
+     * This is a better metric for "how well calibrated" the system is,
+     * as it measures the diversity of orientations in the sample window
+     * rather than instantaneous residual accuracy.
+     *
+     * @returns {Object} {quality: number, diversityRatio: number, windowFill: number}
+     */
+    getCalibrationQuality() {
+        const windowFill = Math.min(1, this._worldSamples.length / this.windowSize);
+
+        // Measure orientation diversity via variance in world-frame samples
+        if (this._worldSamples.length < this.minSamples) {
+            return { quality: windowFill * 0.5, diversityRatio: 0, windowFill };
+        }
+
+        const samples = this._worldSamples;
+        const n = samples.length;
+
+        // Compute variance in each axis
+        const meanX = samples.reduce((s, p) => s + p.x, 0) / n;
+        const meanY = samples.reduce((s, p) => s + p.y, 0) / n;
+        const meanZ = samples.reduce((s, p) => s + p.z, 0) / n;
+
+        const varX = samples.reduce((s, p) => s + (p.x - meanX) ** 2, 0) / n;
+        const varY = samples.reduce((s, p) => s + (p.y - meanY) ** 2, 0) / n;
+        const varZ = samples.reduce((s, p) => s + (p.z - meanZ) ** 2, 0) / n;
+
+        // Total variance - higher means more diverse orientations
+        const totalVar = Math.sqrt(varX + varY + varZ);
+
+        // For ideal calibration with diverse rotations, we'd expect variance
+        // roughly equal to Earth field magnitude (samples spread around sphere)
+        // Static device has near-zero variance
+        const diversityRatio = Math.min(1, totalVar / (this._earthFieldMagnitude || 50));
+
+        // Quality combines window fill and orientation diversity
+        const quality = windowFill * (0.5 + 0.5 * diversityRatio);
+
+        return { quality, diversityRatio, windowFill };
     }
 
     /**
@@ -596,6 +650,7 @@ export class UnifiedMagCalibration {
             this._extendedBaseline.y ** 2 +
             this._extendedBaseline.z ** 2
         );
+        const calibrationQuality = this.getCalibrationQuality();
         return {
             ready: this.isReady(),
             confidence: this.getConfidence(),
@@ -610,7 +665,11 @@ export class UnifiedMagCalibration {
             capturingBaseline: this._baselineCapturing,
             baselineSampleCount: this._baselineCaptureSamples.length,
             windowSize: this._worldSamples.length,
-            totalSamples: this._totalSamples
+            totalSamples: this._totalSamples,
+            // Calibration quality based on orientation diversity (better metric during motion)
+            calibrationQuality: calibrationQuality.quality,
+            diversityRatio: calibrationQuality.diversityRatio,
+            windowFill: calibrationQuality.windowFill
         };
     }
 
