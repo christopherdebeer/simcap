@@ -34,9 +34,17 @@ export const DEFAULT_SAMPLE_FREQ = 26;
 
 /**
  * Magnetometer scale factor: LSB to μT
- * LIS3MDL: 6842 LSB/gauss @ ±4 gauss, 1 gauss = 100 μT
+ *
+ * DEPRECATED: Use magLsbToMicroTesla() from sensor-units.js instead!
+ * This constant is kept for backward compatibility but uses outdated LIS3MDL values.
+ * The authoritative source is sensor-units.js which supports current MMC5603NJ.
+ *
+ * Current hardware (Puck.js v2.1a): MMC5603NJ - 100/1024 = 0.09765625 μT/LSB
+ * Legacy hardware (Puck.js v2): LIS3MDL - 100/6842 = 0.014616 μT/LSB
+ *
+ * @deprecated Use sensor-units.js magLsbToMicroTesla() for correct conversion
  */
-export const MAG_SCALE_LSB_TO_UT = 100 / 6842;
+export const MAG_SCALE_LSB_TO_UT = 100 / 6842; // DEPRECATED - see sensor-units.js
 
 // ===== Unit Conversion Functions =====
 
