@@ -495,7 +495,7 @@
                     </label>
                     <label class="checkbox-label">
                         <input type="checkbox" id="show-win-traj-fused">
-                        Traj Fused
+                        Traj Residual
                     </label>
                     <label class="checkbox-label">
                         <input type="checkbox" id="show-win-traj-filtered">
@@ -757,8 +757,8 @@
                 }
                 if (w.trajectory_images && w.trajectory_images.fused && viewSettings.showWinTrajFused) {
                     html += `<div class="trajectory-card" data-type="traj-fused" onclick="openModal('${w.trajectory_images.fused}')">
-                        <img src="../../../visualizations/${w.trajectory_images.fused}" class="trajectory-image" alt="Traj Fused">
-                        <div class="trajectory-label">Traj Fused</div>
+                        <img src="../../../visualizations/${w.trajectory_images.fused}" class="trajectory-image" alt="Traj Residual">
+                        <div class="trajectory-label">Traj Residual</div>
                     </div>`;
                 }
                 if (w.trajectory_images && w.trajectory_images.filtered && viewSettings.showWinTrajFiltered) {
@@ -913,8 +913,8 @@
                                 ` : ''}
                                 ${session.trajectory_comparison_images.fused && viewSettings.showWinTrajFused ? `
                                 <div class="trajectory-card" data-type="fused" onclick="openModal('${session.trajectory_comparison_images.fused}')">
-                                    <img src="../../../visualizations/${session.trajectory_comparison_images.fused}" class="trajectory-image" alt="Fused trajectory">
-                                    <div class="trajectory-label">Fused</div>
+                                    <img src="../../../visualizations/${session.trajectory_comparison_images.fused}" class="trajectory-image" alt="Residual trajectory">
+                                    <div class="trajectory-label">Residual</div>
                                 </div>
                                 ` : ''}
                                 ${session.trajectory_comparison_images.filtered && viewSettings.showWinTrajFiltered ? `
