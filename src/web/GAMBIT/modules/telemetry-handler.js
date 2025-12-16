@@ -36,7 +36,7 @@ export function setDependencies(dependencies) {
     
     // Update calibration in processor if it exists
     if (telemetryProcessor && deps.calibrationInstance) {
-        telemetryProcessor.setCalibration(deps.calibrationInstance);
+        // telemetryProcessor.setCalibration(deps.calibrationInstance);
     }
 }
 
@@ -94,20 +94,17 @@ export function resetIMU() {
  * @param {Object} telemetry - Raw telemetry data from device
  */
 export function onTelemetry(telemetry) {
-    // Skip if not recording at all
-    if (!state.recording) return;
-
-    // Track whether we should store this sample (not when paused)
-    const shouldStore = !state.paused;
-
-    // Initialize processor if needed
+    // Initialize processor if needed (always, even when not recording)
     if (!telemetryProcessor) {
         initProcessor();
     }
+
+    // Track whether we should store this sample (only when recording and not paused)
+    const shouldStore = state.recording && !state.paused;
     
     // Update calibration instance if changed
     if (deps.calibrationInstance && telemetryProcessor.calibration !== deps.calibrationInstance) {
-        telemetryProcessor.setCalibration(deps.calibrationInstance);
+        // telemetryProcessor.setCalibration(deps.calibrationInstance);
     }
 
     // Process telemetry through the shared pipeline
@@ -183,22 +180,27 @@ function updateLiveDisplay(raw, decorated) {
     $('mz').textContent = (decorated.calibrated_mz ?? raw.mz).toFixed(2);
 
     // Residual magnetic field display (finger magnet signals)
-    if (decorated.fused_mx !== undefined) {
-        $('fused_mx').textContent = decorated.fused_mx.toFixed(2);
-        $('fused_my').textContent = decorated.fused_my.toFixed(2);
-        $('fused_mz').textContent = decorated.fused_mz.toFixed(2);
+    // TelemetryProcessor outputs residual_mx/my/mz (Earth field subtracted)
+    if (decorated.residual_mx !== undefined) {
+        $('fused_mx').textContent = decorated.residual_mx.toFixed(2);
+        $('fused_my').textContent = decorated.residual_my.toFixed(2);
+        $('fused_mz').textContent = decorated.residual_mz.toFixed(2);
 
         // Display residual magnitude
         const residualMag = decorated.residual_magnitude ?? Math.sqrt(
-            decorated.fused_mx ** 2 +
-            decorated.fused_my ** 2 +
-            decorated.fused_mz ** 2
+            decorated.residual_mx ** 2 +
+            decorated.residual_my ** 2 +
+            decorated.residual_mz ** 2
         );
         $('residual_magnitude').textContent = residualMag.toFixed(2) + ' μT';
 
         // Update 3D magnetic trajectory visualization
         if (deps.updateMagTrajectory) {
-            deps.updateMagTrajectory(decorated);
+            deps.updateMagTrajectory({
+                fused_mx: decorated.residual_mx,
+                fused_my: decorated.residual_my,
+                fused_mz: decorated.residual_mz
+            });
         }
     } else {
         $('fused_mx').textContent = '-';

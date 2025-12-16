@@ -12,7 +12,7 @@ import {
     calibrationInstance,
     setStoreSessionCallback as setCalibrationSessionCallback
 } from './modules/calibration-ui.js';
-import { onTelemetry, setDependencies as setTelemetryDeps, resetIMU } from './modules/telemetry-handler.js';
+import { onTelemetry, setDependencies as setTelemetryDeps, resetIMU, getProcessor } from './modules/telemetry-handler.js';
 import { setCallbacks as setConnectionCallbacks, initConnectionUI } from './modules/connection-manager.js';
 import { setCallbacks as setRecordingCallbacks, initRecordingUI, startRecording, pauseRecording, resumeRecording } from './modules/recording-controls.js';
 import {
@@ -96,6 +96,209 @@ let mlModelLoaded = false;
 // GitHub token (for upload functionality)
 let ghToken = null;
 
+// Live calibration UI update interval
+let calibrationUIInterval = null;
+const CALIBRATION_UI_UPDATE_INTERVAL = 500; // Update every 500ms
+
+/**
+ * Update calibration confidence UI
+ * Shows incremental calibration status and confidence metrics
+ * Mirrors the implementation in index.html
+ */
+function updateCalibrationConfidenceUI() {
+    // Get telemetry processor from telemetry handler
+    const processor = getProcessor();
+    if (!processor) return;
+
+    // Get calibration state from TelemetryProcessor's UnifiedMagCalibration
+    const magCal = processor.getMagCalibration();
+    if (!magCal) return;
+
+    const calState = magCal.getState();
+
+    const overall = Math.round(calState.confidence * 100);
+    const meanResidual = calState.meanResidual;
+    const earthMag = calState.earthMagnitude;
+    const totalSamples = calState.totalSamples;
+
+    // Update text displays
+    const overallEl = $('overallConfidence');
+    const hardIronEl = $('hardIronConf');
+    const earthFieldEl = $('earthFieldConf');
+    const samplesEl = $('calibSamples');
+    const fieldMagEl = $('earthFieldMag');
+    const statusEl = $('calibStatus');
+    const barEl = $('confidenceBar');
+    const meanResidualEl = $('meanResidual');
+    const residualQualityEl = $('residualQuality');
+
+    if (overallEl) overallEl.textContent = `${overall}%`;
+    if (hardIronEl) hardIronEl.textContent = calState.hardIronEnabled ? '✓' : '--';
+    if (earthFieldEl) earthFieldEl.textContent = calState.ready ? '✓ Auto' : 'Building...';
+    if (samplesEl) samplesEl.textContent = totalSamples.toString();
+
+    if (fieldMagEl) {
+        fieldMagEl.textContent = earthMag > 0 ? `${earthMag.toFixed(1)} µT` : '-- µT';
+    }
+
+    // Update mean residual display (the TRUE measure of calibration quality)
+    if (meanResidualEl) {
+        if (meanResidual !== undefined && meanResidual !== Infinity && !isNaN(meanResidual)) {
+            meanResidualEl.textContent = `${meanResidual.toFixed(1)} µT`;
+            // Color based on residual quality
+            if (meanResidual < 5) {
+                meanResidualEl.style.color = 'var(--success)';
+            } else if (meanResidual < 10) {
+                meanResidualEl.style.color = 'var(--warning)';
+            } else {
+                meanResidualEl.style.color = 'var(--danger)';
+            }
+        } else {
+            meanResidualEl.textContent = '-- µT';
+            meanResidualEl.style.color = 'var(--fg-muted)';
+        }
+    }
+
+    // Update residual quality indicator
+    if (residualQualityEl) {
+        let interpretation = '--';
+        if (meanResidual !== undefined && meanResidual !== Infinity && !isNaN(meanResidual)) {
+            interpretation = meanResidual < 5 ? 'excellent' :
+                            meanResidual < 10 ? 'good' :
+                            meanResidual < 15 ? 'moderate' : 'poor';
+        }
+        residualQualityEl.textContent = interpretation.toUpperCase();
+        if (interpretation === 'excellent') {
+            residualQualityEl.style.color = 'var(--success)';
+        } else if (interpretation === 'good') {
+            residualQualityEl.style.color = '#8bc34a';
+        } else if (interpretation === 'moderate') {
+            residualQualityEl.style.color = 'var(--warning)';
+        } else {
+            residualQualityEl.style.color = 'var(--danger)';
+        }
+    }
+
+    // Update progress bar
+    if (barEl) {
+        barEl.style.width = `${overall}%`;
+        // Color based on confidence level
+        if (overall >= 70) {
+            barEl.style.background = 'var(--success)';
+        } else if (overall >= 40) {
+            barEl.style.background = 'var(--warning)';
+        } else {
+            barEl.style.background = 'var(--danger)';
+        }
+    }
+
+    // Update status text - now based on residual
+    if (statusEl) {
+        const status = [];
+        if (meanResidual !== undefined && meanResidual !== Infinity && !isNaN(meanResidual)) {
+            if (meanResidual < 5) {
+                status.push('✓ Excellent calibration');
+            } else if (meanResidual < 10) {
+                status.push('Good calibration');
+            } else if (meanResidual < 15) {
+                status.push('Moderate - keep rotating');
+            } else {
+                status.push('Poor - rotate more');
+            }
+        } else if (totalSamples < 50) {
+            status.push('Collecting samples...');
+        } else if (!calState.ready) {
+            status.push('Building Earth field estimate...');
+        } else {
+            status.push('Calibrated (auto)');
+        }
+        statusEl.textContent = status.join(' | ');
+    }
+
+    // Update overall confidence color
+    if (overallEl) {
+        if (overall >= 70) {
+            overallEl.style.color = 'var(--success)';
+        } else if (overall >= 40) {
+            overallEl.style.color = 'var(--warning)';
+        } else {
+            overallEl.style.color = 'var(--danger)';
+        }
+    }
+}
+
+/**
+ * Update magnet detection UI display
+ * Shows finger magnet detection status and confidence
+ * Mirrors the implementation in index.html
+ */
+function updateMagnetDetectionUI() {
+    // Get telemetry processor from telemetry handler
+    const processor = getProcessor();
+    if (!processor) return;
+
+    // Get magnet state from telemetry processor
+    const magnetState = processor.getMagnetState();
+    if (!magnetState) return;
+
+    const statusEl = $('magnetStatusValue');
+    const confEl = $('magnetConfidenceValue');
+    const barEl = $('magnetConfidenceBar');
+    const residualEl = $('magnetAvgResidual');
+
+    // Update status text with icon
+    if (statusEl) {
+        const icons = { none: '○', possible: '◐', likely: '◑', confirmed: '🧲' };
+        const labels = { none: 'No Magnets', possible: 'Possible', likely: 'Likely', confirmed: 'Confirmed' };
+        const colors = { none: 'var(--fg-muted)', possible: 'var(--warning)', likely: '#5bc0de', confirmed: 'var(--success)' };
+
+        statusEl.textContent = `${icons[magnetState.status] || '?'} ${labels[magnetState.status] || '--'}`;
+        statusEl.style.color = colors[magnetState.status] || 'var(--fg-muted)';
+    }
+
+    // Update confidence
+    const confPct = Math.round(magnetState.confidence * 100);
+    if (confEl) confEl.textContent = `${confPct}%`;
+
+    // Update bar
+    if (barEl) {
+        barEl.style.width = `${confPct}%`;
+        const colors = { none: 'var(--fg-muted)', possible: 'var(--warning)', likely: '#5bc0de', confirmed: 'var(--success)' };
+        barEl.style.background = colors[magnetState.status] || 'var(--fg-muted)';
+    }
+
+    // Update residual
+    if (residualEl) {
+        residualEl.textContent = magnetState.avgResidual > 0 ?
+            `${magnetState.avgResidual.toFixed(1)} µT` : '-- µT';
+    }
+}
+
+/**
+ * Start periodic calibration UI updates
+ */
+function startCalibrationUIUpdates() {
+    if (calibrationUIInterval) return; // Already running
+
+    calibrationUIInterval = setInterval(() => {
+        updateCalibrationConfidenceUI();
+        updateMagnetDetectionUI();
+    }, CALIBRATION_UI_UPDATE_INTERVAL);
+
+    console.log('[GAMBIT Collector] Started calibration UI updates');
+}
+
+/**
+ * Stop periodic calibration UI updates
+ */
+function stopCalibrationUIUpdates() {
+    if (calibrationUIInterval) {
+        clearInterval(calibrationUIInterval);
+        calibrationUIInterval = null;
+        console.log('[GAMBIT Collector] Stopped calibration UI updates');
+    }
+}
+
 /**
  * Initialize application
  */
@@ -132,8 +335,8 @@ async function init() {
         $: $
     });
 
-    // Set connection callbacks
-    setConnectionCallbacks(updateUI, updateCalibrationStatus);
+    // Set connection callbacks (including calibration UI start/stop)
+    setConnectionCallbacks(updateUI, updateCalibrationStatus, startCalibrationUIUpdates, stopCalibrationUIUpdates);
 
     // Set recording callbacks
     setRecordingCallbacks(updateUI, closeCurrentLabel);
@@ -1082,7 +1285,7 @@ function initMagneticTrajectory() {
             backgroundColor: '#ffffff',
             autoNormalize: true,
             showMarkers: true,
-            showCube: false
+            showCube: true
         });
 
         // Clear button

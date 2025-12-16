@@ -696,6 +696,62 @@
             </div>
         </section>
 
+        <!-- Live Calibration Confidence -->
+        <section class="card">
+            <h2 class="collapsible">Live Calibration</h2>
+            <div class="collapse-content">
+                <!-- Incremental Calibration Confidence Display -->
+                <div id="calibrationConfidence" style="margin-bottom: var(--space-sm); padding: var(--space-xs); background: var(--bg); border-radius: var(--radius-sm);">
+                    <strong style="font-size: 11px;">📊 Live Calibration:</strong>
+                    <div style="margin-top: 4px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <span style="font-size: 10px;">Overall Confidence:</span>
+                            <span id="overallConfidence" style="font-weight: bold; color: var(--warning); font-size: 11px;">0%</span>
+                        </div>
+                        <div style="background: #333; border-radius: 3px; height: 6px; margin-bottom: 6px;">
+                            <div id="confidenceBar" style="height: 100%; border-radius: 3px; width: 0%; background: var(--warning); transition: width 0.3s, background 0.3s;"></div>
+                        </div>
+                        <div style="font-size: 9px; color: var(--fg-muted);">
+                            <div style="display: flex; justify-content: space-between;">
+                                <span>Hard Iron: <span id="hardIronConf">--</span></span>
+                                <span>Earth Field: <span id="earthFieldConf">--</span></span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-top: 2px;">
+                                <span>Samples: <span id="calibSamples">0</span></span>
+                                <span>Field: <span id="earthFieldMag">-- µT</span></span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-top: 2px;">
+                                <span>Residual: <span id="meanResidual" style="font-weight: bold;">-- µT</span></span>
+                                <span id="residualQuality" style="font-size: 8px;">--</span>
+                            </div>
+                            <div id="calibStatus" style="margin-top: 4px; color: var(--fg-muted);">Collecting samples...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Magnet Detection Status -->
+                <div id="magnetDetectionStatus" style="margin-bottom: var(--space-sm); padding: var(--space-xs); background: var(--bg); border-radius: var(--radius-sm);">
+                    <strong style="font-size: 11px;">🧲 Magnet Detection:</strong>
+                    <div style="margin-top: 4px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <span style="font-size: 10px;">Status:</span>
+                            <span id="magnetStatusValue" style="font-weight: bold; color: var(--fg-muted); font-size: 11px;">--</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 10px;">Confidence:</span>
+                            <span id="magnetConfidenceValue" style="font-weight: bold; font-size: 11px;">0%</span>
+                        </div>
+                        <div style="background: #333; border-radius: 3px; height: 6px; margin-top: 4px;">
+                            <div id="magnetConfidenceBar" style="height: 100%; border-radius: 3px; width: 0%; background: var(--fg-muted); transition: width 0.3s, background 0.3s;"></div>
+                        </div>
+                        <div style="font-size: 9px; color: var(--fg-muted); margin-top: 4px;">
+                            <span>Avg Residual: <span id="magnetAvgResidual">-- µT</span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <!-- Calibration Wizard -->
         <section class="card">
             <h2 class="collapsible collapsed">Calibration Wizard</h2>

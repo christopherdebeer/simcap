@@ -9,15 +9,21 @@ import { onTelemetry } from './telemetry-handler.js';
 
 let updateUI = null;
 let updateCalibrationStatus = null;
+let onConnectCallback = null;
+let onDisconnectCallback = null;
 
 /**
  * Set callbacks for UI updates
  * @param {Function} uiCallback - Function to update UI
  * @param {Function} calibrationCallback - Function to update calibration status
+ * @param {Function} connectCallback - Function called on successful connection
+ * @param {Function} disconnectCallback - Function called on disconnection
  */
-export function setCallbacks(uiCallback, calibrationCallback) {
+export function setCallbacks(uiCallback, calibrationCallback, connectCallback = null, disconnectCallback = null) {
     updateUI = uiCallback;
     updateCalibrationStatus = calibrationCallback;
+    onConnectCallback = connectCallback;
+    onDisconnectCallback = disconnectCallback;
 }
 
 /**
@@ -65,6 +71,7 @@ export async function connect() {
             log('Connection closed');
             if (updateUI) updateUI();
             if (updateCalibrationStatus) updateCalibrationStatus();
+            if (onDisconnectCallback) onDisconnectCallback();
         });
 
         // Handle errors
@@ -80,6 +87,7 @@ export async function connect() {
         log('Connected!');
         if (updateUI) updateUI();
         if (updateCalibrationStatus) updateCalibrationStatus();
+        if (onConnectCallback) onConnectCallback();
 
         return true;
 
@@ -107,6 +115,7 @@ export function disconnect() {
     log('Disconnected');
     if (updateUI) updateUI();
     if (updateCalibrationStatus) updateCalibrationStatus();
+    if (onDisconnectCallback) onDisconnectCallback();
 }
 
 /**
