@@ -145,7 +145,22 @@ class SensorDataProcessor:
         print(f"\nTotal sessions loaded: {len(self.sessions)}")
 
     def extract_sensor_arrays(self, data: List[Dict]) -> Dict[str, np.ndarray]:
-        """Extract sensor data into numpy arrays, including calibrated/fused/filtered fields."""
+        """Extract sensor data into numpy arrays, including calibrated/fused/filtered fields.
+
+        Physical Units (per unified-mag-calibration.js and sensor-config.js):
+        - Accelerometer: g (1g = 9.81 m/s²)
+        - Gyroscope: °/s (degrees per second)
+        - Magnetometer: µT (microtesla)
+
+        Magnetometer Calibration Stages (per magnetometer-calibration-complete-analysis.md):
+        1. Raw (mx, my, mz): Unit-converted readings in µT
+        2. Iron Corrected (calibrated_*): Hard/soft iron correction applied
+        3. Residual/Earth-Subtracted (residual_* or fused_*): Earth field removed via orientation-compensated averaging
+        4. Filtered (filtered_*): Kalman smoothed for noise reduction
+
+        Note: 'fused_*' is legacy naming for 'residual_*' (Earth-subtracted) fields.
+        Both field names are supported for backward compatibility.
+        """
         # Initialize arrays
         n_samples = len(data)
         sensors = {
@@ -379,7 +394,7 @@ class SessionVisualizer:
         ax1.plot(sensors['time'], sensors['az'], label='Z', alpha=0.7, linewidth=1)
         ax1.set_title('Accelerometer (3-axis)', fontweight='bold')
         ax1.set_xlabel('Time (s)')
-        ax1.set_ylabel('Value (raw ADC)')
+        ax1.set_ylabel('Acceleration (g)')
         ax1.legend(loc='upper right')
         ax1.grid(True, alpha=0.3)
 
@@ -390,7 +405,7 @@ class SessionVisualizer:
         ax2.plot(sensors['time'], sensors['gz'], label='Z', alpha=0.7, linewidth=1)
         ax2.set_title('Gyroscope (3-axis)', fontweight='bold')
         ax2.set_xlabel('Time (s)')
-        ax2.set_ylabel('Value (raw ADC)')
+        ax2.set_ylabel('Angular velocity (°/s)')
         ax2.legend(loc='upper right')
         ax2.grid(True, alpha=0.3)
 
@@ -406,7 +421,7 @@ class SessionVisualizer:
             calib_status = 'Full (Iron + Earth + Filtered)'
             status_color = '#4daf4a'  # Green
         elif has_fused:
-            calib_status = 'Fused (Iron + Earth Field)'
+            calib_status = 'Residual (Iron + Earth Subtracted)'
             status_color = '#377eb8'  # Blue
         elif has_calibrated:
             calib_status = 'Partial (Iron Only)'
@@ -429,11 +444,11 @@ class SessionVisualizer:
             ax3.plot(sensors['time'], sensors['calibrated_my'], color='#17becf', alpha=0.6, linewidth=1, label='Iron Y')
             ax3.plot(sensors['time'], sensors['calibrated_mz'], color='#9467bd', alpha=0.6, linewidth=1, label='Iron Z')
 
-        # Stage 3: Fused / Earth field subtracted (green tones) - if available
+        # Stage 3: Residual / Earth field subtracted (green tones) - if available
         if has_fused:
-            ax3.plot(sensors['time'], sensors['fused_mx'], color='#2ca02c', alpha=0.7, linewidth=1.2, label='Fused X')
-            ax3.plot(sensors['time'], sensors['fused_my'], color='#98df8a', alpha=0.7, linewidth=1.2, label='Fused Y')
-            ax3.plot(sensors['time'], sensors['fused_mz'], color='#006400', alpha=0.7, linewidth=1.2, label='Fused Z')
+            ax3.plot(sensors['time'], sensors['fused_mx'], color='#2ca02c', alpha=0.7, linewidth=1.2, label='Residual X')
+            ax3.plot(sensors['time'], sensors['fused_my'], color='#98df8a', alpha=0.7, linewidth=1.2, label='Residual Y')
+            ax3.plot(sensors['time'], sensors['fused_mz'], color='#006400', alpha=0.7, linewidth=1.2, label='Residual Z')
 
         # Stage 4: Filtered / Kalman smoothed (red tones, bold) - if available
         if has_filtered:
@@ -457,7 +472,7 @@ class SessionVisualizer:
         if has_calibrated and 'calibrated_mag' in sensors:
             ax4.plot(sensors['time'], sensors['calibrated_mag'], color='#1f77b4', alpha=0.6, linewidth=1, label='Mag (Iron)')
         if has_fused and 'fused_mag' in sensors:
-            ax4.plot(sensors['time'], sensors['fused_mag'], color='#2ca02c', alpha=0.7, linewidth=1.2, label='Mag (Fused)')
+            ax4.plot(sensors['time'], sensors['fused_mag'], color='#2ca02c', alpha=0.7, linewidth=1.2, label='Mag (Residual)')
         if has_filtered and 'filtered_mag' in sensors:
             ax4.plot(sensors['time'], sensors['filtered_mag'], color='#d62728', alpha=0.9, linewidth=1.5, label='Mag (Filtered)')
 
@@ -573,7 +588,7 @@ class SessionVisualizer:
             ax.plot(time_window, sensors['az'][start_idx:end_idx], label='Z', linewidth=2)
             ax.set_title(f'Accelerometer | Window {i+1} ({window_time_start:.1f}s - {window_time_end:.1f}s)', fontweight='bold')
             ax.set_xlabel('Time (s)')
-            ax.set_ylabel('Value (raw)')
+            ax.set_ylabel('Acceleration (g)')
             ax.legend(loc='upper right')
             ax.grid(True, alpha=0.3)
             ts_accel_path = window_subdir / 'timeseries_accel.png'
@@ -588,7 +603,7 @@ class SessionVisualizer:
             ax.plot(time_window, sensors['gz'][start_idx:end_idx], label='Z', linewidth=2)
             ax.set_title(f'Gyroscope | Window {i+1} ({window_time_start:.1f}s - {window_time_end:.1f}s)', fontweight='bold')
             ax.set_xlabel('Time (s)')
-            ax.set_ylabel('Value (raw)')
+            ax.set_ylabel('Angular velocity (°/s)')
             ax.legend(loc='upper right')
             ax.grid(True, alpha=0.3)
             ts_gyro_path = window_subdir / 'timeseries_gyro.png'
@@ -606,9 +621,9 @@ class SessionVisualizer:
                 ax.plot(time_window, sensors['filtered_my'][start_idx:end_idx], color='#ff9896', linewidth=2, label='Filtered Y')
                 ax.plot(time_window, sensors['filtered_mz'][start_idx:end_idx], color='#8b0000', linewidth=2, label='Filtered Z')
             elif has_fused:
-                ax.plot(time_window, sensors['fused_mx'][start_idx:end_idx], color='#2ca02c', linewidth=2, label='Fused X')
-                ax.plot(time_window, sensors['fused_my'][start_idx:end_idx], color='#98df8a', linewidth=2, label='Fused Y')
-                ax.plot(time_window, sensors['fused_mz'][start_idx:end_idx], color='#006400', linewidth=2, label='Fused Z')
+                ax.plot(time_window, sensors['fused_mx'][start_idx:end_idx], color='#2ca02c', linewidth=2, label='Residual X')
+                ax.plot(time_window, sensors['fused_my'][start_idx:end_idx], color='#98df8a', linewidth=2, label='Residual Y')
+                ax.plot(time_window, sensors['fused_mz'][start_idx:end_idx], color='#006400', linewidth=2, label='Residual Z')
             ax.set_title(f'Magnetometer | Window {i+1} ({window_time_start:.1f}s - {window_time_end:.1f}s)', fontweight='bold')
             ax.set_xlabel('Time (s)')
             ax.set_ylabel('Value (μT)')
@@ -1020,10 +1035,10 @@ Magnetometer:
         # 3. Fused (if available)
         if has_fused:
             fused_path = window_subdir / 'trajectory_fused.png'
-            plot_trajectory(sensors['fused_mx'][start_idx:end_idx], 
-                           sensors['fused_my'][start_idx:end_idx], 
-                           sensors['fused_mz'][start_idx:end_idx], 
-                           'Fused (Earth Subtracted)', colors['fused'], 'Greens', fused_path)
+            plot_trajectory(sensors['fused_mx'][start_idx:end_idx],
+                           sensors['fused_my'][start_idx:end_idx],
+                           sensors['fused_mz'][start_idx:end_idx],
+                           'Residual (Earth Subtracted)', colors['fused'], 'Greens', fused_path)
             trajectory_images['fused'] = str(fused_path.relative_to(self.output_dir))
 
         # 4. Filtered (if available)
@@ -1052,7 +1067,7 @@ Magnetometer:
             ax.plot(sensors['fused_mx'][start_idx:end_idx], 
                     sensors['fused_my'][start_idx:end_idx], 
                     sensors['fused_mz'][start_idx:end_idx],
-                    color=colors['fused'], alpha=0.7, linewidth=1.2, label='Fused')
+                    color=colors['fused'], alpha=0.7, linewidth=1.2, label='Residual')
         if has_filtered:
             ax.plot(sensors['filtered_mx'][start_idx:end_idx], 
                     sensors['filtered_my'][start_idx:end_idx], 
@@ -1104,7 +1119,7 @@ WINDOW {window_num} TRAJECTORY STATS
                                             sensors['fused_my'][start_idx:end_idx],
                                             sensors['fused_mz'][start_idx:end_idx])
             stats_text += f"""
-◆ FUSED
+◆ RESIDUAL (Earth Subtracted)
   Spread: {fused_stats['spread']:.2f} μT ({(fused_stats['spread']/raw_stats['spread']*100):.0f}%)
   Path: {fused_stats['path_length']:.2f} μT
   Center: ({fused_stats['center'][0]:.1f}, {fused_stats['center'][1]:.1f}, {fused_stats['center'][2]:.1f})
@@ -1187,7 +1202,7 @@ Time: {start_idx/50.0:.2f}s - {end_idx/50.0:.2f}s
                            [sensors['fused_mz'][start_idx]], c='green', s=60, marker='o', label='Start', zorder=10)
             ax_fused.scatter([sensors['fused_mx'][end_idx-1]], [sensors['fused_my'][end_idx-1]], 
                            [sensors['fused_mz'][end_idx-1]], c='red', s=60, marker='s', label='End', zorder=10)
-            ax_fused.set_title('Fused', fontweight='bold', fontsize=10, color=colors['fused'])
+            ax_fused.set_title('Residual', fontweight='bold', fontsize=10, color=colors['fused'])
             ax_fused.set_xlabel('X', fontsize=8); ax_fused.set_ylabel('Y', fontsize=8); ax_fused.set_zlabel('Z', fontsize=8)
             ax_fused.legend(fontsize=6, loc='upper left')
             ax_fused.tick_params(axis='both', which='major', labelsize=6)
@@ -1224,7 +1239,7 @@ Time: {start_idx/50.0:.2f}s - {end_idx/50.0:.2f}s
             ax_combined.plot(sensors['fused_mx'][start_idx:end_idx], 
                             sensors['fused_my'][start_idx:end_idx], 
                             sensors['fused_mz'][start_idx:end_idx],
-                            color=colors['fused'], alpha=0.7, linewidth=1.2, label='Fused')
+                            color=colors['fused'], alpha=0.7, linewidth=1.2, label='Residual')
         if has_filtered:
             ax_combined.plot(sensors['filtered_mx'][start_idx:end_idx], 
                             sensors['filtered_my'][start_idx:end_idx], 
@@ -1265,7 +1280,7 @@ WINDOW {window_num} TRAJECTORY STATS
                                             sensors['fused_my'][start_idx:end_idx],
                                             sensors['fused_mz'][start_idx:end_idx])
             stats_text += f"""
-◆ FUSED
+◆ RESIDUAL (Earth Subtracted)
   Spread: {fused_stats['spread']:.2f} μT ({(fused_stats['spread']/raw_stats['spread']*100):.0f}%)
   Path: {fused_stats['path_length']:.2f} μT
   Center: ({fused_stats['center'][0]:.1f}, {fused_stats['center'][1]:.1f}, {fused_stats['center'][2]:.1f})
@@ -1309,7 +1324,7 @@ WINDOW {window_num} TRAJECTORY STATS
         # Accelerometer
         axes[0, 0].plot(sensors['time'], sensors['ax'], 'r-', linewidth=1)
         axes[0, 0].set_title('Accelerometer X', fontweight='bold')
-        axes[0, 0].set_ylabel('Value (raw)')
+        axes[0, 0].set_ylabel('Acceleration (g)')
         axes[0, 0].grid(True, alpha=0.3)
 
         axes[0, 1].plot(sensors['time'], sensors['ay'], 'g-', linewidth=1)
@@ -1323,7 +1338,7 @@ WINDOW {window_num} TRAJECTORY STATS
         # Gyroscope
         axes[1, 0].plot(sensors['time'], sensors['gx'], 'r-', linewidth=1)
         axes[1, 0].set_title('Gyroscope X', fontweight='bold')
-        axes[1, 0].set_ylabel('Value (raw)')
+        axes[1, 0].set_ylabel('Angular velocity (°/s)')
         axes[1, 0].grid(True, alpha=0.3)
 
         axes[1, 1].plot(sensors['time'], sensors['gy'], 'g-', linewidth=1)
@@ -1343,7 +1358,7 @@ WINDOW {window_num} TRAJECTORY STATS
         if has_calibrated:
             axes[2, 0].plot(sensors['time'], sensors['calibrated_mx'], color='#1f77b4', alpha=0.6, linewidth=1, label='Iron')
         if has_fused:
-            axes[2, 0].plot(sensors['time'], sensors['fused_mx'], color='#2ca02c', alpha=0.7, linewidth=1.2, label='Fused')
+            axes[2, 0].plot(sensors['time'], sensors['fused_mx'], color='#2ca02c', alpha=0.7, linewidth=1.2, label='Residual')
         if has_filtered:
             axes[2, 0].plot(sensors['time'], sensors['filtered_mx'], color='#d62728', alpha=0.9, linewidth=1.5, label='Filtered')
         axes[2, 0].set_title('Magnetometer X', fontweight='bold')
@@ -1357,7 +1372,7 @@ WINDOW {window_num} TRAJECTORY STATS
         if has_calibrated:
             axes[2, 1].plot(sensors['time'], sensors['calibrated_my'], color='#1f77b4', alpha=0.6, linewidth=1, label='Iron')
         if has_fused:
-            axes[2, 1].plot(sensors['time'], sensors['fused_my'], color='#2ca02c', alpha=0.7, linewidth=1.2, label='Fused')
+            axes[2, 1].plot(sensors['time'], sensors['fused_my'], color='#2ca02c', alpha=0.7, linewidth=1.2, label='Residual')
         if has_filtered:
             axes[2, 1].plot(sensors['time'], sensors['filtered_my'], color='#d62728', alpha=0.9, linewidth=1.5, label='Filtered')
         axes[2, 1].set_title('Magnetometer Y', fontweight='bold')
@@ -1370,7 +1385,7 @@ WINDOW {window_num} TRAJECTORY STATS
         if has_calibrated:
             axes[2, 2].plot(sensors['time'], sensors['calibrated_mz'], color='#1f77b4', alpha=0.6, linewidth=1, label='Iron')
         if has_fused:
-            axes[2, 2].plot(sensors['time'], sensors['fused_mz'], color='#2ca02c', alpha=0.7, linewidth=1.2, label='Fused')
+            axes[2, 2].plot(sensors['time'], sensors['fused_mz'], color='#2ca02c', alpha=0.7, linewidth=1.2, label='Residual')
         if has_filtered:
             axes[2, 2].plot(sensors['time'], sensors['filtered_mz'], color='#d62728', alpha=0.9, linewidth=1.5, label='Filtered')
         axes[2, 2].set_title('Magnetometer Z', fontweight='bold')
@@ -1460,7 +1475,7 @@ WINDOW {window_num} TRAJECTORY STATS
             if has_calibrated and 'calibrated_mag' in sensors:
                 ax3.plot(sensors['time'], sensors['calibrated_mag'], color='#1f77b4', alpha=0.6, linewidth=1, label='Iron')
             if has_fused and 'fused_mag' in sensors:
-                ax3.plot(sensors['time'], sensors['fused_mag'], color='#2ca02c', alpha=0.7, linewidth=1.2, label='Fused')
+                ax3.plot(sensors['time'], sensors['fused_mag'], color='#2ca02c', alpha=0.7, linewidth=1.2, label='Residual')
             if has_filtered and 'filtered_mag' in sensors:
                 ax3.plot(sensors['time'], sensors['filtered_mag'], color='#d62728', alpha=0.9, linewidth=1.5, label='Filtered')
 
@@ -1615,7 +1630,7 @@ WINDOW {window_num} TRAJECTORY STATS
                     color=colors['iron'], alpha=0.5, linewidth=1.2, label='Iron')
         if has_fused:
             ax.plot(sensors['fused_mx'], sensors['fused_my'], sensors['fused_mz'],
-                    color=colors['fused'], alpha=0.7, linewidth=1.5, label='Fused')
+                    color=colors['fused'], alpha=0.7, linewidth=1.5, label='Residual')
         if has_filtered:
             ax.plot(sensors['filtered_mx'], sensors['filtered_my'], sensors['filtered_mz'],
                     color=colors['filtered'], alpha=0.9, linewidth=1.8, label='Filtered')
