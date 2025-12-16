@@ -1,20 +1,14 @@
 /**
  * Calibration Configuration
  * Single source of truth for calibration sample counts, rates, and quality thresholds
+ *
+ * NOTE: Earth field calibration has been removed from the wizard.
+ * Earth field is now auto-estimated in real-time using UnifiedMagCalibration
+ * (200-sample sliding window, orientation-compensated world-frame averaging).
  */
 
 export const CALIBRATION_CONFIG = {
     SAMPLE_RATE: 50,
-
-    EARTH_FIELD: {
-        sampleCount: 500,
-        sampleRate: 50,
-        minSamples: 50,
-        qualityThresholds: {
-            excellent: 0.9,
-            good: 0.7
-        }
-    },
 
     HARD_IRON: {
         sampleCount: 1000,

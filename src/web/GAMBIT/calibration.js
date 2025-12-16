@@ -292,7 +292,14 @@ class EnvironmentalCalibration {
 
     /**
      * Calibrate Earth field reference
-     * Should be done with sensor in a known orientation (e.g., flat on table)
+     *
+     * @deprecated This method is deprecated. Earth field is now auto-estimated
+     * in real-time using UnifiedMagCalibration (200-sample sliding window,
+     * orientation-compensated world-frame averaging). This method is kept for
+     * backwards compatibility with existing stored calibration files.
+     *
+     * See: shared/unified-mag-calibration.js
+     * See: docs/technical/earth-field-subtraction-investigation.md
      *
      * IMPORTANT: Earth field is stored in WORLD frame for proper orientation compensation.
      * The referenceOrientation parameter is required to transform from sensor to world frame.
@@ -302,6 +309,7 @@ class EnvironmentalCalibration {
      * @returns {Object} Earth field estimate with detailed diagnostics
      */
     runEarthFieldCalibration(samples, referenceOrientation = null) {
+        console.warn('[EnvironmentalCalibration] runEarthFieldCalibration is deprecated. Earth field is now auto-estimated in real-time.');
         if (samples.length < 50) {
             throw new Error('Need at least 50 samples for Earth field calibration');
         }

@@ -1256,13 +1256,13 @@ function initExport() {
 /**
  * Store calibration session data for export/upload
  * @param {Array} samples - Raw calibration samples
- * @param {string} stepName - Calibration step name (EARTH_FIELD, HARD_IRON, SOFT_IRON)
+ * @param {string} stepName - Calibration step name (HARD_IRON, SOFT_IRON)
  * @param {Object} result - Calibration result with quality metrics
  */
 function storeCalibrationSessionData(samples, stepName, result) {
     // Map step name to calibration label format
+    // NOTE: Earth field calibration removed - now auto-estimated in real-time
     const calibrationLabels = {
-        'EARTH_FIELD': 'earth_field',
         'HARD_IRON': 'hard_iron',
         'SOFT_IRON': 'soft_iron'
     };

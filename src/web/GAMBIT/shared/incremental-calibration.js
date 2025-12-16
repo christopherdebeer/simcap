@@ -1,6 +1,12 @@
 /**
  * Incremental Magnetometer Calibration
  *
+ * @deprecated Use UnifiedMagCalibration instead. This class is kept for backwards
+ * compatibility but is no longer used in the telemetry pipeline.
+ *
+ * See: shared/unified-mag-calibration.js
+ * See: docs/technical/earth-field-subtraction-investigation.md
+ *
  * Builds calibration from streaming data rather than relying on stored values.
  * This approach was validated by analyze_raw_magnetic.py which achieved < 5 µT
  * residual on 12/14 sessions by computing calibration fresh per-session.

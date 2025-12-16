@@ -32,8 +32,8 @@ import {
 } from './geomagnetic-field.js';
 
 import {
-    IncrementalCalibration
-} from './incremental-calibration.js';
+    UnifiedMagCalibration
+} from './unified-mag-calibration.js';
 
 import {
     MagnetDetector,
@@ -56,25 +56,25 @@ export class TelemetryProcessor {
     /**
      * Create a TelemetryProcessor instance
      * @param {Object} options - Configuration options
-     * @param {Object} [options.calibration] - EnvironmentalCalibration instance
+     * @param {Object} [options.calibration] - EnvironmentalCalibration instance (optional, for hard/soft iron)
      * @param {Function} [options.onProcessed] - Callback for processed telemetry
      * @param {Function} [options.onOrientationUpdate] - Callback for orientation updates
      * @param {Function} [options.onGyroBiasCalibrated] - Callback when gyro bias is calibrated
      * @param {boolean} [options.useMagnetometer=true] - Enable 9-DOF fusion with magnetometer
      * @param {number} [options.magTrust=0.5] - Magnetometer trust factor (0-1)
-     * @param {boolean} [options.useIncrementalCalibration=false] - Enable live incremental calibration
-     * @param {boolean} [options.incrementalCalibrationDebug=false] - Enable debug logging for incremental calibration
+     * @param {boolean} [options.magCalibrationDebug=false] - Enable debug logging for mag calibration
      */
     constructor(options = {}) {
         this.options = options;
 
-        // Calibration instance (external, for magnetometer correction)
+        // External calibration instance (optional, for hard/soft iron from wizard)
         this.calibration = options.calibration || null;
-        
-        // Incremental calibration (live calibration from streaming data)
-        this.useIncrementalCalibration = options.useIncrementalCalibration || false;
-        this.incrementalCalibration = new IncrementalCalibration({
-            debug: options.incrementalCalibrationDebug || false
+
+        // Unified magnetometer calibration (live Earth field estimation)
+        this.magCalibration = new UnifiedMagCalibration({
+            windowSize: 200,  // Optimal based on investigation
+            minSamples: 50,   // ~1 second at 50Hz
+            debug: options.magCalibrationDebug || false
         });
         
         // Magnet detector (detects finger magnet presence from residual magnitude)
@@ -114,10 +114,7 @@ export class TelemetryProcessor {
 
         // Debug logging flags (to avoid spam)
         this._loggedCalibrationMissing = false;
-        this._loggedOrientationMissing = false;
-        this._loggedEarthCalibrationMissing = false;
         this._loggedMagFusion = false;
-        this._loggedIncrementalCalibration = false;
         this._loggedMagnetDetection = false;
     }
     
@@ -138,31 +135,19 @@ export class TelemetryProcessor {
     }
     
     /**
-     * Enable/disable incremental calibration
-     * @param {boolean} enabled
+     * Get mag calibration instance
+     * @returns {UnifiedMagCalibration}
      */
-    setIncrementalCalibrationEnabled(enabled) {
-        this.useIncrementalCalibration = enabled;
-        if (enabled && !this._loggedIncrementalCalibration) {
-            console.log('[TelemetryProcessor] Incremental calibration enabled');
-            this._loggedIncrementalCalibration = true;
-        }
+    getMagCalibration() {
+        return this.magCalibration;
     }
-    
+
     /**
-     * Get incremental calibration instance
-     * @returns {IncrementalCalibration}
+     * Reset mag calibration
      */
-    getIncrementalCalibration() {
-        return this.incrementalCalibration;
-    }
-    
-    /**
-     * Reset incremental calibration
-     */
-    resetIncrementalCalibration() {
-        this.incrementalCalibration.reset();
-        console.log('[TelemetryProcessor] Incremental calibration reset');
+    resetMagCalibration() {
+        this.magCalibration.reset();
+        console.log('[TelemetryProcessor] Mag calibration reset');
     }
 
     /**
@@ -186,7 +171,7 @@ export class TelemetryProcessor {
     }
 
     /**
-     * Set geomagnetic reference on AHRS and IncrementalCalibration
+     * Set geomagnetic reference on AHRS
      * @param {Object} location - Location with horizontal, vertical, declination fields
      */
     _setGeomagneticRef(location) {
@@ -197,9 +182,6 @@ export class TelemetryProcessor {
                 declination: location.declination
             };
             this.imuFusion.setGeomagneticReference(this.geomagneticRef);
-            
-            // Also set on incremental calibration for known Earth field direction
-            this.incrementalCalibration.setGeomagneticReference(this.geomagneticRef);
         }
     }
 
@@ -395,168 +377,75 @@ export class TelemetryProcessor {
             this.onOrientationUpdate(euler, orientation);
         }
         
-        // ===== Step 5: Magnetometer Calibration =====
-        if (this.calibration &&
-            this.calibration.hardIronCalibrated &&
-            this.calibration.softIronCalibrated) {
-            
-            try {
-                // Iron correction only (no Earth field subtraction yet)
-                // IMPORTANT: Use converted µT values, not raw LSB
-                const ironCorrected = this.calibration.correctIronOnly({
-                    x: mx_ut,
-                    y: my_ut,
-                    z: mz_ut
-                });
-                decorated.calibrated_mx = ironCorrected.x;
-                decorated.calibrated_my = ironCorrected.y;
-                decorated.calibrated_mz = ironCorrected.z;
-                
-                // Full correction with Earth field subtraction (requires orientation)
-                if (this.calibration.earthFieldCalibrated && orientation) {
-                    // Create Quaternion object for calibration.correct()
-                    // Quaternion is expected to be globally available from calibration.js
-                    const quatOrientation = new Quaternion(
-                        orientation.w, orientation.x, orientation.y, orientation.z
-                    );
-                    // IMPORTANT: Use converted µT values, not raw LSB
-                    const fused = this.calibration.correct(
-                        { x: mx_ut, y: my_ut, z: mz_ut },
-                        quatOrientation
-                    );
-                    decorated.fused_mx = fused.x;
-                    decorated.fused_my = fused.y;
-                    decorated.fused_mz = fused.z;
-                    
-                    // Calculate residual magnitude (useful for finger magnet detection)
-                    decorated.residual_magnitude = Math.sqrt(
-                        fused.x ** 2 + fused.y ** 2 + fused.z ** 2
-                    );
-                    
+        // ===== Step 5: Magnetometer Calibration (Unified) =====
+        // Use UnifiedMagCalibration for real-time Earth field estimation and subtraction
+        // Optionally apply hard iron from stored calibration if available
+
+        // Apply hard iron offset from stored calibration if available
+        if (this.calibration?.hardIronCalibrated && this.calibration.hardIronOffset) {
+            // Set hard iron on unified calibration (only sets once if unchanged)
+            const currentOffset = this.magCalibration.getHardIronOffset();
+            const storedOffset = this.calibration.hardIronOffset;
+            if (currentOffset.x !== storedOffset.x ||
+                currentOffset.y !== storedOffset.y ||
+                currentOffset.z !== storedOffset.z) {
+                this.magCalibration.setHardIronOffset(storedOffset);
+            }
+        }
+
+        // Update unified calibration with current sample
+        if (orientation) {
+            this.magCalibration.update(mx_ut, my_ut, mz_ut, orientation);
+
+            // Add calibration metrics to telemetry
+            const calState = this.magCalibration.getState();
+            decorated.mag_cal_ready = calState.ready;
+            decorated.mag_cal_confidence = calState.confidence;
+            decorated.mag_cal_mean_residual = calState.meanResidual;
+            decorated.mag_cal_earth_magnitude = calState.earthMagnitude;
+
+            // Compute residual if Earth field has been estimated
+            if (calState.ready) {
+                const residual = this.magCalibration.getResidual(mx_ut, my_ut, mz_ut, orientation);
+                if (residual) {
+                    decorated.residual_mx = residual.x;
+                    decorated.residual_my = residual.y;
+                    decorated.residual_mz = residual.z;
+                    decorated.residual_magnitude = residual.magnitude;
+
                     // Update magnet detector with residual
-                    const magnetState = this.magnetDetector.update(decorated.residual_magnitude);
+                    const magnetState = this.magnetDetector.update(residual.magnitude);
                     decorated.magnet_status = magnetState.status;
                     decorated.magnet_confidence = magnetState.confidence;
                     decorated.magnet_detected = magnetState.detected;
-                    
+                    decorated.magnet_baseline_established = magnetState.baselineEstablished;
+                    decorated.magnet_baseline_residual = magnetState.baselineResidual;
+                    decorated.magnet_deviation = magnetState.deviationFromBaseline;
+
                     if (magnetState.detected && !this._loggedMagnetDetection) {
-                        console.log('[TelemetryProcessor] 🧲 Finger magnets detected! Status:', magnetState.status, 
+                        console.log('[TelemetryProcessor] Finger magnets detected! Status:', magnetState.status,
                                     'Confidence:', (magnetState.confidence * 100).toFixed(0) + '%',
-                                    'Residual:', magnetState.avgResidual.toFixed(1), 'µT');
+                                    'Residual:', magnetState.avgResidual.toFixed(1), 'uT');
                         this._loggedMagnetDetection = true;
                     }
-                } else if (!this.calibration.earthFieldCalibrated) {
-                    if (!this._loggedEarthCalibrationMissing) {
-                        console.debug('[TelemetryProcessor] Earth field not calibrated - using best effort (iron-corrected only)');
-                        this._loggedEarthCalibrationMissing = true;
-                    }
-                    // Best effort: provide iron-corrected values as approximation
-                    // This shows the magnetic field without Earth field subtraction
-                    decorated.fused_mx = ironCorrected.x;
-                    decorated.fused_my = ironCorrected.y;
-                    decorated.fused_mz = ironCorrected.z;
-                    decorated.fused_incomplete = true; // Flag for UI to show warning
-                    decorated.residual_magnitude = Math.sqrt(
-                        ironCorrected.x ** 2 + ironCorrected.y ** 2 + ironCorrected.z ** 2
-                    );
-                } else if (!orientation) {
-                    if (!this._loggedOrientationMissing) {
-                        console.debug('[TelemetryProcessor] Orientation not available - using best effort (iron-corrected only)');
-                        this._loggedOrientationMissing = true;
-                    }
-                    // Best effort: provide iron-corrected values without orientation correction
-                    decorated.fused_mx = ironCorrected.x;
-                    decorated.fused_my = ironCorrected.y;
-                    decorated.fused_mz = ironCorrected.z;
-                    decorated.fused_incomplete = true; // Flag for UI to show warning
-                    decorated.residual_magnitude = Math.sqrt(
-                        ironCorrected.x ** 2 + ironCorrected.y ** 2 + ironCorrected.z ** 2
-                    );
                 }
-            } catch (e) {
-                console.error('[TelemetryProcessor] Calibration correction failed:', e);
             }
         } else {
+            // No orientation - fall back to raw magnitude
             if (!this._loggedCalibrationMissing) {
-                console.debug('[TelemetryProcessor] Iron calibration incomplete - using raw µT values as best effort');
+                console.debug('[TelemetryProcessor] Orientation not available - using raw mag values');
                 this._loggedCalibrationMissing = true;
             }
-            // Best effort: use raw µT values when iron calibration is missing
-            // This at least shows the uncalibrated magnetic field
-            decorated.fused_mx = mx_ut;
-            decorated.fused_my = my_ut;
-            decorated.fused_mz = mz_ut;
-            decorated.fused_incomplete = true; // Flag for UI to show warning
-            decorated.fused_uncalibrated = true; // Flag indicating no iron calibration
-            decorated.residual_magnitude = Math.sqrt(
-                mx_ut ** 2 + my_ut ** 2 + mz_ut ** 2
-            );
-        }
-        
-        // ===== Step 5b: Incremental Calibration =====
-        // Feed samples to incremental calibration for live calibration building
-        if (orientation) {
-            this.incrementalCalibration.addSample(
-                { x: mx_ut, y: my_ut, z: mz_ut },
-                orientation
-            );
-            
-            // Add incremental calibration metrics to decorated telemetry
-            decorated.incremental_cal_confidence = this.incrementalCalibration.getConfidence();
-            decorated.incremental_cal_mean_residual = this.incrementalCalibration.getMeanResidual();
-            decorated.incremental_cal_earth_magnitude = this.incrementalCalibration.getEarthFieldMagnitude();
-            
-            // Compute residual if Earth field has been estimated
-            const earthMag = this.incrementalCalibration.getEarthFieldMagnitude();
-            
-            if (earthMag > 0) {
-                const incResidual = this.incrementalCalibration.computeResidual(
-                    { x: mx_ut, y: my_ut, z: mz_ut },
-                    orientation
-                );
-                if (incResidual) {
-                    decorated.incremental_residual_mx = incResidual.residual.x;
-                    decorated.incremental_residual_my = incResidual.residual.y;
-                    decorated.incremental_residual_mz = incResidual.residual.z;
-                    decorated.incremental_residual_magnitude = incResidual.magnitude;
-                    
-                    // Update magnet detector with incremental residual (fallback when stored calibration unavailable)
-                    // IMPORTANT: Only feed detector after Earth field has been computed (earthMag > 0)
-                    // The MagnetDetector uses baseline comparison, so it will:
-                    // 1. Establish baseline from first 100 samples after Earth field is computed
-                    // 2. Detect deviations from that baseline (magnets cause +30-100 µT deviation)
-                    if (!decorated.magnet_status) {
-                        const magnetState = this.magnetDetector.update(incResidual.magnitude);
-                        decorated.magnet_status = magnetState.status;
-                        decorated.magnet_confidence = magnetState.confidence;
-                        decorated.magnet_detected = magnetState.detected;
-                        
-                        // Add baseline info to telemetry for debugging
-                        decorated.magnet_baseline_established = magnetState.baselineEstablished;
-                        decorated.magnet_baseline_residual = magnetState.baselineResidual;
-                        decorated.magnet_deviation = magnetState.deviationFromBaseline;
-                        
-                        if (magnetState.detected && !this._loggedMagnetDetection) {
-                            console.log('[TelemetryProcessor] 🧲 Finger magnets detected (incremental cal)! Status:', magnetState.status, 
-                                        'Confidence:', (magnetState.confidence * 100).toFixed(0) + '%',
-                                        'Avg Residual:', magnetState.avgResidual.toFixed(1), 'µT',
-                                        'Baseline:', magnetState.baselineResidual?.toFixed(1), 'µT',
-                                        'Deviation:', magnetState.deviationFromBaseline?.toFixed(1), 'µT');
-                            this._loggedMagnetDetection = true;
-                        }
-                    }
-                }
-            }
+            decorated.residual_magnitude = Math.sqrt(mx_ut**2 + my_ut**2 + mz_ut**2);
         }
         
         // ===== Step 6: Kalman Filtering =====
-        // Use best available source: fused > calibrated > converted µT
-        // IMPORTANT: Use µT values, not raw LSB
+        // Apply Kalman filter to residual (Earth-subtracted) values for noise reduction
         try {
             const magInput = {
-                x: decorated.fused_mx ?? decorated.calibrated_mx ?? mx_ut,
-                y: decorated.fused_my ?? decorated.calibrated_my ?? my_ut,
-                z: decorated.fused_mz ?? decorated.calibrated_mz ?? mz_ut
+                x: decorated.residual_mx ?? mx_ut,
+                y: decorated.residual_my ?? my_ut,
+                z: decorated.residual_mz ?? mz_ut
             };
             const filteredMag = this.magFilter.update(magInput);
             decorated.filtered_mx = filteredMag.x;
@@ -585,20 +474,17 @@ export class TelemetryProcessor {
         this.gyroBiasState = createGyroBiasState();
         this.imuInitialized = false;
         this.lastTimestamp = null;
-        
+
         // Reset logging flags
         this._loggedCalibrationMissing = false;
-        this._loggedOrientationMissing = false;
-        this._loggedEarthCalibrationMissing = false;
         this._loggedMagFusion = false;
-        this._loggedIncrementalCalibration = false;
-        
-        // Reset incremental calibration
-        this.incrementalCalibration.reset();
-        
+        this._loggedMagnetDetection = false;
+
+        // Reset mag calibration
+        this.magCalibration.reset();
+
         // Reset magnet detector
         this.magnetDetector.reset();
-        this._loggedMagnetDetection = false;
 
         console.log('[TelemetryProcessor] Reset complete');
     }
