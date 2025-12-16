@@ -290,340 +290,28 @@ class EnvironmentalCalibration {
         };
     }
 
-    /**
-     * Calibrate Earth field reference
-     *
-     * @deprecated This method is deprecated. Earth field is now auto-estimated
-     * in real-time using UnifiedMagCalibration (200-sample sliding window,
-     * orientation-compensated world-frame averaging). This method is kept for
-     * backwards compatibility with existing stored calibration files.
-     *
-     * See: shared/unified-mag-calibration.js
-     * See: docs/technical/earth-field-subtraction-investigation.md
-     *
-     * IMPORTANT: Earth field is stored in WORLD frame for proper orientation compensation.
-     * The referenceOrientation parameter is required to transform from sensor to world frame.
-     *
-     * @param {Array} samples - Array of {x, y, z} readings in reference orientation
-     * @param {Quaternion} referenceOrientation - Current device orientation (from IMU fusion)
-     * @returns {Object} Earth field estimate with detailed diagnostics
-     */
-    runEarthFieldCalibration(samples, referenceOrientation = null) {
-        console.warn('[EnvironmentalCalibration] runEarthFieldCalibration is deprecated. Earth field is now auto-estimated in real-time.');
-        if (samples.length < 50) {
-            throw new Error('Need at least 50 samples for Earth field calibration');
-        }
-
-        // Apply hard/soft iron corrections first
-        const corrected = samples.map(s => this._applyIronCorrection(s));
-
-        // Average the corrected readings (in sensor frame)
-        let sumX = 0, sumY = 0, sumZ = 0;
-        for (const s of corrected) {
-            sumX += s.x;
-            sumY += s.y;
-            sumZ += s.z;
-        }
-
-        const earthFieldSensor = {
-            x: sumX / corrected.length,
-            y: sumY / corrected.length,
-            z: sumZ / corrected.length
-        };
-
-        // Transform to world frame if orientation provided
-        // R transforms from sensor to world, so: B_world = R @ B_sensor
-        if (referenceOrientation) {
-            const rotMatrix = referenceOrientation.toRotationMatrix();
-            this.earthField = rotMatrix.multiply(earthFieldSensor);
-            console.log('[Calibration] Earth field stored in WORLD frame');
-        } else {
-            // Fallback: assume sensor frame = world frame (device flat, aligned with world)
-            this.earthField = earthFieldSensor;
-            console.warn('[Calibration] No orientation provided - assuming device is flat and aligned');
-        }
-
-        this.earthFieldMagnitude = Math.sqrt(
-            this.earthField.x ** 2 +
-            this.earthField.y ** 2 +
-            this.earthField.z ** 2
-        );
-
-        // === ENHANCED DIAGNOSTICS ===
-        
-        // Per-axis statistics
-        const deviations = corrected.map(s => ({
-            x: s.x - this.earthField.x,
-            y: s.y - this.earthField.y,
-            z: s.z - this.earthField.z,
-            magnitude: Math.sqrt(
-                (s.x - this.earthField.x) ** 2 +
-                (s.y - this.earthField.y) ** 2 +
-                (s.z - this.earthField.z) ** 2
-            )
-        }));
-
-        // Per-axis standard deviation
-        const axisStats = {
-            x: this._calculateAxisStats(deviations.map(d => d.x)),
-            y: this._calculateAxisStats(deviations.map(d => d.y)),
-            z: this._calculateAxisStats(deviations.map(d => d.z))
-        };
-
-        // Overall deviation stats
-        const magnitudeDeviations = deviations.map(d => d.magnitude);
-        const avgDeviation = magnitudeDeviations.reduce((a, b) => a + b, 0) / magnitudeDeviations.length;
-        const maxDeviation = Math.max(...magnitudeDeviations);
-        const minDeviation = Math.min(...magnitudeDeviations);
-        
-        // Variance (sum of squared deviations)
-        const variance = magnitudeDeviations.reduce((sum, d) => sum + d * d, 0);
-        const stdDev = Math.sqrt(variance / magnitudeDeviations.length);
-
-        // Outlier detection (samples > 2 std devs from mean)
-        const outlierThreshold = avgDeviation + 2 * stdDev;
-        const outliers = deviations.map((d, i) => ({ index: i, deviation: d.magnitude }))
-            .filter(o => o.deviation > outlierThreshold);
-        const outlierPercentage = (outliers.length / corrected.length) * 100;
-
-        // Temporal analysis - detect drift and sudden jumps
-        const temporalAnalysis = this._analyzeTemporalStability(corrected);
-
-        // Quality: 1.0 if deviation is very small, decreases with larger deviation
-        // Typical good reading has <5% deviation
-        const quality = Math.max(0, Math.min(1, 1 - (avgDeviation / this.earthFieldMagnitude) * 10));
-        
-        // Determine dominant issue for diagnostics
-        const diagnostics = this._generateEarthFieldDiagnostics({
-            quality,
-            avgDeviation,
-            stdDev,
-            axisStats,
-            outlierPercentage,
-            temporalAnalysis,
-            earthFieldMagnitude: this.earthFieldMagnitude
-        });
-
-        console.log(`Earth field calibration details:`, {
-            quality, 
-            avgDeviation, 
-            stdDev,
-            variance, 
-            axisStats,
-            outliers: outliers.length,
-            temporalAnalysis,
-            diagnostics,
-            earthField: this.earthField, 
-            earthFieldMagnitude: this.earthFieldMagnitude
-        });
-        
-        this.earthFieldCalibrated = true;
-
-        return {
-            field: { ...this.earthField },
-            magnitude: this.earthFieldMagnitude,
-            // Convert to μT using scale factor
-            magnitudeUT: this.earthFieldMagnitude * this.scaleFactorLSBToUT,
-            quality: quality, // Numeric quality metric (0.0 to 1.0)
-            avgDeviation: avgDeviation,
-            // Enhanced diagnostics
-            diagnostics: {
-                stdDev,
-                maxDeviation,
-                minDeviation,
-                axisStats,
-                outlierCount: outliers.length,
-                outlierPercentage: outlierPercentage.toFixed(1),
-                temporalAnalysis,
-                recommendations: diagnostics.recommendations,
-                dominantIssue: diagnostics.dominantIssue
-            }
-        };
-    }
-
-    /**
-     * Calculate statistics for a single axis
-     * @private
-     */
-    _calculateAxisStats(values) {
-        const mean = values.reduce((a, b) => a + b, 0) / values.length;
-        const variance = values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / values.length;
-        const stdDev = Math.sqrt(variance);
-        const max = Math.max(...values);
-        const min = Math.min(...values);
-        const range = max - min;
-        
-        return { mean, stdDev, max, min, range };
-    }
-
-    /**
-     * Analyze temporal stability of samples
-     * @private
-     */
-    _analyzeTemporalStability(samples) {
-        if (samples.length < 10) {
-            return { stable: true, drift: 0, jumps: 0 };
-        }
-
-        // Calculate magnitude for each sample
-        const magnitudes = samples.map(s => Math.sqrt(s.x**2 + s.y**2 + s.z**2));
-        
-        // Check for drift (compare first 10% vs last 10%)
-        const windowSize = Math.max(5, Math.floor(samples.length * 0.1));
-        const firstWindow = magnitudes.slice(0, windowSize);
-        const lastWindow = magnitudes.slice(-windowSize);
-        const firstAvg = firstWindow.reduce((a, b) => a + b, 0) / windowSize;
-        const lastAvg = lastWindow.reduce((a, b) => a + b, 0) / windowSize;
-        const drift = lastAvg - firstAvg;
-        const driftPercent = (Math.abs(drift) / firstAvg) * 100;
-
-        // Detect sudden jumps (sample-to-sample changes > 3x median change)
-        const changes = [];
-        for (let i = 1; i < magnitudes.length; i++) {
-            changes.push(Math.abs(magnitudes[i] - magnitudes[i-1]));
-        }
-        changes.sort((a, b) => a - b);
-        const medianChange = changes[Math.floor(changes.length / 2)];
-        const jumpThreshold = Math.max(medianChange * 3, 1); // At least 1 unit
-        const jumps = changes.filter(c => c > jumpThreshold).length;
-        const jumpPercentage = (jumps / changes.length) * 100;
-
-        // Check for periodic noise (simple autocorrelation check)
-        let periodicScore = 0;
-        if (samples.length >= 50) {
-            // Check correlation at common interference frequencies (50Hz, 60Hz harmonics)
-            for (const lag of [1, 2, 5, 10]) {
-                if (lag < samples.length / 2) {
-                    let correlation = 0;
-                    for (let i = lag; i < magnitudes.length; i++) {
-                        correlation += (magnitudes[i] - firstAvg) * (magnitudes[i - lag] - firstAvg);
-                    }
-                    correlation /= (magnitudes.length - lag);
-                    periodicScore = Math.max(periodicScore, Math.abs(correlation));
-                }
-            }
-        }
-
-        return {
-            stable: driftPercent < 2 && jumpPercentage < 5,
-            drift: drift.toFixed(2),
-            driftPercent: driftPercent.toFixed(1),
-            jumps,
-            jumpPercentage: jumpPercentage.toFixed(1),
-            periodicScore: periodicScore.toFixed(2),
-            firstAvg: firstAvg.toFixed(2),
-            lastAvg: lastAvg.toFixed(2)
-        };
-    }
-
-    /**
-     * Generate diagnostic recommendations based on calibration results
-     * @private
-     */
-    _generateEarthFieldDiagnostics(stats) {
-        const recommendations = [];
-        let dominantIssue = 'unknown';
-
-        const deviationPercent = (stats.avgDeviation / stats.earthFieldMagnitude) * 100;
-        const { temporalAnalysis, axisStats, outlierPercentage } = stats;
-
-        // Check for movement during calibration
-        if (temporalAnalysis.jumpPercentage > 10) {
-            recommendations.push('🚶 Movement detected: Keep device completely still during calibration');
-            dominantIssue = 'movement';
-        }
-
-        // Check for drift (device slowly moving or warming up)
-        if (parseFloat(temporalAnalysis.driftPercent) > 3) {
-            recommendations.push(`📈 Drift detected (${temporalAnalysis.driftPercent}%): Device may be moving slowly or sensor warming up. Wait 30s after connecting before calibrating.`);
-            if (dominantIssue === 'unknown') dominantIssue = 'drift';
-        }
-
-        // Check for high outlier percentage (interference spikes)
-        if (outlierPercentage > 5) {
-            recommendations.push(`⚡ ${outlierPercentage.toFixed(1)}% outliers detected: Possible electromagnetic interference. Move away from electronics, motors, or power cables.`);
-            if (dominantIssue === 'unknown') dominantIssue = 'interference';
-        }
-
-        // Check for axis-specific issues
-        const axisStdDevs = [
-            { axis: 'X', stdDev: axisStats.x.stdDev },
-            { axis: 'Y', stdDev: axisStats.y.stdDev },
-            { axis: 'Z', stdDev: axisStats.z.stdDev }
-        ].sort((a, b) => b.stdDev - a.stdDev);
-
-        const worstAxis = axisStdDevs[0];
-        const bestAxis = axisStdDevs[2];
-        
-        if (worstAxis.stdDev > bestAxis.stdDev * 3) {
-            recommendations.push(`📊 ${worstAxis.axis}-axis has ${(worstAxis.stdDev / bestAxis.stdDev).toFixed(1)}x more noise than ${bestAxis.axis}-axis. Check sensor orientation or nearby magnetic interference along ${worstAxis.axis}-axis.`);
-            if (dominantIssue === 'unknown') dominantIssue = 'axis_noise';
-        }
-
-        // Check for periodic interference
-        if (parseFloat(temporalAnalysis.periodicScore) > 100) {
-            recommendations.push('🔄 Periodic noise detected: Possible 50/60Hz interference from power lines or electronics.');
-            if (dominantIssue === 'unknown') dominantIssue = 'periodic_noise';
-        }
-
-        // General high deviation
-        if (deviationPercent > 5 && recommendations.length === 0) {
-            recommendations.push(`📏 High deviation (${deviationPercent.toFixed(1)}%): Ensure device is stationary and away from magnets (>50cm).`);
-            dominantIssue = 'high_deviation';
-        }
-
-        // Check earth field magnitude sanity
-        if (stats.earthFieldMagnitude < 200 || stats.earthFieldMagnitude > 700) {
-            recommendations.push(`🧲 Unusual earth field magnitude (${stats.earthFieldMagnitude.toFixed(0)}). Expected 250-650 for typical locations. Check for nearby strong magnets or ferromagnetic materials.`);
-            if (dominantIssue === 'unknown') dominantIssue = 'magnitude_anomaly';
-        }
-
-        // Success case
-        if (stats.quality > 0.9) {
-            recommendations.push('✅ Excellent calibration quality!');
-            dominantIssue = 'none';
-        } else if (stats.quality > 0.7) {
-            recommendations.push('⚠️ Acceptable quality, but could be improved by reducing movement/interference.');
-        }
-
-        return { recommendations, dominantIssue };
-    }
+    // =====================================================================
+    // NOTE: Earth field calibration has been removed from this class.
+    // Earth field is now auto-estimated in real-time using UnifiedMagCalibration
+    // (200-sample sliding window, orientation-compensated world-frame averaging).
+    //
+    // See: shared/unified-mag-calibration.js
+    // See: docs/technical/earth-field-subtraction-investigation.md
+    // =====================================================================
 
     /**
      * Apply full calibration correction to raw magnetometer reading
      *
+     * NOTE: Earth field subtraction has been moved to UnifiedMagCalibration.
+     * This method now only applies hard/soft iron corrections.
+     *
      * @param {Object} raw - Raw {x, y, z} magnetometer reading
-     * @param {Quaternion} orientation - Current orientation (optional)
-     * @returns {Object} Corrected {x, y, z} reading
+     * @param {Quaternion} orientation - Ignored (kept for API compatibility)
+     * @returns {Object} Iron-corrected {x, y, z} reading
      */
     correct(raw, orientation = null) {
-        // Step 1: Apply hard iron correction
-        let corrected = {
-            x: raw.x - this.hardIronOffset.x,
-            y: raw.y - this.hardIronOffset.y,
-            z: raw.z - this.hardIronOffset.z
-        };
-
-        // Step 2: Apply soft iron correction
-        if (this.softIronCalibrated) {
-            corrected = this.softIronMatrix.multiply(corrected);
-        }
-
-        // Step 3: Subtract Earth field (rotated to current sensor frame)
-        // earthField is stored in WORLD frame during calibration
-        // To subtract it, we transform world→sensor using R.T (transpose)
-        if (this.earthFieldCalibrated && orientation) {
-            const rotMatrix = orientation.toRotationMatrix();
-            // R.T transforms from world frame to current sensor frame
-            const rotatedEarth = rotMatrix.transpose().multiply(this.earthField);
-            corrected = {
-                x: corrected.x - rotatedEarth.x,
-                y: corrected.y - rotatedEarth.y,
-                z: corrected.z - rotatedEarth.z
-            };
-        }
-
-        return corrected;
+        // Only apply iron corrections - Earth field is handled by UnifiedMagCalibration
+        return this._applyIronCorrection(raw);
     }
 
     /**
@@ -724,7 +412,7 @@ class EnvironmentalCalibration {
 
     /**
      * Check if a specific calibration type has been completed
-     * @param {string} type - 'hard_iron', 'soft_iron', or 'earth_field'
+     * @param {string} type - 'hard_iron' or 'soft_iron'
      * @returns {boolean} Whether the calibration has been completed
      */
     hasCalibration(type) {
@@ -734,7 +422,8 @@ class EnvironmentalCalibration {
             case 'soft_iron':
                 return this.softIronCalibrated;
             case 'earth_field':
-                return this.earthFieldCalibrated;
+                // Deprecated: Earth field is now auto-estimated by UnifiedMagCalibration
+                return false;
             default:
                 return false;
         }
@@ -742,24 +431,25 @@ class EnvironmentalCalibration {
 
     /**
      * Save calibration to JSON
+     * NOTE: earthField properties kept for backwards compatibility but are deprecated.
+     * Earth field is now auto-estimated by UnifiedMagCalibration.
      */
     toJSON() {
         return {
             hardIronOffset: this.hardIronOffset,
             softIronMatrix: this.softIronMatrix.toArray(),
+            // Deprecated: kept for backwards compatibility with stored files
             earthField: this.earthField,
             earthFieldMagnitude: this.earthFieldMagnitude,
             hardIronCalibrated: this.hardIronCalibrated,
             softIronCalibrated: this.softIronCalibrated,
-            earthFieldCalibrated: this.earthFieldCalibrated,
+            earthFieldCalibrated: false, // Always false - Earth field now auto-estimated
             timestamp: new Date().toISOString(),
             // Unit metadata (CRITICAL: documents what units these values are in)
             units: {
                 hardIronOffset: 'µT',
-                earthField: 'µT',
-                earthFieldMagnitude: 'µT',
                 softIronMatrix: 'dimensionless',
-                note: 'Calibration operates in µT units. Raw sensor data (LSB) must be converted before applying calibration.'
+                note: 'Calibration operates in µT units. Earth field is now auto-estimated by UnifiedMagCalibration.'
             }
         };
     }
