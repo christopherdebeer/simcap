@@ -8,6 +8,7 @@ import { log } from './logger.js';
 import { CALIBRATION_CONFIG, validateSampleCount } from '../calibration-config.js';
 import { formatFieldData } from '../shared/geomagnetic-field.js';
 import { UnifiedMagCalibration } from '../shared/unified-mag-calibration.js';
+import { magLsbToMicroTesla } from '../shared/sensor-units.js';
 
 // Callback for storing calibration session data
 let storeCalibrationSession = null;
@@ -196,7 +197,14 @@ export function initCalibrationUI() {
                 updateCalibrationStatus();
             },
             (buffer) => {
-                const samples = buffer.map(s => ({x: s.mx, y: s.my, z: s.mz}));
+                // CRITICAL: Convert raw LSB values to µT before calibration
+                // The device sends raw LSB values, but calibration must be in µT
+                // to match the units used during real-time processing
+                const samples = buffer.map(s => ({
+                    x: magLsbToMicroTesla(s.mx),
+                    y: magLsbToMicroTesla(s.my),
+                    z: magLsbToMicroTesla(s.mz)
+                }));
                 return calibrationInstance.runHardIronCalibration(samples);
             }
         );
@@ -220,7 +228,14 @@ export function initCalibrationUI() {
                 log('Calibration saved to localStorage');
             },
             (buffer) => {
-                const samples = buffer.map(s => ({x: s.mx, y: s.my, z: s.mz}));
+                // CRITICAL: Convert raw LSB values to µT before calibration
+                // The device sends raw LSB values, but calibration must be in µT
+                // to match the units used during real-time processing
+                const samples = buffer.map(s => ({
+                    x: magLsbToMicroTesla(s.mx),
+                    y: magLsbToMicroTesla(s.my),
+                    z: magLsbToMicroTesla(s.mz)
+                }));
                 return calibrationInstance.runSoftIronCalibration(samples);
             }
         );
