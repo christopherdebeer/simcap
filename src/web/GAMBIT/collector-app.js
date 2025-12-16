@@ -31,6 +31,12 @@ import {
     formatFieldData
 } from './shared/geomagnetic-field.js';
 import { uploadToGitHubLFS } from './shared/github-lfs-upload.js';
+import {
+    uploadSessionWithRetry,
+    getUploadSecret,
+    setUploadSecret,
+    hasUploadSecret
+} from './shared/blob-upload.js';
 
 // Export state for global access (used by inline functions in HTML)
 window.appState = state;
@@ -96,6 +102,9 @@ let mlModelLoaded = false;
 
 // GitHub token (for upload functionality)
 let ghToken = null;
+
+// Upload method: 'blob' (Vercel Blob) or 'github' (GitHub LFS)
+let uploadMethod = 'blob';
 
 // Live calibration UI update interval
 let calibrationUIInterval = null;
@@ -408,6 +417,45 @@ async function init() {
         console.warn('Failed to load GitHub token:', e);
     }
 
+    // Initialize blob upload secret
+    try {
+        const blobSecretInput = $('blobSecret');
+        if (hasUploadSecret()) {
+            log('Blob upload secret loaded');
+            if (blobSecretInput) {
+                blobSecretInput.value = '••••••••'; // Mask the secret
+            }
+        }
+        // Add change handler for blob secret input
+        if (blobSecretInput) {
+            blobSecretInput.addEventListener('change', (e) => {
+                const secret = e.target.value;
+                if (secret && secret !== '••••••••') {
+                    setUploadSecret(secret);
+                    e.target.value = '••••••••'; // Mask after saving
+                    log('Blob upload secret saved');
+                } else if (!secret) {
+                    setUploadSecret(null);
+                    log('Blob upload secret cleared');
+                }
+                updateUI();
+            });
+        }
+
+        // Handle upload method toggle
+        const uploadMethodSelect = $('uploadMethod');
+        if (uploadMethodSelect) {
+            uploadMethodSelect.value = uploadMethod;
+            uploadMethodSelect.addEventListener('change', (e) => {
+                uploadMethod = e.target.value;
+                log(`Upload method: ${uploadMethod === 'blob' ? 'Vercel Blob' : 'GitHub LFS'}`);
+                updateUI();
+            });
+        }
+    } catch (e) {
+        console.warn('Failed to initialize blob upload:', e);
+    }
+
     // Initialize geomagnetic location
     await initGeomagneticLocation();
 
@@ -499,10 +547,12 @@ function updateUI() {
     if (clearBtn) clearBtn.disabled = state.sessionData.length === 0 || state.recording;
     if (exportBtn) exportBtn.disabled = state.sessionData.length === 0 || state.recording;
 
-    // Upload button
+    // Upload button - check auth based on upload method
     const uploadBtn = $('uploadBtn');
     if (uploadBtn) {
-        uploadBtn.disabled = state.sessionData.length === 0 || state.recording || !ghToken;
+        const hasAuth = uploadMethod === 'blob' ? hasUploadSecret() : !!ghToken;
+        uploadBtn.disabled = state.sessionData.length === 0 || state.recording || !hasAuth;
+        uploadBtn.title = hasAuth ? 'Upload session data' : `Configure ${uploadMethod === 'blob' ? 'upload secret' : 'GitHub token'} first`;
     }
 
     // Wizard button - enable when connected
@@ -1453,7 +1503,71 @@ function initExport() {
     // Initialize upload functionality
     const uploadBtn = $('uploadBtn');
     if (uploadBtn) {
-        uploadBtn.addEventListener('click', uploadToGitHub);
+        uploadBtn.addEventListener('click', uploadSession);
+    }
+}
+
+/**
+ * Upload session data using configured method (Blob or GitHub)
+ */
+async function uploadSession() {
+    if (uploadMethod === 'blob') {
+        await uploadToBlob();
+    } else {
+        await uploadToGitHub();
+    }
+}
+
+/**
+ * Upload data to Vercel Blob storage
+ */
+async function uploadToBlob() {
+    if (state.sessionData.length === 0) {
+        log('No data to upload');
+        return;
+    }
+
+    if (!hasUploadSecret()) {
+        log('Error: No upload secret configured');
+        return;
+    }
+
+    const uploadBtn = $('uploadBtn');
+    const originalText = uploadBtn.textContent;
+
+    try {
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = 'Uploading...';
+        log('Uploading to Vercel Blob...');
+
+        // Build export data with metadata
+        const data = buildExportData();
+
+        // Create filename with timestamp (replace colons for URL safety)
+        const timestamp = new Date().toISOString().replace(/:/g, '_');
+        const filename = `${timestamp}.json`;
+        const content = JSON.stringify(data, null, 2);
+
+        // Upload using blob API with retry
+        const result = await uploadSessionWithRetry({
+            filename,
+            content,
+            maxRetries: 3,
+            onProgress: (progress) => {
+                uploadBtn.textContent = progress.message;
+                log(`Upload: ${progress.message}`);
+            }
+        });
+
+        log(`Uploaded: ${result.filename} (${(result.size / 1024).toFixed(1)} KB)`);
+        log(`URL: ${result.url}`);
+
+    } catch (e) {
+        console.error('[GAMBIT] Blob upload failed:', e);
+        log(`Upload failed: ${e.message}`);
+    } finally {
+        uploadBtn.disabled = state.sessionData.length === 0 || state.recording || !hasUploadSecret();
+        uploadBtn.textContent = originalText;
     }
 }
 
@@ -1571,7 +1685,8 @@ async function uploadToGitHub() {
         console.error('[GAMBIT] Upload failed:', e);
         log(`Upload failed: ${e.message}`);
     } finally {
-        uploadBtn.disabled = state.sessionData.length === 0 || state.recording || !ghToken;
+        const hasAuth = uploadMethod === 'blob' ? hasUploadSecret() : !!ghToken;
+        uploadBtn.disabled = state.sessionData.length === 0 || state.recording || !hasAuth;
         uploadBtn.textContent = originalText;
     }
 }
