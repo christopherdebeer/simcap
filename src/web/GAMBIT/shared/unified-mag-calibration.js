@@ -5,8 +5,11 @@
  * 1. Hard Iron - constant offset from nearby ferromagnetic materials (wizard)
  * 2. Soft Iron - distortion from nearby conductive materials (wizard)
  * 3. Earth Field - real-time estimation using orientation-compensated averaging
+ * 4. Extended Baseline - session-start capture with fingers extended (automatic)
  *
- * Design based on investigation: /docs/technical/earth-field-subtraction-investigation.md
+ * Design based on investigations:
+ * - /docs/technical/earth-field-subtraction-investigation.md
+ * - /docs/technical/magnetometer-calibration-complete-analysis.md
  *
  * @module shared/unified-mag-calibration
  */
@@ -64,6 +67,10 @@ export class UnifiedMagCalibration {
      * @param {number} [options.windowSize=200] - Sliding window for Earth estimation
      * @param {number} [options.minSamples=50] - Minimum samples before Earth field computed
      * @param {boolean} [options.debug=false] - Enable debug logging
+     * @param {boolean} [options.extendedBaselineEnabled=true] - Enable Extended Baseline capture
+     * @param {Object} [options.extendedBaseline=null] - Pre-computed baseline {x, y, z} in µT
+     * @param {number} [options.baselineMagnitudeThreshold=100] - Max magnitude for valid baseline (µT)
+     * @param {number} [options.baselineMinSamples=50] - Min samples for baseline capture (~1 second)
      */
     constructor(options = {}) {
         // Configuration
@@ -71,11 +78,27 @@ export class UnifiedMagCalibration {
         this.minSamples = options.minSamples || 50;
         this.debug = options.debug || false;
 
+        // Extended Baseline configuration
+        this.extendedBaselineEnabled = options.extendedBaselineEnabled !== false; // default true
+        this.baselineMagnitudeThreshold = options.baselineMagnitudeThreshold || 100; // µT
+        this.baselineMinSamples = options.baselineMinSamples || 50; // ~1 second at 50Hz
+
         // Iron calibration (from wizard)
         this.hardIronOffset = { x: 0, y: 0, z: 0 };
         this.softIronMatrix = Matrix3.identity();
         this.hardIronCalibrated = false;
         this.softIronCalibrated = false;
+
+        // Extended Baseline state (session-start capture)
+        this._extendedBaseline = { x: 0, y: 0, z: 0 };
+        this._extendedBaselineActive = false;
+        this._baselineCapturing = false;
+        this._baselineCaptureSamples = [];
+
+        // Apply pre-computed baseline if provided
+        if (options.extendedBaseline) {
+            this.setExtendedBaseline(options.extendedBaseline);
+        }
 
         // Earth field estimation (real-time)
         this._worldSamples = [];
@@ -231,6 +254,154 @@ export class UnifiedMagCalibration {
     }
 
     // =========================================================================
+    // EXTENDED BASELINE (Session-start capture)
+    // =========================================================================
+
+    /**
+     * Start baseline capture phase
+     * Call this at session start, prompt user to extend fingers and rotate hand.
+     * Samples collected during capture are averaged to form the Extended Baseline.
+     */
+    startBaselineCapture() {
+        if (!this.extendedBaselineEnabled) {
+            if (this.debug) console.log('[UnifiedMagCal] Extended Baseline disabled, skipping capture');
+            return;
+        }
+        this._baselineCapturing = true;
+        this._baselineCaptureSamples = [];
+        if (this.debug) console.log('[UnifiedMagCal] Baseline capture started');
+    }
+
+    /**
+     * End baseline capture and compute Extended Baseline
+     * @returns {Object} Result with success, magnitude, quality info
+     */
+    endBaselineCapture() {
+        if (!this._baselineCapturing) {
+            return { success: false, reason: 'not_capturing' };
+        }
+
+        this._baselineCapturing = false;
+        const samples = this._baselineCaptureSamples;
+
+        if (samples.length < this.baselineMinSamples) {
+            if (this.debug) console.log(`[UnifiedMagCal] Baseline capture failed: only ${samples.length}/${this.baselineMinSamples} samples`);
+            return {
+                success: false,
+                reason: 'insufficient_samples',
+                sampleCount: samples.length,
+                required: this.baselineMinSamples
+            };
+        }
+
+        // Compute mean residual
+        const sumX = samples.reduce((s, r) => s + r.x, 0);
+        const sumY = samples.reduce((s, r) => s + r.y, 0);
+        const sumZ = samples.reduce((s, r) => s + r.z, 0);
+        const n = samples.length;
+        const baseline = { x: sumX / n, y: sumY / n, z: sumZ / n };
+        const magnitude = Math.sqrt(baseline.x ** 2 + baseline.y ** 2 + baseline.z ** 2);
+
+        // Quality gate: reject high-magnitude baselines (fingers not extended)
+        if (magnitude > this.baselineMagnitudeThreshold) {
+            if (this.debug) console.log(`[UnifiedMagCal] Baseline rejected: magnitude ${magnitude.toFixed(1)} µT > ${this.baselineMagnitudeThreshold} µT threshold`);
+            return {
+                success: false,
+                reason: 'magnitude_too_high',
+                magnitude,
+                threshold: this.baselineMagnitudeThreshold,
+                baseline,
+                suggestion: 'Extend fingers further from palm sensor'
+            };
+        }
+
+        // Accept baseline
+        this._extendedBaseline = baseline;
+        this._extendedBaselineActive = true;
+
+        if (this.debug) console.log(`[UnifiedMagCal] Baseline captured: [${baseline.x.toFixed(1)}, ${baseline.y.toFixed(1)}, ${baseline.z.toFixed(1)}] |${magnitude.toFixed(1)}| µT`);
+
+        return {
+            success: true,
+            baseline: { ...baseline },
+            magnitude,
+            sampleCount: n,
+            quality: magnitude < 60 ? 'excellent' : magnitude < 80 ? 'good' : 'acceptable'
+        };
+    }
+
+    /**
+     * Manually set Extended Baseline (e.g., from stored calibration)
+     * @param {Object} baseline - {x, y, z} in µT
+     * @returns {Object} Result with success and magnitude
+     */
+    setExtendedBaseline(baseline) {
+        if (!baseline || typeof baseline.x !== 'number') {
+            return { success: false, reason: 'invalid_baseline' };
+        }
+
+        const magnitude = Math.sqrt(baseline.x ** 2 + baseline.y ** 2 + baseline.z ** 2);
+
+        // Optional quality check (can be bypassed by providing baseline directly)
+        if (magnitude > this.baselineMagnitudeThreshold * 2) {
+            if (this.debug) console.log(`[UnifiedMagCal] Warning: provided baseline magnitude ${magnitude.toFixed(1)} µT is very high`);
+        }
+
+        this._extendedBaseline = { x: baseline.x, y: baseline.y, z: baseline.z };
+        this._extendedBaselineActive = true;
+
+        if (this.debug) console.log(`[UnifiedMagCal] Extended Baseline set: [${baseline.x.toFixed(1)}, ${baseline.y.toFixed(1)}, ${baseline.z.toFixed(1)}] |${magnitude.toFixed(1)}| µT`);
+
+        return { success: true, magnitude };
+    }
+
+    /**
+     * Clear Extended Baseline
+     */
+    clearExtendedBaseline() {
+        this._extendedBaseline = { x: 0, y: 0, z: 0 };
+        this._extendedBaselineActive = false;
+        this._baselineCapturing = false;
+        this._baselineCaptureSamples = [];
+        if (this.debug) console.log('[UnifiedMagCal] Extended Baseline cleared');
+    }
+
+    /**
+     * Check if Extended Baseline is active
+     * @returns {boolean}
+     */
+    hasExtendedBaseline() {
+        return this._extendedBaselineActive;
+    }
+
+    /**
+     * Get current Extended Baseline
+     * @returns {Object} {x, y, z, magnitude, active}
+     */
+    getExtendedBaseline() {
+        const mag = Math.sqrt(
+            this._extendedBaseline.x ** 2 +
+            this._extendedBaseline.y ** 2 +
+            this._extendedBaseline.z ** 2
+        );
+        return {
+            x: this._extendedBaseline.x,
+            y: this._extendedBaseline.y,
+            z: this._extendedBaseline.z,
+            magnitude: mag,
+            active: this._extendedBaselineActive
+        };
+    }
+
+    /**
+     * Check if currently capturing baseline
+     * @returns {boolean}
+     */
+    isCapturingBaseline() {
+        return this._baselineCapturing;
+    }
+
+    // =========================================================================
     // EARTH FIELD ESTIMATION (Real-time)
     // =========================================================================
 
@@ -276,13 +447,18 @@ export class UnifiedMagCalibration {
         // Recompute Earth field
         this._computeEarthField();
 
-        // Track residual
+        // Track residual and collect baseline samples
         if (this._earthFieldMagnitude > 0) {
-            const residual = this.getResidual(mx_ut, my_ut, mz_ut, orientation);
+            const residual = this._getEarthResidual(mx_ut, my_ut, mz_ut, orientation);
             if (residual) {
                 this._recentResiduals.push(residual.magnitude);
                 if (this._recentResiduals.length > this._maxResidualHistory) {
                     this._recentResiduals.shift();
+                }
+
+                // Collect samples during baseline capture phase
+                if (this._baselineCapturing) {
+                    this._baselineCaptureSamples.push({ x: residual.x, y: residual.y, z: residual.z });
                 }
             }
         }
@@ -290,12 +466,14 @@ export class UnifiedMagCalibration {
         return {
             earthReady: this._earthFieldMagnitude > 0,
             confidence: this.getConfidence(),
-            earthMagnitude: this._earthFieldMagnitude
+            earthMagnitude: this._earthFieldMagnitude,
+            capturingBaseline: this._baselineCapturing,
+            baselineSampleCount: this._baselineCaptureSamples.length
         };
     }
 
     /**
-     * Get residual (fully corrected: iron + Earth subtracted)
+     * Get residual (fully corrected: iron + Earth + Extended Baseline subtracted)
      * @param {number} mx_ut - Raw magnetometer X in µT
      * @param {number} my_ut - Raw magnetometer Y in µT
      * @param {number} mz_ut - Raw magnetometer Z in µT
@@ -303,6 +481,36 @@ export class UnifiedMagCalibration {
      * @returns {Object|null} {x, y, z, magnitude} or null if not ready
      */
     getResidual(mx_ut, my_ut, mz_ut, orientation) {
+        // Get Earth-subtracted residual
+        const earthResidual = this._getEarthResidual(mx_ut, my_ut, mz_ut, orientation);
+        if (!earthResidual) {
+            return null;
+        }
+
+        // Apply Extended Baseline if active
+        if (this._extendedBaselineActive) {
+            const residual = {
+                x: earthResidual.x - this._extendedBaseline.x,
+                y: earthResidual.y - this._extendedBaseline.y,
+                z: earthResidual.z - this._extendedBaseline.z
+            };
+            residual.magnitude = Math.sqrt(residual.x ** 2 + residual.y ** 2 + residual.z ** 2);
+            return residual;
+        }
+
+        return earthResidual;
+    }
+
+    /**
+     * Get Earth-only residual (iron + Earth subtracted, no Extended Baseline)
+     * @private
+     * @param {number} mx_ut - Raw magnetometer X in µT
+     * @param {number} my_ut - Raw magnetometer Y in µT
+     * @param {number} mz_ut - Raw magnetometer Z in µT
+     * @param {Object} orientation - Quaternion {w, x, y, z}
+     * @returns {Object|null} {x, y, z, magnitude} or null if not ready
+     */
+    _getEarthResidual(mx_ut, my_ut, mz_ut, orientation) {
         if (this._earthFieldMagnitude === 0 || !orientation) {
             return null;
         }
@@ -324,7 +532,7 @@ export class UnifiedMagCalibration {
             y: ironCorrected.y - earthSensor.y,
             z: ironCorrected.z - earthSensor.z
         };
-        residual.magnitude = Math.sqrt(residual.x**2 + residual.y**2 + residual.z**2);
+        residual.magnitude = Math.sqrt(residual.x ** 2 + residual.y ** 2 + residual.z ** 2);
 
         return residual;
     }
@@ -383,6 +591,11 @@ export class UnifiedMagCalibration {
      * @returns {Object}
      */
     getState() {
+        const baselineMag = Math.sqrt(
+            this._extendedBaseline.x ** 2 +
+            this._extendedBaseline.y ** 2 +
+            this._extendedBaseline.z ** 2
+        );
         return {
             ready: this.isReady(),
             confidence: this.getConfidence(),
@@ -391,6 +604,11 @@ export class UnifiedMagCalibration {
             earthWorld: { ...this._earthFieldWorld },
             hardIronCalibrated: this.hardIronCalibrated,
             softIronCalibrated: this.softIronCalibrated,
+            extendedBaselineActive: this._extendedBaselineActive,
+            extendedBaseline: { ...this._extendedBaseline },
+            extendedBaselineMagnitude: baselineMag,
+            capturingBaseline: this._baselineCapturing,
+            baselineSampleCount: this._baselineCaptureSamples.length,
             windowSize: this._worldSamples.length,
             totalSamples: this._totalSamples
         };
@@ -404,7 +622,7 @@ export class UnifiedMagCalibration {
     }
 
     /**
-     * Full reset (clears everything including iron calibration)
+     * Full reset (clears everything including iron calibration and Extended Baseline)
      */
     reset() {
         this.hardIronOffset = { x: 0, y: 0, z: 0 };
@@ -412,6 +630,7 @@ export class UnifiedMagCalibration {
         this.hardIronCalibrated = false;
         this.softIronCalibrated = false;
         this._resetEarthEstimation();
+        this.clearExtendedBaseline();
         this._totalSamples = 0;
         this._loggedFirstSample = false;
 
@@ -445,11 +664,19 @@ export class UnifiedMagCalibration {
      * @returns {Object}
      */
     toJSON() {
+        const baselineMag = Math.sqrt(
+            this._extendedBaseline.x ** 2 +
+            this._extendedBaseline.y ** 2 +
+            this._extendedBaseline.z ** 2
+        );
         return {
             hardIronOffset: this.hardIronOffset,
             softIronMatrix: this.softIronMatrix.toArray(),
             hardIronCalibrated: this.hardIronCalibrated,
             softIronCalibrated: this.softIronCalibrated,
+            // Extended Baseline (persisted for session continuity)
+            extendedBaseline: this._extendedBaselineActive ? { ...this._extendedBaseline } : null,
+            extendedBaselineMagnitude: this._extendedBaselineActive ? baselineMag : null,
             // Earth field state (informational, will be re-estimated)
             earthFieldWorld: this._earthFieldWorld,
             earthFieldMagnitude: this._earthFieldMagnitude,
@@ -457,6 +684,7 @@ export class UnifiedMagCalibration {
             units: {
                 hardIronOffset: 'µT',
                 softIronMatrix: 'dimensionless',
+                extendedBaseline: 'µT',
                 earthFieldWorld: 'µT',
                 earthFieldMagnitude: 'µT'
             }
@@ -472,6 +700,14 @@ export class UnifiedMagCalibration {
         this.softIronMatrix = json.softIronMatrix ? Matrix3.fromArray(json.softIronMatrix) : Matrix3.identity();
         this.hardIronCalibrated = json.hardIronCalibrated || false;
         this.softIronCalibrated = json.softIronCalibrated || false;
+
+        // Restore Extended Baseline if available
+        if (json.extendedBaseline) {
+            this.setExtendedBaseline(json.extendedBaseline);
+        } else {
+            this.clearExtendedBaseline();
+        }
+
         // Don't restore Earth field - let it re-estimate in real-time
         this._resetEarthEstimation();
     }
