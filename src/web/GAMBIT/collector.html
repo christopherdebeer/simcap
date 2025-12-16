@@ -789,12 +789,13 @@
                     <div id="softIronQuality" style="font-size: 10px; margin-top: 4px;"></div>
                 </div>
 
-                <!-- Step 3: Extended Baseline -->
-                <div id="calStep3" class="calibration-step">
-                    <h3>Step 3: Extended Baseline (Optional)</h3>
-                    <p style="font-size: 11px; margin-bottom: 8px;">Hold hand still with fingers extended away from palm. Improves magnet detection accuracy.</p>
+                <!-- Extended Baseline (Auto-captured) -->
+                <div id="calBaseline" class="calibration-step" style="border-top: 1px solid var(--border); padding-top: 12px; margin-top: 12px;">
+                    <h3>Extended Baseline</h3>
+                    <p style="font-size: 11px; margin-bottom: 8px;">Auto-captured at session start with fingers extended. Manual recapture available below.</p>
+                    <div id="baselineStatus" style="font-size: 10px; margin-bottom: 8px;"></div>
                     <div class="row">
-                        <button id="startBaselineCal" class="btn-secondary" disabled>Start (3 seconds)</button>
+                        <button id="startBaselineCal" class="btn-secondary" disabled>Recapture (3 seconds)</button>
                         <div id="baselineProgress" style="flex: 1;"></div>
                     </div>
                     <div id="baselineQuality" style="font-size: 10px; margin-top: 4px;"></div>

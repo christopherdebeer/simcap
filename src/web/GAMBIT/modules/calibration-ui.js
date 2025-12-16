@@ -83,19 +83,42 @@ export function updateCalibrationStatus() {
 
     saveBtn.disabled = !complete;
 
-    // Hard Iron enabled immediately, Soft Iron requires Hard Iron first, Baseline requires Soft Iron
+    // Hard Iron enabled immediately, Soft Iron requires Hard Iron first
+    // Baseline recapture enabled anytime when connected (auto-baseline handles initial capture)
     const startHardIronBtn = $('startHardIronCal');
     const startSoftIronBtn = $('startSoftIronCal');
     const startBaselineBtn = $('startBaselineCal');
     if (startHardIronBtn) startHardIronBtn.disabled = !state.connected;
     if (startSoftIronBtn) startSoftIronBtn.disabled = !state.connected || !hasHardIron;
-    if (startBaselineBtn) startBaselineBtn.disabled = !state.connected || !hasSoftIron;
+    if (startBaselineBtn) startBaselineBtn.disabled = !state.connected;
 
-    // Show baseline status if captured
+    // Show baseline status
+    const baselineStatus = $('baselineStatus');
     const baselineQuality = $('baselineQuality');
-    if (baselineQuality && calibrationInstance) {
+    if (calibrationInstance) {
         const calState = calibrationInstance.getState();
-        if (calState.extendedBaselineActive) {
+
+        // Show status in dedicated status div
+        if (baselineStatus) {
+            if (calState.extendedBaselineActive) {
+                const mag = calState.extendedBaselineMagnitude;
+                const quality = mag < 60 ? 'Excellent' : mag < 80 ? 'Good' : 'Acceptable';
+                baselineStatus.textContent = `✓ Auto-captured (${quality}, ${mag.toFixed(1)} µT)`;
+                baselineStatus.style.color = 'var(--success)';
+            } else if (calState.capturingBaseline) {
+                baselineStatus.textContent = `⏳ Capturing... (${calState.baselineSampleCount} samples)`;
+                baselineStatus.style.color = 'var(--fg-muted)';
+            } else if (calState.autoBaselineRetryCount >= calState.autoBaselineMaxRetries) {
+                baselineStatus.textContent = `⚠️ Auto-capture failed (magnets detected?) - use manual recapture`;
+                baselineStatus.style.color = 'var(--warning)';
+            } else {
+                baselineStatus.textContent = `○ Waiting for samples...`;
+                baselineStatus.style.color = 'var(--fg-muted)';
+            }
+        }
+
+        // Show quality in dedicated quality div (for manual capture feedback)
+        if (baselineQuality && calState.extendedBaselineActive) {
             const mag = calState.extendedBaselineMagnitude;
             const quality = mag < 60 ? 'Excellent' : mag < 80 ? 'Good' : 'Acceptable';
             const emoji = mag < 60 ? '✅' : mag < 80 ? '⚠️' : '⚠️';
@@ -257,7 +280,7 @@ export function initCalibrationUI() {
         });
     }
 
-    // Extended Baseline Capture
+    // Extended Baseline Manual Recapture
     const startBaselineCal = $('startBaselineCal');
     if (startBaselineCal) {
         startBaselineCal.addEventListener('click', async () => {
@@ -268,14 +291,19 @@ export function initCalibrationUI() {
 
             const progressDiv = $('baselineProgress');
             const qualityDiv = $('baselineQuality');
+            const statusDiv = $('baselineStatus');
 
             // Need 100 samples at ~26Hz = ~4 seconds, use 78 samples for 3 seconds
             const sampleCount = 78;
             const sampleRate = 26;
 
-            log('Starting Extended Baseline capture: hold hand still with fingers extended...');
+            log('Starting Extended Baseline recapture: hold hand still with fingers extended...');
             progressDiv.textContent = 'Starting...';
             qualityDiv.textContent = '';
+            if (statusDiv) statusDiv.textContent = '⏳ Manual capture in progress...';
+
+            // Clear any existing baseline and auto-baseline state
+            calibrationInstance.clearExtendedBaseline();
 
             // Start baseline capture mode
             calibrationInstance.startBaselineCapture();
