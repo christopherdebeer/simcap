@@ -1079,18 +1079,33 @@
             </div>
         </section>
 
-        <!-- GitHub Sync -->
+        <!-- Cloud Upload -->
         <section class="card">
-            <h2 class="collapsible collapsed">GitHub Sync</h2>
+            <h2 class="collapsible collapsed">Cloud Upload</h2>
             <div class="collapse-content hidden">
                 <div class="row">
+                    <div style="flex: 1">
+                        <label>Upload Method</label>
+                        <select id="uploadMethod">
+                            <option value="blob">Vercel Blob</option>
+                            <option value="github">GitHub LFS</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row" style="margin-top: 10px;">
+                    <div style="flex: 2">
+                        <label>Blob Upload Secret</label>
+                        <input type="password" id="blobSecret" placeholder="Enter upload secret" />
+                    </div>
+                </div>
+                <div class="row" style="margin-top: 10px;">
                     <div style="flex: 2">
                         <label>GitHub Token (PAT with repo scope)</label>
                         <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxx" />
                     </div>
                 </div>
                 <div style="font-size: 11px; color: var(--fg-muted); margin-top: 5px;">
-                    Token is stored locally. Data uploads to: data/GAMBIT/labeled/
+                    Credentials stored locally. Blob uploads to Vercel, GitHub to data/GAMBIT/
                 </div>
             </div>
         </section>
