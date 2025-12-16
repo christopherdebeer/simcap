@@ -62,6 +62,7 @@ class SensorDataProcessor:
                 session_type = 'recording'
                 custom_labels = []
                 calibration_types = []
+                metadata = {}
 
                 if isinstance(data, dict) and 'samples' in data:
                     # New format with wrapper (v2.0 or v2.1)
@@ -89,7 +90,6 @@ class SensorDataProcessor:
                     samples = data
                     # Load metadata from separate file if available
                     meta_file = json_file.with_suffix('.meta.json')
-                    metadata = None
                     if meta_file.exists():
                         with open(meta_file, 'r') as f:
                             metadata = json.load(f)
@@ -101,24 +101,43 @@ class SensorDataProcessor:
                     print(f"Skipping {json_file.name}: no valid samples")
                     continue
 
+                # Determine actual sample rate from metadata or data
+                sample_rate = metadata.get('sample_rate', 50) if metadata else 50
+                # Use dt from first sample if available for more accurate rate
+                if samples and 'dt' in samples[0]:
+                    dt = samples[0].get('dt', 0.02)
+                    if dt > 0:
+                        sample_rate = 1.0 / dt
+
                 session = {
                     'filename': json_file.name,
                     'timestamp': json_file.stem,
                     'data': samples,
                     'metadata': metadata,
-                    'duration': len(samples) / 50.0,  # 50Hz sampling
+                    'duration': len(samples) / sample_rate,
+                    'sample_rate': sample_rate,
                     # V2.1 extended fields
                     'version': version,
                     'firmware_version': firmware_version,
                     'session_type': session_type,
                     'labels': labels,
                     'custom_labels': list(set(custom_labels)),
-                    'calibration_types': list(set(calibration_types))
+                    'calibration_types': list(set(calibration_types)),
+                    # Extended metadata fields for VIZ display
+                    'device': metadata.get('device', 'unknown') if metadata else 'unknown',
+                    'subject_id': metadata.get('subject_id', '') if metadata else '',
+                    'environment': metadata.get('environment', '') if metadata else '',
+                    'hand': metadata.get('hand', '') if metadata else '',
+                    'magnet_config': metadata.get('magnet_config', '') if metadata else '',
+                    'magnet_type': metadata.get('magnet_type', '') if metadata else '',
+                    'notes': metadata.get('notes', '') if metadata else '',
+                    'location': metadata.get('location', {}) if metadata else {},
+                    'calibration_state': metadata.get('calibration', {}) if metadata else {},
                 }
 
                 self.sessions.append(session)
                 fw_info = f" | fw:{firmware_version}" if firmware_version else ""
-                print(f"Loaded {json_file.name}: {len(samples)} samples ({session['duration']:.1f}s){fw_info}")
+                print(f"Loaded {json_file.name}: {len(samples)} samples ({session['duration']:.1f}s @ {sample_rate:.0f}Hz){fw_info}")
 
             except Exception as e:
                 print(f"Error loading {json_file}: {e}")
@@ -2021,6 +2040,7 @@ def main():
                 'filename': session['filename'],
                 'timestamp': session['timestamp'],
                 'duration': session['duration'],
+                'sample_rate': session.get('sample_rate', 50),
                 'composite_image': str(composite_path.relative_to(output_dir)),
                 'windows': windows_info,
                 'raw_images': [str(img.relative_to(output_dir)) for img in raw_images],
@@ -2029,7 +2049,17 @@ def main():
                 'session_type': session.get('session_type', 'recording'),
                 'labels': session.get('labels', []),
                 'custom_labels': session.get('custom_labels', []),
-                'calibration_types': session.get('calibration_types', [])
+                'calibration_types': session.get('calibration_types', []),
+                # Extended metadata for VIZ display
+                'device': session.get('device', 'unknown'),
+                'subject_id': session.get('subject_id', ''),
+                'environment': session.get('environment', ''),
+                'hand': session.get('hand', ''),
+                'magnet_config': session.get('magnet_config', ''),
+                'magnet_type': session.get('magnet_type', ''),
+                'notes': session.get('notes', ''),
+                'location': session.get('location', {}),
+                'calibration_state': session.get('calibration_state', {}),
             }
 
             # Include calibration stages image if it was created

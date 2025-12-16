@@ -865,7 +865,20 @@
                     <div class="session-header" onclick="toggleSession(${idx})">
                         <div>
                             <div class="session-title">${session.filename}</div>
-                            <div class="session-info">${formatTimestamp(session.timestamp.replaceAll('_', ':'))} | ${session.duration.toFixed(1)}s | ${session.windows.length} windows <span class="chips-container">${ session.custom_labels?.map( l => `<span class="chip">${l}</span>`).join('') }</span></div>
+                            <div class="session-info">
+                                ${formatTimestamp(session.timestamp.replaceAll('_', ':'))} | 
+                                ${session.duration.toFixed(1)}s @ ${session.sample_rate || 50}Hz | 
+                                ${session.windows.length} windows
+                                ${session.device ? ` | ${session.device}` : ''}
+                                ${session.firmware_version ? ` (fw:${session.firmware_version})` : ''}
+                                <span class="chips-container">
+                                    ${session.session_type && session.session_type !== 'recording' ? `<span class="chip" style="background: var(--warning);">${session.session_type}</span>` : ''}
+                                    ${session.hand && session.hand !== 'unknown' ? `<span class="chip">${session.hand} hand</span>` : ''}
+                                    ${session.magnet_type && session.magnet_type !== 'unknown' && session.magnet_type !== 'none' ? `<span class="chip" style="background: var(--success);">${session.magnet_type}</span>` : ''}
+                                    ${session.custom_labels?.map(l => `<span class="chip">${l}</span>`).join('') || ''}
+                                </span>
+                            </div>
+                            ${session.notes ? `<div class="session-notes" style="font-size: 0.75rem; color: var(--fg-muted); margin-top: var(--space-xs); font-style: italic;">📝 ${session.notes}</div>` : ''}
                         </div>
                         <div class="expand-icon">▼</div>
                     </div>
