@@ -83,6 +83,7 @@ export class UnifiedMagCalibration {
         this.extendedBaselineEnabled = options.extendedBaselineEnabled !== false; // default true
         this.baselineMagnitudeThreshold = options.baselineMagnitudeThreshold || 100; // µT
         this.baselineMinSamples = options.baselineMinSamples || 50; // ~1 second at 50Hz
+        this.autoBaseline = options.autoBaseline !== false; // default true - auto-capture at session start
 
         // Confidence calculation configuration
         // Threshold of 50µT is more forgiving during motion (Earth field ~50µT)
@@ -99,10 +100,14 @@ export class UnifiedMagCalibration {
         this._extendedBaselineActive = false;
         this._baselineCapturing = false;
         this._baselineCaptureSamples = [];
+        this._autoBaselineAttempted = false; // tracks if auto-baseline has been attempted
+        this._autoBaselineRetryCount = 0;
+        this._autoBaselineMaxRetries = 5; // retry up to 5 times if quality gate fails
 
         // Apply pre-computed baseline if provided
         if (options.extendedBaseline) {
             this.setExtendedBaseline(options.extendedBaseline);
+            this._autoBaselineAttempted = true; // skip auto if baseline provided
         }
 
         // Earth field estimation (real-time)
@@ -362,13 +367,16 @@ export class UnifiedMagCalibration {
 
     /**
      * Clear Extended Baseline
+     * Also resets auto-baseline state so it can retry
      */
     clearExtendedBaseline() {
         this._extendedBaseline = { x: 0, y: 0, z: 0 };
         this._extendedBaselineActive = false;
         this._baselineCapturing = false;
         this._baselineCaptureSamples = [];
-        if (this.debug) console.log('[UnifiedMagCal] Extended Baseline cleared');
+        this._autoBaselineAttempted = false;
+        this._autoBaselineRetryCount = 0;
+        if (this.debug) console.log('[UnifiedMagCal] Extended Baseline cleared (auto-baseline can retry)');
     }
 
     /**
@@ -425,6 +433,15 @@ export class UnifiedMagCalibration {
 
         this._totalSamples++;
 
+        // Auto-start baseline capture on first sample if enabled and not already captured
+        if (this.autoBaseline && this.extendedBaselineEnabled &&
+            !this._extendedBaselineActive && !this._baselineCapturing &&
+            this._autoBaselineRetryCount < this._autoBaselineMaxRetries) {
+            this._baselineCapturing = true;
+            this._baselineCaptureSamples = [];
+            if (this.debug) console.log('[UnifiedMagCal] Auto-baseline capture started');
+        }
+
         // Apply iron correction
         const ironCorrected = this.applyIronCorrection({ x: mx_ut, y: my_ut, z: mz_ut });
 
@@ -453,6 +470,7 @@ export class UnifiedMagCalibration {
         this._computeEarthField();
 
         // Track residual and collect baseline samples
+        let autoBaselineResult = null;
         if (this._earthFieldMagnitude > 0) {
             const residual = this._getEarthResidual(mx_ut, my_ut, mz_ut, orientation);
             if (residual) {
@@ -464,6 +482,11 @@ export class UnifiedMagCalibration {
                 // Collect samples during baseline capture phase
                 if (this._baselineCapturing) {
                     this._baselineCaptureSamples.push({ x: residual.x, y: residual.y, z: residual.z });
+
+                    // Auto-complete baseline when we have enough samples
+                    if (this.autoBaseline && this._baselineCaptureSamples.length >= this.baselineMinSamples) {
+                        autoBaselineResult = this._attemptAutoBaseline();
+                    }
                 }
             }
         }
@@ -473,7 +496,70 @@ export class UnifiedMagCalibration {
             confidence: this.getConfidence(),
             earthMagnitude: this._earthFieldMagnitude,
             capturingBaseline: this._baselineCapturing,
-            baselineSampleCount: this._baselineCaptureSamples.length
+            baselineSampleCount: this._baselineCaptureSamples.length,
+            autoBaselineResult // null or {success, magnitude, quality} if auto-baseline completed
+        };
+    }
+
+    /**
+     * Attempt automatic baseline completion
+     * @private
+     * @returns {Object} Result with success, magnitude, quality info
+     */
+    _attemptAutoBaseline() {
+        const samples = this._baselineCaptureSamples;
+        const n = samples.length;
+
+        // Compute mean residual
+        const sumX = samples.reduce((s, r) => s + r.x, 0);
+        const sumY = samples.reduce((s, r) => s + r.y, 0);
+        const sumZ = samples.reduce((s, r) => s + r.z, 0);
+        const baseline = { x: sumX / n, y: sumY / n, z: sumZ / n };
+        const magnitude = Math.sqrt(baseline.x ** 2 + baseline.y ** 2 + baseline.z ** 2);
+
+        // Quality gate: reject high-magnitude baselines (magnets present)
+        if (magnitude > this.baselineMagnitudeThreshold) {
+            this._autoBaselineRetryCount++;
+            if (this.debug) {
+                console.log(`[UnifiedMagCal] Auto-baseline rejected (attempt ${this._autoBaselineRetryCount}/${this._autoBaselineMaxRetries}): magnitude ${magnitude.toFixed(1)} µT > ${this.baselineMagnitudeThreshold} µT`);
+            }
+
+            // Clear samples and retry if we haven't exceeded max retries
+            if (this._autoBaselineRetryCount < this._autoBaselineMaxRetries) {
+                this._baselineCaptureSamples = [];
+                // Keep capturing
+            } else {
+                // Give up on auto-baseline
+                this._baselineCapturing = false;
+                if (this.debug) console.log('[UnifiedMagCal] Auto-baseline gave up after max retries');
+            }
+
+            return {
+                success: false,
+                reason: 'magnitude_too_high',
+                magnitude,
+                threshold: this.baselineMagnitudeThreshold,
+                attempt: this._autoBaselineRetryCount
+            };
+        }
+
+        // Accept baseline
+        this._extendedBaseline = baseline;
+        this._extendedBaselineActive = true;
+        this._baselineCapturing = false;
+        this._autoBaselineAttempted = true;
+
+        if (this.debug) {
+            const quality = magnitude < 60 ? 'excellent' : magnitude < 80 ? 'good' : 'acceptable';
+            console.log(`[UnifiedMagCal] Auto-baseline captured: [${baseline.x.toFixed(1)}, ${baseline.y.toFixed(1)}, ${baseline.z.toFixed(1)}] |${magnitude.toFixed(1)}| µT (${quality})`);
+        }
+
+        return {
+            success: true,
+            baseline: { ...baseline },
+            magnitude,
+            sampleCount: n,
+            quality: magnitude < 60 ? 'excellent' : magnitude < 80 ? 'good' : 'acceptable'
         };
     }
 
@@ -669,7 +755,11 @@ export class UnifiedMagCalibration {
             // Calibration quality based on orientation diversity (better metric during motion)
             calibrationQuality: calibrationQuality.quality,
             diversityRatio: calibrationQuality.diversityRatio,
-            windowFill: calibrationQuality.windowFill
+            windowFill: calibrationQuality.windowFill,
+            // Auto-baseline status
+            autoBaselineEnabled: this.autoBaseline,
+            autoBaselineRetryCount: this._autoBaselineRetryCount,
+            autoBaselineMaxRetries: this._autoBaselineMaxRetries
         };
     }
 
