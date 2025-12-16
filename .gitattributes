@@ -1,4 +1,0 @@
-data/GAMBIT/*.json filter=lfs diff=lfs merge=lfs -text
-visualizations/**/*.png filter=lfs diff=lfs merge=lfs -text
-visualizations/*.png filter=lfs diff=lfs merge=lfs -text
-visualizations/session-data.js filter=lfs diff=lfs merge=lfs -text

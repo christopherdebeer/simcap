@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SIMCAP Data Visualization Explorer</title>
+    <link rel="stylesheet" href="../src/simcap.css">
+    <style>
+        /* Visualization-specific overrides maintaining brutalist aesthetic */
+        body {
+            padding: var(--space-lg) 0;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: var(--space-md);
+            margin-top: var(--space-lg);
+        }
+
+        .stat-box {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            padding: var(--space-lg);
+            text-align: center;
+            transition: border-color 0.15s ease;
+        }
+
+        .stat-box:hover {
+            border-color: var(--accent);
+        }
+
+        .stat-box .number {
+            font-size: 2rem;
+            font-weight: 600;
+            display: block;
+            margin-bottom: var(--space-xs);
+        }
+
+        .stat-box .label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--fg-muted);
+        }
+
+        .session-list {
+            display: grid;
+            gap: var(--space-lg);
+            margin-top: var(--space-xl);
+        }
+
+        .session-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            overflow: hidden;
+            transition: border-color 0.15s ease;
+        }
+
+        .session-card:hover {
+            border-color: var(--border-strong);
+        }
+
+        .session-header {
+            padding: var(--space-lg);
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+            transition: background 0.15s ease;
+        }
+
+        .session-header:hover {
+            background: var(--bg-elevated);
+        }
+
+        .session-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: var(--space-xs);
+        }
+
+        .session-info {
+            font-size: 0.75rem;
+            color: var(--fg-muted);
+        }
+
+        .expand-icon {
+            font-size: 1.25rem;
+            transition: transform 0.2s ease;
+            color: var(--fg-muted);
+        }
+
+        .session-card.expanded .expand-icon {
+            transform: rotate(180deg);
+        }
+
+        .session-content {
+            display: none;
+            padding: var(--space-lg);
+        }
+
+        .session-card.expanded .session-content {
+            display: block;
+        }
+
+        .image-section {
+            margin-bottom: var(--space-2xl);
+        }
+
+        .image-section.hidden {
+            display: none;
+        }
+
+        .section-title {
+            font-size: 1rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: var(--space-lg);
+            padding-bottom: var(--space-sm);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .composite-image {
+            width: 100%;
+            border: 1px solid var(--border);
+            cursor: pointer;
+            transition: border-color 0.15s ease;
+        }
+
+        .composite-image:hover {
+            border-color: var(--accent);
+        }
+
+        .trajectory-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: var(--space-md);
+            margin-top: var(--space-md);
+        }
+
+        .trajectory-card {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            overflow: hidden;
+            transition: border-color 0.15s ease;
+            cursor: pointer;
+        }
+
+        .trajectory-card:hover {
+            border-color: var(--accent);
+        }
+
+        .trajectory-card.hidden {
+            display: none;
+        }
+
+        .trajectory-image {
+            width: 100%;
+            aspect-ratio: 4/3;
+            object-fit: contain;
+            background: var(--bg);
+            display: block;
+        }
+
+        .trajectory-label {
+            padding: var(--space-sm) var(--space-md);
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            text-align: center;
+            border-top: 1px solid var(--border);
+        }
+
+        .windows-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: var(--space-md);
+            margin-top: var(--space-md);
+        }
+
+        .window-card {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            overflow: hidden;
+            transition: border-color 0.15s ease;
+            cursor: pointer;
+        }
+
+        .window-card:hover {
+            border-color: var(--accent);
+        }
+
+        .window-color-bar {
+            height: 4px;
+        }
+
+        .window-preview {
+            width: 100%;
+            aspect-ratio: 4/3;
+            object-fit: contain;
+            background: var(--bg);
+            display: block;
+        }
+
+        .window-info {
+            padding: var(--space-md);
+        }
+
+        .window-title {
+            font-weight: 600;
+            font-size: 0.875rem;
+            margin-bottom: var(--space-xs);
+        }
+
+        .window-time {
+            font-size: 0.75rem;
+            color: var(--fg-muted);
+            margin-bottom: var(--space-xs);
+        }
+
+        .window-stats {
+            font-size: 0.625rem;
+            color: var(--fg-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .raw-images {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: var(--space-md);
+        }
+
+        .raw-image {
+            width: 100%;
+            border: 1px solid var(--border);
+            cursor: pointer;
+            transition: border-color 0.15s ease;
+        }
+
+        .raw-image:hover {
+            border-color: var(--accent);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            padding: var(--space-lg);
+        }
+
+        .modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            max-width: 95%;
+            max-height: 95%;
+            object-fit: contain;
+            border: 1px solid var(--border);
+        }
+
+        .modal-close {
+            position: absolute;
+            top: var(--space-xl);
+            right: var(--space-xl);
+            color: var(--fg);
+            font-size: 2rem;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 1001;
+            transition: color 0.15s ease;
+        }
+
+        .modal-close:hover {
+            color: var(--accent);
+        }
+
+        .filter-bar {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            padding: var(--space-lg);
+            margin-bottom: var(--space-xl);
+            display: flex;
+            gap: var(--space-lg);
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .filter-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--fg-muted);
+            font-weight: 600;
+        }
+
+        .filter-group {
+            display: flex;
+            gap: var(--space-md);
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .checkbox-group {
+            display: flex;
+            gap: var(--space-md);
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            cursor: pointer;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .checkbox-label input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            accent-color: var(--accent);
+        }
+
+        .divider {
+            width: 1px;
+            height: 24px;
+            background: var(--border);
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: var(--space-sm);
+        }
+
+        .no-sessions {
+            text-align: center;
+            padding: var(--space-2xl);
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            color: var(--fg-muted);
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        input[type="text"], select {
+            min-width: 200px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="page-header">
+            <h1 class="title">SIMCAP DATA VISUALIZATION EXPLORER</h1>
+            <p class="subtitle">Interactive viewer for 9-axis IMU sensor data and gesture recognition</p>
+            <div class="stats">
+                <div class="stat-box">
+                    <span class="number" id="total-sessions">0</span>
+                    <span class="label">Sessions</span>
+                </div>
+                <div class="stat-box">
+                    <span class="number" id="total-windows">0</span>
+                    <span class="label">Windows</span>
+                </div>
+                <div class="stat-box">
+                    <span class="number" id="total-duration">0</span>
+                    <span class="label">Duration (s)</span>
+                </div>
+                <div class="stat-box" style="cursor: pointer;" onclick="openModal('snr_analysis_report.png')">
+                    <span class="number">📊</span>
+                    <span class="label">SNR Report</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="filter-bar">
+            <div class="filter-group">
+                <span class="filter-label">Search:</span>
+                <input type="text" id="search-box" placeholder="Search sessions...">
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="filter-group">
+                <span class="filter-label">Sort:</span>
+                <select id="sort-select">
+                    <option value="timestamp-desc">Newest First</option>
+                    <option value="timestamp-asc">Oldest First</option>
+                    <option value="duration-desc">Longest First</option>
+                    <option value="duration-asc">Shortest First</option>
+                </select>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="filter-group">
+                <span class="filter-label">Label:</span>
+                <select id="label-filter">
+                    <option value="all">All Labels</option>
+                </select>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="filter-group">
+                <span class="filter-label">Show:</span>
+                <div class="checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-composite" checked>
+                        Composite
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-calibration" checked>
+                        Calibration
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-windows" checked>
+                        Windows
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-raw" checked>
+                        Raw Axis
+                    </label>
+                </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="filter-group">
+                <span class="filter-label">Window Views:</span>
+                <div class="checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-win-composite" checked>
+                        Composite
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-win-accel-time">
+                        Accel Time
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-win-gyro-time">
+                        Gyro Time
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-win-mag-time">
+                        Mag Time
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-win-accel-3d">
+                        Accel 3D
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-win-gyro-3d">
+                        Gyro 3D
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-win-mag-3d">
+                        Mag 3D
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-win-combined-3d">
+                        Combined 3D
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-win-signature">
+                        Signature
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-win-stats">
+                        Stats
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-win-traj-raw">
+                        Traj Raw
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-win-traj-iron">
+                        Traj Iron
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-win-traj-fused">
+                        Traj Fused
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-win-traj-filtered">
+                        Traj Filtered
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-win-traj-combined">
+                        Traj Combined
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="show-win-traj-stats">
+                        Traj Stats
+                    </label>
+                </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="filter-group">
+                <span class="filter-label">Sessions:</span>
+                <div class="action-buttons">
+                    <button class="btn btn-sm" id="expand-all-btn" onclick="expandAll()">Expand All</button>
+                    <button class="btn btn-sm" id="collapse-all-btn" onclick="collapseAll()">Collapse All</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="session-list" id="session-list"></div>
+    </div>
+
+    <div class="modal" id="image-modal">
+        <span class="modal-close" onclick="closeModal()">&times;</span>
+        <img class="modal-content" id="modal-image">
+    </div>
+
+    <script src="../../visualizations/session-data.js"></script>
+
+    <script>
+
+        let filteredSessions = [...sessionsData];
+        let defaultExpanded = false;
+        let selectedLabel = 'all';
+
+        // Collect all unique labels across all sessions
+        function getAllLabels() {
+            const labels = new Set();
+            sessionsData.forEach(session => {
+                // Add custom_labels from session
+                if (session.custom_labels) {
+                    session.custom_labels.forEach(l => labels.add(l));
+                }
+                // Add labels from label segments
+                if (session.labels) {
+                    session.labels.forEach(segment => {
+                        if (segment.labels) {
+                            if (segment.labels.pose) labels.add(`pose:${segment.labels.pose}`);
+                            if (segment.labels.motion) labels.add(`motion:${segment.labels.motion}`);
+                            if (segment.labels.calibration && segment.labels.calibration !== 'none') {
+                                labels.add(`calibration:${segment.labels.calibration}`);
+                            }
+                            if (segment.labels.custom) {
+                                segment.labels.custom.forEach(l => labels.add(l));
+                            }
+                        }
+                    });
+                }
+            });
+            return Array.from(labels).sort();
+        }
+
+        // Get labels for a specific window based on sample range overlap
+        // Assumes 50Hz sample rate
+        const SAMPLE_RATE = 50;
+        
+        function getLabelsForWindow(session, window) {
+            const windowLabels = {
+                pose: null,
+                motion: null,
+                calibration: null,
+                custom: []
+            };
+            
+            if (!session.labels) return windowLabels;
+            
+            const windowStartSample = Math.floor(window.time_start * SAMPLE_RATE);
+            const windowEndSample = Math.floor(window.time_end * SAMPLE_RATE);
+            
+            session.labels.forEach(segment => {
+                // Check if this label segment overlaps with the window
+                const segmentStart = segment.start_sample;
+                const segmentEnd = segment.end_sample;
+                
+                // Overlap check: segments overlap if one starts before the other ends
+                const overlaps = windowStartSample < segmentEnd && windowEndSample > segmentStart;
+                
+                if (overlaps && segment.labels) {
+                    if (segment.labels.pose && !windowLabels.pose) {
+                        windowLabels.pose = segment.labels.pose;
+                    }
+                    if (segment.labels.motion && !windowLabels.motion) {
+                        windowLabels.motion = segment.labels.motion;
+                    }
+                    if (segment.labels.calibration && segment.labels.calibration !== 'none' && !windowLabels.calibration) {
+                        windowLabels.calibration = segment.labels.calibration;
+                    }
+                    if (segment.labels.custom) {
+                        segment.labels.custom.forEach(l => {
+                            if (!windowLabels.custom.includes(l)) {
+                                windowLabels.custom.push(l);
+                            }
+                        });
+                    }
+                }
+            });
+            
+            return windowLabels;
+        }
+
+        // Format window labels as chip HTML
+        function formatWindowLabels(windowLabels) {
+            const chips = [];
+            if (windowLabels.pose) {
+                chips.push(`<span class="chip" style="background: var(--accent);">${windowLabels.pose}</span>`);
+            }
+            if (windowLabels.motion && windowLabels.motion !== 'static') {
+                chips.push(`<span class="chip" style="background: var(--warning);">${windowLabels.motion}</span>`);
+            }
+            if (windowLabels.calibration) {
+                chips.push(`<span class="chip" style="background: var(--success);">${windowLabels.calibration}</span>`);
+            }
+            windowLabels.custom.forEach(l => {
+                chips.push(`<span class="chip">${l}</span>`);
+            });
+            return chips.join('');
+        }
+
+        // Check if a session or its windows contain a specific label
+        function sessionHasLabel(session, label) {
+            if (label === 'all') return true;
+            
+            // Check session custom_labels
+            if (session.custom_labels && session.custom_labels.includes(label)) {
+                return true;
+            }
+            
+            // Check label segments
+            if (session.labels) {
+                for (const segment of session.labels) {
+                    if (segment.labels) {
+                        if (label.startsWith('pose:') && segment.labels.pose === label.replace('pose:', '')) {
+                            return true;
+                        }
+                        if (label.startsWith('motion:') && segment.labels.motion === label.replace('motion:', '')) {
+                            return true;
+                        }
+                        if (label.startsWith('calibration:') && segment.labels.calibration === label.replace('calibration:', '')) {
+                            return true;
+                        }
+                        if (segment.labels.custom && segment.labels.custom.includes(label)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            
+            return false;
+        }
+
+        // Render windows for a session (separate function to avoid template literal issues)
+        function renderWindows(session) {
+            return session.windows.map(w => {
+                const windowLabels = getLabelsForWindow(session, w);
+                let html = `
+                <div style="margin-bottom: var(--space-xl); padding: var(--space-lg); background: var(--bg-elevated); border: 1px solid var(--border);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-md);">
+                        <h4 style="margin: 0; font-size: 0.875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
+                            Window ${w.window_num} | ${w.time_start.toFixed(2)}s - ${w.time_end.toFixed(2)}s
+                            <span class="chips-container">
+                                ${formatWindowLabels(windowLabels)}
+                            </span>
+                        </h4>
+                        <div style="font-size: 0.625rem; color: var(--fg-muted); text-transform: uppercase;">
+                            Accel: ${w.accel_mag_mean.toFixed(0)} | Gyro: ${w.gyro_mag_mean.toFixed(0)}
+                        </div>
+                    </div>
+                    <div class="trajectory-grid">`;
+                
+                if (viewSettings.showWinComposite) {
+                    html += `<div class="trajectory-card" data-type="composite" onclick="openModal('${w.filepath}')">
+                        <img src="${w.filepath}" class="trajectory-image" alt="Composite">
+                        <div class="trajectory-label">Composite</div>
+                    </div>`;
+                }
+                if (w.images.timeseries_accel && viewSettings.showWinAccelTime) {
+                    html += `<div class="trajectory-card" data-type="accel-time" onclick="openModal('${w.images.timeseries_accel}')">
+                        <img src="${w.images.timeseries_accel}" class="trajectory-image" alt="Accel Time">
+                        <div class="trajectory-label">Accel Time</div>
+                    </div>`;
+                }
+                if (w.images.timeseries_gyro && viewSettings.showWinGyroTime) {
+                    html += `<div class="trajectory-card" data-type="gyro-time" onclick="openModal('${w.images.timeseries_gyro}')">
+                        <img src="${w.images.timeseries_gyro}" class="trajectory-image" alt="Gyro Time">
+                        <div class="trajectory-label">Gyro Time</div>
+                    </div>`;
+                }
+                if (w.images.timeseries_mag && viewSettings.showWinMagTime) {
+                    html += `<div class="trajectory-card" data-type="mag-time" onclick="openModal('${w.images.timeseries_mag}')">
+                        <img src="${w.images.timeseries_mag}" class="trajectory-image" alt="Mag Time">
+                        <div class="trajectory-label">Mag Time</div>
+                    </div>`;
+                }
+                if (w.images.trajectory_accel_3d && viewSettings.showWinAccel3d) {
+                    html += `<div class="trajectory-card" data-type="accel-3d" onclick="openModal('${w.images.trajectory_accel_3d}')">
+                        <img src="${w.images.trajectory_accel_3d}" class="trajectory-image" alt="Accel 3D">
+                        <div class="trajectory-label">Accel 3D</div>
+                    </div>`;
+                }
+                if (w.images.trajectory_gyro_3d && viewSettings.showWinGyro3d) {
+                    html += `<div class="trajectory-card" data-type="gyro-3d" onclick="openModal('${w.images.trajectory_gyro_3d}')">
+                        <img src="${w.images.trajectory_gyro_3d}" class="trajectory-image" alt="Gyro 3D">
+                        <div class="trajectory-label">Gyro 3D</div>
+                    </div>`;
+                }
+                if (w.images.trajectory_mag_3d && viewSettings.showWinMag3d) {
+                    html += `<div class="trajectory-card" data-type="mag-3d" onclick="openModal('${w.images.trajectory_mag_3d}')">
+                        <img src="${w.images.trajectory_mag_3d}" class="trajectory-image" alt="Mag 3D">
+                        <div class="trajectory-label">Mag 3D</div>
+                    </div>`;
+                }
+                if (w.images.trajectory_combined_3d && viewSettings.showWinCombined3d) {
+                    html += `<div class="trajectory-card" data-type="combined-3d" onclick="openModal('${w.images.trajectory_combined_3d}')">
+                        <img src="${w.images.trajectory_combined_3d}" class="trajectory-image" alt="Combined 3D">
+                        <div class="trajectory-label">Combined 3D</div>
+                    </div>`;
+                }
+                if (w.images.signature && viewSettings.showWinSignature) {
+                    html += `<div class="trajectory-card" data-type="signature" onclick="openModal('${w.images.signature}')">
+                        <img src="${w.images.signature}" class="trajectory-image" alt="Signature">
+                        <div class="trajectory-label">Signature</div>
+                    </div>`;
+                }
+                if (w.images.stats && viewSettings.showWinStats) {
+                    html += `<div class="trajectory-card" data-type="stats" onclick="openModal('${w.images.stats}')">
+                        <img src="${w.images.stats}" class="trajectory-image" alt="Stats">
+                        <div class="trajectory-label">Stats</div>
+                    </div>`;
+                }
+                if (w.trajectory_images && w.trajectory_images.raw && viewSettings.showWinTrajRaw) {
+                    html += `<div class="trajectory-card" data-type="traj-raw" onclick="openModal('${w.trajectory_images.raw}')">
+                        <img src="${w.trajectory_images.raw}" class="trajectory-image" alt="Traj Raw">
+                        <div class="trajectory-label">Traj Raw</div>
+                    </div>`;
+                }
+                if (w.trajectory_images && w.trajectory_images.iron && viewSettings.showWinTrajIron) {
+                    html += `<div class="trajectory-card" data-type="traj-iron" onclick="openModal('${w.trajectory_images.iron}')">
+                        <img src="${w.trajectory_images.iron}" class="trajectory-image" alt="Traj Iron">
+                        <div class="trajectory-label">Traj Iron</div>
+                    </div>`;
+                }
+                if (w.trajectory_images && w.trajectory_images.fused && viewSettings.showWinTrajFused) {
+                    html += `<div class="trajectory-card" data-type="traj-fused" onclick="openModal('${w.trajectory_images.fused}')">
+                        <img src="${w.trajectory_images.fused}" class="trajectory-image" alt="Traj Fused">
+                        <div class="trajectory-label">Traj Fused</div>
+                    </div>`;
+                }
+                if (w.trajectory_images && w.trajectory_images.filtered && viewSettings.showWinTrajFiltered) {
+                    html += `<div class="trajectory-card" data-type="traj-filtered" onclick="openModal('${w.trajectory_images.filtered}')">
+                        <img src="${w.trajectory_images.filtered}" class="trajectory-image" alt="Traj Filtered">
+                        <div class="trajectory-label">Traj Filtered</div>
+                    </div>`;
+                }
+                if (w.trajectory_images && w.trajectory_images.combined && viewSettings.showWinTrajCombined) {
+                    html += `<div class="trajectory-card" data-type="traj-combined" onclick="openModal('${w.trajectory_images.combined}')">
+                        <img src="${w.trajectory_images.combined}" class="trajectory-image" alt="Traj Combined">
+                        <div class="trajectory-label">Traj Combined</div>
+                    </div>`;
+                }
+                if (w.trajectory_images && w.trajectory_images.statistics && viewSettings.showWinTrajStats) {
+                    html += `<div class="trajectory-card" data-type="traj-stats" onclick="openModal('${w.trajectory_images.statistics}')">
+                        <img src="${w.trajectory_images.statistics}" class="trajectory-image" alt="Traj Stats">
+                        <div class="trajectory-label">Traj Stats</div>
+                    </div>`;
+                }
+                
+                html += `</div></div>`;
+                return html;
+            }).join('');
+        }
+
+        // Populate label filter dropdown
+        function populateLabelFilter() {
+            const select = document.getElementById('label-filter');
+            const labels = getAllLabels();
+            labels.forEach(label => {
+                const option = document.createElement('option');
+                option.value = label;
+                option.textContent = label;
+                select.appendChild(option);
+            });
+        }
+
+        // Apply all filters (search + label)
+        function applyFilters() {
+            const query = document.getElementById('search-box').value.toLowerCase();
+            filteredSessions = sessionsData.filter(s => {
+                const matchesSearch = s.filename.toLowerCase().includes(query) ||
+                    s.timestamp.toLowerCase().includes(query);
+                const matchesLabel = sessionHasLabel(s, selectedLabel);
+                return matchesSearch && matchesLabel;
+            });
+            updateStats();
+            renderSessions();
+        }
+
+        // View settings
+        let viewSettings = {
+            showComposite: true,
+            showCalibration: true,
+            showWindows: true,
+            showRaw: true,
+            // Window view settings
+            showWinComposite: true,
+            showWinAccelTime: false,
+            showWinGyroTime: false,
+            showWinMagTime: false,
+            showWinAccel3d: false,
+            showWinGyro3d: false,
+            showWinMag3d: false,
+            showWinCombined3d: false,
+            showWinSignature: false,
+            showWinStats: false,
+            showWinTrajRaw: false,
+            showWinTrajIron: false,
+            showWinTrajFused: false,
+            showWinTrajFiltered: false,
+            showWinTrajCombined: false,
+            showWinTrajStats: false
+        };
+
+        function initializePage() {
+            populateLabelFilter();
+            updateStats();
+            renderSessions();
+            setupEventListeners();
+        }
+
+        function updateStats() {
+            document.getElementById('total-sessions').textContent = filteredSessions.length;
+
+            const totalWindows = filteredSessions.reduce((sum, s) => sum + s.windows.length, 0);
+            document.getElementById('total-windows').textContent = totalWindows;
+
+            const totalDuration = filteredSessions.reduce((sum, s) => sum + s.duration, 0);
+            document.getElementById('total-duration').textContent = totalDuration.toFixed(1);
+        }
+
+        function renderSessions() {
+            const container = document.getElementById('session-list');
+
+            if (filteredSessions.length === 0) {
+                container.innerHTML = '<div class="no-sessions">No sessions found matching your criteria</div>';
+                return;
+            }
+
+            container.innerHTML = filteredSessions.map((session, idx) => `
+                <div class="session-card ${defaultExpanded ? 'expanded' : ''}" id="session-${idx}">
+                    <div class="session-header" onclick="toggleSession(${idx})">
+                        <div>
+                            <div class="session-title">${session.filename}</div>
+                            <div class="session-info">${formatTimestamp(session.timestamp.replaceAll('_', ':'))} | ${session.duration.toFixed(1)}s | ${session.windows.length} windows <span class="chips-container">${ session.custom_labels?.map( l => `<span class="chip">${l}</span>`).join('') }</span></div>
+                        </div>
+                        <div class="expand-icon">▼</div>
+                    </div>
+                    <div class="session-content">
+                        <div class="image-section composite-section ${viewSettings.showComposite ? '' : 'hidden'}">
+                            <h3 class="section-title">Composite Session View</h3>
+                            <img src="${session.composite_image}" class="composite-image" onclick="openModal(this.src)" alt="Composite view">
+                        </div>
+
+                        ${session.calibration_stages_image ? `
+                        <div class="image-section calibration-section ${viewSettings.showCalibration ? '' : 'hidden'}">
+                            <h3 class="section-title">Magnetometer Calibration Stages</h3>
+                            <img src="${session.calibration_stages_image}" class="composite-image" onclick="openModal(this.src)" alt="Calibration stages comparison">
+                        </div>
+                        ` : ''}
+
+                        ${session.trajectory_comparison_images ? `
+                        <div class="image-section trajectory-section">
+                            <h3 class="section-title">Session-Level 3D Trajectory Comparison</h3>
+                            <div class="trajectory-grid">
+                                ${session.trajectory_comparison_images.raw && viewSettings.showWinTrajRaw ? `
+                                <div class="trajectory-card" data-type="raw" onclick="openModal('${session.trajectory_comparison_images.raw}')">
+                                    <img src="${session.trajectory_comparison_images.raw}" class="trajectory-image" alt="Raw trajectory">
+                                    <div class="trajectory-label">Raw</div>
+                                </div>
+                                ` : ''}
+                                ${session.trajectory_comparison_images.iron && viewSettings.showWinTrajIron ? `
+                                <div class="trajectory-card" data-type="iron" onclick="openModal('${session.trajectory_comparison_images.iron}')">
+                                    <img src="${session.trajectory_comparison_images.iron}" class="trajectory-image" alt="Iron corrected trajectory">
+                                    <div class="trajectory-label">Iron Corrected</div>
+                                </div>
+                                ` : ''}
+                                ${session.trajectory_comparison_images.fused && viewSettings.showWinTrajFused ? `
+                                <div class="trajectory-card" data-type="fused" onclick="openModal('${session.trajectory_comparison_images.fused}')">
+                                    <img src="${session.trajectory_comparison_images.fused}" class="trajectory-image" alt="Fused trajectory">
+                                    <div class="trajectory-label">Fused</div>
+                                </div>
+                                ` : ''}
+                                ${session.trajectory_comparison_images.filtered && viewSettings.showWinTrajFiltered ? `
+                                <div class="trajectory-card" data-type="filtered" onclick="openModal('${session.trajectory_comparison_images.filtered}')">
+                                    <img src="${session.trajectory_comparison_images.filtered}" class="trajectory-image" alt="Filtered trajectory">
+                                    <div class="trajectory-label">Filtered</div>
+                                </div>
+                                ` : ''}
+                                ${session.trajectory_comparison_images.combined && viewSettings.showWinTrajCombined ? `
+                                <div class="trajectory-card" data-type="combined" onclick="openModal('${session.trajectory_comparison_images.combined}')">
+                                    <img src="${session.trajectory_comparison_images.combined}" class="trajectory-image" alt="Combined overlay">
+                                    <div class="trajectory-label">Combined Overlay</div>
+                                </div>
+                                ` : ''}
+                                ${session.trajectory_comparison_images.statistics && viewSettings.showWinTrajStats ? `
+                                <div class="trajectory-card" data-type="statistics" onclick="openModal('${session.trajectory_comparison_images.statistics}')">
+                                    <img src="${session.trajectory_comparison_images.statistics}" class="trajectory-image" alt="Statistics">
+                                    <div class="trajectory-label">Statistics</div>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                        ` : ''}
+
+                        <div class="image-section windows-section ${viewSettings.showWindows ? '' : 'hidden'}">
+                            <h3 class="section-title">Per-Window Analysis (${session.windows.length} windows)</h3>
+                            ${renderWindows(session)}
+                        </div>
+
+                        <div class="image-section raw-section ${viewSettings.showRaw ? '' : 'hidden'}">
+                            <h3 class="section-title">Raw Axis & Orientation Views</h3>
+                            <div class="raw-images">
+                                ${session.raw_images.map(img => `
+                                    <img src="${img}" class="raw-image" onclick="openModal(this.src)" alt="Raw axis view">
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function toggleSession(idx) {
+            const card = document.getElementById(`session-${idx}`);
+            card.classList.toggle('expanded');
+        }
+
+        function expandAll() {
+            document.querySelectorAll('.session-card').forEach(card => {
+                card.classList.add('expanded');
+            });
+            defaultExpanded = true;
+        }
+
+        function collapseAll() {
+            document.querySelectorAll('.session-card').forEach(card => {
+                card.classList.remove('expanded');
+            });
+            defaultExpanded = false;
+        }
+
+        function updateViewSettings() {
+            // Section visibility
+            viewSettings.showComposite = document.getElementById('show-composite').checked;
+            viewSettings.showCalibration = document.getElementById('show-calibration').checked;
+            viewSettings.showWindows = document.getElementById('show-windows').checked;
+            viewSettings.showRaw = document.getElementById('show-raw').checked;
+            
+            // Window view settings
+            viewSettings.showWinComposite = document.getElementById('show-win-composite').checked;
+            viewSettings.showWinAccelTime = document.getElementById('show-win-accel-time').checked;
+            viewSettings.showWinGyroTime = document.getElementById('show-win-gyro-time').checked;
+            viewSettings.showWinMagTime = document.getElementById('show-win-mag-time').checked;
+            viewSettings.showWinAccel3d = document.getElementById('show-win-accel-3d').checked;
+            viewSettings.showWinGyro3d = document.getElementById('show-win-gyro-3d').checked;
+            viewSettings.showWinMag3d = document.getElementById('show-win-mag-3d').checked;
+            viewSettings.showWinCombined3d = document.getElementById('show-win-combined-3d').checked;
+            viewSettings.showWinSignature = document.getElementById('show-win-signature').checked;
+            viewSettings.showWinStats = document.getElementById('show-win-stats').checked;
+            viewSettings.showWinTrajRaw = document.getElementById('show-win-traj-raw').checked;
+            viewSettings.showWinTrajIron = document.getElementById('show-win-traj-iron').checked;
+            viewSettings.showWinTrajFused = document.getElementById('show-win-traj-fused').checked;
+            viewSettings.showWinTrajFiltered = document.getElementById('show-win-traj-filtered').checked;
+            viewSettings.showWinTrajCombined = document.getElementById('show-win-traj-combined').checked;
+            viewSettings.showWinTrajStats = document.getElementById('show-win-traj-stats').checked;
+
+            // Re-render to apply filters
+            renderSessions();
+        }
+
+        function openModal(imageSrc) {
+            const modal = document.getElementById('image-modal');
+            const modalImg = document.getElementById('modal-image');
+            modal.classList.add('active');
+            modalImg.src = imageSrc;
+        }
+
+        function closeModal() {
+            document.getElementById('image-modal').classList.remove('active');
+        }
+
+        function formatTimestamp(timestamp) {
+            try {
+                const date = new Date(timestamp);
+                return date.toLocaleString();
+            } catch {
+                return timestamp;
+            }
+        }
+
+        function setupEventListeners() {
+            // Search functionality - use applyFilters to combine with label filter
+            document.getElementById('search-box').addEventListener('input', () => {
+                applyFilters();
+            });
+
+            // Label filter functionality
+            document.getElementById('label-filter').addEventListener('change', (e) => {
+                selectedLabel = e.target.value;
+                applyFilters();
+            });
+
+            // Sort functionality
+            document.getElementById('sort-select').addEventListener('change', (e) => {
+                const sortBy = e.target.value;
+
+                filteredSessions.sort((a, b) => {
+                    switch(sortBy) {
+                        case 'timestamp-desc':
+                            return b.timestamp.localeCompare(a.timestamp);
+                        case 'timestamp-asc':
+                            return a.timestamp.localeCompare(b.timestamp);
+                        case 'duration-desc':
+                            return b.duration - a.duration;
+                        case 'duration-asc':
+                            return a.duration - b.duration;
+                        default:
+                            return 0;
+                    }
+                });
+
+                renderSessions();
+            });
+
+            // Section visibility checkboxes
+            document.getElementById('show-composite').addEventListener('change', updateViewSettings);
+            document.getElementById('show-calibration').addEventListener('change', updateViewSettings);
+            document.getElementById('show-windows').addEventListener('change', updateViewSettings);
+            document.getElementById('show-raw').addEventListener('change', updateViewSettings);
+            
+            // Window view checkboxes
+            document.getElementById('show-win-composite').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-accel-time').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-gyro-time').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-mag-time').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-accel-3d').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-gyro-3d').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-mag-3d').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-combined-3d').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-signature').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-stats').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-traj-raw').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-traj-iron').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-traj-fused').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-traj-filtered').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-traj-combined').addEventListener('change', updateViewSettings);
+            document.getElementById('show-win-traj-stats').addEventListener('change', updateViewSettings);
+
+            // Close modal on click outside
+            document.getElementById('image-modal').addEventListener('click', (e) => {
+                if (e.target.id === 'image-modal') {
+                    closeModal();
+                }
+            });
+
+            // Close modal on Escape key
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    closeModal();
+                }
+            });
+        }
+
+        // Initialize on page load
+        initializePage();
+    </script>
+</body>
+</html>
