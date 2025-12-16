@@ -437,7 +437,28 @@
                 <!-- TODO show status -->
                 <button class="btn" id="connect">Connect</button>
                 <button class="btn" disabled id="getdata">Get data</button>
-                <input id="token" type="password" placeholder="GitHub token"/>
+            </details>
+
+            <details class="card">
+                <summary class="card-header">Cloud Upload</summary>
+                <div style="display: flex; flex-direction: column; gap: var(--space-sm);">
+                    <div style="display: flex; gap: var(--space-sm); align-items: center;">
+                        <label style="font-size: 0.75rem; color: var(--fg-muted); min-width: 60px;">Method:</label>
+                        <select id="uploadMethod" style="flex: 1; padding: var(--space-xs); font-size: 0.875rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--fg);">
+                            <option value="blob">Vercel Blob</option>
+                            <option value="github">GitHub LFS</option>
+                        </select>
+                    </div>
+                    <div id="blobSecretRow" style="display: flex; gap: var(--space-sm); align-items: center;">
+                        <label style="font-size: 0.75rem; color: var(--fg-muted); min-width: 60px;">Secret:</label>
+                        <input type="password" id="blobSecret" placeholder="Enter upload secret" style="flex: 1; padding: var(--space-xs); font-size: 0.875rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--fg);"/>
+                    </div>
+                    <div id="ghTokenRow" style="display: none; gap: var(--space-sm); align-items: center;">
+                        <label style="font-size: 0.75rem; color: var(--fg-muted); min-width: 60px;">Token:</label>
+                        <input id="token" type="password" placeholder="ghp_xxxxxxxxxxxx" style="flex: 1; padding: var(--space-xs); font-size: 0.875rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--fg);"/>
+                    </div>
+                    <div id="uploadStatus" style="font-size: 0.75rem; color: var(--fg-muted); text-align: center;"></div>
+                </div>
             </details>
 
             <details class="card" open>
@@ -1026,6 +1047,8 @@
             }
 
             let ghToken;
+            let blobSecret;  // Vercel Blob upload secret
+            let uploadMethod = 'blob';  // 'blob' or 'github'
             let firmwareVersion = null;  // Store firmware version for session metadata
             let geomagneticLocation = null;  // Store geomagnetic location for session metadata
 
@@ -1817,8 +1840,8 @@
                 if (uploadTimeout) clearTimeout(uploadTimeout);
                 uploadTimeout = setTimeout(function() {
                     if (sessionData.length > 0) {
-                        console.log("Uploading to gh");
-                        ghPutData(sessionData);  // Pass array directly, ghPutData wraps in v2.1 schema
+                        console.log("Uploading session data via", uploadMethod);
+                        uploadSessionData(sessionData);  // Pass array directly, wrapper functions add v2.1 schema
                         sessionData = [];
                     }
                 }, 1000);
@@ -2377,10 +2400,99 @@
                 }
             }
 
+            // ===== Vercel Blob Upload =====
+            async function blobPutData(rawSessionData) {
+                if (!blobSecret) {
+                    console.log("blobSecret not found. skipping upload.");
+                    updateUploadStatus('No upload secret configured', 'error');
+                    return;
+                }
+
+                const d = new Date();
+                const filename = `${d.toISOString().replace(/:/g, '_')}.json`;
+                const pathname = `sessions/${filename}`;
+
+                // Build v2.1 schema export data
+                const exportData = {
+                    version: '2.1',
+                    timestamp: d.toISOString(),
+                    samples: rawSessionData,
+                    labels: [],
+                    metadata: {
+                        sample_rate: 26,
+                        device: 'GAMBIT',
+                        firmware_version: firmwareVersion || 'unknown',
+                        calibration: calibration ? calibration.toJSON() : null,
+                        location: exportLocationMetadata(geomagneticLocation),
+                        subject_id: 'unknown',
+                        environment: 'unknown',
+                        hand: 'unknown',
+                        split: 'train',
+                        magnet_config: 'none',
+                        magnet_type: 'unknown',
+                        notes: '',
+                        session_type: 'streaming'
+                    }
+                };
+
+                const content = JSON.stringify(exportData, null, 2);
+                const blob = new Blob([content], { type: 'application/json' });
+
+                console.log("blobPutData: Starting Vercel Blob upload for", filename);
+                updateUploadStatus('Uploading...', 'progress');
+
+                try {
+                    const response = await fetch('/api/upload', {
+                        method: 'POST',
+                        headers: {
+                            'x-upload-secret': blobSecret,
+                            'x-vercel-blob-pathname': pathname,
+                            'content-type': 'application/json',
+                        },
+                        body: blob,
+                    });
+
+                    if (!response.ok) {
+                        const error = await response.json().catch(() => ({ error: response.statusText }));
+                        throw new Error(error.error || `Upload failed: ${response.status}`);
+                    }
+
+                    const result = await response.json();
+                    console.log("blobPutData: ✓ Upload complete!", result.url);
+                    updateUploadStatus(`✓ Uploaded: ${filename}`, 'success');
+                    return result;
+                } catch (err) {
+                    console.error("blobPutData: Upload failed", err);
+                    updateUploadStatus(`✗ Upload failed: ${err.message}`, 'error');
+                    throw err;
+                }
+            }
+
+            // Helper to update upload status in UI
+            function updateUploadStatus(message, type) {
+                const statusEl = document.getElementById('uploadStatus');
+                if (statusEl) {
+                    statusEl.textContent = message;
+                    statusEl.style.color = type === 'error' ? 'var(--error)' :
+                                           type === 'success' ? 'var(--success)' :
+                                           'var(--fg-muted)';
+                }
+            }
+
+            // Dispatcher function - routes to blob or github based on uploadMethod
+            async function uploadSessionData(rawSessionData) {
+                if (uploadMethod === 'blob') {
+                    return blobPutData(rawSessionData);
+                } else {
+                    return ghPutData(rawSessionData);
+                }
+            }
+
             async function ghPutData(rawSessionData) {
 
                 if (!ghToken) {
-                    console.log("ghToken not found. skipping upload.")
+                    console.log("ghToken not found. skipping upload.");
+                    updateUploadStatus('No GitHub token configured', 'error');
                     return;
                 }
 
@@ -2415,6 +2527,7 @@
                 const repo = 'simcap';
 
                 console.log("ghPutData: Starting LFS upload for", filename);
+                updateUploadStatus('Uploading via GitHub LFS...', 'progress');
 
                 try {
                     // Calculate content hash and size for LFS
@@ -2509,23 +2622,86 @@
                     const commitResult = await commitResponse.json();
                     console.log("ghPutData: ✓ Upload complete!", commitResult.content?.html_url);
                     console.log("ghPutData: LFS OID:", oid.substring(0, 16) + "...");
+                    updateUploadStatus(`✓ Uploaded: ${filename}`, 'success');
 
                 } catch(err) {
                     console.error("ghPutData: Upload failed", err);
+                    updateUploadStatus(`✗ Upload failed: ${err.message}`, 'error');
                 }
 
             }
 
-            // Load GitHub token from localStorage
+            // ===== Cloud Upload Storage & Event Handlers =====
+            // Load upload settings from localStorage
             try {
-                const t = localStorage.getItem("ghToken")
-                if (t) {
-                    ghToken = t
-                    window.token.value = t
+                // Load blob secret
+                const s = localStorage.getItem("simcap_upload_secret");
+                if (s) {
+                    blobSecret = s;
+                    const blobSecretInput = document.getElementById('blobSecret');
+                    if (blobSecretInput) blobSecretInput.value = s;
                 }
-                else console.log("No ghToken in localStorage")
+
+                // Load upload method preference
+                const m = localStorage.getItem("simcap_upload_method");
+                if (m && (m === 'blob' || m === 'github')) {
+                    uploadMethod = m;
+                    const methodSelect = document.getElementById('uploadMethod');
+                    if (methodSelect) methodSelect.value = m;
+                }
+
+                // Load GitHub token
+                const t = localStorage.getItem("ghToken");
+                if (t) {
+                    ghToken = t;
+                    const tokenInput = document.getElementById('token');
+                    if (tokenInput) tokenInput.value = t;
+                }
+                else console.log("No ghToken in localStorage");
+
+                // Update UI visibility based on current method
+                updateUploadMethodUI();
             } catch(e) {
-                console.log("Error getting token from localStorage")
+                console.log("Error loading upload settings from localStorage:", e);
+            }
+
+            // Helper to show/hide upload method rows
+            function updateUploadMethodUI() {
+                const blobRow = document.getElementById('blobSecretRow');
+                const ghRow = document.getElementById('ghTokenRow');
+                if (blobRow) blobRow.style.display = uploadMethod === 'blob' ? 'flex' : 'none';
+                if (ghRow) ghRow.style.display = uploadMethod === 'github' ? 'flex' : 'none';
+            }
+
+            // Upload method selector
+            const uploadMethodSelect = document.getElementById('uploadMethod');
+            if (uploadMethodSelect) {
+                uploadMethodSelect.addEventListener('change', function(e) {
+                    uploadMethod = e.target.value;
+                    localStorage.setItem("simcap_upload_method", uploadMethod);
+                    updateUploadMethodUI();
+                    console.log("Upload method changed to:", uploadMethod);
+                });
+            }
+
+            // Blob secret input
+            const blobSecretInput = document.getElementById('blobSecret');
+            if (blobSecretInput) {
+                blobSecretInput.addEventListener('change', function(e) {
+                    blobSecret = e.target.value;
+                    localStorage.setItem("simcap_upload_secret", blobSecret);
+                    console.log("Blob secret updated");
+                });
+            }
+
+            // GitHub token input
+            const tokenInput = document.getElementById('token');
+            if (tokenInput) {
+                tokenInput.addEventListener('change', function(e) {
+                    ghToken = e.target.value;
+                    localStorage.setItem("ghToken", ghToken);
+                    console.log("GitHub token updated");
+                });
             }
 
             // ===== Connect Button - Uses GambitClient =====
@@ -2548,12 +2724,6 @@
                     }
                 }
             }
-
-            window.token.addEventListener('change', function(e){
-                ghToken = e.target.value;
-                console.log("Updating ghToken")
-                localStorage.setItem("ghToken", ghToken)
-            })
 
             // ===== Get Data Button - Uses GambitClient Streaming =====
             window.getdata.onclick = async function() {
