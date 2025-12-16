@@ -316,7 +316,7 @@ export class TelemetryProcessor {
             // Check if we should use 9-DOF magnetometer fusion
             const magDataValid = mx_ut !== 0 || my_ut !== 0 || mz_ut !== 0;
 
-            if (this.useMagnetometer && magDataValid && this.geomagneticRef) {
+            if (false && this.useMagnetometer && magDataValid && this.geomagneticRef) {
                 // 9-DOF fusion with magnetometer for absolute yaw reference
                 // Apply iron correction from unified calibration
                 const ironCorrected = this.magCalibration.applyIronCorrection({ x: mx_ut, y: my_ut, z: mz_ut });
