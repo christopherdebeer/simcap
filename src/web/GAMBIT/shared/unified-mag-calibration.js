@@ -1,40 +1,68 @@
 /**
  * Unified Magnetometer Calibration
  *
- * Single calibration system for GAMBIT magnetometer data that replaces the
- * dual EnvironmentalCalibration + IncrementalCalibration approach.
+ * Single class handling all magnetometer calibration:
+ * 1. Hard Iron - constant offset from nearby ferromagnetic materials (wizard)
+ * 2. Soft Iron - distortion from nearby conductive materials (wizard)
+ * 3. Earth Field - real-time estimation using orientation-compensated averaging
  *
- * Key design decisions based on investigation (see /docs/technical/earth-field-subtraction-investigation.md):
- *
- * 1. SLIDING WINDOW EARTH ESTIMATION (200 samples)
- *    - World-frame averaging: transform raw readings to world frame, average
- *    - 200-sample sliding window outperforms cumulative (SNR 4.07x vs 3.34x)
- *    - Improvements visible at 50 samples (~1 second at 50Hz)
- *
- * 2. NO HARD IRON FROM MIN/MAX when magnets present
- *    - Min/max method captures magnet extremes, not true hard iron
- *    - Optional hard iron from stored calibration (magnet-free environment)
- *
- * 3. ORIENTATION-COMPENSATED SUBTRACTION
- *    - Earth field stored in world frame
- *    - Rotated to sensor frame using quaternion before subtraction
+ * Design based on investigation: /docs/technical/earth-field-subtraction-investigation.md
  *
  * @module shared/unified-mag-calibration
  */
 
 /**
+ * 3x3 Matrix for soft iron correction
+ */
+class Matrix3 {
+    constructor(data = null) {
+        this.data = data || [
+            [1, 0, 0],
+            [0, 1, 0],
+            [0, 0, 1]
+        ];
+    }
+
+    static identity() {
+        return new Matrix3();
+    }
+
+    static fromArray(arr) {
+        return new Matrix3([
+            [arr[0], arr[1], arr[2]],
+            [arr[3], arr[4], arr[5]],
+            [arr[6], arr[7], arr[8]]
+        ]);
+    }
+
+    multiply(vec) {
+        return {
+            x: this.data[0][0] * vec.x + this.data[0][1] * vec.y + this.data[0][2] * vec.z,
+            y: this.data[1][0] * vec.x + this.data[1][1] * vec.y + this.data[1][2] * vec.z,
+            z: this.data[2][0] * vec.x + this.data[2][1] * vec.y + this.data[2][2] * vec.z
+        };
+    }
+
+    toArray() {
+        return [
+            this.data[0][0], this.data[0][1], this.data[0][2],
+            this.data[1][0], this.data[1][1], this.data[1][2],
+            this.data[2][0], this.data[2][1], this.data[2][2]
+        ];
+    }
+}
+
+/**
  * UnifiedMagCalibration class
  *
- * Provides real-time Earth field estimation and subtraction using
- * orientation-compensated world-frame averaging.
+ * Handles iron calibration (wizard) and Earth field estimation (real-time).
  */
 export class UnifiedMagCalibration {
     /**
-     * Create a UnifiedMagCalibration instance
-     * @param {Object} options - Configuration options
-     * @param {number} [options.windowSize=200] - Sliding window size for Earth estimation
-     * @param {number} [options.minSamples=50] - Minimum samples before Earth field is computed
-     * @param {Object} [options.hardIronOffset] - Optional hard iron offset {x, y, z} in µT
+     * Create instance
+     * @param {Object} options - Configuration
+     * @param {number} [options.windowSize=200] - Sliding window for Earth estimation
+     * @param {number} [options.minSamples=50] - Minimum samples before Earth field computed
      * @param {boolean} [options.debug=false] - Enable debug logging
      */
     constructor(options = {}) {
@@ -43,38 +71,176 @@ export class UnifiedMagCalibration {
         this.minSamples = options.minSamples || 50;
         this.debug = options.debug || false;
 
-        // Hard iron offset (optional, from stored calibration)
-        this._hardIronOffset = options.hardIronOffset || { x: 0, y: 0, z: 0 };
-        this._hardIronEnabled = !!(options.hardIronOffset);
+        // Iron calibration (from wizard)
+        this.hardIronOffset = { x: 0, y: 0, z: 0 };
+        this.softIronMatrix = Matrix3.identity();
+        this.hardIronCalibrated = false;
+        this.softIronCalibrated = false;
 
-        // Sliding window buffer for world-frame samples
+        // Earth field estimation (real-time)
         this._worldSamples = [];
-
-        // Computed Earth field in world frame
         this._earthFieldWorld = { x: 0, y: 0, z: 0 };
         this._earthFieldMagnitude = 0;
 
-        // Sample count for statistics
+        // Statistics
         this._totalSamples = 0;
-
-        // Recent residuals for confidence tracking
         this._recentResiduals = [];
         this._maxResidualHistory = 100;
 
-        // Debug logging state
+        // Debug state
         this._loggedFirstSample = false;
         this._loggedEarthComputed = false;
     }
 
+    // =========================================================================
+    // IRON CALIBRATION (Wizard)
+    // =========================================================================
+
     /**
-     * Update calibration with a new sample
-     * Call this for every magnetometer reading
-     *
-     * @param {number} mx_ut - Magnetometer X in µT
-     * @param {number} my_ut - Magnetometer Y in µT
-     * @param {number} mz_ut - Magnetometer Z in µT
-     * @param {Object} orientation - Quaternion {w, x, y, z} from IMU fusion
-     * @returns {Object} Current state {earthReady, confidence, earthMagnitude}
+     * Run hard iron calibration from collected samples
+     * @param {Array} samples - Array of {x, y, z} magnetometer readings
+     * @returns {Object} Calibration result with offset and quality
+     */
+    runHardIronCalibration(samples) {
+        if (samples.length < 100) {
+            throw new Error('Need at least 100 samples for hard iron calibration');
+        }
+
+        // Find min/max for each axis
+        let minX = Infinity, maxX = -Infinity;
+        let minY = Infinity, maxY = -Infinity;
+        let minZ = Infinity, maxZ = -Infinity;
+
+        for (const s of samples) {
+            minX = Math.min(minX, s.x); maxX = Math.max(maxX, s.x);
+            minY = Math.min(minY, s.y); maxY = Math.max(maxY, s.y);
+            minZ = Math.min(minZ, s.z); maxZ = Math.max(maxZ, s.z);
+        }
+
+        // Hard iron offset is center of ellipsoid
+        this.hardIronOffset = {
+            x: (maxX + minX) / 2,
+            y: (maxY + minY) / 2,
+            z: (maxZ + minZ) / 2
+        };
+
+        const rangeX = maxX - minX;
+        const rangeY = maxY - minY;
+        const rangeZ = maxZ - minZ;
+
+        // Sphericity: how close to sphere (1.0 = perfect)
+        const sphericity = Math.min(rangeX, rangeY, rangeZ) / Math.max(rangeX, rangeY, rangeZ);
+        const coverage = this._calculateCoverage(samples);
+
+        this.hardIronCalibrated = true;
+
+        // Reset Earth estimation since iron calibration changed
+        this._resetEarthEstimation();
+
+        return {
+            offset: { ...this.hardIronOffset },
+            ranges: { x: rangeX, y: rangeY, z: rangeZ },
+            sphericity,
+            coverage,
+            sampleCount: samples.length,
+            quality: sphericity,
+            qualityLevel: sphericity > 0.9 && coverage > 0.7 ? 'good' :
+                          sphericity > 0.7 && coverage > 0.5 ? 'acceptable' : 'poor'
+        };
+    }
+
+    /**
+     * Run soft iron calibration from collected samples
+     * @param {Array} samples - Array of {x, y, z} magnetometer readings
+     * @returns {Object} Calibration result
+     */
+    runSoftIronCalibration(samples) {
+        if (samples.length < 200) {
+            throw new Error('Need at least 200 samples for soft iron calibration');
+        }
+
+        // Apply hard iron correction first
+        const corrected = samples.map(s => ({
+            x: s.x - this.hardIronOffset.x,
+            y: s.y - this.hardIronOffset.y,
+            z: s.z - this.hardIronOffset.z
+        }));
+
+        // Calculate covariance matrix
+        const cov = this._calculateCovariance(corrected);
+
+        // Diagonal scaling (assumes axes aligned)
+        const scaleX = Math.sqrt(cov[0][0]);
+        const scaleY = Math.sqrt(cov[1][1]);
+        const scaleZ = Math.sqrt(cov[2][2]);
+        const avgScale = (scaleX + scaleY + scaleZ) / 3;
+
+        // Correction matrix to make ellipsoid into sphere
+        this.softIronMatrix = new Matrix3([
+            [avgScale / scaleX, 0, 0],
+            [0, avgScale / scaleY, 0],
+            [0, 0, avgScale / scaleZ]
+        ]);
+
+        this.softIronCalibrated = true;
+
+        // Reset Earth estimation
+        this._resetEarthEstimation();
+
+        const minScale = Math.min(scaleX, scaleY, scaleZ);
+        const maxScale = Math.max(scaleX, scaleY, scaleZ);
+        const quality = minScale / maxScale;
+
+        return {
+            matrix: this.softIronMatrix.toArray(),
+            scales: { x: scaleX, y: scaleY, z: scaleZ },
+            correction: { x: avgScale / scaleX, y: avgScale / scaleY, z: avgScale / scaleZ },
+            quality
+        };
+    }
+
+    /**
+     * Apply iron correction (hard + soft) to raw reading
+     * @param {Object} raw - {x, y, z} in µT
+     * @returns {Object} Iron-corrected {x, y, z}
+     */
+    applyIronCorrection(raw) {
+        if (!this.hardIronCalibrated) {
+            return { x: raw.x, y: raw.y, z: raw.z };
+        }
+
+        let corrected = {
+            x: raw.x - this.hardIronOffset.x,
+            y: raw.y - this.hardIronOffset.y,
+            z: raw.z - this.hardIronOffset.z
+        };
+
+        if (this.softIronCalibrated) {
+            corrected = this.softIronMatrix.multiply(corrected);
+        }
+
+        return corrected;
+    }
+
+    /**
+     * Check if any iron calibration available
+     * @returns {boolean}
+     */
+    hasIronCalibration() {
+        return this.hardIronCalibrated || this.softIronCalibrated;
+    }
+
+    // =========================================================================
+    // EARTH FIELD ESTIMATION (Real-time)
+    // =========================================================================
+
+    /**
+     * Update with new sample - applies iron correction and estimates Earth field
+     * @param {number} mx_ut - Raw magnetometer X in µT
+     * @param {number} my_ut - Raw magnetometer Y in µT
+     * @param {number} mz_ut - Raw magnetometer Z in µT
+     * @param {Object} orientation - Quaternion {w, x, y, z}
+     * @returns {Object} {earthReady, confidence, earthMagnitude}
      */
     update(mx_ut, my_ut, mz_ut, orientation) {
         if (!orientation || orientation.w === undefined) {
@@ -83,28 +249,22 @@ export class UnifiedMagCalibration {
 
         this._totalSamples++;
 
+        // Apply iron correction
+        const ironCorrected = this.applyIronCorrection({ x: mx_ut, y: my_ut, z: mz_ut });
+
         // Debug first sample
         if (this.debug && !this._loggedFirstSample) {
-            const rawMag = Math.sqrt(mx_ut**2 + my_ut**2 + mz_ut**2);
-            console.log(`[UnifiedMagCal] First sample:
-  Mag (µT): [${mx_ut.toFixed(1)}, ${my_ut.toFixed(1)}, ${mz_ut.toFixed(1)}] |${rawMag.toFixed(1)}| µT
-  Orientation: w=${orientation.w.toFixed(3)} x=${orientation.x.toFixed(3)} y=${orientation.y.toFixed(3)} z=${orientation.z.toFixed(3)}`);
+            const mag = Math.sqrt(ironCorrected.x**2 + ironCorrected.y**2 + ironCorrected.z**2);
+            console.log(`[UnifiedMagCal] First sample: [${ironCorrected.x.toFixed(1)}, ${ironCorrected.y.toFixed(1)}, ${ironCorrected.z.toFixed(1)}] |${mag.toFixed(1)}| µT`);
             this._loggedFirstSample = true;
         }
-
-        // Apply hard iron correction if enabled
-        const corrected = {
-            x: mx_ut - this._hardIronOffset.x,
-            y: my_ut - this._hardIronOffset.y,
-            z: mz_ut - this._hardIronOffset.z
-        };
 
         // Transform to world frame using R^T (sensor → world)
         const R = this._quaternionToRotationMatrix(orientation);
         const worldSample = {
-            x: R[0][0] * corrected.x + R[1][0] * corrected.y + R[2][0] * corrected.z,
-            y: R[0][1] * corrected.x + R[1][1] * corrected.y + R[2][1] * corrected.z,
-            z: R[0][2] * corrected.x + R[1][2] * corrected.y + R[2][2] * corrected.z
+            x: R[0][0] * ironCorrected.x + R[1][0] * ironCorrected.y + R[2][0] * ironCorrected.z,
+            y: R[0][1] * ironCorrected.x + R[1][1] * ironCorrected.y + R[2][1] * ironCorrected.z,
+            z: R[0][2] * ironCorrected.x + R[1][2] * ironCorrected.y + R[2][2] * ironCorrected.z
         };
 
         // Add to sliding window
@@ -113,10 +273,10 @@ export class UnifiedMagCalibration {
             this._worldSamples.shift();
         }
 
-        // Recompute Earth field estimate
+        // Recompute Earth field
         this._computeEarthField();
 
-        // Track residual if Earth field is ready
+        // Track residual
         if (this._earthFieldMagnitude > 0) {
             const residual = this.getResidual(mx_ut, my_ut, mz_ut, orientation);
             if (residual) {
@@ -135,82 +295,22 @@ export class UnifiedMagCalibration {
     }
 
     /**
-     * Compute Earth field from sliding window
-     * @private
-     */
-    _computeEarthField() {
-        if (this._worldSamples.length < this.minSamples) {
-            return;
-        }
-
-        const n = this._worldSamples.length;
-        let sumX = 0, sumY = 0, sumZ = 0;
-        const magnitudes = [];
-
-        for (const s of this._worldSamples) {
-            sumX += s.x;
-            sumY += s.y;
-            sumZ += s.z;
-            magnitudes.push(Math.sqrt(s.x**2 + s.y**2 + s.z**2));
-        }
-
-        // Average direction in world frame
-        const avgX = sumX / n;
-        const avgY = sumY / n;
-        const avgZ = sumZ / n;
-
-        // Use average of individual magnitudes (more robust with incomplete coverage)
-        const avgMagnitude = magnitudes.reduce((a, b) => a + b, 0) / n;
-
-        // Scale direction vector to correct magnitude
-        const vectorMagnitude = Math.sqrt(avgX**2 + avgY**2 + avgZ**2);
-
-        if (vectorMagnitude > 0.1) {
-            const scale = avgMagnitude / vectorMagnitude;
-            this._earthFieldWorld = {
-                x: avgX * scale,
-                y: avgY * scale,
-                z: avgZ * scale
-            };
-        } else {
-            this._earthFieldWorld = { x: avgX, y: avgY, z: avgZ };
-        }
-
-        const prevMagnitude = this._earthFieldMagnitude;
-        this._earthFieldMagnitude = avgMagnitude;
-
-        // Log when Earth field is first computed
-        if (this.debug && prevMagnitude === 0 && this._earthFieldMagnitude > 0 && !this._loggedEarthComputed) {
-            console.log(`[UnifiedMagCal] Earth field computed at sample ${this._totalSamples}:
-  Earth (world): [${this._earthFieldWorld.x.toFixed(1)}, ${this._earthFieldWorld.y.toFixed(1)}, ${this._earthFieldWorld.z.toFixed(1)}] µT
-  Magnitude: ${this._earthFieldMagnitude.toFixed(1)} µT
-  Window size: ${n} samples`);
-            this._loggedEarthComputed = true;
-        }
-    }
-
-    /**
-     * Get residual (Earth-subtracted reading) for a sample
-     *
-     * @param {number} mx_ut - Magnetometer X in µT
-     * @param {number} my_ut - Magnetometer Y in µT
-     * @param {number} mz_ut - Magnetometer Z in µT
+     * Get residual (fully corrected: iron + Earth subtracted)
+     * @param {number} mx_ut - Raw magnetometer X in µT
+     * @param {number} my_ut - Raw magnetometer Y in µT
+     * @param {number} mz_ut - Raw magnetometer Z in µT
      * @param {Object} orientation - Quaternion {w, x, y, z}
-     * @returns {Object|null} {x, y, z, magnitude} residual in µT, or null if not ready
+     * @returns {Object|null} {x, y, z, magnitude} or null if not ready
      */
     getResidual(mx_ut, my_ut, mz_ut, orientation) {
         if (this._earthFieldMagnitude === 0 || !orientation) {
             return null;
         }
 
-        // Apply hard iron correction
-        const corrected = {
-            x: mx_ut - this._hardIronOffset.x,
-            y: my_ut - this._hardIronOffset.y,
-            z: mz_ut - this._hardIronOffset.z
-        };
+        // Apply iron correction
+        const ironCorrected = this.applyIronCorrection({ x: mx_ut, y: my_ut, z: mz_ut });
 
-        // Rotate Earth field from world to sensor frame using R
+        // Rotate Earth field from world to sensor frame
         const R = this._quaternionToRotationMatrix(orientation);
         const earthSensor = {
             x: R[0][0] * this._earthFieldWorld.x + R[0][1] * this._earthFieldWorld.y + R[0][2] * this._earthFieldWorld.z,
@@ -218,61 +318,19 @@ export class UnifiedMagCalibration {
             z: R[2][0] * this._earthFieldWorld.x + R[2][1] * this._earthFieldWorld.y + R[2][2] * this._earthFieldWorld.z
         };
 
-        // Residual = measured - expected (both in sensor frame)
+        // Residual = iron-corrected - expected Earth field
         const residual = {
-            x: corrected.x - earthSensor.x,
-            y: corrected.y - earthSensor.y,
-            z: corrected.z - earthSensor.z
+            x: ironCorrected.x - earthSensor.x,
+            y: ironCorrected.y - earthSensor.y,
+            z: ironCorrected.z - earthSensor.z
         };
-
         residual.magnitude = Math.sqrt(residual.x**2 + residual.y**2 + residual.z**2);
 
         return residual;
     }
 
     /**
-     * Convert quaternion to 3x3 rotation matrix
-     * @private
-     */
-    _quaternionToRotationMatrix(q) {
-        const { w, x, y, z } = q;
-        return [
-            [1 - 2*(y*y + z*z),     2*(x*y - w*z),     2*(x*z + w*y)],
-            [    2*(x*y + w*z), 1 - 2*(x*x + z*z),     2*(y*z - w*x)],
-            [    2*(x*z - w*y),     2*(y*z + w*x), 1 - 2*(x*x + y*y)]
-        ];
-    }
-
-    /**
-     * Get calibration confidence (0.0 - 1.0)
-     * Based on residual magnitude - lower is better
-     * @returns {number}
-     */
-    getConfidence() {
-        if (this._recentResiduals.length < 10) {
-            // Not enough data yet, estimate from sample count
-            return Math.min(0.5, this._totalSamples / (this.minSamples * 2));
-        }
-
-        const meanResidual = this._recentResiduals.reduce((a, b) => a + b, 0) / this._recentResiduals.length;
-
-        // Linear confidence: 0 µT → 100%, 20 µT → 0%
-        return Math.max(0, Math.min(1, 1 - meanResidual / 20));
-    }
-
-    /**
-     * Get mean residual magnitude
-     * @returns {number} Mean residual in µT (lower is better)
-     */
-    getMeanResidual() {
-        if (this._recentResiduals.length === 0) {
-            return Infinity;
-        }
-        return this._recentResiduals.reduce((a, b) => a + b, 0) / this._recentResiduals.length;
-    }
-
-    /**
-     * Check if Earth field estimation is ready
+     * Check if Earth field estimation ready
      * @returns {boolean}
      */
     isReady() {
@@ -280,7 +338,28 @@ export class UnifiedMagCalibration {
     }
 
     /**
-     * Get Earth field vector in world frame
+     * Get confidence (0-1) based on residual magnitude
+     * @returns {number}
+     */
+    getConfidence() {
+        if (this._recentResiduals.length < 10) {
+            return Math.min(0.5, this._totalSamples / (this.minSamples * 2));
+        }
+        const meanResidual = this._recentResiduals.reduce((a, b) => a + b, 0) / this._recentResiduals.length;
+        return Math.max(0, Math.min(1, 1 - meanResidual / 20));
+    }
+
+    /**
+     * Get mean residual magnitude
+     * @returns {number}
+     */
+    getMeanResidual() {
+        if (this._recentResiduals.length === 0) return Infinity;
+        return this._recentResiduals.reduce((a, b) => a + b, 0) / this._recentResiduals.length;
+    }
+
+    /**
+     * Get Earth field in world frame
      * @returns {Object} {x, y, z} in µT
      */
     getEarthFieldWorld() {
@@ -289,57 +368,18 @@ export class UnifiedMagCalibration {
 
     /**
      * Get Earth field magnitude
-     * @returns {number} Magnitude in µT
+     * @returns {number}
      */
     getEarthFieldMagnitude() {
         return this._earthFieldMagnitude;
     }
 
-    /**
-     * Get hard iron offset
-     * @returns {Object} {x, y, z} in µT
-     */
-    getHardIronOffset() {
-        return { ...this._hardIronOffset };
-    }
+    // =========================================================================
+    // STATE & PERSISTENCE
+    // =========================================================================
 
     /**
-     * Set hard iron offset (from external calibration)
-     * @param {Object} offset - {x, y, z} in µT
-     */
-    setHardIronOffset(offset) {
-        if (offset && typeof offset.x === 'number') {
-            this._hardIronOffset = { ...offset };
-            this._hardIronEnabled = true;
-
-            // Reset Earth estimation since hard iron changed
-            this._worldSamples = [];
-            this._earthFieldWorld = { x: 0, y: 0, z: 0 };
-            this._earthFieldMagnitude = 0;
-            this._loggedEarthComputed = false;
-
-            if (this.debug) {
-                console.log(`[UnifiedMagCal] Hard iron offset set: [${offset.x.toFixed(1)}, ${offset.y.toFixed(1)}, ${offset.z.toFixed(1)}] µT`);
-            }
-        }
-    }
-
-    /**
-     * Clear hard iron offset
-     */
-    clearHardIronOffset() {
-        this._hardIronOffset = { x: 0, y: 0, z: 0 };
-        this._hardIronEnabled = false;
-
-        // Reset Earth estimation
-        this._worldSamples = [];
-        this._earthFieldWorld = { x: 0, y: 0, z: 0 };
-        this._earthFieldMagnitude = 0;
-        this._loggedEarthComputed = false;
-    }
-
-    /**
-     * Get current state for telemetry decoration
+     * Get current state
      * @returns {Object}
      */
     getState() {
@@ -349,66 +389,183 @@ export class UnifiedMagCalibration {
             meanResidual: this.getMeanResidual(),
             earthMagnitude: this._earthFieldMagnitude,
             earthWorld: { ...this._earthFieldWorld },
-            hardIronOffset: { ...this._hardIronOffset },
-            hardIronEnabled: this._hardIronEnabled,
+            hardIronCalibrated: this.hardIronCalibrated,
+            softIronCalibrated: this.softIronCalibrated,
             windowSize: this._worldSamples.length,
             totalSamples: this._totalSamples
         };
     }
 
     /**
-     * Reset calibration state
+     * Reset Earth field estimation (keeps iron calibration)
      */
-    reset() {
-        this._worldSamples = [];
-        this._earthFieldWorld = { x: 0, y: 0, z: 0 };
-        this._earthFieldMagnitude = 0;
-        this._totalSamples = 0;
-        this._recentResiduals = [];
-        this._loggedFirstSample = false;
-        this._loggedEarthComputed = false;
-
-        if (this.debug) {
-            console.log('[UnifiedMagCal] Reset complete');
-        }
+    resetEarthEstimation() {
+        this._resetEarthEstimation();
     }
 
     /**
-     * Export calibration state for saving
+     * Full reset (clears everything including iron calibration)
+     */
+    reset() {
+        this.hardIronOffset = { x: 0, y: 0, z: 0 };
+        this.softIronMatrix = Matrix3.identity();
+        this.hardIronCalibrated = false;
+        this.softIronCalibrated = false;
+        this._resetEarthEstimation();
+        this._totalSamples = 0;
+        this._loggedFirstSample = false;
+
+        if (this.debug) console.log('[UnifiedMagCal] Full reset');
+    }
+
+    /**
+     * Save to localStorage
+     * @param {string} key
+     */
+    save(key = 'gambit_calibration') {
+        localStorage.setItem(key, JSON.stringify(this.toJSON()));
+    }
+
+    /**
+     * Load from localStorage
+     * @param {string} key
+     * @returns {boolean} Success
+     */
+    load(key = 'gambit_calibration') {
+        const json = localStorage.getItem(key);
+        if (json) {
+            this.fromJSON(JSON.parse(json));
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Export to JSON
      * @returns {Object}
      */
     toJSON() {
         return {
+            hardIronOffset: this.hardIronOffset,
+            softIronMatrix: this.softIronMatrix.toArray(),
+            hardIronCalibrated: this.hardIronCalibrated,
+            softIronCalibrated: this.softIronCalibrated,
+            // Earth field state (informational, will be re-estimated)
             earthFieldWorld: this._earthFieldWorld,
             earthFieldMagnitude: this._earthFieldMagnitude,
-            hardIronOffset: this._hardIronOffset,
-            hardIronEnabled: this._hardIronEnabled,
-            confidence: this.getConfidence(),
-            meanResidual: this.getMeanResidual(),
-            windowSize: this.windowSize,
-            minSamples: this.minSamples,
-            totalSamples: this._totalSamples,
             timestamp: new Date().toISOString(),
             units: {
-                earthFieldWorld: 'µT',
-                earthFieldMagnitude: 'µT',
                 hardIronOffset: 'µT',
-                meanResidual: 'µT'
+                softIronMatrix: 'dimensionless',
+                earthFieldWorld: 'µT',
+                earthFieldMagnitude: 'µT'
             }
         };
+    }
+
+    /**
+     * Import from JSON
+     * @param {Object} json
+     */
+    fromJSON(json) {
+        this.hardIronOffset = json.hardIronOffset || { x: 0, y: 0, z: 0 };
+        this.softIronMatrix = json.softIronMatrix ? Matrix3.fromArray(json.softIronMatrix) : Matrix3.identity();
+        this.hardIronCalibrated = json.hardIronCalibrated || false;
+        this.softIronCalibrated = json.softIronCalibrated || false;
+        // Don't restore Earth field - let it re-estimate in real-time
+        this._resetEarthEstimation();
+    }
+
+    // =========================================================================
+    // PRIVATE METHODS
+    // =========================================================================
+
+    _resetEarthEstimation() {
+        this._worldSamples = [];
+        this._earthFieldWorld = { x: 0, y: 0, z: 0 };
+        this._earthFieldMagnitude = 0;
+        this._recentResiduals = [];
+        this._loggedEarthComputed = false;
+    }
+
+    _computeEarthField() {
+        if (this._worldSamples.length < this.minSamples) return;
+
+        const n = this._worldSamples.length;
+        let sumX = 0, sumY = 0, sumZ = 0;
+        const magnitudes = [];
+
+        for (const s of this._worldSamples) {
+            sumX += s.x; sumY += s.y; sumZ += s.z;
+            magnitudes.push(Math.sqrt(s.x**2 + s.y**2 + s.z**2));
+        }
+
+        const avgX = sumX / n, avgY = sumY / n, avgZ = sumZ / n;
+        const avgMagnitude = magnitudes.reduce((a, b) => a + b, 0) / n;
+        const vectorMagnitude = Math.sqrt(avgX**2 + avgY**2 + avgZ**2);
+
+        if (vectorMagnitude > 0.1) {
+            const scale = avgMagnitude / vectorMagnitude;
+            this._earthFieldWorld = { x: avgX * scale, y: avgY * scale, z: avgZ * scale };
+        } else {
+            this._earthFieldWorld = { x: avgX, y: avgY, z: avgZ };
+        }
+
+        const prevMagnitude = this._earthFieldMagnitude;
+        this._earthFieldMagnitude = avgMagnitude;
+
+        if (this.debug && prevMagnitude === 0 && this._earthFieldMagnitude > 0 && !this._loggedEarthComputed) {
+            console.log(`[UnifiedMagCal] Earth field: [${this._earthFieldWorld.x.toFixed(1)}, ${this._earthFieldWorld.y.toFixed(1)}, ${this._earthFieldWorld.z.toFixed(1)}] |${this._earthFieldMagnitude.toFixed(1)}| µT`);
+            this._loggedEarthComputed = true;
+        }
+    }
+
+    _quaternionToRotationMatrix(q) {
+        const { w, x, y, z } = q;
+        return [
+            [1 - 2*(y*y + z*z),     2*(x*y - w*z),     2*(x*z + w*y)],
+            [    2*(x*y + w*z), 1 - 2*(x*x + z*z),     2*(y*z - w*x)],
+            [    2*(x*z - w*y),     2*(y*z + w*x), 1 - 2*(x*x + y*y)]
+        ];
+    }
+
+    _calculateCoverage(samples) {
+        const octants = new Array(8).fill(0);
+        for (const s of samples) {
+            const cx = s.x - this.hardIronOffset.x;
+            const cy = s.y - this.hardIronOffset.y;
+            const cz = s.z - this.hardIronOffset.z;
+            const idx = (cx >= 0 ? 4 : 0) + (cy >= 0 ? 2 : 0) + (cz >= 0 ? 1 : 0);
+            octants[idx]++;
+        }
+        return octants.filter(c => c > 0).length / 8;
+    }
+
+    _calculateCovariance(samples) {
+        const n = samples.length;
+        let sumX = 0, sumY = 0, sumZ = 0;
+        for (const s of samples) { sumX += s.x; sumY += s.y; sumZ += s.z; }
+        const meanX = sumX / n, meanY = sumY / n, meanZ = sumZ / n;
+
+        const cov = [[0,0,0], [0,0,0], [0,0,0]];
+        for (const s of samples) {
+            const dx = s.x - meanX, dy = s.y - meanY, dz = s.z - meanZ;
+            cov[0][0] += dx*dx; cov[0][1] += dx*dy; cov[0][2] += dx*dz;
+            cov[1][1] += dy*dy; cov[1][2] += dy*dz; cov[2][2] += dz*dz;
+        }
+        cov[1][0] = cov[0][1]; cov[2][0] = cov[0][2]; cov[2][1] = cov[1][2];
+        for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) cov[i][j] /= (n - 1);
+        return cov;
     }
 }
 
 /**
- * Create a UnifiedMagCalibration instance
- * @param {Object} options - Configuration options
+ * Create instance
+ * @param {Object} options
  * @returns {UnifiedMagCalibration}
  */
 export function createUnifiedMagCalibration(options = {}) {
     return new UnifiedMagCalibration(options);
 }
 
-export default {
-    UnifiedMagCalibration,
-    createUnifiedMagCalibration
-};
+export default { UnifiedMagCalibration, createUnifiedMagCalibration };

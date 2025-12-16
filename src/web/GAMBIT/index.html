@@ -16,7 +16,6 @@
         <script src="puck.js"></script>
         <script src="gambit-client.js"></script>
         <script src="kalman.js"></script>
-        <script src="calibration.js"></script>
         <script src="filters.js"></script>
         <script src="gesture-inference.js"></script>
         <!-- Three.js for skeletal hand visualization -->
@@ -1065,24 +1064,14 @@
                 }
             });
 
-            // ===== Calibration =====
-            // Initialize calibration (loads previous calibration if available)
-            const calibration = new EnvironmentalCalibration();
-            try {
-                calibration.load('gambit_calibration');
-                console.log('Loaded calibration from localStorage');
-            } catch (e) {
-                console.log('No previous calibration found');
-            }
-
             // ===== Calibration Confidence UI =====
             let lastConfidenceUpdate = 0;
             const CONFIDENCE_UPDATE_INTERVAL = 500;  // Update UI every 500ms
 
             // ===== Telemetry Processor (shared module) =====
             // Handles: unit conversion, IMU fusion, gyro bias calibration, mag calibration, filtering
+            // Calibration (iron + Earth) is loaded from localStorage by TelemetryProcessor
             const telemetryProcessor = new TelemetryProcessor({
-                calibration: calibration,
                 onGyroBiasCalibrated: () => {
                     console.log('[AHRS] Gyroscope bias calibration complete');
                     // Update visual indicator

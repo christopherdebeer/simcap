@@ -56,7 +56,6 @@ export class TelemetryProcessor {
     /**
      * Create a TelemetryProcessor instance
      * @param {Object} options - Configuration options
-     * @param {Object} [options.calibration] - EnvironmentalCalibration instance (optional, for hard/soft iron)
      * @param {Function} [options.onProcessed] - Callback for processed telemetry
      * @param {Function} [options.onOrientationUpdate] - Callback for orientation updates
      * @param {Function} [options.onGyroBiasCalibrated] - Callback when gyro bias is calibrated
@@ -67,15 +66,15 @@ export class TelemetryProcessor {
     constructor(options = {}) {
         this.options = options;
 
-        // External calibration instance (optional, for hard/soft iron from wizard)
-        this.calibration = options.calibration || null;
-
-        // Unified magnetometer calibration (live Earth field estimation)
+        // Unified magnetometer calibration (iron correction + Earth field estimation)
         this.magCalibration = new UnifiedMagCalibration({
             windowSize: 200,  // Optimal based on investigation
             minSamples: 50,   // ~1 second at 50Hz
             debug: options.magCalibrationDebug || false
         });
+
+        // Load stored iron calibration from localStorage
+        this.magCalibration.load('gambit_calibration');
         
         // Magnet detector (detects finger magnet presence from residual magnitude)
         this.magnetDetector = createMagnetDetector({
@@ -203,15 +202,13 @@ export class TelemetryProcessor {
     }
     
     /**
-     * Set the calibration instance
-     * @param {Object} calibration - EnvironmentalCalibration instance
+     * Reload iron calibration from localStorage
+     * Call this after the wizard updates calibration
      */
-    setCalibration(calibration) {
-        this.calibration = calibration;
-        // Reset logging flags when calibration changes
-        this._loggedCalibrationMissing = false;
-        this._loggedOrientationMissing = false;
-        this._loggedEarthCalibrationMissing = false;
+    reloadCalibration() {
+        this.magCalibration.load('gambit_calibration');
+        // Reset Earth estimation since iron calibration may have changed
+        this.magCalibration.resetEarthEstimation();
     }
     
     /**
@@ -321,17 +318,15 @@ export class TelemetryProcessor {
 
             if (this.useMagnetometer && magDataValid && this.geomagneticRef) {
                 // 9-DOF fusion with magnetometer for absolute yaw reference
-                // Pass hard iron offset from calibration if available
-                if (this.calibration?.hardIronCalibrated && this.calibration.hardIronOffset) {
-                    this.imuFusion.setHardIronOffset(this.calibration.hardIronOffset);
-                }
+                // Apply iron correction from unified calibration
+                const ironCorrected = this.magCalibration.applyIronCorrection({ x: mx_ut, y: my_ut, z: mz_ut });
 
-                // Use updateWithMag for 9-DOF fusion
+                // Use updateWithMag for 9-DOF fusion (applyHardIron=false since we already applied it)
                 this.imuFusion.updateWithMag(
                     ax_g, ay_g, az_g,
                     gx_dps, gy_dps, gz_dps,
-                    mx_ut, my_ut, mz_ut,
-                    dt, true, true // gyroInDegrees=true, applyHardIron=true
+                    ironCorrected.x, ironCorrected.y, ironCorrected.z,
+                    dt, true, false // gyroInDegrees=true, applyHardIron=false (already corrected)
                 );
 
                 if (!this._loggedMagFusion) {
@@ -378,22 +373,17 @@ export class TelemetryProcessor {
         }
         
         // ===== Step 5: Magnetometer Calibration (Unified) =====
-        // Use UnifiedMagCalibration for real-time Earth field estimation and subtraction
-        // Optionally apply hard iron from stored calibration if available
+        // UnifiedMagCalibration handles: iron correction + Earth field estimation + residual computation
 
-        // Apply hard iron offset from stored calibration if available
-        if (this.calibration?.hardIronCalibrated && this.calibration.hardIronOffset) {
-            // Set hard iron on unified calibration (only sets once if unchanged)
-            const currentOffset = this.magCalibration.getHardIronOffset();
-            const storedOffset = this.calibration.hardIronOffset;
-            if (currentOffset.x !== storedOffset.x ||
-                currentOffset.y !== storedOffset.y ||
-                currentOffset.z !== storedOffset.z) {
-                this.magCalibration.setHardIronOffset(storedOffset);
-            }
+        // Add iron-corrected values to telemetry if calibration available
+        if (this.magCalibration.hasIronCalibration()) {
+            const ironCorrected = this.magCalibration.applyIronCorrection({ x: mx_ut, y: my_ut, z: mz_ut });
+            decorated.iron_mx = ironCorrected.x;
+            decorated.iron_my = ironCorrected.y;
+            decorated.iron_mz = ironCorrected.z;
         }
 
-        // Update unified calibration with current sample
+        // Update calibration with raw sample (handles iron correction internally)
         if (orientation) {
             this.magCalibration.update(mx_ut, my_ut, mz_ut, orientation);
 
@@ -403,6 +393,8 @@ export class TelemetryProcessor {
             decorated.mag_cal_confidence = calState.confidence;
             decorated.mag_cal_mean_residual = calState.meanResidual;
             decorated.mag_cal_earth_magnitude = calState.earthMagnitude;
+            decorated.mag_cal_hard_iron = calState.hardIronCalibrated;
+            decorated.mag_cal_soft_iron = calState.softIronCalibrated;
 
             // Compute residual if Earth field has been estimated
             if (calState.ready) {
