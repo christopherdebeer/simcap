@@ -7,6 +7,8 @@ import { state } from './state.js';
 import { log } from './logger.js';
 import { CALIBRATION_CONFIG, validateSampleCount } from '../calibration-config.js';
 import { formatFieldData } from '../shared/geomagnetic-field.js';
+import { UnifiedMagCalibration } from '../shared/unified-mag-calibration.js';
+
 // Callback for storing calibration session data
 let storeCalibrationSession = null;
 
@@ -18,22 +20,18 @@ export function setStoreSessionCallback(callback) {
     storeCalibrationSession = callback;
 }
 
-// Single calibration instance used for both wizard and real-time correction
+// Single calibration instance used for wizard
 export let calibrationInstance = null;
 export let calibrationInterval = null;
 
 /**
  * Initialize calibration instance
- * @returns {EnvironmentalCalibration} Calibration instance
+ * @returns {UnifiedMagCalibration} Calibration instance
  */
 export function initCalibration() {
-    if (typeof EnvironmentalCalibration === 'undefined') {
-        console.error('Error: calibration.js not loaded');
-        return null;
-    }
-    calibrationInstance = new EnvironmentalCalibration();
+    calibrationInstance = new UnifiedMagCalibration();
 
-    // Try to load from localStorage using the class method
+    // Try to load from localStorage
     try {
         const loaded = calibrationInstance.load('gambit_calibration');
         if (loaded) {
