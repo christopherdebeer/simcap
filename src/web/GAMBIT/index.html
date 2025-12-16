@@ -659,8 +659,12 @@
                                 </div>
                                 <div style="font-size: 0.6rem; color: var(--fg-muted);">
                                     <div style="display: flex; justify-content: space-between;">
-                                        <span>Hard Iron: <span id="hardIronConf">0%</span></span>
-                                        <span>Earth Field: <span id="earthFieldConf">0%</span></span>
+                                        <span>Hard Iron: <span id="hardIronConf">--</span></span>
+                                        <span>Soft Iron: <span id="softIronConf">--</span></span>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; margin-top: 2px;">
+                                        <span>Earth Field: <span id="earthFieldConf">--</span></span>
+                                        <span>Baseline: <span id="baselineConf">--</span></span>
                                     </div>
                                     <div style="display: flex; justify-content: space-between; margin-top: 2px;">
                                         <span>Samples: <span id="calibSamples">0</span></span>
@@ -669,6 +673,10 @@
                                     <div style="display: flex; justify-content: space-between; margin-top: 2px;">
                                         <span>Residual: <span id="meanResidual" style="font-weight: bold;">-- µT</span></span>
                                         <span id="residualQuality" style="font-size: 0.55rem;">--</span>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; margin-top: 2px;">
+                                        <span>Quality: <span id="calibQuality">--</span></span>
+                                        <span>Diversity: <span id="calibDiversity">--</span></span>
                                     </div>
                                     <div id="calibStatus" style="margin-top: 4px; color: var(--fg-muted);">Collecting samples...</div>
                                 </div>
@@ -1939,17 +1947,53 @@
                 // Update text displays
                 const overallEl = document.getElementById('overallConfidence');
                 const hardIronEl = document.getElementById('hardIronConf');
+                const softIronEl = document.getElementById('softIronConf');
                 const earthFieldEl = document.getElementById('earthFieldConf');
+                const baselineEl = document.getElementById('baselineConf');
                 const samplesEl = document.getElementById('calibSamples');
                 const fieldMagEl = document.getElementById('earthFieldMag');
                 const statusEl = document.getElementById('calibStatus');
                 const barEl = document.getElementById('confidenceBar');
                 const meanResidualEl = document.getElementById('meanResidual');
                 const residualQualityEl = document.getElementById('residualQuality');
+                const calibQualityEl = document.getElementById('calibQuality');
+                const calibDiversityEl = document.getElementById('calibDiversity');
 
                 if (overallEl) overallEl.textContent = `${overall}%`;
-                if (hardIronEl) hardIronEl.textContent = state.hardIronEnabled ? '✓' : '--';
+                if (hardIronEl) hardIronEl.textContent = state.hardIronCalibrated ? '✓' : '--';
+                if (softIronEl) softIronEl.textContent = state.softIronCalibrated ? '✓' : '--';
                 if (earthFieldEl) earthFieldEl.textContent = state.ready ? '✓ Auto' : 'Building...';
+
+                // Extended Baseline status
+                if (baselineEl) {
+                    if (state.extendedBaselineActive) {
+                        const mag = state.extendedBaselineMagnitude;
+                        const quality = mag < 60 ? '✓' : mag < 80 ? '⚠' : '⚠';
+                        baselineEl.textContent = `${quality} ${mag.toFixed(0)}µT`;
+                        baselineEl.style.color = mag < 80 ? 'var(--success)' : 'var(--warning)';
+                    } else if (state.capturingBaseline) {
+                        baselineEl.textContent = `⏳ ${state.baselineSampleCount}`;
+                        baselineEl.style.color = 'var(--fg-muted)';
+                    } else if (state.autoBaselineRetryCount >= state.autoBaselineMaxRetries) {
+                        baselineEl.textContent = '✗ Failed';
+                        baselineEl.style.color = 'var(--error)';
+                    } else {
+                        baselineEl.textContent = '...';
+                        baselineEl.style.color = 'var(--fg-muted)';
+                    }
+                }
+
+                // Calibration quality (orientation diversity)
+                if (calibQualityEl) {
+                    const quality = Math.round((state.calibrationQuality || 0) * 100);
+                    calibQualityEl.textContent = `${quality}%`;
+                    calibQualityEl.style.color = quality >= 70 ? 'var(--success)' : quality >= 40 ? 'var(--warning)' : 'var(--fg-muted)';
+                }
+                if (calibDiversityEl) {
+                    const diversity = Math.round((state.diversityRatio || 0) * 100);
+                    calibDiversityEl.textContent = `${diversity}%`;
+                    calibDiversityEl.style.color = diversity >= 50 ? 'var(--success)' : diversity >= 25 ? 'var(--warning)' : 'var(--fg-muted)';
+                }
                 if (samplesEl) samplesEl.textContent = totalSamples.toString();
 
                 if (fieldMagEl) {
@@ -2007,27 +2051,37 @@
                     }
                 }
 
-                // Update status text - now based on residual
+                // Update status text - based on calibration state
                 if (statusEl) {
-                    const status = [];
-                    if (meanResidual !== undefined && meanResidual !== Infinity && !isNaN(meanResidual)) {
-                        if (meanResidual < 5) {
-                            status.push('✓ Excellent calibration');
-                        } else if (meanResidual < 10) {
-                            status.push('Good calibration');
-                        } else if (meanResidual < 15) {
-                            status.push('Moderate - keep rotating');
-                        } else {
-                            status.push('Poor - rotate more');
-                        }
-                    } else if (totalSamples < 50) {
-                        status.push('Collecting samples...');
+                    let status = '';
+                    if (totalSamples < 50) {
+                        status = 'Collecting samples...';
                     } else if (!state.ready) {
-                        status.push('Building Earth field estimate...');
+                        status = 'Building Earth field estimate...';
+                    } else if (state.capturingBaseline) {
+                        status = `Capturing baseline (${state.baselineSampleCount}/${50})...`;
+                    } else if (state.extendedBaselineActive) {
+                        // Have baseline - show quality based on residual
+                        if (meanResidual !== undefined && meanResidual !== Infinity && !isNaN(meanResidual)) {
+                            if (meanResidual < 10) {
+                                status = '✓ Calibrated (Earth + Baseline)';
+                            } else if (meanResidual < 30) {
+                                status = 'Calibrated - rotate for diversity';
+                            } else {
+                                status = 'High residual - extend fingers';
+                            }
+                        } else {
+                            status = '✓ Calibrated (Earth + Baseline)';
+                        }
                     } else {
-                        status.push('Calibrated (auto)');
+                        // No baseline yet
+                        if (state.autoBaselineRetryCount >= state.autoBaselineMaxRetries) {
+                            status = '⚠ Baseline failed - extend fingers & recapture';
+                        } else {
+                            status = 'Earth auto ✓ | Baseline capturing...';
+                        }
                     }
-                    statusEl.textContent = status.join(' | ');
+                    statusEl.textContent = status;
                 }
 
                 // Update overall confidence color
