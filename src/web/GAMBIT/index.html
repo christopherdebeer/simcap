@@ -960,7 +960,6 @@
                 LowPassFilter
             } from './shared/sensor-config.js';
             import { TelemetryProcessor } from './shared/telemetry-processor.js';
-            import { IncrementalCalibration } from './shared/incremental-calibration.js';
             import {
                 SessionPlayback,
                 formatTime,
@@ -1076,11 +1075,7 @@
                 console.log('No previous calibration found');
             }
 
-            // ===== Incremental Calibration =====
-            // Builds calibration from streaming data (more robust than stored values)
-            // Validated by analyze_raw_magnetic.py: achieves < 5 µT residual
-            const incrementalCalibration = new IncrementalCalibration({ debug: true });
-            let incrementalCalibrationEnabled = true;  // Use incremental by default
+            // ===== Calibration Confidence UI =====
             let lastConfidenceUpdate = 0;
             const CONFIDENCE_UPDATE_INTERVAL = 500;  // Update UI every 500ms
 
@@ -1128,15 +1123,6 @@
                     console.log(`[GAMBIT] Magnetic field: ${geomagneticLocation.intensity.toFixed(1)} µT, Declination: ${geomagneticLocation.declination.toFixed(1)}°`);
                 }
                 
-                // CRITICAL: Pass geomagnetic reference to incremental calibration
-                // This enables using known Earth field direction instead of estimating from incomplete data
-                if (geomagneticLocation && incrementalCalibration) {
-                    incrementalCalibration.setGeomagneticReference({
-                        horizontal: geomagneticLocation.horizontal,
-                        vertical: geomagneticLocation.vertical,
-                        declination: geomagneticLocation.declination
-                    });
-                }
             }
 
             // Initialize geomagnetic location on page load
@@ -1952,10 +1938,14 @@
             }
 
             function updateCalibrationConfidenceUI() {
-                const details = incrementalCalibration.getConfidenceDetails();
-                const overall = Math.round(details.overall * 100);
-                const hardIron = Math.round(details.hardIron.confidence * 100);
-                const earthField = Math.round(details.earthField.confidence * 100);
+                // Get calibration state from TelemetryProcessor's UnifiedMagCalibration
+                const magCal = telemetryProcessor.getMagCalibration();
+                const state = magCal.getState();
+
+                const overall = Math.round(state.confidence * 100);
+                const meanResidual = state.meanResidual;
+                const earthMag = state.earthMagnitude;
+                const totalSamples = state.totalSamples;
 
                 // Update text displays
                 const overallEl = document.getElementById('overallConfidence');
@@ -1969,17 +1959,15 @@
                 const residualQualityEl = document.getElementById('residualQuality');
 
                 if (overallEl) overallEl.textContent = `${overall}%`;
-                if (hardIronEl) hardIronEl.textContent = `${hardIron}%`;
-                if (earthFieldEl) earthFieldEl.textContent = `${earthField}%`;
-                if (samplesEl) samplesEl.textContent = details.hardIron.sampleCount.toString();
+                if (hardIronEl) hardIronEl.textContent = state.hardIronEnabled ? '✓' : '--';
+                if (earthFieldEl) earthFieldEl.textContent = state.ready ? '✓ Auto' : 'Building...';
+                if (samplesEl) samplesEl.textContent = totalSamples.toString();
 
-                const earthMag = details.earthField.magnitude;
                 if (fieldMagEl) {
                     fieldMagEl.textContent = earthMag > 0 ? `${earthMag.toFixed(1)} µT` : '-- µT';
                 }
 
                 // Update mean residual display (the TRUE measure of calibration quality)
-                const meanResidual = details.residual?.meanMagnitude;
                 if (meanResidualEl) {
                     if (meanResidual !== undefined && meanResidual !== Infinity && !isNaN(meanResidual)) {
                         meanResidualEl.textContent = `${meanResidual.toFixed(1)} µT`;
@@ -1998,8 +1986,13 @@
                 }
 
                 // Update residual quality indicator
-                if (residualQualityEl && details.residual) {
-                    const interpretation = details.residual.interpretation || '--';
+                if (residualQualityEl) {
+                    let interpretation = '--';
+                    if (meanResidual !== undefined && meanResidual !== Infinity && !isNaN(meanResidual)) {
+                        interpretation = meanResidual < 5 ? 'excellent' :
+                                        meanResidual < 10 ? 'good' :
+                                        meanResidual < 15 ? 'moderate' : 'poor';
+                    }
                     residualQualityEl.textContent = interpretation.toUpperCase();
                     if (interpretation === 'excellent') {
                         residualQualityEl.style.color = 'var(--success)';
@@ -2038,10 +2031,12 @@
                         } else {
                             status.push('Poor - rotate more');
                         }
-                    } else if (details.hardIron.sampleCount < 100) {
+                    } else if (totalSamples < 50) {
                         status.push('Collecting samples...');
+                    } else if (!state.ready) {
+                        status.push('Building Earth field estimate...');
                     } else {
-                        status.push('Rotate device to calibrate');
+                        status.push('Calibrated (auto)');
                     }
                     statusEl.textContent = status.join(' | ');
                 }
@@ -2060,41 +2055,15 @@
 
             function updateData(prenorm) {
                 // Process telemetry through shared TelemetryProcessor
-                // This handles: unit conversion, IMU fusion, gyro bias, calibration, filtering
+                // This handles: unit conversion, IMU fusion, gyro bias, mag calibration (unified), filtering
                 const decoratedData = telemetryProcessor.process(prenorm);
 
-                // ===== Incremental Calibration Update =====
-                // Feed sample to incremental calibration if we have µT values and orientation
-                if (incrementalCalibrationEnabled && decoratedData.mx_ut !== undefined) {
-                    const mag = {
-                        x: decoratedData.mx_ut,
-                        y: decoratedData.my_ut,
-                        z: decoratedData.mz_ut
-                    };
-                    const orientation = decoratedData.orientation_w !== undefined ? {
-                        w: decoratedData.orientation_w,
-                        x: decoratedData.orientation_x,
-                        y: decoratedData.orientation_y,
-                        z: decoratedData.orientation_z
-                    } : null;
-
-                    incrementalCalibration.addSample(mag, orientation);
-
-                    // Compute incremental residual (alternative to stored calibration residual)
-                    if (orientation && incrementalCalibration.getConfidence() > 0.3) {
-                        const incResult = incrementalCalibration.computeResidual(mag, orientation);
-                        if (incResult) {
-                            decoratedData.incremental_residual_magnitude = incResult.magnitude;
-                        }
-                    }
-
-                    // Update confidence display periodically
-                    const now = performance.now();
-                    if (now - lastConfidenceUpdate > CONFIDENCE_UPDATE_INTERVAL) {
-                        lastConfidenceUpdate = now;
-                        updateCalibrationConfidenceUI();
-                        updateMagnetDetectionUI(decoratedData);
-                    }
+                // Update calibration confidence UI periodically
+                const now = performance.now();
+                if (now - lastConfidenceUpdate > CONFIDENCE_UPDATE_INTERVAL) {
+                    lastConfidenceUpdate = now;
+                    updateCalibrationConfidenceUI();
+                    updateMagnetDetectionUI(decoratedData);
                 }
 
                 // Store decorated data (raw + calibrated + filtered fields)
@@ -2145,9 +2114,9 @@
                         break;
                     case 'fused':
                         // Earth field removed (residual = finger magnet signal)
-                        mx = decoratedData.fused_mx ?? decoratedData.calibrated_mx ?? decoratedData.mx_ut ?? 0;
-                        my = decoratedData.fused_my ?? decoratedData.calibrated_my ?? decoratedData.my_ut ?? 0;
-                        mz = decoratedData.fused_mz ?? decoratedData.calibrated_mz ?? decoratedData.mz_ut ?? 0;
+                        mx = decoratedData.residual_mx ?? decoratedData.mx_ut ?? 0;
+                        my = decoratedData.residual_my ?? decoratedData.my_ut ?? 0;
+                        mz = decoratedData.residual_mz ?? decoratedData.mz_ut ?? 0;
                         ax = decoratedData.ax_g || 0;
                         ay = decoratedData.ay_g || 0;
                         az = decoratedData.az_g || 0;
@@ -2157,9 +2126,9 @@
                         break;
                     case 'filtered':
                         // Kalman filtered (best for visualization)
-                        mx = decoratedData.filtered_mx ?? decoratedData.fused_mx ?? decoratedData.mx_ut ?? 0;
-                        my = decoratedData.filtered_my ?? decoratedData.fused_my ?? decoratedData.my_ut ?? 0;
-                        mz = decoratedData.filtered_mz ?? decoratedData.fused_mz ?? decoratedData.mz_ut ?? 0;
+                        mx = decoratedData.filtered_mx ?? decoratedData.residual_mx ?? decoratedData.mx_ut ?? 0;
+                        my = decoratedData.filtered_my ?? decoratedData.residual_my ?? decoratedData.my_ut ?? 0;
+                        mz = decoratedData.filtered_mz ?? decoratedData.residual_mz ?? decoratedData.mz_ut ?? 0;
                         ax = decoratedData.ax_g || 0;
                         ay = decoratedData.ay_g || 0;
                         az = decoratedData.az_g || 0;
@@ -2249,11 +2218,11 @@
                 }
 
                 // Update magnetic trajectory with residual field
-                if (magTrajectory && magTrajectoryEnabled && decoratedData.fused_mx !== undefined) {
+                if (magTrajectory && magTrajectoryEnabled && decoratedData.residual_mx !== undefined) {
                     magTrajectory.addPoint(
-                        decoratedData.fused_mx,
-                        decoratedData.fused_my,
-                        decoratedData.fused_mz
+                        decoratedData.residual_mx,
+                        decoratedData.residual_my,
+                        decoratedData.residual_mz
                     );
 
                     // Update stats every 50 points to reduce DOM updates
