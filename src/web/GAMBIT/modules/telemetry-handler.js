@@ -47,8 +47,7 @@ export function setDependencies(dependencies) {
 export function initProcessor() {
     telemetryProcessor = new TelemetryProcessor({
         calibration: deps.calibrationInstance,
-        useIncrementalCalibration: true,  // Enable live incremental calibration
-        incrementalCalibrationDebug: true, // Enable debug logging
+        magCalibrationDebug: true, // Enable debug logging for mag calibration
         onOrientationUpdate: (euler, quaternion) => {
             // Update Three.js hand skeleton if available
             if (euler) {
@@ -65,11 +64,11 @@ export function initProcessor() {
 }
 
 /**
- * Get incremental calibration instance
- * @returns {IncrementalCalibration|null}
+ * Get mag calibration instance
+ * @returns {UnifiedMagCalibration|null}
  */
-export function getIncrementalCalibration() {
-    return telemetryProcessor?.getIncrementalCalibration() ?? null;
+export function getMagCalibration() {
+    return telemetryProcessor?.getMagCalibration() ?? null;
 }
 
 /**

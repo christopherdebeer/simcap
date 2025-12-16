@@ -144,7 +144,8 @@ class SensorDataProcessor:
             'calibrated_mx': np.zeros(n_samples),
             'calibrated_my': np.zeros(n_samples),
             'calibrated_mz': np.zeros(n_samples),
-            # Fused magnetometer (iron + Earth field subtraction)
+            # Fused/Residual magnetometer (Earth field subtracted)
+            # Note: Internally uses 'fused_*' but loads both new (residual_*) and legacy (fused_*) field names
             'fused_mx': np.zeros(n_samples),
             'fused_my': np.zeros(n_samples),
             'fused_mz': np.zeros(n_samples),
@@ -169,7 +170,7 @@ class SensorDataProcessor:
 
         # Track which decorated fields are present
         has_calibrated = False
-        has_fused = False
+        has_fused = False  # Supports both new (residual_*) and legacy (fused_*) field names
         has_filtered = False
         has_orientation = False
 
@@ -194,12 +195,12 @@ class SensorDataProcessor:
                 sensors['calibrated_my'][i] = sample.get('calibrated_my', 0)
                 sensors['calibrated_mz'][i] = sample.get('calibrated_mz', 0)
 
-            # Fused (Earth field subtracted)
-            if 'fused_mx' in sample:
+            # Fused/Residual (Earth field subtracted) - supports new (residual_*) and legacy (fused_*) field names
+            if 'residual_mx' in sample or 'fused_mx' in sample:
                 has_fused = True
-                sensors['fused_mx'][i] = sample.get('fused_mx', 0)
-                sensors['fused_my'][i] = sample.get('fused_my', 0)
-                sensors['fused_mz'][i] = sample.get('fused_mz', 0)
+                sensors['fused_mx'][i] = sample.get('residual_mx', sample.get('fused_mx', 0))
+                sensors['fused_my'][i] = sample.get('residual_my', sample.get('fused_my', 0))
+                sensors['fused_mz'][i] = sample.get('residual_mz', sample.get('fused_mz', 0))
 
             # Filtered (Kalman smoothed)
             if 'filtered_mx' in sample:
