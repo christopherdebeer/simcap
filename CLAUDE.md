@@ -1,8 +1,10 @@
 # Git LFS Workflow
 
-## LFS-tracked files
+
+## LFS-tracked files (via .gitattributes)
 - `data/GAMBIT/*.json` - session data
-- `visualizations/*.png` - generated plots
+- `visualizations/**/*.png` - generated plots
+- `visualizations/session-data.js`
 
 ## After clone/checkout
 
@@ -18,15 +20,6 @@ git add data/GAMBIT/new-session.json
 git commit -m "Add session"
 git push              # Pushes commit + LFS objects
 ```
-
-## ⚠️ Don't commit pointer→content changes
-
-If `git diff --staged` shows LFS pointer changing to binary content:
-```bash
-git restore --staged <file>   # Unstage it
-```
-
-This happens after `git lfs checkout` - it's normal. The pointer in git is correct.
 
 ## Verify LFS status
 
@@ -46,3 +39,9 @@ git lfs checkout      # Replace pointers with content
 
 ```bash
 git lfs push --all origin main
+```
+
+## Troubleshooting
+
+If files show as "modified" unexpectedly, check that `.gitattributes` exists and contains the LFS tracking patterns.
+
