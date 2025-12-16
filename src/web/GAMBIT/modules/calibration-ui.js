@@ -47,6 +47,10 @@ export function initCalibration() {
 
 /**
  * Update calibration status UI
+ *
+ * NOTE: Earth field calibration has been removed from the wizard.
+ * Earth field is now estimated automatically in real-time using
+ * UnifiedMagCalibration (200-sample sliding window).
  */
 export function updateCalibrationStatus() {
     const $ = (id) => document.getElementById(id);
@@ -65,33 +69,33 @@ export function updateCalibrationStatus() {
         return;
     }
 
-    // Use the class's calibration flags (set by the calibration methods)
-    const hasEarth = calibrationInstance.earthFieldCalibrated;
+    // Iron calibration from wizard (Earth field is auto-estimated in real-time)
     const hasHardIron = calibrationInstance.hardIronCalibrated;
     const hasSoftIron = calibrationInstance.softIronCalibrated;
-    const complete = hasEarth && hasHardIron && hasSoftIron;
+    const complete = hasHardIron && hasSoftIron;
 
-    statusText.textContent = complete ? 'Calibrated' : (hasEarth || hasHardIron || hasSoftIron) ? 'Partial' : 'Not Calibrated';
-    statusText.style.color = complete ? 'var(--success)' : (hasEarth || hasHardIron || hasSoftIron) ? 'var(--warning)' : 'var(--fg-muted)';
+    statusText.textContent = complete ? 'Calibrated' : (hasHardIron || hasSoftIron) ? 'Partial' : 'Not Calibrated';
+    statusText.style.color = complete ? 'var(--success)' : (hasHardIron || hasSoftIron) ? 'var(--warning)' : 'var(--fg-muted)';
 
     const steps = [];
-    if (hasEarth) steps.push('Earth');
     if (hasHardIron) steps.push('Hard Iron');
     if (hasSoftIron) steps.push('Soft Iron');
-    detailsText.textContent += steps.length ? `Complete: ${steps.join(', ')}` : 'No calibration data';
+    detailsText.textContent += steps.length ? `Complete: ${steps.join(', ')} (Earth: auto)` : 'No iron calibration (Earth: auto)';
 
     saveBtn.disabled = !complete;
 
-    $('startEarthCal').disabled = !state.connected;
-    $('startHardIronCal').disabled = !state.connected || !hasEarth;
-    $('startSoftIronCal').disabled = !state.connected || !hasHardIron;
+    // Hard Iron enabled immediately, Soft Iron requires Hard Iron first
+    const startHardIronBtn = $('startHardIronCal');
+    const startSoftIronBtn = $('startSoftIronCal');
+    if (startHardIronBtn) startHardIronBtn.disabled = !state.connected;
+    if (startSoftIronBtn) startSoftIronBtn.disabled = !state.connected || !hasHardIron;
 }
 
 /**
  * Run a calibration step using guaranteed sample collection
  * Uses collectSamples() for exact sample counts
  *
- * @param {string} stepName - Name of calibration step (e.g., 'EARTH_FIELD', 'HARD_IRON')
+ * @param {string} stepName - Name of calibration step (e.g., 'HARD_IRON', 'SOFT_IRON')
  * @param {Function} sampleHandler - Handler called with calibration result
  * @param {Function} completionHandler - Handler to process collected samples
  */
@@ -175,87 +179,8 @@ export async function runCalibrationStep(stepName, sampleHandler, completionHand
 export function initCalibrationUI() {
     const $ = (id) => document.getElementById(id);
 
-    // Earth Field Calibration
-    const startEarthCal = $('startEarthCal');
-    if (startEarthCal) {
-        startEarthCal.addEventListener('click', () => {
-        runCalibrationStep('EARTH_FIELD',
-            (result) => {
-                const thresholds = CALIBRATION_CONFIG.EARTH_FIELD.qualityThresholds;
-                const quality = result.quality > thresholds.excellent ? 'Excellent' : result.quality > thresholds.good ? 'Good' : 'Poor';
-                const emoji = result.quality > thresholds.excellent ? '✅' : result.quality > thresholds.good ? '⚠️' : '❌';
-                $('earthQuality').textContent = `${emoji} ${quality} (quality: ${result.quality.toFixed(2)})`;
-                $('earthQuality').style.color = result.quality > thresholds.good ? 'var(--success)' : 'var(--danger)';
-
-                // Display enhanced diagnostics if quality is not excellent
-                const diagDiv = $('earthDiagnostics');
-                if (diagDiv && result.diagnostics) {
-                    const { diagnostics } = result;
-                    let diagHTML = '';
-                    
-                    // Show recommendations
-                    if (diagnostics.recommendations && diagnostics.recommendations.length > 0) {
-                        diagHTML += '<div class="cal-recommendations">';
-                        diagnostics.recommendations.forEach(rec => {
-                            diagHTML += `<div class="cal-rec-item">${rec}</div>`;
-                        });
-                        diagHTML += '</div>';
-                    }
-                    
-                    // Show detailed stats for debugging (collapsible)
-                    diagHTML += `<details class="cal-details">
-                        <summary>📊 Detailed Statistics</summary>
-                        <div class="cal-stats">
-                            <div><strong>Avg Deviation:</strong> ${result.avgDeviation.toFixed(2)} (${((result.avgDeviation / result.magnitude) * 100).toFixed(1)}%)</div>
-                            <div><strong>Std Dev:</strong> ${diagnostics.stdDev.toFixed(2)}</div>
-                            <div><strong>Min/Max Dev:</strong> ${diagnostics.minDeviation.toFixed(2)} / ${diagnostics.maxDeviation.toFixed(2)}</div>
-                            <div><strong>Outliers:</strong> ${diagnostics.outlierCount} (${diagnostics.outlierPercentage}%)</div>
-                            <div><strong>Earth Field:</strong> ${result.magnitude.toFixed(1)} (${result.magnitudeUT.toFixed(1)} μT)</div>
-                            <hr>
-                            <div><strong>Per-Axis Std Dev:</strong></div>
-                            <div style="padding-left: 12px;">
-                                X: ${diagnostics.axisStats.x.stdDev.toFixed(2)} | 
-                                Y: ${diagnostics.axisStats.y.stdDev.toFixed(2)} | 
-                                Z: ${diagnostics.axisStats.z.stdDev.toFixed(2)}
-                            </div>
-                            <hr>
-                            <div><strong>Temporal Analysis:</strong></div>
-                            <div style="padding-left: 12px;">
-                                Drift: ${diagnostics.temporalAnalysis.drift} (${diagnostics.temporalAnalysis.driftPercent}%)<br>
-                                Jumps: ${diagnostics.temporalAnalysis.jumps} (${diagnostics.temporalAnalysis.jumpPercentage}%)<br>
-                                Stable: ${diagnostics.temporalAnalysis.stable ? '✅' : '❌'}
-                            </div>
-                        </div>
-                    </details>`;
-                    
-                    diagDiv.innerHTML = diagHTML;
-                    diagDiv.style.display = 'block';
-                } else if (diagDiv) {
-                    diagDiv.style.display = 'none';
-                }
-
-                calibrationInstance.save('gambit_calibration');
-                updateCalibrationStatus();
-            },
-            (buffer) => {
-                const samples = buffer.map(s => ({x: s.mx, y: s.my, z: s.mz}));
-                // Get current orientation for world-frame earth field storage
-                const currentOrientation = window.getCurrentOrientation?.();
-                let orientationQuat = null;
-                if (currentOrientation) {
-                    // Create a Quaternion object for calibration
-                    orientationQuat = new Quaternion(
-                        currentOrientation.w,
-                        currentOrientation.x,
-                        currentOrientation.y,
-                        currentOrientation.z
-                    );
-                }
-                return calibrationInstance.runEarthFieldCalibration(samples, orientationQuat);
-            }
-        );
-        });
-    }
+    // NOTE: Earth Field Calibration has been removed from the wizard.
+    // Earth field is now auto-estimated in real-time by UnifiedMagCalibration.
 
     // Hard Iron Calibration
     const startHardIronCal = $('startHardIronCal');

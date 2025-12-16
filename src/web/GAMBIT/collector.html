@@ -706,23 +706,15 @@
                 </div>
             <div class="collapse-content hidden">
                 <p style="font-size: 11px; color: var(--fg-muted); margin-bottom: 12px;">
-                    Calibrate the magnetometer to remove environmental interference. Required for accurate magnetic finger tracking.
+                    Calibrate the magnetometer for iron interference. Earth field is auto-estimated in real-time.
                 </p>
-                <!-- Step 1: Earth Field -->
-                <div id="calStep1" class="calibration-step">
-                    <h3>Step 1: Earth Field Calibration</h3>
-                    <p style="font-size: 11px; margin-bottom: 8px;">Hold device still, away from magnets (>50cm)</p>
-                    <div class="row">
-                        <button id="startEarthCal" class="btn-secondary" disabled>Start (10 seconds)</button>
-                        <div id="earthProgress" style="flex: 1;"></div>
-                    </div>
-                    <div id="earthQuality" style="font-size: 10px; margin-top: 4px;"></div>
-                    <div id="earthDiagnostics" class="cal-diagnostics" style="display: none;"></div>
+                <div style="font-size: 10px; background: var(--bg-muted); padding: 6px 8px; border-radius: 4px; margin-bottom: 12px;">
+                    <strong>Earth Field:</strong> Auto-estimated (no manual calibration needed)
                 </div>
 
-                <!-- Step 2: Hard Iron -->
-                <div id="calStep2" class="calibration-step">
-                    <h3>Step 2: Hard Iron Calibration</h3>
+                <!-- Step 1: Hard Iron -->
+                <div id="calStep1" class="calibration-step">
+                    <h3>Step 1: Hard Iron Calibration</h3>
                     <p style="font-size: 11px; margin-bottom: 8px;">Rotate device in figure-8 pattern covering all orientations</p>
                     <div class="row">
                         <button id="startHardIronCal" class="btn-secondary" disabled>Start (20 seconds)</button>
@@ -731,9 +723,9 @@
                     <div id="hardIronQuality" style="font-size: 10px; margin-top: 4px;"></div>
                 </div>
 
-                <!-- Step 3: Soft Iron -->
-                <div id="calStep3" class="calibration-step">
-                    <h3>Step 3: Soft Iron Calibration</h3>
+                <!-- Step 2: Soft Iron -->
+                <div id="calStep2" class="calibration-step">
+                    <h3>Step 2: Soft Iron Calibration</h3>
                     <p style="font-size: 11px; margin-bottom: 8px;">Continue rotating to capture field distortion</p>
                     <div class="row">
                         <button id="startSoftIronCal" class="btn-secondary" disabled>Start (20 seconds)</button>
