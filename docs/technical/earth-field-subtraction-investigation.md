@@ -698,16 +698,31 @@ class UnifiedMagCalibration {
 
 ## 9. Implementation Checklist
 
-- [ ] Create `UnifiedMagCalibration` class based on investigation findings
-- [ ] Add sliding window (200 samples) Earth estimation
-- [ ] Remove Earth field calibration from wizard UI
-- [ ] Update `TelemetryProcessor` to use unified calibration
-- [ ] Remove duplicate `fused_*` / `incremental_*` output fields
-- [ ] Add `earth_confidence` to decorated telemetry
+- [x] Create `UnifiedMagCalibration` class based on investigation findings
+- [x] Add sliding window (200 samples) Earth estimation
+- [x] Remove Earth field calibration from wizard UI
+- [x] Update `TelemetryProcessor` to use unified calibration
+- [x] Remove duplicate `fused_*` / `incremental_*` output fields
+- [x] Add `earth_confidence` to decorated telemetry
 - [ ] Update `collector.html` and `index.html` UI
-- [ ] Remove `runEarthFieldCalibration()` from `EnvironmentalCalibration`
-- [ ] Deprecate `IncrementalCalibration` (merge into unified)
-- [ ] Update documentation
+- [x] Remove `runEarthFieldCalibration()` from `EnvironmentalCalibration`
+- [x] Deprecate `IncrementalCalibration` (merge into unified)
+- [x] Update documentation
+
+---
+
+## 10. Follow-Up Investigation: Auto Iron Calibration
+
+A follow-up investigation examined whether hard iron calibration could also be automated from streaming data (see `docs/technical/auto-iron-calibration-investigation.md`).
+
+**Result:** Automatic hard iron calibration **does not work** when finger magnets are present:
+- Sensor-frame residual averaging captures both hard iron AND finger magnet fields
+- The magnet field (~100-500 µT) dominates the hard iron (~10-50 µT)
+- Adding auto iron estimation actually **degrades** SNR by -8.82x on average
+
+**Conclusion:** The current architecture is correct:
+- Earth field: Automatic real-time estimation (provides +7.99x SNR improvement)
+- Hard/Soft iron: Manual wizard calibration (optional, requires magnets removed)
 
 ---
 
@@ -717,3 +732,4 @@ class UnifiedMagCalibration {
 2. `docs/design/magnetic-finger-tracking-analysis.md` - Physics foundation
 3. `docs/procedures/magnet-attachment-guide.md` - Polarity configuration
 4. `src/web/GAMBIT/analysis/ORIENTATION_AND_MAGNETOMETER_SYSTEM.md` - System architecture
+5. `docs/technical/auto-iron-calibration-investigation.md` - Auto iron calibration investigation (negative result)
