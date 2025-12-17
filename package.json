@@ -1,6 +1,7 @@
 {
   "name": "simcap",
   "version": "1.0.0",
+  "type": "module",
   "description": "*Sensor Inferred Motion CAPture*",
   "main": "index.js",
   "directories": {
