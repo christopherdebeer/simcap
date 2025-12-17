@@ -16,3 +16,5 @@ data/GAMBIT/visualizations/
 
 # Build output
 dist/
+
+.env.local
