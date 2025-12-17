@@ -1,5 +1,65 @@
-import { defineConfig } from 'vite';
+import { defineConfig, Plugin } from 'vite';
 import { resolve } from 'path';
+import { IncomingMessage, ServerResponse } from 'http';
+
+// API handler plugin for development
+function apiPlugin(): Plugin {
+  return {
+    name: 'api-handler',
+    configureServer(server) {
+      server.middlewares.use(async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
+        if (!req.url?.startsWith('/api/')) {
+          return next();
+        }
+
+        try {
+          // Extract the API route path
+          const urlPath = req.url.split('?')[0];
+          const apiPath = urlPath.replace('/api/', '');
+          const handlerPath = resolve(__dirname, `api/${apiPath}.ts`);
+
+          // Dynamically import the handler
+          const handler = await import(handlerPath);
+          
+          // Collect request body for POST/PUT
+          let body = '';
+          if (req.method === 'POST' || req.method === 'PUT') {
+            body = await new Promise<string>((resolve) => {
+              const chunks: Buffer[] = [];
+              req.on('data', (chunk: Buffer) => chunks.push(chunk));
+              req.on('end', () => resolve(Buffer.concat(chunks).toString()));
+            });
+          }
+
+          // Create a mock Request object
+          const url = new URL(req.url, `http://${req.headers.host}`);
+          const mockRequest = new Request(url.toString(), {
+            method: req.method,
+            headers: req.headers as HeadersInit,
+            body: body || undefined,
+          });
+
+          // Call the handler
+          const response = await handler.default(mockRequest);
+
+          // Send the response
+          res.statusCode = response.status;
+          response.headers.forEach((value: string, key: string) => {
+            res.setHeader(key, value);
+          });
+
+          const responseBody = await response.text();
+          res.end(responseBody);
+        } catch (error: any) {
+          console.error('API handler error:', error);
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ error: error.message }));
+        }
+      });
+    }
+  };
+}
 
 export default defineConfig({
   root: '.',
@@ -41,5 +101,8 @@ export default defineConfig({
   },
 
   // Handle static assets
-  publicDir: 'public'
+  publicDir: 'public',
+
+  // Plugins
+  plugins: [apiPlugin()]
 });

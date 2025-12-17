@@ -15,7 +15,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "fetch:sessions": "node scripts/fetch-sessions.js",
     "fetch:visualizations": "node scripts/fetch-visualizations.js",
-    "fetch:all": "npm run fetch:sessions && npm run fetch:visualizations"
+    "fetch:all": "npm run fetch:sessions && npm run fetch:visualizations",
+    "upload:sessions": "node scripts/upload-local-sessions.js"
   },
   "repository": {
     "type": "git",
