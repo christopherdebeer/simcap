@@ -75,10 +75,10 @@ export async function connect(): Promise<boolean> {
         });
 
         // Register data handler
-        state.gambitClient.on('data', onTelemetry);
+        state.gambitClient!.on('data', onTelemetry);
 
         // Handle firmware info
-        state.gambitClient.on('firmware', (info: FirmwareInfo) => {
+        state.gambitClient!.on('firmware', (info: FirmwareInfo) => {
             console.log('[GAMBIT] Firmware info:', info);
             // Store firmware version for session metadata
             state.firmwareVersion = info.version;
@@ -93,7 +93,7 @@ export async function connect(): Promise<boolean> {
         });
 
         // Handle disconnection
-        state.gambitClient.on('disconnect', () => {
+        state.gambitClient!.on('disconnect', () => {
             console.log('[GAMBIT] Device disconnected');
             state.connected = false;
             state.recording = false;
@@ -104,13 +104,13 @@ export async function connect(): Promise<boolean> {
         });
 
         // Handle errors
-        state.gambitClient.on('error', (err: Error) => {
+        state.gambitClient!.on('error', (err: Error) => {
             console.error('[GAMBIT] Error:', err);
             log(`Error: ${err.message}`);
         });
 
         // Attempt connection
-        await state.gambitClient.connect();
+        await state.gambitClient!.connect();
 
         state.connected = true;
         log('Connected!');

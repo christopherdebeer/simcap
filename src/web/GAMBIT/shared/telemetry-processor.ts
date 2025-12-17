@@ -126,13 +126,13 @@ interface GeomagneticRef {
   declination: number;
 }
 
-interface MotionState {
+export interface MotionState {
   isMoving: boolean;
   accelStd: number;
   gyroStd: number;
 }
 
-interface GyroBiasState {
+export interface GyroBiasState {
   calibrated: boolean;
   stationaryCount: number;
 }
@@ -213,8 +213,12 @@ export class TelemetryProcessor {
         this.magCalibration.load('gambit_calibration');
 
         // Magnet detector (detects finger magnet presence from residual magnitude)
+        // Wrap the callback to match the expected signature
+        const magnetStatusCallback = options.onMagnetStatusChange
+            ? (_newStatus: string, _oldStatus: string, state: MagnetDetectorState) => options.onMagnetStatusChange!(state)
+            : null;
         this.magnetDetector = createMagnetDetector({
-            onStatusChange: options.onMagnetStatusChange || null
+            onStatusChange: magnetStatusCallback
         });
 
         // Create signal processing components

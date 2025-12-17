@@ -37,11 +37,24 @@ export interface CustomLabelDefinition {
   color?: string;
 }
 
-// GambitClient type - this would come from the gambit-client module
+// GambitClient type - matches gambit-client.js global
 export interface GambitClient {
   connected: boolean;
-  disconnect: () => void;
-  // Add other methods as needed
+
+  connect(): Promise<void>;
+  disconnect(): void;
+
+  on(event: 'data', callback: (data: any) => void): void;
+  on(event: 'firmware', callback: (info: { name: string; version: string }) => void): void;
+  on(event: 'disconnect', callback: () => void): void;
+  on(event: 'error', callback: (error: Error) => void): void;
+  off(event: string, callback: (...args: any[]) => void): void;
+
+  startStreaming(): void;
+  stopStreaming(): void;
+
+  collectSamples(count: number, sampleRate?: number): Promise<{ collectedCount: number; durationMs: number }>;
+  checkCompatibility(minVersion: string): { compatible: boolean; reason?: string };
 }
 
 export interface AppState {
