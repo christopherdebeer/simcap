@@ -1,21 +1,11 @@
 /**
- * Type declarations for global scripts
+ * Type declarations for external scripts loaded via script tags
  *
- * These declarations provide TypeScript support for legacy global scripts
- * (filters.js, kalman.js, puck.js) without converting them.
+ * Note: Most filter/client code is now proper TypeScript modules.
+ * These declarations are only for external libraries that remain as global scripts.
  */
 
-// ===== filters.js =====
-
-interface MadgwickOptions {
-  sampleFreq?: number;
-  beta?: number;
-  geomagneticRef?: {
-    horizontal: number;
-    vertical: number;
-    declination: number;
-  } | null;
-}
+// ===== Common Types (used by inline scripts) =====
 
 interface Quaternion {
   w: number;
@@ -36,91 +26,7 @@ interface EulerAngles {
   yaw: number;
 }
 
-declare class MadgwickAHRS {
-  sampleFreq: number;
-  beta: number;
-  q: Quaternion;
-  gyroBias: Vector3;
-  magTrust: number;
-  hardIron: Vector3;
-  _lastMagExpected: Vector3 | null;
-  _lastMagResidual: Vector3 | null;
-
-  constructor(options?: MadgwickOptions);
-
-  update(
-    ax: number, ay: number, az: number,
-    gx: number, gy: number, gz: number,
-    dt?: number | null,
-    gyroInDegrees?: boolean
-  ): void;
-
-  updateWithMag(
-    ax: number, ay: number, az: number,
-    gx: number, gy: number, gz: number,
-    mx: number, my: number, mz: number,
-    dt?: number | null,
-    gyroInDegrees?: boolean,
-    applyHardIron?: boolean
-  ): { expected: Vector3; residual: Vector3 } | null;
-
-  initFromAccelerometer(ax: number, ay: number, az: number): void;
-  updateGyroBias(gx: number, gy: number, gz: number, isStationary: boolean): void;
-  setMagTrust(trust: number): void;
-  setGeomagneticReference(ref: { horizontal: number; vertical: number; declination: number }): void;
-  getMagResidual(): Vector3 | null;
-  getMagResidualMagnitude(): number;
-  getQuaternion(): Quaternion;
-  getEulerAngles(): EulerAngles;
-  reset(): void;
-}
-
-interface KalmanFilter3DOptions {
-  R?: number;  // Process noise
-  Q?: number;  // Measurement noise
-}
-
-declare class KalmanFilter3D {
-  constructor(options?: KalmanFilter3DOptions);
-  filter(x: number, y: number, z: number): { x: number; y: number; z: number };
-  setMeasurementNoise(noise: number): void;
-  setProcessNoise(noise: number): void;
-}
-
-interface MotionDetectorOptions {
-  accelThreshold?: number;
-  gyroThreshold?: number;
-  windowSize?: number;
-}
-
-interface MotionDetectorResult {
-  isStationary: boolean;
-  isMoving: boolean;
-  accelStd: number;
-  gyroStd: number;
-}
-
-declare class MotionDetector {
-  constructor(options?: MotionDetectorOptions);
-  update(ax: number, ay: number, az: number, gx: number, gy: number, gz: number): MotionDetectorResult;
-  getState(): MotionDetectorResult;
-  reset(): void;
-}
-
-// ===== kalman.js =====
-
-interface KalmanFilterOptions {
-  R?: number;  // Process noise
-  Q?: number;  // Measurement noise
-}
-
-declare class KalmanFilter {
-  constructor(options?: KalmanFilterOptions);
-  filter(value: number): number;
-  reset(): void;
-}
-
-// ===== puck.js =====
+// ===== puck.js (external BLE library) =====
 
 interface PuckConnectionCallback {
   (connection: any): void;
@@ -148,7 +54,13 @@ declare const Puck: {
   LED3: { write: (value: boolean) => void };
 };
 
-// ===== gambit-client.js =====
+// ===== Three.js (loaded via CDN) =====
+
+declare const THREE: typeof import('three');
+
+// ===== GambitClient (exposed by entry point modules) =====
+// Note: The actual class is in gambit-client.ts, but synth-app.ts
+// and loader-app.ts expose it globally for inline scripts.
 
 interface GambitClientOptions {
   debug?: boolean;
@@ -165,7 +77,8 @@ interface GambitCompatibilityResult {
   reason?: string;
 }
 
-interface GambitClient {
+// Interface for inline script usage (matches the exported class)
+interface GambitClientInterface {
   connected: boolean;
 
   connect(): Promise<void>;
@@ -184,12 +97,9 @@ interface GambitClient {
   checkCompatibility(minVersion: string): GambitCompatibilityResult;
 }
 
-declare class GambitClient implements GambitClient {
-  constructor(options?: GambitClientOptions);
+// Declare GambitClient as available on window (set by synth-app.ts/loader-app.ts)
+declare global {
+  interface Window {
+    GambitClient: new (options?: GambitClientOptions) => GambitClientInterface;
+  }
 }
-
-// ===== Three.js =====
-
-// THREE is loaded as a script tag globally
-declare const THREE: typeof import('three');
-
