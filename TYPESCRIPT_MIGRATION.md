@@ -2,36 +2,64 @@
 
 ## Current Status (Updated: 2025-12-17)
 
-### ✅ Completed
-- **Phase 0**: Vite + TypeScript foundation setup
-- **Phase 1**: API routes converted (sessions.ts, upload.ts, visualizations.ts)
-- **Phase 2 (Partial)**: Core types package created (`packages/core/`)
-- **Cleanup**: Removed duplicate .js files where .ts versions exist
-  - `src/web/GAMBIT/modules/*.js` - All deleted (10 files)
-  - `src/web/GAMBIT/shared/*.js` - All deleted except test file (12 files)
-  - `src/web/GAMBIT/calibration-config.js`, `collector-app.js` - Deleted
-- **Phase 5 (Partial)**: Inline script extraction
-  - `synth.html` - Fully migrated to `synth-app.ts` (~460 lines extracted)
-  - All `window.GambitClient` patterns removed - using proper ES module imports
+### ✅ TypeScript Migration Complete
 
-### 🔄 Remaining Work
-- `src/web/GAMBIT/puck.js` - External BLE library (keep as-is, non-module)
-- `api/explorer.js` - API route (low priority)
-- `src/web/loader/index.html` - Has inline script (~1200 lines, uses Puck directly)
+All JavaScript application code has been converted to TypeScript. The migration is functionally complete.
 
-### ✅ Recently Converted (all now .ts)
+#### API Routes (100% TypeScript)
+- `api/sessions.ts` ✓
+- `api/upload.ts` ✓
+- `api/visualizations.ts` ✓
+- `api/explorer.ts` ✓
+
+#### Web Application Entry Points (100% TypeScript modules)
+- `gambit-app.ts` - Main GAMBIT application (89KB)
+- `collector-app.ts` - Data collection app (58KB)
+- `synth-app.ts` - Audio synthesizer app (~460 lines extracted from inline)
+- `loader-app.ts` - Firmware loader (~1318 lines extracted from inline)
+
+#### Core Libraries (100% TypeScript)
+- `gambit-client.ts` - BLE device communication with typed event overloads
 - `filters.ts` - MadgwickAHRS, ComplementaryFilter, MotionDetector
 - `kalman.ts` - KalmanFilter, KalmanFilter3D
-- `gambit-client.ts` - GambitClient BLE protocol (with typed event overloads)
 - `gesture-inference.ts` - TensorFlow.js gesture recognition
 - `hand-model.ts` - Hand geometry types
-- `synth-app.ts` - Full synth application (audio synthesis, sensor handling)
-- `loader-app.ts` - Loader entry point (minimal, uses Puck.js directly)
+- `calibration-config.ts` - Calibration configuration
 
-### ❌ Not Started (Future Phases)
-- Phase 3: Create `packages/filters/`, `packages/orientation/`, `packages/puck/`
-- Phase 4: Restructure to `apps/` directory
-- Phase 5: Extract remaining inline scripts (loader/index.html, main gambit/index.html)
+#### Modules Directory (100% TypeScript)
+- All 10+ modules in `src/web/GAMBIT/modules/` converted
+
+#### Cleanup Completed
+- Removed all duplicate .js files where .ts versions exist
+- Removed `window.GambitClient` patterns - using proper ES module imports
+- Updated globals.d.ts for external libraries only
+
+### 📁 Files Intentionally Kept as JavaScript
+
+These files are NOT TypeScript because they serve specific purposes:
+
+1. **Device Firmware** (runs on Espruino, not in browser):
+   - `src/device/GAMBIT/app.js`
+   - `src/device/BAE/app.js`
+   - `src/device/KEYBOARD/app.js`
+   - `src/device/MOUSE/app.js`
+   - `src/device/P0/*.js`
+
+2. **External Libraries** (vendored, not our code):
+   - `src/web/GAMBIT/puck.js` - Espruino Puck.js BLE library
+   - `src/web/P0/assets/*.js` - D3, jQuery, Rickshaw
+
+### 🔮 Optional Future Phases (Structural Reorganization)
+
+These phases are about project structure improvement, not TypeScript conversion:
+
+- **Phase 3**: Create `packages/filters/`, `packages/orientation/`, `packages/puck/`
+  - Would split existing TypeScript into reusable packages
+  - Not required for TypeScript migration
+
+- **Phase 4**: Restructure to `apps/` directory
+  - Would move `src/web/*` to `apps/*`
+  - Not required for TypeScript migration
 
 ---
 
