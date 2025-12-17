@@ -12,6 +12,13 @@
 import type { GeomagneticLocation } from './shared/geomagnetic-field.js';
 import type { EulerAngles, Quaternion } from '@core/types';
 
+// ===== Import Global Classes (previously loaded via <script> tags) =====
+// These are now ES modules that also export to window for backward compatibility
+import { GambitClient } from './gambit-client';
+import { KalmanFilter, KalmanFilter3D } from './kalman';
+import { MadgwickAHRS, ComplementaryFilter, MotionDetector } from './filters';
+import { GestureInference, FingerTrackingInference } from './gesture-inference';
+
 // ===== Type Definitions =====
 
 interface TelemetrySample {
@@ -232,6 +239,12 @@ import {
     quaternionToEuler,
     testEulerOrders
 } from './shared/orientation-calibration.js';
+import {
+    uploadToBlob,
+    getUploadSecret,
+    setUploadSecret,
+    hasUploadSecret
+} from './shared/blob-upload.js';
 
 // ===== GambitClient for Frame-Based Protocol =====
 const gambitClient = new GambitClient({ debug: true });
@@ -1614,16 +1627,17 @@ async function getFileShaForLFS(token, owner, repo, path) {
 }
 
 // ===== Vercel Blob Upload =====
+// Uses the shared blob-upload module with two-phase @vercel/blob/client protocol
 async function blobPutData(rawSessionData) {
-    if (!blobSecret) {
-        console.log("blobSecret not found. skipping upload.");
+    // Check for secret using the module's function (reads from localStorage)
+    if (!hasUploadSecret()) {
+        console.log("blobPutData: No upload secret configured. Skipping upload.");
         updateUploadStatus('No upload secret configured', 'error');
         return;
     }
 
     const d = new Date();
     const filename = `${d.toISOString().replace(/:/g, '_')}.json`;
-    const pathname = `sessions/${filename}`;
 
     // Build v2.1 schema export data
     const exportData = {
@@ -1649,28 +1663,23 @@ async function blobPutData(rawSessionData) {
     };
 
     const content = JSON.stringify(exportData, null, 2);
-    const blob = new Blob([content], { type: 'application/json' });
 
     console.log("blobPutData: Starting Vercel Blob upload for", filename);
     updateUploadStatus('Uploading...', 'progress');
 
     try {
-        const response = await fetch('/api/upload', {
-            method: 'POST',
-            headers: {
-                'x-upload-secret': blobSecret,
-                'x-vercel-blob-pathname': pathname,
-                'content-type': 'application/json',
-            },
-            body: blob,
+        // Use the shared blob-upload module (two-phase protocol)
+        const result = await uploadToBlob({
+            filename,
+            content,
+            onProgress: (progress) => {
+                console.log(`blobPutData: ${progress.stage} - ${progress.message}`);
+                if (progress.stage === 'uploading') {
+                    updateUploadStatus('Uploading...', 'progress');
+                }
+            }
         });
 
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({ error: response.statusText }));
-            throw new Error(error.error || `Upload failed: ${response.status}`);
-        }
-
-        const result = await response.json();
         console.log("blobPutData: ✓ Upload complete!", result.url);
         updateUploadStatus(`✓ Uploaded: ${filename}`, 'success');
         return result;
@@ -1847,8 +1856,8 @@ async function ghPutData(rawSessionData) {
 // ===== Cloud Upload Storage & Event Handlers =====
 // Load upload settings from localStorage
 try {
-    // Load blob secret
-    const s = localStorage.getItem("simcap_upload_secret");
+    // Load blob secret - use the module's getter for consistency
+    const s = getUploadSecret();
     if (s) {
         blobSecret = s;
         const blobSecretInput = document.getElementById('blobSecret');
@@ -1897,12 +1906,12 @@ if (uploadMethodSelect) {
     });
 }
 
-// Blob secret input
+// Blob secret input - use the module's setter for consistency
 const blobSecretInput = document.getElementById('blobSecret');
 if (blobSecretInput) {
     blobSecretInput.addEventListener('change', function(e) {
         blobSecret = e.target.value;
-        localStorage.setItem("simcap_upload_secret", blobSecret);
+        setUploadSecret(blobSecret);  // Use module function
         console.log("Blob secret updated");
     });
 }

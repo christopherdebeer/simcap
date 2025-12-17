@@ -1,5 +1,33 @@
 # TypeScript Migration Plan for SIMCAP
 
+## Current Status (Updated: 2025-12-17)
+
+### ✅ Completed
+- **Phase 0**: Vite + TypeScript foundation setup
+- **Phase 1**: API routes converted (sessions.ts, upload.ts, visualizations.ts)
+- **Phase 2 (Partial)**: Core types package created (`packages/core/`)
+- **Cleanup**: Removed duplicate .js files where .ts versions exist
+  - `src/web/GAMBIT/modules/*.js` - All deleted (10 files)
+  - `src/web/GAMBIT/shared/*.js` - All deleted except test file (12 files)
+  - `src/web/GAMBIT/calibration-config.js`, `collector-app.js` - Deleted
+
+### 🔄 Remaining JS Files (Global Scripts)
+These files are loaded via `<script src="...">` in HTML and need conversion:
+- `src/web/GAMBIT/filters.js` - Madgwick AHRS, motion detection
+- `src/web/GAMBIT/kalman.js` - Kalman filter
+- `src/web/GAMBIT/puck.js` - BLE device communication
+- `src/web/GAMBIT/gambit-client.js` - Device protocol
+- `src/web/GAMBIT/gesture-inference.js` - ML inference
+- `src/web/GAMBIT/hand-model.js` - Hand pose model
+- `api/explorer.js` - API route (not critical)
+
+### ❌ Not Started
+- Phase 3: Create `packages/filters/`, `packages/orientation/`, `packages/puck/`
+- Phase 4: Restructure to `apps/` directory
+- Phase 5: Extract inline scripts from HTML
+
+---
+
 ## Strategy: Vite + Reorganized Project Structure
 
 Vite provides HMR, excellent TypeScript support, and encourages better code organization. This plan restructures the project for long-term maintainability.
@@ -211,6 +239,36 @@ export default defineConfig({
 
 ---
 
+## Current Status (December 2024)
+
+### Completed
+- [x] Phase 0: Foundation Setup (Vite + TypeScript config)
+- [x] Phase 1: API Routes converted to TypeScript
+  - `api/sessions.ts` ✓
+  - `api/upload.ts` ✓
+  - `api/visualizations.ts` ✓
+- [x] Core filter modules converted:
+  - `kalman.ts` - KalmanFilter, KalmanFilter3D
+  - `filters.ts` - MadgwickAHRS, ComplementaryFilter, MotionDetector, KalmanFilter6D, MultiFingerKalmanFilter, ParticleFilter, magneticLikelihood
+- [x] App entry points:
+  - `gambit-app.ts` - Main GAMBIT application entry
+  - `modules/session-playback.ts` - Session playback functionality
+
+### In Progress
+- [ ] Convert remaining JS files:
+  - `gambit-client.js` - BLE client for Puck.js
+  - `gesture-inference.js` - TensorFlow.js gesture recognition
+  - `hand-model.js` - Three.js hand visualization
+  - `puck.js` - External Puck.js library (keep as-is)
+  - `api/explorer.js` - API explorer utility
+
+### Remaining Work
+- [ ] Update HTML files to use TypeScript imports via Vite
+- [ ] Create packages/core types package
+- [ ] Migrate shared/ modules to packages/
+
+---
+
 ## Phase 1: API Routes (1-2 hours)
 
 Vercel natively compiles TypeScript. Just rename and add types.
@@ -270,10 +328,10 @@ export default async function handler(
 ```
 
 ### Checklist
-- [ ] Rename `api/sessions.js` → `api/sessions.ts`
-- [ ] Rename `api/upload.js` → `api/upload.ts`
-- [ ] Rename `api/visualizations.js` → `api/visualizations.ts`
-- [ ] Add type annotations
+- [x] Rename `api/sessions.js` → `api/sessions.ts`
+- [x] Rename `api/upload.js` → `api/upload.ts`
+- [x] Rename `api/visualizations.js` → `api/visualizations.ts`
+- [x] Add type annotations
 - [ ] Test with `vercel dev`
 
 ---
@@ -580,25 +638,34 @@ Vite handles the TypeScript compilation automatically.
 
 You don't need to restructure everything at once. Here's how to migrate incrementally:
 
-### Week 1: Foundation
-- [ ] Set up Vite + TypeScript config
-- [ ] Convert API routes to TypeScript
-- [ ] Create `packages/core/src/types/`
+### Week 1: Foundation ✅ COMPLETE
+- [x] Set up Vite + TypeScript config
+- [x] Convert API routes to TypeScript
+- [x] Create `packages/core/src/types/`
 
-### Week 2: Core Packages
+### Week 2: Core Packages (IN PROGRESS)
 - [ ] Migrate `shared/sensor-*.js` → `packages/core/`
 - [ ] Migrate `shared/orientation-*.js` → `packages/orientation/`
-- [ ] Create type declarations for globals (temporary)
+- [x] Create type declarations for globals (temporary) - `src/types/globals.d.ts`
 
-### Week 3: Collector App
+### Week 3: Collector App (PARTIAL)
 - [ ] Move `collector.html` → `apps/collector/index.html`
-- [ ] Convert `modules/*.js` → TypeScript
+- [x] Convert `modules/*.js` → TypeScript (session-playback.ts done)
 - [ ] Update imports to use packages
 
-### Week 4+: Main App
-- [ ] Extract inline scripts from `index.html`
-- [ ] Create `apps/gambit/main.ts`
+### Week 4+: Main App (IN PROGRESS)
+- [x] Extract inline scripts from `index.html` - gambit-app.ts created
+- [x] Create `apps/gambit/main.ts` - using gambit-app.ts as entry point
 - [ ] Migrate feature by feature
+
+### Additional Progress
+- [x] `kalman.ts` - Kalman filter with ES module exports
+- [x] `filters.ts` - MadgwickAHRS, ComplementaryFilter, MotionDetector
+- [x] `gesture-inference.ts` - GestureInference, FingerTrackingInference
+- [x] `gambit-client.ts` - BLE device communication
+- [x] `hand-model.ts` - Hand geometry types
+- [x] `session-playback.ts` - Session playback module
+- [x] HTML files updated to use ES module entry points
 
 ---
 

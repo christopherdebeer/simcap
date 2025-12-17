@@ -12,12 +12,8 @@
         <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
         <script>if (typeof eruda !== 'undefined') eruda.init();</script>
         <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
-        <!-- Load non-module scripts first (they define globals) -->
+        <!-- External BLE library (non-module) -->
         <script src="puck.js"></script>
-        <script src="gambit-client.js"></script>
-        <script src="kalman.js"></script>
-        <script src="filters.js"></script>
-        <script src="gesture-inference.js"></script>
         <!-- Three.js for skeletal hand visualization -->
         <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
         <style>

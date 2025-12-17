@@ -9,6 +9,10 @@
 
 import type { Vector3, Quaternion } from '@core/types';
 
+// Import filter classes from TypeScript modules
+import { MadgwickAHRS, MotionDetector } from '../filters';
+import { KalmanFilter, KalmanFilter3D } from '../kalman';
+
 // ===== Sensor Scale Constants =====
 
 /** Accelerometer scale factor: LSB per g (LSM6DS3 at ±2g range) */
@@ -46,8 +50,10 @@ export interface MadgwickOptions {
 }
 
 export interface KalmanFilter3DOptions {
-  processNoise?: number;
-  measurementNoise?: number;
+  /** Process noise (R) */
+  R?: number;
+  /** Measurement noise (Q) */
+  Q?: number;
 }
 
 export interface MotionDetectorOptions {
@@ -107,8 +113,6 @@ export function convertGyroToDps(raw: GyroRaw): GyroRaw {
 
 /**
  * Create a MadgwickAHRS instance with standard GAMBIT configuration
- *
- * @throws Error if MadgwickAHRS global is not available
  */
 export function createMadgwickAHRS(options: MadgwickOptions = {}): MadgwickAHRS {
   const config = {
@@ -116,35 +120,23 @@ export function createMadgwickAHRS(options: MadgwickOptions = {}): MadgwickAHRS 
     beta: options.beta || 0.05
   };
 
-  if (typeof MadgwickAHRS === 'undefined') {
-    throw new Error('MadgwickAHRS not found. Ensure filters.js is loaded.');
-  }
-
   return new MadgwickAHRS(config);
 }
 
 /**
  * Create a KalmanFilter3D instance with standard GAMBIT configuration
- *
- * @throws Error if KalmanFilter3D global is not available
  */
 export function createKalmanFilter3D(options: KalmanFilter3DOptions = {}): KalmanFilter3D {
   const config = {
-    processNoise: options.processNoise || 0.1,
-    measurementNoise: options.measurementNoise || 1.0
+    R: options.R ?? 0.1,
+    Q: options.Q ?? 1.0
   };
-
-  if (typeof KalmanFilter3D === 'undefined') {
-    throw new Error('KalmanFilter3D not found. Ensure filters.js is loaded.');
-  }
 
   return new KalmanFilter3D(config);
 }
 
 /**
  * Create a MotionDetector instance with standard GAMBIT configuration
- *
- * @throws Error if MotionDetector global is not available
  */
 export function createMotionDetector(options: MotionDetectorOptions = {}): MotionDetector {
   const config = {
@@ -153,27 +145,17 @@ export function createMotionDetector(options: MotionDetectorOptions = {}): Motio
     windowSize: options.windowSize || 10
   };
 
-  if (typeof MotionDetector === 'undefined') {
-    throw new Error('MotionDetector not found. Ensure filters.js is loaded.');
-  }
-
   return new MotionDetector(config);
 }
 
 /**
  * Create a 1D KalmanFilter instance for single-axis filtering
- *
- * @throws Error if KalmanFilter global is not available
  */
 export function createKalmanFilter1D(options: KalmanFilter1DOptions = {}): KalmanFilter {
   const config = {
     R: options.R || 0.01,
     Q: options.Q || 3
   };
-
-  if (typeof KalmanFilter === 'undefined') {
-    throw new Error('KalmanFilter not found. Ensure kalman.js is loaded.');
-  }
 
   return new KalmanFilter(config);
 }
