@@ -52,6 +52,9 @@ declare const Puck: {
   LED1: { write: (value: boolean) => void };
   LED2: { write: (value: boolean) => void };
   LED3: { write: (value: boolean) => void };
+
+  // Optional logging function (set dynamically)
+  log?: (level: number, message: string) => void;
 };
 
 // ===== Three.js (loaded via CDN) =====
