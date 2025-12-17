@@ -1,0 +1,1657 @@
+/**
+ * GAMBIT Collector Application
+ * Main entry point that coordinates all modules
+ */
+
+import { state, resetSession, GambitClient } from './modules/state.js';
+import { initLogger, log } from './modules/logger.js';
+import {
+    initCalibration,
+    updateCalibrationStatus,
+    initCalibrationUI,
+    calibrationInstance,
+    setStoreSessionCallback as setCalibrationSessionCallback,
+    CalibrationResult,
+    CalibrationSample
+} from './modules/calibration-ui.js';
+import { onTelemetry, setDependencies as setTelemetryDeps, resetIMU, getProcessor } from './modules/telemetry-handler.js';
+import { setCallbacks as setConnectionCallbacks, initConnectionUI } from './modules/connection-manager.js';
+import { setCallbacks as setRecordingCallbacks, initRecordingUI, startRecording, pauseRecording, resumeRecording } from './modules/recording-controls.js';
+import {
+    initWizard,
+    setDependencies as setWizardDeps,
+    getWizardState,
+    getCalibrationBuffers
+} from './modules/wizard.js';
+import { MagneticTrajectory } from './modules/magnetic-trajectory.js';
+import { ThreeJSHandSkeleton } from './shared/threejs-hand-skeleton.js';
+import {
+    getBrowserLocation,
+    getDefaultLocation,
+    exportLocationMetadata,
+    formatLocation,
+    formatFieldData,
+    GeomagneticLocation
+} from './shared/geomagnetic-field.js';
+import { uploadToGitHubLFS } from './shared/github-lfs-upload.js';
+import {
+    uploadSessionWithRetry,
+    getUploadSecret,
+    setUploadSecret,
+    hasUploadSecret
+} from './shared/blob-upload.js';
+
+// ===== Type Definitions =====
+
+interface PoseState {
+    enabled: boolean;
+    currentPose: FingerStates | null;
+    confidence: number;
+    updateCount: number;
+    orientation?: EulerAngles | null;
+}
+
+interface FingerStates {
+    thumb: number;
+    index: number;
+    middle: number;
+    ring: number;
+    pinky: number;
+}
+
+interface EulerAngles {
+    roll: number;
+    pitch: number;
+    yaw: number;
+}
+
+interface PoseEstimationOptions {
+    useCalibration: boolean;
+    useFiltering: boolean;
+    useOrientation: boolean;
+    show3DOrientation: boolean;
+    useParticleFilter: boolean;
+    useMLInference: boolean;
+    enableHandOrientation: boolean;
+    smoothHandOrientation: boolean;
+    handOrientationAlpha: number;
+}
+
+interface PoseUpdateData {
+    magField: { x: number; y: number; z: number };
+    orientation: { w: number; x: number; y: number; z: number } | null;
+    euler: EulerAngles | null;
+    sample: Record<string, any>;
+}
+
+interface ExportData {
+    version: string;
+    timestamp: string;
+    samples: any[];
+    labels: any[];
+    metadata: Record<string, any>;
+}
+
+// ===== Window Augmentation =====
+
+declare global {
+    interface Window {
+        appState: typeof state;
+        log: typeof log;
+        updateUI: typeof updateUI;
+        addCustomLabel: typeof addCustomLabel;
+        addPresetLabels: typeof addPresetLabels;
+        removeActiveLabel: typeof removeActiveLabel;
+        clearFingerStates: typeof clearFingerStates;
+        removeCustomLabel: typeof removeCustomLabel;
+        toggleCustomLabel: typeof toggleCustomLabel;
+        deleteCustomLabelDef: typeof deleteCustomLabelDef;
+        deleteLabel: (index: number) => void;
+        setHandPreviewMode: typeof setHandPreviewMode;
+        togglePoseOption: typeof togglePoseOption;
+        updateHandOrientationAlpha: typeof updateHandOrientationAlpha;
+        getCurrentOrientation: () => { w: number; x: number; y: number; z: number } | null;
+    }
+}
+
+// Export state for global access (used by inline functions in HTML)
+window.appState = state;
+window.log = log;
+
+// Export function to get current orientation (for calibration)
+window.getCurrentOrientation = () => {
+    if (typeof imuFusion !== 'undefined' && imuFusion) {
+        return imuFusion.getQuaternion();
+    }
+    return null;
+};
+
+// DOM helper
+const $ = (id: string): HTMLElement | null => document.getElementById(id);
+
+// Initialize filters and fusion
+const magFilter = new KalmanFilter3D({
+    processNoise: 0.1,
+    measurementNoise: 1.0
+});
+
+// NOTE: With stable sensor data (Puck.accelOn fix in firmware v0.3.6),
+// we can use standard AHRS parameters instead of jitter-compensating values
+const imuFusion = new MadgwickAHRS({
+    sampleFreq: 26,  // Match firmware accelOn rate (26Hz, not 50Hz)
+    beta: 0.05       // Standard Madgwick gain (was 0.02 for jittery data)
+});
+
+// Pose estimation state
+const poseState: PoseState = {
+    enabled: false,
+    currentPose: null,
+    confidence: 0,
+    updateCount: 0
+};
+
+// Hand visualization
+let threeHandSkeleton: ThreeJSHandSkeleton | null = null;
+let handPreviewMode: 'labels' | 'predictions' = 'labels';
+
+// Magnetic trajectory visualization
+let magTrajectory: MagneticTrajectory | null = null;
+let magTrajectoryPaused = false;
+
+// Pose estimation options
+const poseEstimationOptions: PoseEstimationOptions = {
+    useCalibration: true,
+    useFiltering: true,
+    useOrientation: true,
+    show3DOrientation: false,
+    useParticleFilter: false,
+    useMLInference: false,
+    enableHandOrientation: true,
+    smoothHandOrientation: true,
+    handOrientationAlpha: 0.1
+};
+
+// ML Finger tracking inference
+let fingerTrackingInference: any = null;
+let mlModelLoaded = false;
+
+// GitHub token (for upload functionality)
+let ghToken: string | null = null;
+
+// Upload method: 'blob' (Vercel Blob) or 'github' (GitHub LFS)
+let uploadMethod: 'blob' | 'github' = 'blob';
+
+// Live calibration UI update interval
+let calibrationUIInterval: ReturnType<typeof setInterval> | null = null;
+const CALIBRATION_UI_UPDATE_INTERVAL = 500;
+
+/**
+ * Update calibration confidence UI
+ */
+function updateCalibrationConfidenceUI(): void {
+    const processor = getProcessor();
+    if (!processor) return;
+
+    const magCal = processor.getMagCalibration();
+    if (!magCal) return;
+
+    const calState = magCal.getState();
+
+    const overall = Math.round(calState.confidence * 100);
+    const meanResidual = calState.meanResidual;
+    const earthMag = calState.earthMagnitude;
+    const totalSamples = calState.totalSamples;
+
+    const overallEl = $('overallConfidence');
+    const hardIronEl = $('hardIronConf');
+    const earthFieldEl = $('earthFieldConf');
+    const samplesEl = $('calibSamples');
+    const fieldMagEl = $('earthFieldMag');
+    const statusEl = $('calibStatus');
+    const barEl = $('confidenceBar');
+    const meanResidualEl = $('meanResidual');
+    const residualQualityEl = $('residualQuality');
+
+    if (overallEl) overallEl.textContent = `${overall}%`;
+    if (hardIronEl) hardIronEl.textContent = calState.hardIronCalibrated ? '✓' : '--';
+    if (earthFieldEl) earthFieldEl.textContent = calState.ready ? '✓ Auto' : 'Building...';
+    if (samplesEl) samplesEl.textContent = totalSamples.toString();
+
+    if (fieldMagEl) {
+        fieldMagEl.textContent = earthMag > 0 ? `${earthMag.toFixed(1)} µT` : '-- µT';
+    }
+
+    if (meanResidualEl) {
+        if (meanResidual !== undefined && meanResidual !== Infinity && !isNaN(meanResidual)) {
+            meanResidualEl.textContent = `${meanResidual.toFixed(1)} µT`;
+            if (meanResidual < 5) {
+                meanResidualEl.style.color = 'var(--success)';
+            } else if (meanResidual < 10) {
+                meanResidualEl.style.color = 'var(--warning)';
+            } else {
+                meanResidualEl.style.color = 'var(--danger)';
+            }
+        } else {
+            meanResidualEl.textContent = '-- µT';
+            meanResidualEl.style.color = 'var(--fg-muted)';
+        }
+    }
+
+    if (residualQualityEl) {
+        let interpretation = '--';
+        if (meanResidual !== undefined && meanResidual !== Infinity && !isNaN(meanResidual)) {
+            interpretation = meanResidual < 5 ? 'excellent' :
+                            meanResidual < 10 ? 'good' :
+                            meanResidual < 15 ? 'moderate' : 'poor';
+        }
+        residualQualityEl.textContent = interpretation.toUpperCase();
+        if (interpretation === 'excellent') {
+            residualQualityEl.style.color = 'var(--success)';
+        } else if (interpretation === 'good') {
+            residualQualityEl.style.color = '#8bc34a';
+        } else if (interpretation === 'moderate') {
+            residualQualityEl.style.color = 'var(--warning)';
+        } else {
+            residualQualityEl.style.color = 'var(--danger)';
+        }
+    }
+
+    if (barEl) {
+        (barEl as HTMLElement).style.width = `${overall}%`;
+        if (overall >= 70) {
+            (barEl as HTMLElement).style.background = 'var(--success)';
+        } else if (overall >= 40) {
+            (barEl as HTMLElement).style.background = 'var(--warning)';
+        } else {
+            (barEl as HTMLElement).style.background = 'var(--danger)';
+        }
+    }
+
+    if (statusEl) {
+        const status: string[] = [];
+        if (meanResidual !== undefined && meanResidual !== Infinity && !isNaN(meanResidual)) {
+            if (meanResidual < 5) {
+                status.push('✓ Excellent calibration');
+            } else if (meanResidual < 10) {
+                status.push('Good calibration');
+            } else if (meanResidual < 15) {
+                status.push('Moderate - keep rotating');
+            } else {
+                status.push('Poor - rotate more');
+            }
+        } else if (totalSamples < 50) {
+            status.push('Collecting samples...');
+        } else if (!calState.ready) {
+            status.push('Building Earth field estimate...');
+        } else {
+            status.push('Calibrated (auto)');
+        }
+        statusEl.textContent = status.join(' | ');
+    }
+
+    if (overallEl) {
+        if (overall >= 70) {
+            overallEl.style.color = 'var(--success)';
+        } else if (overall >= 40) {
+            overallEl.style.color = 'var(--warning)';
+        } else {
+            overallEl.style.color = 'var(--danger)';
+        }
+    }
+}
+
+/**
+ * Update magnet detection UI display
+ */
+function updateMagnetDetectionUI(): void {
+    const processor = getProcessor();
+    if (!processor) return;
+
+    const magnetState = processor.getMagnetState();
+    if (!magnetState) return;
+
+    const statusEl = $('magnetStatusValue');
+    const confEl = $('magnetConfidenceValue');
+    const barEl = $('magnetConfidenceBar');
+    const residualEl = $('magnetAvgResidual');
+
+    type MagnetStatus = 'none' | 'possible' | 'likely' | 'confirmed';
+    const status = magnetState.status as MagnetStatus;
+
+    if (statusEl) {
+        const icons: Record<MagnetStatus, string> = { none: '○', possible: '◐', likely: '◑', confirmed: '🧲' };
+        const labels: Record<MagnetStatus, string> = { none: 'No Magnets', possible: 'Possible', likely: 'Likely', confirmed: 'Confirmed' };
+        const colors: Record<MagnetStatus, string> = { none: 'var(--fg-muted)', possible: 'var(--warning)', likely: '#5bc0de', confirmed: 'var(--success)' };
+
+        statusEl.textContent = `${icons[status] || '?'} ${labels[status] || '--'}`;
+        statusEl.style.color = colors[status] || 'var(--fg-muted)';
+    }
+
+    const confPct = Math.round(magnetState.confidence * 100);
+    if (confEl) confEl.textContent = `${confPct}%`;
+
+    if (barEl) {
+        const colors: Record<MagnetStatus, string> = { none: 'var(--fg-muted)', possible: 'var(--warning)', likely: '#5bc0de', confirmed: 'var(--success)' };
+        (barEl as HTMLElement).style.width = `${confPct}%`;
+        (barEl as HTMLElement).style.background = colors[status] || 'var(--fg-muted)';
+    }
+
+    if (residualEl) {
+        residualEl.textContent = magnetState.avgResidual > 0 ?
+            `${magnetState.avgResidual.toFixed(1)} µT` : '-- µT';
+    }
+}
+
+/**
+ * Start periodic calibration UI updates
+ */
+function startCalibrationUIUpdates(): void {
+    if (calibrationUIInterval) return;
+
+    calibrationUIInterval = setInterval(() => {
+        updateCalibrationConfidenceUI();
+        updateMagnetDetectionUI();
+    }, CALIBRATION_UI_UPDATE_INTERVAL);
+
+    console.log('[GAMBIT Collector] Started calibration UI updates');
+}
+
+/**
+ * Stop periodic calibration UI updates
+ */
+function stopCalibrationUIUpdates(): void {
+    if (calibrationUIInterval) {
+        clearInterval(calibrationUIInterval);
+        calibrationUIInterval = null;
+        console.log('[GAMBIT Collector] Stopped calibration UI updates');
+    }
+}
+
+/**
+ * Initialize application
+ */
+async function init(): Promise<void> {
+    console.log('[GAMBIT Collector] Initializing...');
+
+    initLogger($('log') as HTMLElement);
+
+    const calInstance = initCalibration();
+
+    setWizardDeps({
+        state: state,
+        startRecording: startRecording,
+        $: $,
+        log: log
+    });
+
+    setTelemetryDeps({
+        calibrationInstance: calInstance,
+        wizard: getWizardState(),
+        calibrationBuffers: getCalibrationBuffers(),
+        poseState: poseState,
+        threeHandSkeleton: () => threeHandSkeleton,
+        updatePoseEstimation: updatePoseEstimationFromMag,
+        updateUI: updateUI,
+        updateMagTrajectory: updateMagneticTrajectoryFromTelemetry,
+        $: $
+    });
+
+    setConnectionCallbacks(updateUI, updateCalibrationStatus, startCalibrationUIUpdates, stopCalibrationUIUpdates);
+    setRecordingCallbacks(updateUI, closeCurrentLabel);
+
+    initConnectionUI($('connectBtn') as HTMLButtonElement);
+    initRecordingUI({
+        start: $('startBtn') as HTMLButtonElement,
+        pause: $('pauseBtn') as HTMLButtonElement,
+        stop: $('stopBtn') as HTMLButtonElement,
+        clear: $('clearBtn') as HTMLButtonElement
+    });
+    initCalibrationUI();
+
+    setCalibrationSessionCallback(storeCalibrationSessionData);
+
+    initLabelManagement();
+    initExport();
+    initPoseEstimation();
+    initWizard();
+    initHandVisualization();
+    initMagneticTrajectory();
+    initCollapsibleSections();
+    loadCustomLabels();
+
+    // Load GitHub token
+    try {
+        ghToken = localStorage.getItem('gh_token');
+        const tokenInput = $('ghToken') as HTMLInputElement | null;
+        if (ghToken) {
+            log('GitHub token loaded');
+            if (tokenInput) {
+                tokenInput.value = ghToken;
+            }
+        }
+        if (tokenInput) {
+            tokenInput.addEventListener('change', (e) => {
+                ghToken = (e.target as HTMLInputElement).value;
+                if (ghToken) {
+                    localStorage.setItem('gh_token', ghToken);
+                    log('GitHub token saved');
+                } else {
+                    localStorage.removeItem('gh_token');
+                    log('GitHub token cleared');
+                }
+                updateUI();
+            });
+        }
+    } catch (e) {
+        console.warn('Failed to load GitHub token:', e);
+    }
+
+    // Initialize blob upload secret
+    try {
+        const blobSecretInput = $('blobSecret') as HTMLInputElement | null;
+        if (hasUploadSecret()) {
+            log('Blob upload secret loaded');
+            if (blobSecretInput) {
+                blobSecretInput.value = '••••••••';
+            }
+        }
+        if (blobSecretInput) {
+            blobSecretInput.addEventListener('change', (e) => {
+                const secret = (e.target as HTMLInputElement).value;
+                if (secret && secret !== '••••••••') {
+                    setUploadSecret(secret);
+                    (e.target as HTMLInputElement).value = '••••••••';
+                    log('Blob upload secret saved');
+                } else if (!secret) {
+                    setUploadSecret(null);
+                    log('Blob upload secret cleared');
+                }
+                updateUI();
+            });
+        }
+
+        const uploadMethodSelect = $('uploadMethod') as HTMLSelectElement | null;
+        if (uploadMethodSelect) {
+            uploadMethodSelect.value = uploadMethod;
+            uploadMethodSelect.addEventListener('change', (e) => {
+                uploadMethod = (e.target as HTMLSelectElement).value as 'blob' | 'github';
+                log(`Upload method: ${uploadMethod === 'blob' ? 'Vercel Blob' : 'GitHub LFS'}`);
+                updateUI();
+            });
+        }
+    } catch (e) {
+        console.warn('Failed to initialize blob upload:', e);
+    }
+
+    await initGeomagneticLocation();
+
+    updateUI();
+    updateCalibrationStatus();
+
+    log('GAMBIT Collector ready');
+}
+
+/**
+ * Initialize geomagnetic location
+ */
+async function initGeomagneticLocation(): Promise<void> {
+    console.log('[GAMBIT] Initializing geomagnetic location...');
+    log('Detecting geomagnetic location...');
+
+    try {
+        const location = await getBrowserLocation();
+        state.geomagneticLocation = location.selected;
+
+        const locationStr = formatLocation(location.selected);
+        const fieldStr = `${location.selected.intensity.toFixed(1)} µT`;
+        const declStr = `${location.selected.declination.toFixed(1)}°`;
+
+        console.log(`[GAMBIT] ✓ Location detected: ${locationStr}`);
+        console.log(`[GAMBIT] Magnetic field: ${fieldStr}, Declination: ${declStr}`);
+
+        log(`Location: ${locationStr} (auto-detected, ±${location.accuracy.toFixed(0)}m)`);
+        log(`Magnetic field: ${fieldStr}, Declination: ${declStr}`);
+    } catch (error) {
+        state.geomagneticLocation = getDefaultLocation();
+
+        const locationStr = formatLocation(state.geomagneticLocation!);
+        console.warn('[GAMBIT] Geolocation failed, using default:', (error as Error).message);
+
+        log(`Location: ${locationStr} (default - ${(error as Error).message})`);
+        log(`Magnetic field: ${state.geomagneticLocation!.intensity.toFixed(1)} µT, Declination: ${state.geomagneticLocation!.declination.toFixed(1)}°`);
+    }
+}
+
+/**
+ * Update UI state
+ */
+function updateUI(): void {
+    const statusIndicator = $('statusIndicator');
+    const connectBtn = $('connectBtn');
+    const startBtn = $('startBtn') as HTMLButtonElement | null;
+    const stopBtn = $('stopBtn') as HTMLButtonElement | null;
+    const clearBtn = $('clearBtn') as HTMLButtonElement | null;
+    const exportBtn = $('exportBtn') as HTMLButtonElement | null;
+    const sampleCount = $('sampleCount');
+    const progressFill = $('progressFill');
+    const labelCount = $('labelCount');
+    const labelsList = $('labelsList');
+
+    if (statusIndicator) {
+        if (state.recording && state.paused) {
+            statusIndicator.className = 'status connected';
+            statusIndicator.textContent = 'Paused';
+        } else if (state.recording) {
+            statusIndicator.className = 'status recording';
+            statusIndicator.textContent = 'Recording...';
+        } else if (state.connected) {
+            statusIndicator.className = 'status connected';
+            statusIndicator.textContent = 'Connected';
+        } else {
+            statusIndicator.className = 'status disconnected';
+            statusIndicator.textContent = 'Disconnected';
+        }
+    }
+
+    if (connectBtn) connectBtn.textContent = state.connected ? 'Disconnect' : 'Connect Device';
+    if (startBtn) startBtn.disabled = !state.connected || state.recording;
+
+    const pauseBtn = $('pauseBtn') as HTMLButtonElement | null;
+    if (pauseBtn) {
+        pauseBtn.disabled = !state.recording;
+        pauseBtn.textContent = state.paused ? 'Resume' : 'Pause';
+        pauseBtn.className = state.paused ? 'btn-success' : 'btn-warning';
+    }
+
+    if (stopBtn) stopBtn.disabled = !state.recording;
+    if (clearBtn) clearBtn.disabled = state.sessionData.length === 0 || state.recording;
+    if (exportBtn) exportBtn.disabled = state.sessionData.length === 0 || state.recording;
+
+    const uploadBtn = $('uploadBtn') as HTMLButtonElement | null;
+    if (uploadBtn) {
+        const hasAuth = uploadMethod === 'blob' ? hasUploadSecret() : !!ghToken;
+        uploadBtn.disabled = state.sessionData.length === 0 || state.recording || !hasAuth;
+        uploadBtn.title = hasAuth ? 'Upload session data' : `Configure ${uploadMethod === 'blob' ? 'upload secret' : 'GitHub token'} first`;
+    }
+
+    const wizardBtn = $('wizardBtn') as HTMLButtonElement | null;
+    if (wizardBtn) {
+        wizardBtn.disabled = !state.connected;
+        wizardBtn.title = state.connected ? 'Start guided data collection' : 'Connect device to enable';
+    }
+
+    const poseEstimationBtn = $('poseEstimationBtn') as HTMLButtonElement | null;
+    if (poseEstimationBtn) {
+        poseEstimationBtn.disabled = !state.connected;
+        poseEstimationBtn.textContent = poseState.enabled ? '🎯 Disable Pose Tracking' : '🎯 Enable Pose Tracking';
+        poseEstimationBtn.title = state.connected
+            ? (poseState.enabled ? 'Disable similarity-based pose tracking' : 'Enable similarity-based pose tracking')
+            : 'Connect device to enable';
+    }
+
+    if (sampleCount) sampleCount.textContent = state.sessionData.length.toString();
+    if (progressFill) {
+        (progressFill as HTMLElement).style.width = Math.min(100, state.sessionData.length / 15) + '%';
+    }
+
+    if (labelCount) labelCount.textContent = state.labels.length.toString();
+    if (labelsList) {
+        if (state.labels.length === 0) {
+            labelsList.innerHTML = '<div style="color: #666; text-align: center; padding: 10px;">No labels yet.</div>';
+        } else {
+            labelsList.innerHTML = state.labels.map((l: any, i: number) => {
+                const duration = ((l.end_sample - l.start_sample) / 50).toFixed(1);
+                const tags: string[] = [];
+
+                if (l.labels.pose) {
+                    tags.push(`<span class="label-tag pose">${l.labels.pose}</span>`);
+                }
+                if (l.labels.fingers) {
+                    const fs = ['thumb', 'index', 'middle', 'ring', 'pinky']
+                        .map(f => {
+                            const s = l.labels.fingers[f];
+                            if (s === 'extended') return '0';
+                            if (s === 'partial') return '1';
+                            if (s === 'flexed') return '2';
+                            return '?';
+                        }).join('');
+                    if (fs !== '?????') {
+                        tags.push(`<span class="label-tag finger">${fs}</span>`);
+                    }
+                }
+                if (l.labels.calibration && l.labels.calibration !== 'none') {
+                    tags.push(`<span class="label-tag calibration">${l.labels.calibration}</span>`);
+                }
+                (l.labels.custom || []).forEach((c: string) => {
+                    tags.push(`<span class="label-tag custom">${c}</span>`);
+                });
+
+                return `
+                    <div class="label-item">
+                        <span class="time-range">${l.start_sample}-${l.end_sample} (${duration}s)</span>
+                        <div class="label-tags">${tags.join('')}</div>
+                        <button class="btn-danger btn-tiny" onclick="window.deleteLabel(${i})">×</button>
+                    </div>
+                `;
+            }).join('');
+        }
+    }
+
+    updateActiveLabelsDisplay();
+}
+
+/**
+ * Update active labels display
+ */
+function updateActiveLabelsDisplay(): void {
+    const display = $('activeLabelsDisplay');
+    if (!display) return;
+
+    const tags: string[] = [];
+
+    if (state.currentLabels.pose) {
+        tags.push(`<span class="active-label-chip label-type-pose" onclick="removeActiveLabel('pose')" style="cursor: pointer;" title="Click to remove">${state.currentLabels.pose} ×</span>`);
+    }
+
+    const fingerStates = ['thumb', 'index', 'middle', 'ring', 'pinky']
+        .map(f => {
+            const s = (state.currentLabels.fingers as any)[f];
+            if (s === 'extended') return '0';
+            if (s === 'partial') return '1';
+            if (s === 'flexed') return '2';
+            return '?';
+        }).join('');
+    if (fingerStates !== '?????') {
+        tags.push(`<span class="active-label-chip label-type-finger" onclick="clearFingerStates()" style="cursor: pointer;" title="Click to clear">fingers:${fingerStates} ×</span>`);
+    }
+
+    if (state.currentLabels.motion !== 'static') {
+        tags.push(`<span class="active-label-chip label-type-motion" onclick="removeActiveLabel('motion')" style="cursor: pointer;" title="Click to remove">motion:${state.currentLabels.motion} ×</span>`);
+    }
+
+    if (state.currentLabels.calibration !== 'none') {
+        tags.push(`<span class="active-label-chip label-type-calibration" onclick="removeActiveLabel('calibration')" style="cursor: pointer;" title="Click to remove">calibration:${state.currentLabels.calibration} ×</span>`);
+    }
+
+    (state.currentLabels.custom || []).forEach((c: string) => {
+        tags.push(`<span class="active-label-chip label-type-custom" onclick="removeCustomLabel('${c}')" style="cursor: pointer;" title="Click to remove">custom:${c} ×</span>`);
+    });
+
+    display.innerHTML = tags.length > 0 ? tags.join('') : '<span style="color: #666;">No labels active</span>';
+}
+
+/**
+ * Remove active label
+ */
+function removeActiveLabel(type: string): void {
+    if (type === 'pose') {
+        state.currentLabels.pose = null;
+        document.querySelectorAll('[data-pose]').forEach(b => b.classList.remove('active'));
+        log('Pose cleared');
+    } else if (type === 'motion') {
+        state.currentLabels.motion = 'static';
+        document.querySelectorAll('[data-motion]').forEach(b => b.classList.remove('active'));
+        document.querySelector('[data-motion="static"]')?.classList.add('active');
+        log('Motion reset to static');
+    } else if (type === 'calibration') {
+        state.currentLabels.calibration = 'none';
+        document.querySelectorAll('[data-calibration]').forEach(b => b.classList.remove('active'));
+        log('Calibration cleared');
+    }
+    onLabelsChanged();
+}
+
+/**
+ * Clear all finger states
+ */
+function clearFingerStates(): void {
+    state.currentLabels.fingers = {
+        thumb: 'unknown',
+        index: 'unknown',
+        middle: 'unknown',
+        ring: 'unknown',
+        pinky: 'unknown'
+    };
+    document.querySelectorAll('.finger-state-btn').forEach(b => b.classList.remove('active'));
+    log('Finger states cleared');
+    onLabelsChanged();
+}
+
+/**
+ * Remove custom label
+ */
+function removeCustomLabel(label: string): void {
+    const index = state.currentLabels.custom.indexOf(label);
+    if (index !== -1) {
+        state.currentLabels.custom.splice(index, 1);
+        log(`Custom label deactivated: ${label}`);
+        onLabelsChanged();
+        renderCustomLabels();
+    }
+}
+
+/**
+ * Close current label segment
+ */
+function closeCurrentLabel(): void {
+    if (state.currentLabelStart !== null && state.sessionData.length > state.currentLabelStart) {
+        const segment = {
+            startIndex: state.currentLabelStart,
+            endIndex: state.sessionData.length - 1,
+            pose: state.currentLabels.pose ?? undefined,
+            fingers: state.currentLabels.fingers,
+            motion: state.currentLabels.motion,
+            calibration: state.currentLabels.calibration,
+            custom: [...state.currentLabels.custom]
+        };
+        state.labels.push(segment);
+        log(`Label segment: ${state.currentLabelStart} - ${segment.endIndex}`);
+    }
+    state.currentLabelStart = state.sessionData.length;
+}
+
+/**
+ * Initialize label management
+ */
+function initLabelManagement(): void {
+    document.querySelectorAll('[data-pose]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const pose = (btn as HTMLElement).dataset.pose!;
+            if (state.currentLabels.pose === pose) {
+                state.currentLabels.pose = null;
+            } else {
+                state.currentLabels.pose = pose;
+            }
+            document.querySelectorAll('[data-pose]').forEach(b => b.classList.remove('active'));
+            if (state.currentLabels.pose) {
+                btn.classList.add('active');
+            }
+            onLabelsChanged();
+            log(`Pose: ${state.currentLabels.pose || 'none'}`);
+        });
+    });
+
+    document.querySelectorAll('.finger-state-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const finger = (btn as HTMLElement).dataset.finger!;
+            const newState = (btn as HTMLElement).dataset.state!;
+            (state.currentLabels.fingers as any)[finger] = newState;
+            updateFingerButtons(finger);
+            onLabelsChanged();
+        });
+    });
+
+    document.querySelectorAll('[data-motion]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const motion = (btn as HTMLElement).dataset.motion!;
+            state.currentLabels.motion = motion as 'static' | 'dynamic';
+            document.querySelectorAll('[data-motion]').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            onLabelsChanged();
+            log(`Motion: ${motion}`);
+        });
+    });
+
+    document.querySelectorAll('[data-calibration]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const cal = (btn as HTMLElement).dataset.calibration!;
+            state.currentLabels.calibration = cal as 'none' | 'mag' | 'gyro';
+            document.querySelectorAll('[data-calibration]').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            onLabelsChanged();
+            log(`Calibration: ${cal}`);
+        });
+    });
+
+    const customLabelInput = $('customLabelInput') as HTMLInputElement | null;
+    if (customLabelInput) {
+        customLabelInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                addCustomLabel();
+            }
+        });
+    }
+
+    window.deleteLabel = (index: number) => {
+        if (confirm('Delete this label segment?')) {
+            state.labels.splice(index, 1);
+            log(`Label segment ${index} deleted`);
+            updateUI();
+        }
+    };
+}
+
+/**
+ * Update finger state buttons
+ */
+function updateFingerButtons(finger: string): void {
+    const currentState = (state.currentLabels.fingers as any)[finger];
+    document.querySelectorAll(`[data-finger="${finger}"]`).forEach(btn => {
+        btn.classList.toggle('active', (btn as HTMLElement).dataset.state === currentState);
+    });
+}
+
+/**
+ * Handle labels changed
+ */
+function onLabelsChanged(): void {
+    if (state.recording) {
+        closeCurrentLabel();
+    }
+    updateActiveLabelsDisplay();
+    updateHandVisualization();
+}
+
+/**
+ * Add custom label
+ */
+function addCustomLabel(): void {
+    const input = $('customLabelInput') as HTMLInputElement | null;
+    if (!input) return;
+
+    const value = input.value.trim();
+    if (!value) return;
+
+    if (!state.customLabelDefinitions.includes(value)) {
+        state.customLabelDefinitions.push(value);
+        saveCustomLabels();
+        renderCustomLabels();
+        log(`Custom label defined: ${value}`);
+    }
+    input.value = '';
+}
+
+/**
+ * Toggle a custom label's active state
+ */
+function toggleCustomLabel(label: string): void {
+    const index = state.currentLabels.custom.indexOf(label);
+    if (index === -1) {
+        state.currentLabels.custom.push(label);
+        log(`Custom label activated: ${label}`);
+    } else {
+        state.currentLabels.custom.splice(index, 1);
+        log(`Custom label deactivated: ${label}`);
+    }
+    onLabelsChanged();
+    renderCustomLabels();
+}
+
+/**
+ * Delete a custom label definition
+ */
+function deleteCustomLabelDef(label: string): void {
+    const defIndex = state.customLabelDefinitions.indexOf(label);
+    if (defIndex !== -1) {
+        state.customLabelDefinitions.splice(defIndex, 1);
+    }
+    const activeIndex = state.currentLabels.custom.indexOf(label);
+    if (activeIndex !== -1) {
+        state.currentLabels.custom.splice(activeIndex, 1);
+        onLabelsChanged();
+    }
+    saveCustomLabels();
+    renderCustomLabels();
+    log(`Custom label deleted: ${label}`);
+}
+
+/**
+ * Save custom labels to localStorage
+ */
+function saveCustomLabels(): void {
+    try {
+        localStorage.setItem('gambit_custom_labels', JSON.stringify(state.customLabelDefinitions));
+    } catch (e) {
+        console.error('Failed to save custom labels:', e);
+    }
+}
+
+/**
+ * Add preset labels
+ */
+function addPresetLabels(preset: string): void {
+    const presets: Record<string, string[]> = {
+        phase1: ['warmup', 'baseline', 'initial'],
+        phase2: ['calibrated', 'training', 'validation'],
+        quality: ['good', 'noisy', 'drift'],
+        transitions: ['entering', 'holding', 'exiting']
+    };
+
+    const labels = presets[preset] || [];
+    let addedCount = 0;
+    labels.forEach(label => {
+        if (!state.customLabelDefinitions.includes(label)) {
+            state.customLabelDefinitions.push(label);
+            addedCount++;
+        }
+    });
+
+    if (addedCount > 0) {
+        saveCustomLabels();
+        renderCustomLabels();
+        log(`Added ${addedCount} preset label definitions: ${labels.join(', ')}`);
+    }
+}
+
+/**
+ * Load custom labels from localStorage
+ */
+function loadCustomLabels(): void {
+    try {
+        const saved = localStorage.getItem('gambit_custom_labels');
+        if (saved) {
+            state.customLabelDefinitions = JSON.parse(saved);
+        }
+    } catch (e) {
+        console.error('Failed to load custom labels:', e);
+    }
+    renderCustomLabels();
+}
+
+/**
+ * Render custom labels
+ */
+function renderCustomLabels(): void {
+    const container = $('customLabelsList');
+    if (!container) return;
+
+    if (state.customLabelDefinitions.length === 0) {
+        container.innerHTML = '<span style="color: var(--fg-muted); font-size: 11px;">No custom labels defined</span>';
+        return;
+    }
+
+    container.innerHTML = state.customLabelDefinitions.map(label => {
+        const isActive = state.currentLabels.custom.includes(label);
+        return `
+            <div class="custom-label-tag ${isActive ? 'active' : ''}"
+                 onclick="window.toggleCustomLabel('${label}')"
+                 title="Click to ${isActive ? 'deactivate' : 'activate'}">
+                <span>${label}</span>
+                <span class="remove" onclick="event.stopPropagation(); window.deleteCustomLabelDef('${label}')" title="Delete">×</span>
+            </div>
+        `;
+    }).join('');
+}
+
+/**
+ * Initialize pose estimation
+ */
+function initPoseEstimation(): void {
+    const poseEstimationBtn = $('poseEstimationBtn');
+    if (poseEstimationBtn) {
+        poseEstimationBtn.addEventListener('click', togglePoseEstimation);
+    }
+}
+
+/**
+ * Toggle pose estimation
+ */
+function togglePoseEstimation(): void {
+    if (!state.connected) {
+        log('Error: Connect device first');
+        return;
+    }
+
+    poseState.enabled = !poseState.enabled;
+
+    if (poseState.enabled) {
+        log('Pose tracking enabled');
+        const statusSection = $('poseEstimationStatus');
+        if (statusSection) {
+            statusSection.style.display = 'block';
+        }
+        renderPoseEstimationOptions();
+        updatePoseEstimationDisplay();
+    } else {
+        log('Pose tracking disabled');
+        const statusSection = $('poseEstimationStatus');
+        if (statusSection) {
+            statusSection.style.display = 'none';
+        }
+        poseState.currentPose = null;
+        poseState.confidence = 0;
+        poseState.updateCount = 0;
+        poseState.orientation = null;
+
+        const orientationInfo = $('handOrientationInfo');
+        if (orientationInfo) {
+            orientationInfo.style.display = 'none';
+        }
+    }
+
+    updateUI();
+}
+
+/**
+ * Render pose estimation options UI
+ */
+function renderPoseEstimationOptions(): void {
+    const statusSection = $('poseEstimationStatus');
+    if (!statusSection) return;
+
+    if ($('poseOptionsPanel')) return;
+
+    const optionsHTML = `
+        <div id="poseOptionsPanel" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);">
+            <div style="font-size: 11px; color: var(--fg-muted); margin-bottom: 8px;">Data Processing:</div>
+            <div style="display: flex; gap: 6px; font-size: 11px; margin-bottom: 12px;">
+                <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input style="flex-basis: 0;" type="checkbox" id="useCalibrationToggle" ${poseEstimationOptions.useCalibration ? 'checked' : ''}
+                           onchange="togglePoseOption('useCalibration')" />
+                    <span>Use Calibration</span>
+                </label>
+                <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input style="flex-basis: 0;" type="checkbox" id="useFilteringToggle" ${poseEstimationOptions.useFiltering ? 'checked' : ''}
+                           onchange="togglePoseOption('useFiltering')" />
+                    <span>Use Kalman Filtering</span>
+                </label>
+                <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input style="flex-basis: 0;" type="checkbox" id="useOrientationToggle" ${poseEstimationOptions.useOrientation ? 'checked' : ''}
+                           onchange="togglePoseOption('useOrientation')" />
+                    <span>Use IMU Orientation</span>
+                </label>
+            </div>
+            <div style="font-size: 11px; color: var(--fg-muted); margin-bottom: 8px;">3D Hand Orientation:</div>
+            <div style="display: inline-flex; gap: 6px; font-size: 11px; margin-bottom: 12px;">
+                <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input style="flex-basis: 0;" type="checkbox" id="enableHandOrientationToggle" ${poseEstimationOptions.enableHandOrientation ? 'checked' : ''}
+                           onchange="togglePoseOption('enableHandOrientation')" />
+                    <span>Enable Sensor Fusion</span>
+                </label>
+                <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input style="flex-basis: 0;" type="checkbox" id="smoothHandOrientationToggle" ${poseEstimationOptions.smoothHandOrientation ? 'checked' : ''}
+                           onchange="togglePoseOption('smoothHandOrientation')" />
+                    <span>Smooth Orientation</span>
+                </label>
+                <div style="display: inline-flex; flex-direction: column; align-items: center; gap: 8px; padding-left: 22px;">
+                    <span style="color: var(--fg-muted);">Smoothing:</span>
+                    <input type="range" id="handOrientationAlphaSlider" min="5" max="50" value="${poseEstimationOptions.handOrientationAlpha * 100}"
+                           style="flex: 1; max-width: 100px;"
+                           onchange="updateHandOrientationAlpha(this.value)" />
+                    <span id="handOrientationAlphaValue" style="width: 30px; text-align: right;">${(poseEstimationOptions.handOrientationAlpha * 100).toFixed(0)}%</span>
+                </div>
+            </div>
+        </div>
+    `;
+
+    statusSection.insertAdjacentHTML('beforeend', optionsHTML);
+}
+
+/**
+ * Toggle pose option
+ */
+function togglePoseOption(option: keyof PoseEstimationOptions): void {
+    (poseEstimationOptions as any)[option] = !(poseEstimationOptions as any)[option];
+
+    if (option === 'show3DOrientation') {
+        const cube = $('orientation3DCube');
+        if (cube) {
+            cube.style.display = poseEstimationOptions.show3DOrientation ? 'block' : 'none';
+        }
+    }
+
+    log(`Pose option ${option}: ${(poseEstimationOptions as any)[option]}`);
+}
+
+/**
+ * Update hand orientation alpha
+ */
+function updateHandOrientationAlpha(value: string): void {
+    const alpha = parseInt(value, 10) / 100;
+    poseEstimationOptions.handOrientationAlpha = alpha;
+
+    const valueDisplay = $('handOrientationAlphaValue');
+    if (valueDisplay) {
+        valueDisplay.textContent = `${value}%`;
+    }
+}
+
+window.togglePoseOption = togglePoseOption;
+window.updateHandOrientationAlpha = updateHandOrientationAlpha;
+
+/**
+ * Update pose estimation from mag data
+ */
+function updatePoseEstimationFromMag(data: PoseUpdateData): void {
+    if (!poseState.enabled) return;
+
+    const { magField, orientation, euler, sample } = data;
+    poseState.updateCount++;
+
+    let mx = magField.x;
+    let my = magField.y;
+    let mz = magField.z;
+
+    if (sample) {
+        if (poseEstimationOptions.useFiltering && sample.filtered_mx !== undefined) {
+            mx = sample.filtered_mx;
+            my = sample.filtered_my;
+            mz = sample.filtered_mz;
+        } else if (poseEstimationOptions.useCalibration) {
+            if (sample.fused_mx !== undefined) {
+                mx = sample.fused_mx;
+                my = sample.fused_my;
+                mz = sample.fused_mz;
+            } else if (sample.calibrated_mx !== undefined) {
+                mx = sample.calibrated_mx;
+                my = sample.calibrated_my;
+                mz = sample.calibrated_mz;
+            }
+        }
+    }
+
+    const strength = Math.sqrt(mx * mx + my * my + mz * mz);
+    poseState.confidence = Math.min(1.0, strength / 100);
+
+    let baseThreshold = 20;
+    let highThreshold = 60;
+
+    if (poseEstimationOptions.useOrientation && euler) {
+        const tiltFactor = Math.abs(Math.cos(euler.pitch * Math.PI / 180) * Math.cos(euler.roll * Math.PI / 180));
+        baseThreshold *= tiltFactor;
+        highThreshold *= tiltFactor;
+        poseState.orientation = { roll: euler.roll, pitch: euler.pitch, yaw: euler.yaw };
+    }
+
+    if (strength < baseThreshold) {
+        poseState.currentPose = { thumb: 0, index: 0, middle: 0, ring: 0, pinky: 0 };
+    } else if (strength > highThreshold) {
+        poseState.currentPose = { thumb: 2, index: 2, middle: 2, ring: 2, pinky: 2 };
+    } else {
+        const flex = (strength - baseThreshold) / (highThreshold - baseThreshold);
+        const fingerState = Math.round(flex * 2);
+        poseState.currentPose = { thumb: fingerState, index: fingerState, middle: fingerState, ring: fingerState, pinky: fingerState };
+    }
+
+    if (poseEstimationOptions.enableHandOrientation && euler && threeHandSkeleton) {
+        threeHandSkeleton.updateOrientation(euler);
+    }
+
+    if (poseState.updateCount % 10 === 0) {
+        updatePoseEstimationDisplay();
+        if (handPreviewMode === 'predictions') {
+            updateHandVisualization();
+        }
+    }
+}
+
+/**
+ * Update pose estimation display
+ */
+function updatePoseEstimationDisplay(): void {
+    const statusText = $('poseStatusText');
+    const confidenceText = $('poseConfidenceText');
+    const updatesText = $('poseUpdatesText');
+
+    if (statusText) {
+        statusText.textContent = poseState.enabled ? 'Active' : 'Disabled';
+        statusText.style.color = poseState.enabled ? 'var(--success)' : 'var(--fg-muted)';
+    }
+
+    if (confidenceText) {
+        confidenceText.textContent = Math.round(poseState.confidence * 100) + '%';
+    }
+
+    if (updatesText) {
+        updatesText.textContent = poseState.updateCount.toString();
+    }
+}
+
+/**
+ * Initialize hand visualization
+ */
+function initHandVisualization(): void {
+    const container = $('threeHandContainer');
+    if (container && typeof THREE !== 'undefined') {
+        try {
+            threeHandSkeleton = new ThreeJSHandSkeleton(container as HTMLElement, {
+                width: 400,
+                height: 400,
+                backgroundColor: 0x1a1a2e,
+                lerpFactor: 0.15,
+                handedness: 'right'
+            });
+
+            threeHandSkeleton.setOrientationOffsets({
+                roll: 180,
+                pitch: 180,
+                yaw: -180
+            });
+
+            log('Three.js hand skeleton initialized');
+        } catch (err) {
+            console.error('Failed to initialize Three.js hand skeleton:', err);
+        }
+    }
+
+    updateHandVisualization();
+}
+
+/**
+ * Initialize magnetic trajectory
+ */
+function initMagneticTrajectory(): void {
+    const canvas = $('magTrajectoryCanvas') as HTMLCanvasElement | null;
+    if (canvas) {
+        magTrajectory = new MagneticTrajectory(canvas, {
+            maxPoints: 200,
+            trajectoryColor: '#4ecdc4',
+            backgroundColor: '#ffffff',
+            autoNormalize: true,
+            showMarkers: true,
+            showCube: true
+        });
+
+        const clearBtn = $('clearTrajectoryBtn');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                magTrajectory!.clear();
+                updateMagTrajectoryStats();
+                log('Magnetic trajectory cleared');
+            });
+        }
+
+        magTrajectory.addPoint(0, 0, 0);
+        magTrajectory.addPoint(1, 1, 1);
+        updateMagTrajectoryStats();
+
+        const pauseBtn = $('pauseTrajectoryBtn') as HTMLButtonElement | null;
+        if (pauseBtn) {
+            pauseBtn.addEventListener('click', () => {
+                magTrajectoryPaused = !magTrajectoryPaused;
+                pauseBtn.textContent = magTrajectoryPaused ? 'Resume' : 'Pause';
+                pauseBtn.className = magTrajectoryPaused ? 'btn-primary' : 'btn-secondary';
+                log(`Magnetic trajectory ${magTrajectoryPaused ? 'paused' : 'resumed'}`);
+            });
+        }
+
+        log('Magnetic trajectory visualizer initialized');
+    }
+}
+
+/**
+ * Update magnetic trajectory stats
+ */
+function updateMagTrajectoryStats(): void {
+    const statsEl = $('trajStats');
+    if (statsEl && magTrajectory) {
+        const stats = magTrajectory.getStats();
+        if (stats.count === 0) {
+            statsEl.textContent = 'No data';
+        } else {
+            statsEl.textContent = `${stats.count} points | Magnitude: ${stats.magnitude.min.toFixed(2)} - ${stats.magnitude.max.toFixed(2)} μT (avg: ${stats.magnitude.avg.toFixed(2)} μT)`;
+        }
+    }
+}
+
+/**
+ * Update magnetic trajectory from telemetry
+ */
+function updateMagneticTrajectoryFromTelemetry(data: { fused_mx?: number; fused_my?: number; fused_mz?: number }): void {
+    if (!magTrajectory || magTrajectoryPaused) return;
+    if (!data || data.fused_mx === undefined) return;
+
+    magTrajectory.addPoint(data.fused_mx, data.fused_my!, data.fused_mz!);
+
+    if ((magTrajectory as any).points.length % 50 === 0) {
+        updateMagTrajectoryStats();
+    }
+}
+
+/**
+ * Set hand preview mode
+ */
+function setHandPreviewMode(mode: 'labels' | 'predictions'): void {
+    handPreviewMode = mode;
+
+    const labelsBtn = $('handModeLabels');
+    const predictionsBtn = $('handModePredictions');
+    const indicator = $('handModeIndicator');
+    const description = $('handPreviewDescription');
+    const predictionInfo = $('handPredictionInfo');
+
+    if (labelsBtn && predictionsBtn) {
+        if (mode === 'labels') {
+            labelsBtn.className = 'btn-primary btn-small';
+            predictionsBtn.className = 'btn-secondary btn-small';
+            if (indicator) indicator.innerHTML = '📋 Showing: Manual Labels';
+            if (description) description.textContent = 'Visual representation of manually selected finger states';
+            if (predictionInfo) predictionInfo.style.display = 'none';
+        } else {
+            labelsBtn.className = 'btn-secondary btn-small';
+            predictionsBtn.className = 'btn-primary btn-small';
+            if (indicator) indicator.innerHTML = '🎯 Showing: Pose Predictions';
+            if (description) description.textContent = 'Real-time pose estimation from magnetic field data';
+            if (predictionInfo) predictionInfo.style.display = 'block';
+        }
+    }
+
+    updateHandVisualization();
+    log(`Hand preview mode: ${mode}`);
+}
+
+/**
+ * Update hand visualization
+ */
+function updateHandVisualization(): void {
+    let fingerStates: FingerStates;
+    if (handPreviewMode === 'labels') {
+        fingerStates = convertFingerLabelsToStates(state.currentLabels.fingers);
+    } else {
+        if (poseState.enabled && poseState.currentPose) {
+            fingerStates = poseState.currentPose;
+        } else {
+            fingerStates = { thumb: 0, index: 0, middle: 0, ring: 0, pinky: 0 };
+        }
+    }
+}
+
+/**
+ * Convert finger labels to states
+ */
+function convertFingerLabelsToStates(fingerLabels: any): FingerStates {
+    const states: FingerStates = { thumb: 0, index: 0, middle: 0, ring: 0, pinky: 0 };
+    const fingers: (keyof FingerStates)[] = ['thumb', 'index', 'middle', 'ring', 'pinky'];
+
+    for (const finger of fingers) {
+        const label = fingerLabels[finger];
+        if (label === 'extended') {
+            states[finger] = 0;
+        } else if (label === 'partial') {
+            states[finger] = 1;
+        } else if (label === 'flexed') {
+            states[finger] = 2;
+        } else {
+            states[finger] = 0;
+        }
+    }
+
+    return states;
+}
+
+window.setHandPreviewMode = setHandPreviewMode;
+
+/**
+ * Initialize export functionality
+ */
+function initExport(): void {
+    const exportBtn = $('exportBtn');
+    if (exportBtn) {
+        exportBtn.addEventListener('click', exportData);
+    }
+
+    const uploadBtn = $('uploadBtn');
+    if (uploadBtn) {
+        uploadBtn.addEventListener('click', uploadSession);
+    }
+}
+
+/**
+ * Upload session
+ */
+async function uploadSession(): Promise<void> {
+    if (uploadMethod === 'blob') {
+        await uploadToBlob();
+    } else {
+        await uploadToGitHub();
+    }
+}
+
+/**
+ * Upload to Vercel Blob
+ */
+async function uploadToBlob(): Promise<void> {
+    if (state.sessionData.length === 0) {
+        log('No data to upload');
+        return;
+    }
+
+    if (!hasUploadSecret()) {
+        log('Error: No upload secret configured');
+        return;
+    }
+
+    const uploadBtn = $('uploadBtn') as HTMLButtonElement;
+    const originalText = uploadBtn.textContent;
+
+    try {
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = 'Uploading...';
+        log('Uploading to Vercel Blob...');
+
+        const data = buildExportData();
+
+        const timestamp = new Date().toISOString().replace(/:/g, '_');
+        const filename = `${timestamp}.json`;
+        const content = JSON.stringify(data, null, 2);
+
+        const result = await uploadSessionWithRetry({
+            filename,
+            content,
+            onProgress: (progress) => {
+                uploadBtn.textContent = progress.message;
+                log(`Upload: ${progress.message}`);
+            }
+        });
+
+        log(`Uploaded: ${result.filename} (${(result.size / 1024).toFixed(1)} KB)`);
+        log(`URL: ${result.url}`);
+
+    } catch (e) {
+        console.error('[GAMBIT] Blob upload failed:', e);
+        log(`Upload failed: ${(e as Error).message}`);
+    } finally {
+        uploadBtn.disabled = state.sessionData.length === 0 || state.recording || !hasUploadSecret();
+        uploadBtn.textContent = originalText || 'Upload';
+    }
+}
+
+/**
+ * Store calibration session data
+ */
+function storeCalibrationSessionData(samples: CalibrationSample[], stepName: string, result: CalibrationResult): void {
+    const calibrationLabels: Record<string, string> = {
+        'HARD_IRON': 'hard_iron',
+        'SOFT_IRON': 'soft_iron'
+    };
+
+    const calibrationLabel = calibrationLabels[stepName] || stepName.toLowerCase();
+    const startIndex = state.sessionData.length;
+
+    const timestamp = Date.now();
+    samples.forEach((sample, i) => {
+        state.sessionData.push({
+            ...sample,
+            timestamp: timestamp + (i * (1000 / 26)),
+            calibration_step: stepName
+        } as any);
+    });
+
+    const segment = {
+        startIndex: startIndex,
+        endIndex: state.sessionData.length - 1,
+        pose: undefined,
+        fingers: {
+            thumb: 'unknown' as const,
+            index: 'unknown' as const,
+            middle: 'unknown' as const,
+            ring: 'unknown' as const,
+            pinky: 'unknown' as const
+        },
+        motion: 'static' as const,
+        calibration: calibrationLabel === 'hard_iron' || calibrationLabel === 'soft_iron' ? 'mag' as const : 'none' as const,
+        custom: ['calibration_session', `cal_${calibrationLabel}`]
+    };
+
+    state.labels.push(segment);
+
+    log(`Calibration session stored: ${samples.length} samples for ${stepName}`);
+    updateUI();
+}
+
+/**
+ * Upload to GitHub
+ */
+async function uploadToGitHub(): Promise<void> {
+    if (state.sessionData.length === 0) {
+        log('No data to upload');
+        return;
+    }
+
+    if (!ghToken) {
+        log('Error: No GitHub token configured');
+        return;
+    }
+
+    const uploadBtn = $('uploadBtn') as HTMLButtonElement;
+    const originalText = uploadBtn.textContent;
+
+    try {
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = 'Uploading...';
+        log('Uploading to GitHub (LFS)...');
+
+        const exportData = buildExportData();
+
+        const timestamp = new Date().toISOString().replace(/:/g, '_');
+        const filename = `${timestamp}.json`;
+        const content = JSON.stringify(exportData, null, 2);
+
+        const result = await uploadToGitHubLFS({
+            token: ghToken,
+            owner: 'christopherdebeer',
+            repo: 'simcap',
+            path: `data/GAMBIT/${filename}`,
+            content: content,
+            message: `GAMBIT Data ingest ${filename}`,
+            onProgress: (progress) => {
+                uploadBtn.textContent = progress.message;
+                log(`Upload: ${progress.message}`);
+            }
+        });
+
+        log(`✓ Uploaded: ${result.filename} (LFS: ${result.lfsOid?.substring(0, 8)}...)`);
+
+    } catch (e) {
+        console.error('[GAMBIT] Upload failed:', e);
+        log(`Upload failed: ${(e as Error).message}`);
+    } finally {
+        const hasAuth = uploadMethod === 'blob' ? hasUploadSecret() : !!ghToken;
+        uploadBtn.disabled = state.sessionData.length === 0 || state.recording || !hasAuth;
+        uploadBtn.textContent = originalText || 'Upload';
+    }
+}
+
+/**
+ * Build export data
+ */
+function buildExportData(options: Record<string, any> = {}): ExportData {
+    const subjectId = ($('subjectId') as HTMLInputElement)?.value || 'unknown';
+    const environment = ($('environment') as HTMLInputElement)?.value || 'unknown';
+    const hand = ($('hand') as HTMLInputElement)?.value || 'unknown';
+    const split = ($('split') as HTMLInputElement)?.value || 'train';
+    const magnetConfig = ($('magnetConfig') as HTMLInputElement)?.value || 'none';
+    const magnetType = ($('magnetType') as HTMLInputElement)?.value || 'unknown';
+    const sessionNotes = ($('sessionNotes') as HTMLTextAreaElement)?.value || '';
+
+    return {
+        version: '2.1',
+        timestamp: new Date().toISOString(),
+        samples: state.sessionData,
+        labels: state.labels,
+        metadata: {
+            sample_rate: 26,
+            device: 'GAMBIT',
+            firmware_version: state.firmwareVersion || 'unknown',
+            calibration: calibrationInstance ? (calibrationInstance as any).toJSON() : null,
+            location: exportLocationMetadata(state.geomagneticLocation),
+            subject_id: subjectId,
+            environment: environment,
+            hand: hand,
+            split: split,
+            magnet_config: magnetConfig,
+            magnet_type: magnetType,
+            notes: sessionNotes,
+            session_type: options.sessionType || 'recording',
+            ...options
+        }
+    };
+}
+
+/**
+ * Export data
+ */
+function exportData(): void {
+    if (state.sessionData.length === 0) {
+        log('No data to export');
+        return;
+    }
+
+    const data = buildExportData();
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const timestamp = new Date().toISOString().replace(/:/g, '_');
+    a.download = `${timestamp}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    log('Data exported');
+}
+
+/**
+ * Initialize collapsible sections
+ */
+function initCollapsibleSections(): void {
+    document.querySelectorAll('.collapsible').forEach(header => {
+        header.addEventListener('click', () => {
+            header.classList.toggle('collapsed');
+
+            const section = header.parentElement;
+            const contents = section?.querySelectorAll('.collapse-content');
+            contents?.forEach(content => {
+                content.classList.toggle('hidden');
+            });
+
+            const sectionId = section?.id;
+            if (sectionId) {
+                const isCollapsed = header.classList.contains('collapsed');
+                localStorage.setItem(`section_${sectionId}_collapsed`, String(isCollapsed));
+            }
+        });
+
+        const section = header.parentElement;
+        const sectionId = section?.id;
+        if (sectionId) {
+            const savedState = localStorage.getItem(`section_${sectionId}_collapsed`);
+            if (savedState === 'true') {
+                header.classList.add('collapsed');
+                const contents = section?.querySelectorAll('.collapse-content');
+                contents?.forEach(content => {
+                    content.classList.add('hidden');
+                });
+            }
+        }
+    });
+}
+
+// Initialize on DOM ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+} else {
+    init();
+}
+
+// Export for debugging and onclick handlers
+window.appState = state;
+window.log = log;
+window.updateUI = updateUI;
+window.addCustomLabel = addCustomLabel;
+window.addPresetLabels = addPresetLabels;
+window.removeActiveLabel = removeActiveLabel;
+window.clearFingerStates = clearFingerStates;
+window.removeCustomLabel = removeCustomLabel;
+window.toggleCustomLabel = toggleCustomLabel;
+window.deleteCustomLabelDef = deleteCustomLabelDef;
