@@ -10,23 +10,28 @@
   - `src/web/GAMBIT/modules/*.js` - All deleted (10 files)
   - `src/web/GAMBIT/shared/*.js` - All deleted except test file (12 files)
   - `src/web/GAMBIT/calibration-config.js`, `collector-app.js` - Deleted
+- **Phase 5 (Partial)**: Inline script extraction
+  - `synth.html` - Fully migrated to `synth-app.ts` (~460 lines extracted)
+  - All `window.GambitClient` patterns removed - using proper ES module imports
 
 ### 🔄 Remaining Work
 - `src/web/GAMBIT/puck.js` - External BLE library (keep as-is, non-module)
-- `src/web/GAMBIT/synth.html` - Still uses JS globals, needs TypeScript entry point
 - `api/explorer.js` - API route (low priority)
+- `src/web/loader/index.html` - Has inline script (~1200 lines, uses Puck directly)
 
 ### ✅ Recently Converted (all now .ts)
 - `filters.ts` - MadgwickAHRS, ComplementaryFilter, MotionDetector
 - `kalman.ts` - KalmanFilter, KalmanFilter3D
-- `gambit-client.ts` - GambitClient BLE protocol
+- `gambit-client.ts` - GambitClient BLE protocol (with typed event overloads)
 - `gesture-inference.ts` - TensorFlow.js gesture recognition
 - `hand-model.ts` - Hand geometry types
+- `synth-app.ts` - Full synth application (audio synthesis, sensor handling)
+- `loader-app.ts` - Loader entry point (minimal, uses Puck.js directly)
 
 ### ❌ Not Started (Future Phases)
 - Phase 3: Create `packages/filters/`, `packages/orientation/`, `packages/puck/`
 - Phase 4: Restructure to `apps/` directory
-- Phase 5: Extract remaining inline scripts (synth.html)
+- Phase 5: Extract remaining inline scripts (loader/index.html, main gambit/index.html)
 
 ---
 
