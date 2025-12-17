@@ -1,2 +1,2 @@
-data/GAMBIT/*.json filter=lfs diff=lfs merge=lfs -text
-visualizations/** filter=lfs diff=lfs merge=lfs -text
+# LFS tracking rules removed - migrated to Vercel Blob storage
+# See CLAUDE.md for Vercel Blob workflow documentation

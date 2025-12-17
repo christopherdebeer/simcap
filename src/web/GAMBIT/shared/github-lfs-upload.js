@@ -1,12 +1,19 @@
 /**
  * GitHub LFS Upload Utility
- * 
+ *
+ * @deprecated This module is deprecated. Use Vercel Blob storage instead.
+ * Session data is now uploaded to Vercel Blob via the /api/upload endpoint.
+ * See blob-upload.js for the current upload implementation.
+ *
+ * This file is kept for backward compatibility only and may be removed
+ * in a future release.
+ *
  * Uploads files to GitHub using the LFS API to properly store large files.
  * This bypasses the GitHub Contents API which doesn't support LFS.
- * 
- * Usage:
+ *
+ * Usage (DEPRECATED):
  *   import { uploadToGitHubLFS } from './shared/github-lfs-upload.js';
- *   
+ *
  *   await uploadToGitHubLFS({
  *     token: 'ghp_xxx',
  *     owner: 'christopherdebeer',
@@ -16,6 +23,8 @@
  *     message: 'GAMBIT Data ingest'
  *   });
  */
+
+console.warn('[DEPRECATED] github-lfs-upload.js is deprecated. Use Vercel Blob storage instead.');
 
 /**
  * Calculate SHA256 hash of content

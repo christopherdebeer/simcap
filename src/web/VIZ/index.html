@@ -531,11 +531,45 @@
         <img class="modal-content" id="modal-image">
     </div>
 
-    <script src="../../../visualizations/session-data.js"></script>
-
     <script>
+        // Session data loaded from API
+        let sessionsData = [];
+        let filteredSessions = [];
+        let dataLoaded = false;
+        let loadError = null;
 
-        let filteredSessions = [...sessionsData];
+        // API base URL - use relative path for same-origin, or configure for cross-origin
+        const API_BASE = '';
+
+        /**
+         * Fetch explorer data from API
+         */
+        async function fetchExplorerData() {
+            try {
+                const response = await fetch(`${API_BASE}/api/explorer`);
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.status} ${response.statusText}`);
+                }
+                const data = await response.json();
+                return data.sessions || [];
+            } catch (error) {
+                console.error('Failed to fetch explorer data:', error);
+                throw error;
+            }
+        }
+
+        /**
+         * Get image URL - handles both blob URLs and relative paths
+         */
+        function getImageUrl(imagePath) {
+            if (!imagePath) return '';
+            // If it's already a full URL, return as-is
+            if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+                return imagePath;
+            }
+            // Otherwise, treat as relative path to visualizations directory
+            return `../../../visualizations/${imagePath}`;
+        }
         let defaultExpanded = false;
         let selectedLabel = 'all';
 
@@ -683,99 +717,99 @@
                     </div>
                     <div class="trajectory-grid">`;
                 
-                if (viewSettings.showWinComposite) {
-                    html += `<div class="trajectory-card" data-type="composite" onclick="openModal('${w.filepath}')">
-                        <img src="../../../visualizations/${w.filepath}" class="trajectory-image" alt="Composite">
+                if (viewSettings.showWinComposite && w.filepath) {
+                    html += `<div class="trajectory-card" data-type="composite" onclick="openModal('${getImageUrl(w.filepath)}')">
+                        <img src="${getImageUrl(w.filepath)}" class="trajectory-image" alt="Composite">
                         <div class="trajectory-label">Composite</div>
                     </div>`;
                 }
-                if (w.images.timeseries_accel && viewSettings.showWinAccelTime) {
-                    html += `<div class="trajectory-card" data-type="accel-time" onclick="openModal('${w.images.timeseries_accel}')">
-                        <img src="../../../visualizations/${w.images.timeseries_accel}" class="trajectory-image" alt="Accel Time">
+                if (w.images?.timeseries_accel && viewSettings.showWinAccelTime) {
+                    html += `<div class="trajectory-card" data-type="accel-time" onclick="openModal('${getImageUrl(w.images.timeseries_accel)}')">
+                        <img src="${getImageUrl(w.images.timeseries_accel)}" class="trajectory-image" alt="Accel Time">
                         <div class="trajectory-label">Accel Time</div>
                     </div>`;
                 }
-                if (w.images.timeseries_gyro && viewSettings.showWinGyroTime) {
-                    html += `<div class="trajectory-card" data-type="gyro-time" onclick="openModal('${w.images.timeseries_gyro}')">
-                        <img src="../../../visualizations/${w.images.timeseries_gyro}" class="trajectory-image" alt="Gyro Time">
+                if (w.images?.timeseries_gyro && viewSettings.showWinGyroTime) {
+                    html += `<div class="trajectory-card" data-type="gyro-time" onclick="openModal('${getImageUrl(w.images.timeseries_gyro)}')">
+                        <img src="${getImageUrl(w.images.timeseries_gyro)}" class="trajectory-image" alt="Gyro Time">
                         <div class="trajectory-label">Gyro Time</div>
                     </div>`;
                 }
-                if (w.images.timeseries_mag && viewSettings.showWinMagTime) {
-                    html += `<div class="trajectory-card" data-type="mag-time" onclick="openModal('${w.images.timeseries_mag}')">
-                        <img src="../../../visualizations/${w.images.timeseries_mag}" class="trajectory-image" alt="Mag Time">
+                if (w.images?.timeseries_mag && viewSettings.showWinMagTime) {
+                    html += `<div class="trajectory-card" data-type="mag-time" onclick="openModal('${getImageUrl(w.images.timeseries_mag)}')">
+                        <img src="${getImageUrl(w.images.timeseries_mag)}" class="trajectory-image" alt="Mag Time">
                         <div class="trajectory-label">Mag Time</div>
                     </div>`;
                 }
-                if (w.images.trajectory_accel_3d && viewSettings.showWinAccel3d) {
-                    html += `<div class="trajectory-card" data-type="accel-3d" onclick="openModal('${w.images.trajectory_accel_3d}')">
-                        <img src="../../../visualizations/${w.images.trajectory_accel_3d}" class="trajectory-image" alt="Accel 3D">
+                if (w.images?.trajectory_accel_3d && viewSettings.showWinAccel3d) {
+                    html += `<div class="trajectory-card" data-type="accel-3d" onclick="openModal('${getImageUrl(w.images.trajectory_accel_3d)}')">
+                        <img src="${getImageUrl(w.images.trajectory_accel_3d)}" class="trajectory-image" alt="Accel 3D">
                         <div class="trajectory-label">Accel 3D</div>
                     </div>`;
                 }
-                if (w.images.trajectory_gyro_3d && viewSettings.showWinGyro3d) {
-                    html += `<div class="trajectory-card" data-type="gyro-3d" onclick="openModal('${w.images.trajectory_gyro_3d}')">
-                        <img src="../../../visualizations/${w.images.trajectory_gyro_3d}" class="trajectory-image" alt="Gyro 3D">
+                if (w.images?.trajectory_gyro_3d && viewSettings.showWinGyro3d) {
+                    html += `<div class="trajectory-card" data-type="gyro-3d" onclick="openModal('${getImageUrl(w.images.trajectory_gyro_3d)}')">
+                        <img src="${getImageUrl(w.images.trajectory_gyro_3d)}" class="trajectory-image" alt="Gyro 3D">
                         <div class="trajectory-label">Gyro 3D</div>
                     </div>`;
                 }
-                if (w.images.trajectory_mag_3d && viewSettings.showWinMag3d) {
-                    html += `<div class="trajectory-card" data-type="mag-3d" onclick="openModal('${w.images.trajectory_mag_3d}')">
-                        <img src="../../../visualizations/${w.images.trajectory_mag_3d}" class="trajectory-image" alt="Mag 3D">
+                if (w.images?.trajectory_mag_3d && viewSettings.showWinMag3d) {
+                    html += `<div class="trajectory-card" data-type="mag-3d" onclick="openModal('${getImageUrl(w.images.trajectory_mag_3d)}')">
+                        <img src="${getImageUrl(w.images.trajectory_mag_3d)}" class="trajectory-image" alt="Mag 3D">
                         <div class="trajectory-label">Mag 3D</div>
                     </div>`;
                 }
-                if (w.images.trajectory_combined_3d && viewSettings.showWinCombined3d) {
-                    html += `<div class="trajectory-card" data-type="combined-3d" onclick="openModal('${w.images.trajectory_combined_3d}')">
-                        <img src="../../../visualizations/${w.images.trajectory_combined_3d}" class="trajectory-image" alt="Combined 3D">
+                if (w.images?.trajectory_combined_3d && viewSettings.showWinCombined3d) {
+                    html += `<div class="trajectory-card" data-type="combined-3d" onclick="openModal('${getImageUrl(w.images.trajectory_combined_3d)}')">
+                        <img src="${getImageUrl(w.images.trajectory_combined_3d)}" class="trajectory-image" alt="Combined 3D">
                         <div class="trajectory-label">Combined 3D</div>
                     </div>`;
                 }
-                if (w.images.signature && viewSettings.showWinSignature) {
-                    html += `<div class="trajectory-card" data-type="signature" onclick="openModal('${w.images.signature}')">
-                        <img src="../../../visualizations/${w.images.signature}" class="trajectory-image" alt="Signature">
+                if (w.images?.signature && viewSettings.showWinSignature) {
+                    html += `<div class="trajectory-card" data-type="signature" onclick="openModal('${getImageUrl(w.images.signature)}')">
+                        <img src="${getImageUrl(w.images.signature)}" class="trajectory-image" alt="Signature">
                         <div class="trajectory-label">Signature</div>
                     </div>`;
                 }
-                if (w.images.stats && viewSettings.showWinStats) {
-                    html += `<div class="trajectory-card" data-type="stats" onclick="openModal('${w.images.stats}')">
-                        <img src="../../../visualizations/${w.images.stats}" class="trajectory-image" alt="Stats">
+                if (w.images?.stats && viewSettings.showWinStats) {
+                    html += `<div class="trajectory-card" data-type="stats" onclick="openModal('${getImageUrl(w.images.stats)}')">
+                        <img src="${getImageUrl(w.images.stats)}" class="trajectory-image" alt="Stats">
                         <div class="trajectory-label">Stats</div>
                     </div>`;
                 }
-                if (w.trajectory_images && w.trajectory_images.raw && viewSettings.showWinTrajRaw) {
-                    html += `<div class="trajectory-card" data-type="traj-raw" onclick="openModal('${w.trajectory_images.raw}')">
-                        <img src="../../../visualizations/${w.trajectory_images.raw}" class="trajectory-image" alt="Traj Raw">
+                if (w.trajectory_images?.raw && viewSettings.showWinTrajRaw) {
+                    html += `<div class="trajectory-card" data-type="traj-raw" onclick="openModal('${getImageUrl(w.trajectory_images.raw)}')">
+                        <img src="${getImageUrl(w.trajectory_images.raw)}" class="trajectory-image" alt="Traj Raw">
                         <div class="trajectory-label">Traj Raw</div>
                     </div>`;
                 }
-                if (w.trajectory_images && w.trajectory_images.iron && viewSettings.showWinTrajIron) {
-                    html += `<div class="trajectory-card" data-type="traj-iron" onclick="openModal('${w.trajectory_images.iron}')">
-                        <img src="../../../visualizations/${w.trajectory_images.iron}" class="trajectory-image" alt="Traj Iron">
+                if (w.trajectory_images?.iron && viewSettings.showWinTrajIron) {
+                    html += `<div class="trajectory-card" data-type="traj-iron" onclick="openModal('${getImageUrl(w.trajectory_images.iron)}')">
+                        <img src="${getImageUrl(w.trajectory_images.iron)}" class="trajectory-image" alt="Traj Iron">
                         <div class="trajectory-label">Traj Iron</div>
                     </div>`;
                 }
-                if (w.trajectory_images && w.trajectory_images.fused && viewSettings.showWinTrajFused) {
-                    html += `<div class="trajectory-card" data-type="traj-fused" onclick="openModal('${w.trajectory_images.fused}')">
-                        <img src="../../../visualizations/${w.trajectory_images.fused}" class="trajectory-image" alt="Traj Residual">
+                if (w.trajectory_images?.fused && viewSettings.showWinTrajFused) {
+                    html += `<div class="trajectory-card" data-type="traj-fused" onclick="openModal('${getImageUrl(w.trajectory_images.fused)}')">
+                        <img src="${getImageUrl(w.trajectory_images.fused)}" class="trajectory-image" alt="Traj Residual">
                         <div class="trajectory-label">Traj Residual</div>
                     </div>`;
                 }
-                if (w.trajectory_images && w.trajectory_images.filtered && viewSettings.showWinTrajFiltered) {
-                    html += `<div class="trajectory-card" data-type="traj-filtered" onclick="openModal('${w.trajectory_images.filtered}')">
-                        <img src="../../../visualizations/${w.trajectory_images.filtered}" class="trajectory-image" alt="Traj Filtered">
+                if (w.trajectory_images?.filtered && viewSettings.showWinTrajFiltered) {
+                    html += `<div class="trajectory-card" data-type="traj-filtered" onclick="openModal('${getImageUrl(w.trajectory_images.filtered)}')">
+                        <img src="${getImageUrl(w.trajectory_images.filtered)}" class="trajectory-image" alt="Traj Filtered">
                         <div class="trajectory-label">Traj Filtered</div>
                     </div>`;
                 }
-                if (w.trajectory_images && w.trajectory_images.combined && viewSettings.showWinTrajCombined) {
-                    html += `<div class="trajectory-card" data-type="traj-combined" onclick="openModal('${w.trajectory_images.combined}')">
-                        <img src="../../../visualizations/${w.trajectory_images.combined}" class="trajectory-image" alt="Traj Combined">
+                if (w.trajectory_images?.combined && viewSettings.showWinTrajCombined) {
+                    html += `<div class="trajectory-card" data-type="traj-combined" onclick="openModal('${getImageUrl(w.trajectory_images.combined)}')">
+                        <img src="${getImageUrl(w.trajectory_images.combined)}" class="trajectory-image" alt="Traj Combined">
                         <div class="trajectory-label">Traj Combined</div>
                     </div>`;
                 }
-                if (w.trajectory_images && w.trajectory_images.statistics && viewSettings.showWinTrajStats) {
-                    html += `<div class="trajectory-card" data-type="traj-stats" onclick="openModal('${w.trajectory_images.statistics}')">
-                        <img src="../../../visualizations/${w.trajectory_images.statistics}" class="trajectory-image" alt="Traj Stats">
+                if (w.trajectory_images?.statistics && viewSettings.showWinTrajStats) {
+                    html += `<div class="trajectory-card" data-type="traj-stats" onclick="openModal('${getImageUrl(w.trajectory_images.statistics)}')">
+                        <img src="${getImageUrl(w.trajectory_images.statistics)}" class="trajectory-image" alt="Traj Stats">
                         <div class="trajectory-label">Traj Stats</div>
                     </div>`;
                 }
@@ -835,11 +869,28 @@
             showWinTrajStats: false
         };
 
-        function initializePage() {
-            populateLabelFilter();
-            updateStats();
-            renderSessions();
-            setupEventListeners();
+        async function initializePage() {
+            // Show loading state
+            const container = document.getElementById('session-list');
+            container.innerHTML = '<div class="no-sessions">Loading session data...</div>';
+
+            try {
+                // Fetch data from API
+                sessionsData = await fetchExplorerData();
+                filteredSessions = [...sessionsData];
+                dataLoaded = true;
+
+                populateLabelFilter();
+                updateStats();
+                renderSessions();
+                setupEventListeners();
+            } catch (error) {
+                loadError = error;
+                container.innerHTML = `<div class="no-sessions" style="color: var(--error);">
+                    Failed to load session data: ${error.message}<br><br>
+                    <button class="btn" onclick="initializePage()">Retry</button>
+                </div>`;
+            }
         }
 
         function updateStats() {
@@ -883,55 +934,57 @@
                         <div class="expand-icon">▼</div>
                     </div>
                     <div class="session-content">
+                        ${session.composite_image ? `
                         <div class="image-section composite-section ${viewSettings.showComposite ? '' : 'hidden'}">
                             <h3 class="section-title">Composite Session View</h3>
-                            <img src="../../../visualizations/${session.composite_image}" class="composite-image" onclick="openModal(this.src)" alt="Composite view">
+                            <img src="${getImageUrl(session.composite_image)}" class="composite-image" onclick="openModal(this.src)" alt="Composite view">
                         </div>
+                        ` : ''}
 
                         ${session.calibration_stages_image ? `
                         <div class="image-section calibration-section ${viewSettings.showCalibration ? '' : 'hidden'}">
                             <h3 class="section-title">Magnetometer Calibration Stages</h3>
-                            <img src="../../../visualizations/${session.calibration_stages_image}" class="composite-image" onclick="openModal(this.src)" alt="Calibration stages comparison">
+                            <img src="${getImageUrl(session.calibration_stages_image)}" class="composite-image" onclick="openModal(this.src)" alt="Calibration stages comparison">
                         </div>
                         ` : ''}
 
-                        ${session.trajectory_comparison_images ? `
+                        ${session.trajectory_comparison_images && Object.keys(session.trajectory_comparison_images).length > 0 ? `
                         <div class="image-section trajectory-section">
                             <h3 class="section-title">Session-Level 3D Trajectory Comparison</h3>
                             <div class="trajectory-grid">
                                 ${session.trajectory_comparison_images.raw && viewSettings.showWinTrajRaw ? `
-                                <div class="trajectory-card" data-type="raw" onclick="openModal('${session.trajectory_comparison_images.raw}')">
-                                    <img src="../../../visualizations/${session.trajectory_comparison_images.raw}" class="trajectory-image" alt="Raw trajectory">
+                                <div class="trajectory-card" data-type="raw" onclick="openModal('${getImageUrl(session.trajectory_comparison_images.raw)}')">
+                                    <img src="${getImageUrl(session.trajectory_comparison_images.raw)}" class="trajectory-image" alt="Raw trajectory">
                                     <div class="trajectory-label">Raw</div>
                                 </div>
                                 ` : ''}
                                 ${session.trajectory_comparison_images.iron && viewSettings.showWinTrajIron ? `
-                                <div class="trajectory-card" data-type="iron" onclick="openModal('${session.trajectory_comparison_images.iron}')">
-                                    <img src="../../../visualizations/${session.trajectory_comparison_images.iron}" class="trajectory-image" alt="Iron corrected trajectory">
+                                <div class="trajectory-card" data-type="iron" onclick="openModal('${getImageUrl(session.trajectory_comparison_images.iron)}')">
+                                    <img src="${getImageUrl(session.trajectory_comparison_images.iron)}" class="trajectory-image" alt="Iron corrected trajectory">
                                     <div class="trajectory-label">Iron Corrected</div>
                                 </div>
                                 ` : ''}
                                 ${session.trajectory_comparison_images.fused && viewSettings.showWinTrajFused ? `
-                                <div class="trajectory-card" data-type="fused" onclick="openModal('${session.trajectory_comparison_images.fused}')">
-                                    <img src="../../../visualizations/${session.trajectory_comparison_images.fused}" class="trajectory-image" alt="Residual trajectory">
+                                <div class="trajectory-card" data-type="fused" onclick="openModal('${getImageUrl(session.trajectory_comparison_images.fused)}')">
+                                    <img src="${getImageUrl(session.trajectory_comparison_images.fused)}" class="trajectory-image" alt="Residual trajectory">
                                     <div class="trajectory-label">Residual</div>
                                 </div>
                                 ` : ''}
                                 ${session.trajectory_comparison_images.filtered && viewSettings.showWinTrajFiltered ? `
-                                <div class="trajectory-card" data-type="filtered" onclick="openModal('${session.trajectory_comparison_images.filtered}')">
-                                    <img src="../../../visualizations/${session.trajectory_comparison_images.filtered}" class="trajectory-image" alt="Filtered trajectory">
+                                <div class="trajectory-card" data-type="filtered" onclick="openModal('${getImageUrl(session.trajectory_comparison_images.filtered)}')">
+                                    <img src="${getImageUrl(session.trajectory_comparison_images.filtered)}" class="trajectory-image" alt="Filtered trajectory">
                                     <div class="trajectory-label">Filtered</div>
                                 </div>
                                 ` : ''}
                                 ${session.trajectory_comparison_images.combined && viewSettings.showWinTrajCombined ? `
-                                <div class="trajectory-card" data-type="combined" onclick="openModal('${session.trajectory_comparison_images.combined}')">
-                                    <img src="../../../visualizations/${session.trajectory_comparison_images.combined}" class="trajectory-image" alt="Combined overlay">
+                                <div class="trajectory-card" data-type="combined" onclick="openModal('${getImageUrl(session.trajectory_comparison_images.combined)}')">
+                                    <img src="${getImageUrl(session.trajectory_comparison_images.combined)}" class="trajectory-image" alt="Combined overlay">
                                     <div class="trajectory-label">Combined Overlay</div>
                                 </div>
                                 ` : ''}
                                 ${session.trajectory_comparison_images.statistics && viewSettings.showWinTrajStats ? `
-                                <div class="trajectory-card" data-type="statistics" onclick="openModal('${session.trajectory_comparison_images.statistics}')">
-                                    <img src="../../../visualizations/${session.trajectory_comparison_images.statistics}" class="trajectory-image" alt="Statistics">
+                                <div class="trajectory-card" data-type="statistics" onclick="openModal('${getImageUrl(session.trajectory_comparison_images.statistics)}')">
+                                    <img src="${getImageUrl(session.trajectory_comparison_images.statistics)}" class="trajectory-image" alt="Statistics">
                                     <div class="trajectory-label">Statistics</div>
                                 </div>
                                 ` : ''}
@@ -939,19 +992,23 @@
                         </div>
                         ` : ''}
 
+                        ${session.windows && session.windows.length > 0 ? `
                         <div class="image-section windows-section ${viewSettings.showWindows ? '' : 'hidden'}">
                             <h3 class="section-title">Per-Window Analysis (${session.windows.length} windows)</h3>
                             ${renderWindows(session)}
                         </div>
+                        ` : ''}
 
+                        ${session.raw_images && session.raw_images.length > 0 ? `
                         <div class="image-section raw-section ${viewSettings.showRaw ? '' : 'hidden'}">
                             <h3 class="section-title">Raw Axis & Orientation Views</h3>
                             <div class="raw-images">
                                 ${session.raw_images.map(img => `
-                                    <img src="../../../visualizations/${img}" class="raw-image" onclick="openModal(this.src)" alt="Raw axis view">
+                                    <img src="${getImageUrl(img)}" class="raw-image" onclick="openModal(this.src)" alt="Raw axis view">
                                 `).join('')}
                             </div>
                         </div>
+                        ` : ''}
                     </div>
                 </div>
             `).join('');
@@ -1009,7 +1066,7 @@
             const modal = document.getElementById('image-modal');
             const modalImg = document.getElementById('modal-image');
             modal.classList.add('active');
-            modalImg.src = imageSrc.indexOf('http') === 0 ? imageSrc : `../../../visualizations/${imageSrc}`
+            modalImg.src = getImageUrl(imageSrc);
         }
 
         function closeModal() {
