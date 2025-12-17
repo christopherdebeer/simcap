@@ -1,44 +1,112 @@
 # TypeScript Migration Plan for SIMCAP
 
-## Current State Analysis
+## Strategy: Vite + Reorganized Project Structure
 
-| Layer | Pattern | Complexity | Priority |
-|-------|---------|------------|----------|
-| **Vercel API** (`/api/`) | Pure ES modules | Low | **Phase 1** |
-| **Shared modules** (`/shared/`) | ES modules | Medium | **Phase 2** |
-| **App modules** (`/modules/`) | ES modules | Medium | **Phase 2** |
-| **Global scripts** (puck.js, filters.js) | Window globals | High | Phase 4 (defer) |
-| **Inline HTML scripts** | `<script type="module">` | Very High | Phase 5 (defer) |
-
-## Recommended Strategy: Incremental esbuild + Vercel Native TS
-
-### Why This Approach
-
-1. **Vercel supports TypeScript natively** for API routes - zero config
-2. **esbuild** is fastest, simplest bundler - 100x faster than webpack
-3. **No Vite** - preserves current HTML-centric static serving (no dev server required)
-4. **Incremental** - existing JS continues to work during migration
-5. **Type safety** without disrupting working code
+Vite provides HMR, excellent TypeScript support, and encourages better code organization. This plan restructures the project for long-term maintainability.
 
 ---
 
-## Phase 1: API Routes (Immediate Win)
+## Target Project Structure
 
-Vercel auto-compiles TypeScript API routes. Just rename files:
-
-```bash
-api/sessions.js    → api/sessions.ts
-api/upload.js      → api/upload.ts
-api/visualizations.js → api/visualizations.ts
+```
+simcap/
+├── api/                          # Vercel serverless (unchanged location)
+│   ├── sessions.ts
+│   ├── upload.ts
+│   └── visualizations.ts
+│
+├── apps/                         # Web applications (Vite entry points)
+│   ├── gambit/                   # Main GAMBIT app
+│   │   ├── index.html
+│   │   ├── main.ts               # Entry point (extracted from inline)
+│   │   ├── components/           # UI components
+│   │   │   ├── cube-visualizer.ts
+│   │   │   ├── telemetry-display.ts
+│   │   │   └── calibration-panel.ts
+│   │   └── features/             # Feature modules
+│   │       ├── connection/
+│   │       ├── recording/
+│   │       └── inference/
+│   │
+│   ├── collector/                # Data collection app
+│   │   ├── index.html
+│   │   ├── main.ts
+│   │   └── components/
+│   │
+│   ├── viz/                      # Visualization explorer
+│   │   ├── index.html
+│   │   └── main.ts
+│   │
+│   └── loader/                   # Firmware loader
+│       ├── index.html
+│       └── main.ts
+│
+├── packages/                     # Shared packages
+│   ├── core/                     # Core types & utilities
+│   │   ├── src/
+│   │   │   ├── types/
+│   │   │   │   ├── telemetry.ts
+│   │   │   │   ├── session.ts
+│   │   │   │   ├── calibration.ts
+│   │   │   │   └── index.ts
+│   │   │   ├── sensor/
+│   │   │   │   ├── config.ts
+│   │   │   │   ├── units.ts
+│   │   │   │   └── index.ts
+│   │   │   └── index.ts
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   │
+│   ├── filters/                  # Signal processing (converted globals)
+│   │   ├── src/
+│   │   │   ├── madgwick.ts
+│   │   │   ├── kalman.ts
+│   │   │   ├── motion-detector.ts
+│   │   │   └── index.ts
+│   │   └── package.json
+│   │
+│   ├── orientation/              # Quaternion/Euler math
+│   │   ├── src/
+│   │   │   ├── model.ts
+│   │   │   ├── calibration.ts
+│   │   │   └── index.ts
+│   │   └── package.json
+│   │
+│   └── puck/                     # BLE device communication
+│       ├── src/
+│       │   ├── connection.ts
+│       │   ├── protocol.ts
+│       │   └── index.ts
+│       └── package.json
+│
+├── public/                       # Static assets (copied to dist)
+│   ├── assets/
+│   │   ├── fonts/
+│   │   └── images/
+│   └── models/                   # TF.js models
+│       └── gesture_v1/
+│
+├── data/                         # Session data (Git LFS)
+│   └── GAMBIT/
+│
+├── vite.config.ts
+├── tsconfig.json
+├── package.json
+└── vercel.json
 ```
 
-**Setup:**
+---
+
+## Phase 0: Foundation Setup
+
+### Install Dependencies
 
 ```bash
-npm install -D typescript @types/node @vercel/blob
+npm install -D vite typescript @types/node
+npm install -D @vercel/node  # Types for API routes
 ```
 
-Create `tsconfig.json`:
+### Root `tsconfig.json`
 
 ```json
 {
@@ -49,23 +117,108 @@ Create `tsconfig.json`:
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "declaration": true,
-    "outDir": "dist",
-    "rootDir": ".",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["src/web/GAMBIT/shared/*"]
+      "@core/*": ["packages/core/src/*"],
+      "@filters/*": ["packages/filters/src/*"],
+      "@orientation/*": ["packages/orientation/src/*"],
+      "@puck/*": ["packages/puck/src/*"]
     }
   },
-  "include": ["api/**/*", "src/**/*"],
+  "include": ["apps/**/*", "packages/**/*", "api/**/*"],
   "exclude": ["node_modules", "dist"]
 }
 ```
 
-**Example conversion** (`api/sessions.ts`):
+### `vite.config.ts`
 
 ```typescript
-import { list, ListBlobResult } from '@vercel/blob';
+import { defineConfig } from 'vite';
+import { resolve } from 'path';
+
+export default defineConfig({
+  root: '.',
+
+  // Path aliases matching tsconfig
+  resolve: {
+    alias: {
+      '@core': resolve(__dirname, 'packages/core/src'),
+      '@filters': resolve(__dirname, 'packages/filters/src'),
+      '@orientation': resolve(__dirname, 'packages/orientation/src'),
+      '@puck': resolve(__dirname, 'packages/puck/src'),
+    }
+  },
+
+  build: {
+    outDir: 'dist',
+    rollupOptions: {
+      input: {
+        gambit: resolve(__dirname, 'apps/gambit/index.html'),
+        collector: resolve(__dirname, 'apps/collector/index.html'),
+        viz: resolve(__dirname, 'apps/viz/index.html'),
+        loader: resolve(__dirname, 'apps/loader/index.html'),
+      }
+    }
+  },
+
+  // Dev server
+  server: {
+    port: 3000,
+    open: '/apps/gambit/'
+  },
+
+  // Optimize external dependencies
+  optimizeDeps: {
+    include: ['three', '@tensorflow/tfjs']
+  }
+});
+```
+
+### `package.json` Scripts
+
+```json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint apps packages api --ext .ts,.tsx"
+  }
+}
+```
+
+### `vercel.json`
+
+```json
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "npm install",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/gambit/(.*)", "destination": "/apps/gambit/$1" },
+    { "source": "/collector/(.*)", "destination": "/apps/collector/$1" },
+    { "source": "/viz/(.*)", "destination": "/apps/viz/$1" },
+    { "source": "/loader/(.*)", "destination": "/apps/loader/$1" }
+  ]
+}
+```
+
+---
+
+## Phase 1: API Routes (1-2 hours)
+
+Vercel natively compiles TypeScript. Just rename and add types.
+
+### `api/sessions.ts`
+
+```typescript
+import { list } from '@vercel/blob';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 interface SessionInfo {
@@ -78,158 +231,383 @@ interface SessionInfo {
   timestamp: string;
 }
 
+interface SessionsResponse {
+  sessions: SessionInfo[];
+  count: number;
+  generatedAt: string;
+}
+
 export default async function handler(
   request: VercelRequest,
-  response: VercelResponse
+  response: VercelResponse<SessionsResponse | { error: string }>
 ) {
   if (request.method !== 'GET') {
     return response.status(405).json({ error: 'Method not allowed' });
   }
-  // ... rest of implementation with types
+
+  const { blobs } = await list({ prefix: 'sessions/', limit: 1000 });
+
+  const sessions: SessionInfo[] = blobs
+    .filter(blob => blob.pathname.endsWith('.json'))
+    .map(blob => ({
+      filename: blob.pathname.replace('sessions/', ''),
+      pathname: blob.pathname,
+      url: blob.url,
+      downloadUrl: blob.downloadUrl,
+      size: blob.size,
+      uploadedAt: blob.uploadedAt,
+      timestamp: blob.pathname.replace('sessions/', '').replace('.json', '').replace(/_/g, ':'),
+    }))
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+  response.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
+  return response.status(200).json({
+    sessions,
+    count: sessions.length,
+    generatedAt: new Date().toISOString(),
+  });
 }
 ```
 
-**Effort:** ~1-2 hours for all 3 API files
+### Checklist
+- [ ] Rename `api/sessions.js` → `api/sessions.ts`
+- [ ] Rename `api/upload.js` → `api/upload.ts`
+- [ ] Rename `api/visualizations.js` → `api/visualizations.ts`
+- [ ] Add type annotations
+- [ ] Test with `vercel dev`
 
 ---
 
-## Phase 2: Shared Modules (Core Type Safety)
+## Phase 2: Core Types Package (1 day)
 
-Convert ES modules in `/shared/` and `/modules/` to TypeScript. These are the highest-value targets because they define core interfaces.
+Create the foundational types that all apps share.
 
-**Setup build script** in `package.json`:
-
-```json
-{
-  "scripts": {
-    "build": "esbuild src/web/GAMBIT/shared/*.ts src/web/GAMBIT/modules/*.ts --outdir=src/web/GAMBIT/dist --format=esm --bundle=false",
-    "build:watch": "npm run build -- --watch",
-    "typecheck": "tsc --noEmit"
-  },
-  "devDependencies": {
-    "esbuild": "^0.24.0",
-    "typescript": "^5.7.0"
-  }
-}
-```
-
-**Key interfaces to define first** (`src/web/GAMBIT/shared/types.ts`):
+### `packages/core/src/types/telemetry.ts`
 
 ```typescript
-// Core telemetry types
+/** Raw sensor reading in LSB (Least Significant Bits) */
 export interface RawTelemetry {
-  ax: number; ay: number; az: number;  // Accelerometer (LSB)
-  gx: number; gy: number; gz: number;  // Gyroscope (LSB)
-  mx: number; my: number; mz: number;  // Magnetometer (LSB)
-  t: number;                            // Timestamp
+  ax: number;  // Accelerometer X (LSB)
+  ay: number;  // Accelerometer Y (LSB)
+  az: number;  // Accelerometer Z (LSB)
+  gx: number;  // Gyroscope X (LSB)
+  gy: number;  // Gyroscope Y (LSB)
+  gz: number;  // Gyroscope Z (LSB)
+  mx: number;  // Magnetometer X (LSB)
+  my: number;  // Magnetometer Y (LSB)
+  mz: number;  // Magnetometer Z (LSB)
+  t: number;   // Timestamp (ms)
 }
 
-export interface ProcessedTelemetry extends RawTelemetry {
-  quaternion: Quaternion;
-  euler: EulerAngles;
+/** Telemetry converted to physical units */
+export interface PhysicalTelemetry {
+  accel: Vector3;      // g's
+  gyro: Vector3;       // deg/s
+  mag: Vector3;        // μT
+  timestamp: number;   // ms
+}
+
+export interface Vector3 {
+  x: number;
+  y: number;
+  z: number;
 }
 
 export interface Quaternion {
-  w: number; x: number; y: number; z: number;
+  w: number;
+  x: number;
+  y: number;
+  z: number;
 }
 
 export interface EulerAngles {
-  roll: number; pitch: number; yaw: number;
+  roll: number;   // degrees
+  pitch: number;  // degrees
+  yaw: number;    // degrees
 }
+```
 
-// Session format
+### `packages/core/src/types/session.ts`
+
+```typescript
+import type { RawTelemetry, Quaternion } from './telemetry';
+
 export interface SessionData {
   version: string;
   device: DeviceInfo;
+  calibration: CalibrationData;
+  geomagneticLocation?: GeomagneticLocation;
   samples: TelemetrySample[];
   labels: LabelSegment[];
-  calibration: CalibrationData;
 }
 
-// Global dependencies (from legacy scripts)
-declare global {
-  interface Window {
-    MadgwickAHRS: typeof MadgwickAHRS;
-    KalmanFilter: typeof KalmanFilter;
-    KalmanFilter3D: typeof KalmanFilter3D;
-    MotionDetector: typeof MotionDetector;
-    Puck: typeof Puck;
+export interface DeviceInfo {
+  id: string;
+  firmware: string;
+  hardware?: string;
+}
+
+export interface TelemetrySample extends RawTelemetry {
+  orientation?: Quaternion;
+}
+
+export interface LabelSegment {
+  startIndex: number;
+  endIndex: number;
+  pose?: string;
+  fingers?: FingerStates;
+  motion?: MotionType;
+  custom?: string[];
+}
+
+export interface FingerStates {
+  thumb: FingerState;
+  index: FingerState;
+  middle: FingerState;
+  ring: FingerState;
+  pinky: FingerState;
+}
+
+export type FingerState = 'extended' | 'flexed' | 'unknown';
+export type MotionType = 'static' | 'dynamic';
+```
+
+### `packages/core/src/sensor/config.ts`
+
+```typescript
+/** LSM6DS3 accelerometer scale: LSB per g at ±2g range */
+export const ACCEL_SCALE = 8192;
+
+/** LSM6DS3 gyroscope scale: LSB per deg/s at 245dps range */
+export const GYRO_SCALE = 114.28;
+
+/** Default sample frequency for GAMBIT firmware (Hz) */
+export const DEFAULT_SAMPLE_FREQ = 26;
+
+/** Convert accelerometer LSB to g's */
+export function accelLsbToG(lsb: number): number {
+  return lsb / ACCEL_SCALE;
+}
+
+/** Convert gyroscope LSB to deg/s */
+export function gyroLsbToDps(lsb: number): number {
+  return lsb / GYRO_SCALE;
+}
+```
+
+---
+
+## Phase 3: Migrate Shared Modules (2-3 days)
+
+Move existing `/shared/` modules into packages.
+
+### Migration Map
+
+| Current Location | New Location | Notes |
+|-----------------|--------------|-------|
+| `shared/sensor-config.js` | `packages/core/src/sensor/config.ts` | Pure functions |
+| `shared/sensor-units.js` | `packages/core/src/sensor/units.ts` | Pure functions |
+| `shared/orientation-model.js` | `packages/orientation/src/model.ts` | Quaternion math |
+| `shared/orientation-calibration.js` | `packages/orientation/src/calibration.ts` | Calibration |
+| `shared/telemetry-processor.js` | `packages/core/src/telemetry/processor.ts` | Uses above |
+| `shared/geomagnetic-field.js` | `packages/core/src/geo/field.ts` | Lookup tables |
+| `shared/blob-upload.js` | `packages/core/src/api/upload.ts` | API client |
+| `filters.js` | `packages/filters/src/` | Split into files |
+| `kalman.js` | `packages/filters/src/kalman.ts` | Signal filter |
+| `puck.js` | `packages/puck/src/` | BLE connection |
+
+### Example: Converting filters.js
+
+```typescript
+// packages/filters/src/madgwick.ts
+
+export interface MadgwickOptions {
+  sampleFreq?: number;
+  beta?: number;
+}
+
+export class MadgwickAHRS {
+  private sampleFreq: number;
+  private beta: number;
+  private q: [number, number, number, number];
+
+  constructor(options: MadgwickOptions = {}) {
+    this.sampleFreq = options.sampleFreq ?? 26;
+    this.beta = options.beta ?? 0.05;
+    this.q = [1, 0, 0, 0];
+  }
+
+  update(gx: number, gy: number, gz: number, ax: number, ay: number, az: number): void {
+    // ... algorithm implementation
+  }
+
+  getQuaternion() {
+    return { w: this.q[0], x: this.q[1], y: this.q[2], z: this.q[3] };
   }
 }
 ```
 
-**Migration order for shared modules:**
-
-1. `types.ts` (new - core interfaces)
-2. `sensor-config.ts` (pure functions, no deps)
-3. `sensor-units.ts` (pure functions)
-4. `orientation-model.ts` (math utilities)
-5. `geomagnetic-field.ts` (lookup tables)
-6. `telemetry-processor.ts` (uses above)
-7. `blob-upload.ts` (API client)
-
-**File structure after Phase 2:**
-
-```
-src/web/GAMBIT/
-├── shared/
-│   ├── types.ts              # Core type definitions
-│   ├── sensor-config.ts      # Converted from .js
-│   ├── sensor-units.ts
-│   ├── orientation-model.ts
-│   └── index.ts              # Re-exports all
-├── dist/                     # esbuild output (ES modules)
-│   ├── types.js
-│   ├── sensor-config.js
-│   └── ...
-```
-
-**HTML import change:**
-
-```html
-<!-- Before -->
-<script type="module">
-  import { ACCEL_SCALE } from './shared/sensor-config.js';
-</script>
-
-<!-- After -->
-<script type="module">
-  import { ACCEL_SCALE } from './dist/sensor-config.js';
-</script>
-```
-
-**Effort:** ~1-2 days for shared modules
-
 ---
 
-## Phase 3: App Modules
+## Phase 4: App Modules (2-3 days)
 
-Convert `/modules/` (collector-app components) following same pattern:
+Move `/modules/` into app-specific feature folders.
 
-1. `state.ts` - Add interfaces for state shape
-2. `logger.ts` - Simple utility
-3. `connection-manager.ts` - BLE connection logic
-4. `telemetry-handler.ts` - Uses shared types
-5. `recording-controls.ts`
-6. `calibration-ui.ts`
-7. `wizard.ts`
+### Migration Map
 
-**These modules already use clean ES module patterns**, making conversion straightforward.
+| Current Location | New Location |
+|-----------------|--------------|
+| `modules/state.js` | `apps/collector/state.ts` |
+| `modules/logger.js` | `packages/core/src/utils/logger.ts` |
+| `modules/connection-manager.js` | `apps/collector/features/connection/manager.ts` |
+| `modules/telemetry-handler.js` | `apps/collector/features/telemetry/handler.ts` |
+| `modules/recording-controls.js` | `apps/collector/features/recording/controls.ts` |
+| `modules/calibration-ui.js` | `apps/collector/components/calibration.ts` |
 
-**Effort:** ~2-3 days
-
----
-
-## Phase 4: Global Scripts (Optional/Deferred)
-
-The global scripts (`puck.js`, `filters.js`, `kalman.js`) work well as-is. Options:
-
-### Option A: Type Declarations Only (Recommended)
-
-Create `.d.ts` files without modifying original JS:
+### State Management with Types
 
 ```typescript
-// src/types/filters.d.ts
+// apps/collector/state.ts
+import type { TelemetrySample, LabelSegment, FingerStates } from '@core/types';
+
+export interface AppState {
+  connected: boolean;
+  recording: boolean;
+  paused: boolean;
+  sessionData: TelemetrySample[];
+  labels: LabelSegment[];
+  currentLabelStart: number | null;
+  gambitClient: GambitClient | null;
+  firmwareVersion: string | null;
+  currentLabels: CurrentLabels;
+}
+
+export interface CurrentLabels {
+  pose: string | null;
+  fingers: FingerStates;
+  motion: 'static' | 'dynamic';
+  calibration: 'none' | 'mag' | 'gyro';
+  custom: string[];
+}
+
+export const state: AppState = {
+  connected: false,
+  recording: false,
+  paused: false,
+  sessionData: [],
+  labels: [],
+  currentLabelStart: null,
+  gambitClient: null,
+  firmwareVersion: null,
+  currentLabels: {
+    pose: null,
+    fingers: { thumb: 'unknown', index: 'unknown', middle: 'unknown', ring: 'unknown', pinky: 'unknown' },
+    motion: 'static',
+    calibration: 'none',
+    custom: []
+  }
+};
+```
+
+---
+
+## Phase 5: Extract Inline Scripts (1 week)
+
+The largest refactor: move 3,600 lines from `index.html` into modules.
+
+### Strategy
+
+1. **Create entry point** `apps/gambit/main.ts`
+2. **Extract by feature:**
+   - Connection handling → `features/connection/`
+   - Telemetry processing → `features/telemetry/`
+   - 3D visualization → `components/cube-visualizer.ts`
+   - Gesture inference → `features/inference/`
+   - UI updates → `components/`
+3. **Replace inline script** with single import
+
+### Example Entry Point
+
+```typescript
+// apps/gambit/main.ts
+import { initConnection } from './features/connection';
+import { initTelemetry } from './features/telemetry';
+import { CubeVisualizer } from './components/cube-visualizer';
+import { GestureInference } from './features/inference';
+
+// Initialize on DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+  const cube = new CubeVisualizer('#cube-container');
+  const inference = new GestureInference('/models/gesture_v1/model.json');
+
+  initConnection({
+    onConnect: (client) => {
+      console.log('Connected to GAMBIT');
+    },
+    onTelemetry: (data) => {
+      cube.updateOrientation(data.quaternion);
+      inference.process(data);
+    }
+  });
+});
+```
+
+### Updated HTML
+
+```html
+<!-- apps/gambit/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>GAMBIT</title>
+  <link rel="stylesheet" href="/assets/simcap.css">
+</head>
+<body>
+  <div id="app">
+    <!-- UI structure -->
+  </div>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>
+```
+
+Vite handles the TypeScript compilation automatically.
+
+---
+
+## Incremental Migration Path
+
+You don't need to restructure everything at once. Here's how to migrate incrementally:
+
+### Week 1: Foundation
+- [ ] Set up Vite + TypeScript config
+- [ ] Convert API routes to TypeScript
+- [ ] Create `packages/core/src/types/`
+
+### Week 2: Core Packages
+- [ ] Migrate `shared/sensor-*.js` → `packages/core/`
+- [ ] Migrate `shared/orientation-*.js` → `packages/orientation/`
+- [ ] Create type declarations for globals (temporary)
+
+### Week 3: Collector App
+- [ ] Move `collector.html` → `apps/collector/index.html`
+- [ ] Convert `modules/*.js` → TypeScript
+- [ ] Update imports to use packages
+
+### Week 4+: Main App
+- [ ] Extract inline scripts from `index.html`
+- [ ] Create `apps/gambit/main.ts`
+- [ ] Migrate feature by feature
+
+---
+
+## Temporary Compatibility Layer
+
+During migration, create type declarations for unconverted globals:
+
+```typescript
+// src/types/globals.d.ts
 declare class MadgwickAHRS {
   constructor(options?: { sampleFreq?: number; beta?: number });
   update(gx: number, gy: number, gz: number, ax: number, ay: number, az: number): void;
@@ -241,143 +619,31 @@ declare class KalmanFilter {
   constructor(options?: { R?: number; Q?: number });
   filter(value: number): number;
 }
+
+declare const Puck: {
+  connect(callback: (connection: any) => void): Promise<void>;
+  write(data: string, callback?: () => void): void;
+};
 ```
 
-### Option B: Full Conversion (Future)
-
-Only if major changes needed. These are stable, tested algorithms.
-
----
-
-## Phase 5: Inline HTML Scripts (Long-term)
-
-The 3,600-line `<script type="module">` in `index.html` is the largest migration:
-
-### Strategy: Extract to Entry Point
-
-1. Create `src/web/GAMBIT/app.ts` as main entry
-2. Move inline logic to importable modules
-3. Replace inline script with single import:
-
-```html
-<!-- index.html - After extraction -->
-<script type="module" src="./dist/app.js"></script>
-```
-
-**This is a significant refactor** - defer until Phases 1-3 complete.
-
----
-
-## Build & Deploy Configuration
-
-### Development Workflow
-
-```bash
-# Terminal 1: Watch TypeScript compilation
-npm run build:watch
-
-# Terminal 2: Local server (any static server works)
-npx serve .
-```
-
-### Vercel Build
-
-Update `vercel.json`:
-
-```json
-{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "npm install",
-  "buildCommand": "npm run build"
-}
-```
-
-### CI Type Checking
-
-Add to GitHub Actions:
-
-```yaml
-- name: Type Check
-  run: npm run typecheck
-```
-
----
-
-## Migration Checklist
-
-### Phase 1: API (1-2 hours)
-- [ ] Add TypeScript + @types/node
-- [ ] Create tsconfig.json
-- [ ] Rename api/sessions.js → .ts + add types
-- [ ] Rename api/upload.js → .ts + add types
-- [ ] Rename api/visualizations.js → .ts + add types
-- [ ] Test deployment
-
-### Phase 2: Shared Modules (1-2 days)
-- [ ] Add esbuild
-- [ ] Create shared/types.ts
-- [ ] Convert sensor-config.js → .ts
-- [ ] Convert sensor-units.js → .ts
-- [ ] Convert orientation-model.js → .ts
-- [ ] Convert remaining shared modules
-- [ ] Update HTML imports to use /dist/
-
-### Phase 3: App Modules (2-3 days)
-- [ ] Convert state.js → .ts
-- [ ] Convert logger.js → .ts
-- [ ] Convert remaining modules
-- [ ] Update collector-app.js → .ts
-
-### Phase 4: Type Declarations (Optional)
-- [ ] Create filters.d.ts
-- [ ] Create puck.d.ts
-- [ ] Create kalman.d.ts
-
-### Phase 5: Index.html Extraction (Future)
-- [ ] Create app.ts entry point
-- [ ] Extract inline modules
-- [ ] Bundle with esbuild
-
----
-
-## Alternative: Vite (If More Tooling Desired)
-
-If you want HMR and more developer tooling, Vite is an option:
-
-```bash
-npm install -D vite
-```
-
-```typescript
-// vite.config.ts
-import { defineConfig } from 'vite';
-
-export default defineConfig({
-  root: 'src/web/GAMBIT',
-  build: {
-    outDir: '../../../dist/GAMBIT',
-    rollupOptions: {
-      input: {
-        main: 'src/web/GAMBIT/index.html',
-        collector: 'src/web/GAMBIT/collector.html'
-      }
-    }
-  }
-});
-```
-
-**Tradeoff:** Vite requires restructuring HTML to work with its dev server. The esbuild approach preserves current static-file workflow.
+This lets you use globals with type safety while migrating.
 
 ---
 
 ## Summary
 
-| Phase | Scope | Effort | Value |
-|-------|-------|--------|-------|
-| 1 | API routes | 1-2 hours | High (immediate safety) |
-| 2 | Shared modules | 1-2 days | High (core type safety) |
-| 3 | App modules | 2-3 days | Medium (collector app) |
-| 4 | Type declarations | 2-4 hours | Low (optional) |
-| 5 | HTML extraction | 1 week+ | Medium (major refactor) |
+| Phase | Scope | Effort | Vite Benefit |
+|-------|-------|--------|--------------|
+| 0 | Setup Vite + TS | 2-4 hours | Foundation |
+| 1 | API routes | 1-2 hours | Native TS |
+| 2 | Core types | 1 day | Path aliases |
+| 3 | Shared modules | 2-3 days | HMR during dev |
+| 4 | App modules | 2-3 days | Fast rebuilds |
+| 5 | Inline extraction | 1 week | Module splitting |
 
-**Recommended start:** Phase 1 (API) this week, Phase 2 (shared) next sprint.
+**Key benefits of Vite approach:**
+- Hot Module Replacement for fast development
+- Native TypeScript support (no separate tsc step for dev)
+- Path aliases (`@core/`, `@filters/`) for clean imports
+- Automatic code splitting in production
+- Better long-term organization with packages structure
