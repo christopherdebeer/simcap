@@ -36,9 +36,8 @@ export default async function handler(request, response) {
 
   try {
     const jsonResponse = await handleUpload({
-      body: request,
       request,
-      onBeforeGenerateToken: async (pathname) => {
+      onBeforeGenerateToken: async (pathname, clientPayload) => {
         // Validate pathname - only allow sessions directory
         if (!pathname.startsWith('sessions/')) {
           throw new Error('Invalid upload path: must be in sessions/ directory');
