@@ -131,8 +131,8 @@ const $ = (id: string): HTMLElement | null => document.getElementById(id);
 
 // Initialize filters and fusion
 const magFilter = new KalmanFilter3D({
-    processNoise: 0.1,
-    measurementNoise: 1.0
+    R: 0.1,  // Process noise
+    Q: 1.0   // Measurement noise
 });
 
 // NOTE: With stable sensor data (Puck.accelOn fix in firmware v0.3.6),

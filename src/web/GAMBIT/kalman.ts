@@ -110,6 +110,14 @@ export class KalmanFilter {
   setProcessNoise(noise: number): void {
     this.R = noise;
   }
+
+  /**
+   * Reset filter state
+   */
+  reset(): void {
+    this.x = NaN;
+    this.cov = NaN;
+  }
 }
 
 /**
@@ -157,6 +165,24 @@ export class KalmanFilter3D {
     this.filterX.setProcessNoise(noise);
     this.filterY.setProcessNoise(noise);
     this.filterZ.setProcessNoise(noise);
+  }
+
+  /**
+   * Update filter with a 3D vector object (alternative to filter())
+   * @param input Object with x, y, z components
+   * @returns Filtered vector
+   */
+  update(input: { x: number; y: number; z: number }): { x: number; y: number; z: number } {
+    return this.filter(input.x, input.y, input.z);
+  }
+
+  /**
+   * Reset all filter axes
+   */
+  reset(): void {
+    this.filterX.reset();
+    this.filterY.reset();
+    this.filterZ.reset();
   }
 }
 

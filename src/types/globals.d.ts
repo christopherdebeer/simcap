@@ -76,15 +76,15 @@ declare class MadgwickAHRS {
 }
 
 interface KalmanFilter3DOptions {
-  processNoise?: number;
-  measurementNoise?: number;
+  R?: number;  // Process noise
+  Q?: number;  // Measurement noise
 }
 
 declare class KalmanFilter3D {
   constructor(options?: KalmanFilter3DOptions);
-  filter(x: number, y: number, z: number): Vector3;
-  update(input: { x: number; y: number; z: number }): { x: number; y: number; z: number };
-  reset(): void;
+  filter(x: number, y: number, z: number): { x: number; y: number; z: number };
+  setMeasurementNoise(noise: number): void;
+  setProcessNoise(noise: number): void;
 }
 
 interface MotionDetectorOptions {

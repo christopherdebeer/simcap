@@ -21,6 +21,10 @@ import {
     createGyroBiasState
 } from './sensor-config.js';
 
+// Import actual types from filter modules
+import type { MadgwickAHRS as MadgwickAHRSClass, MotionDetector as MotionDetectorClass } from '../filters';
+import type { KalmanFilter3D as KalmanFilter3DClass } from '../kalman';
+
 import {
     magLsbToMicroTesla,
     getSensorUnitMetadata
@@ -180,9 +184,9 @@ export class TelemetryProcessor {
     private options: TelemetryProcessorOptions;
     private magCalibration: UnifiedMagCalibration;
     private magnetDetector: MagnetDetector;
-    private imuFusion: MadgwickAHRS;
-    private magFilter: KalmanFilter3D;
-    private motionDetector: MotionDetectorInstance;
+    private imuFusion: MadgwickAHRSClass;
+    private magFilter: KalmanFilter3DClass;
+    private motionDetector: MotionDetectorClass;
     private gyroBiasState: GyroBiasState;
     private imuInitialized: boolean = false;
     private useMagnetometer: boolean;
@@ -222,9 +226,9 @@ export class TelemetryProcessor {
         });
 
         // Create signal processing components
-        this.imuFusion = createMadgwickAHRS() as MadgwickAHRS;
-        this.magFilter = createKalmanFilter3D() as KalmanFilter3D;
-        this.motionDetector = createMotionDetector() as MotionDetectorInstance;
+        this.imuFusion = createMadgwickAHRS();
+        this.magFilter = createKalmanFilter3D();
+        this.motionDetector = createMotionDetector();
 
         // Gyroscope bias calibration state
         this.gyroBiasState = createGyroBiasState();
