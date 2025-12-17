@@ -60,9 +60,16 @@ declare class MadgwickAHRS {
     gx: number, gy: number, gz: number,
     mx: number, my: number, mz: number,
     dt?: number | null,
-    gyroInDegrees?: boolean
+    gyroInDegrees?: boolean,
+    applyHardIron?: boolean
   ): { expected: Vector3; residual: Vector3 } | null;
 
+  initFromAccelerometer(ax: number, ay: number, az: number): void;
+  updateGyroBias(gx: number, gy: number, gz: number, isStationary: boolean): void;
+  setMagTrust(trust: number): void;
+  setGeomagneticReference(ref: { horizontal: number; vertical: number; declination: number }): void;
+  getMagResidual(): Vector3 | null;
+  getMagResidualMagnitude(): number;
   getQuaternion(): Quaternion;
   getEulerAngles(): EulerAngles;
   reset(): void;
@@ -76,6 +83,7 @@ interface KalmanFilter3DOptions {
 declare class KalmanFilter3D {
   constructor(options?: KalmanFilter3DOptions);
   filter(x: number, y: number, z: number): Vector3;
+  update(input: { x: number; y: number; z: number }): { x: number; y: number; z: number };
   reset(): void;
 }
 
@@ -87,6 +95,7 @@ interface MotionDetectorOptions {
 
 interface MotionDetectorResult {
   isStationary: boolean;
+  isMoving: boolean;
   accelStd: number;
   gyroStd: number;
 }
@@ -94,6 +103,7 @@ interface MotionDetectorResult {
 declare class MotionDetector {
   constructor(options?: MotionDetectorOptions);
   update(ax: number, ay: number, az: number, gx: number, gy: number, gz: number): MotionDetectorResult;
+  getState(): MotionDetectorResult;
   reset(): void;
 }
 
@@ -137,4 +147,44 @@ declare const Puck: {
   LED2: { write: (value: boolean) => void };
   LED3: { write: (value: boolean) => void };
 };
+
+// ===== gambit-client.js =====
+
+interface GambitClientOptions {
+  debug?: boolean;
+  autoKeepalive?: boolean;
+}
+
+interface GambitFirmwareInfo {
+  name: string;
+  version: string;
+}
+
+interface GambitCompatibilityResult {
+  compatible: boolean;
+  reason?: string;
+}
+
+interface GambitClient {
+  connected: boolean;
+
+  connect(): Promise<void>;
+  disconnect(): void;
+
+  on(event: 'data', callback: (data: any) => void): void;
+  on(event: 'firmware', callback: (info: GambitFirmwareInfo) => void): void;
+  on(event: 'disconnect', callback: () => void): void;
+  on(event: 'error', callback: (error: Error) => void): void;
+  off(event: string, callback: (...args: any[]) => void): void;
+
+  startStreaming(): void;
+  stopStreaming(): void;
+
+  collectSamples(count: number): Promise<any[]>;
+  checkCompatibility(minVersion: string): GambitCompatibilityResult;
+}
+
+declare class GambitClient implements GambitClient {
+  constructor(options?: GambitClientOptions);
+}
 

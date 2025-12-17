@@ -66,12 +66,15 @@ export interface CalibrationData {
 
 /** Geomagnetic field reference for location */
 export interface GeomagneticLocation {
-  name: string;
-  latitude: number;
-  longitude: number;
-  declination: number;  // degrees
-  inclination: number;  // degrees
-  intensity: number;    // μT
+  city: string;
+  country: string;
+  lat: number;
+  lon: number;
+  declination: number;   // degrees (positive = east, negative = west)
+  inclination: number;   // degrees (positive = down, negative = up)
+  intensity: number;     // μT (total field)
+  horizontal: number;    // μT
+  vertical: number;      // μT (positive = down)
 }
 
 /** Complete session data structure */
