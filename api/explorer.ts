@@ -7,12 +7,73 @@
  * No authentication required - explorer data is public.
  */
 
-import { list, head } from '@vercel/blob';
+import { list } from '@vercel/blob';
+
+// ===== Type Definitions =====
+
+interface LabelSegment {
+  labels?: {
+    custom?: string[];
+  };
+}
+
+interface SessionMetadata {
+  sample_rate: number;
+  duration: number;
+  sample_count: number;
+  device: string;
+  firmware_version: string | null;
+  session_type: string;
+  hand: string;
+  magnet_type: string;
+  notes: string | null;
+  custom_labels: string[];
+  labels: LabelSegment[];
+}
+
+interface WindowData {
+  window_num: number;
+  filepath: string;
+  time_start: number;
+  time_end: number;
+  accel_mag_mean: number;
+  gyro_mag_mean: number;
+  images: Record<string, string>;
+  trajectory_images: Record<string, string>;
+}
+
+interface SessionData extends SessionMetadata {
+  timestamp: string;
+  filename: string;
+  composite_image: string | null;
+  calibration_stages_image: string | null;
+  raw_images: string[];
+  trajectory_comparison_images: Record<string, string>;
+  windows: WindowData[];
+}
+
+interface BlobItem {
+  pathname: string;
+  url: string;
+}
+
+interface ExplorerResponse {
+  sessions: SessionData[];
+  count: number;
+  generatedAt: string;
+}
+
+interface ErrorResponse {
+  error: string;
+  message?: string;
+}
+
+// ===== Helper Functions =====
 
 /**
  * Fetch and parse a session JSON file from blob storage
  */
-async function fetchSessionMetadata(sessionUrl) {
+async function fetchSessionMetadata(sessionUrl: string): Promise<SessionMetadata | null> {
   try {
     const response = await fetch(sessionUrl);
     if (!response.ok) return null;
@@ -64,7 +125,7 @@ async function fetchSessionMetadata(sessionUrl) {
 
     return null;
   } catch (error) {
-    console.error(`Failed to fetch session metadata: ${error.message}`);
+    console.error(`Failed to fetch session metadata: ${(error as Error).message}`);
     return null;
   }
 }
@@ -72,8 +133,8 @@ async function fetchSessionMetadata(sessionUrl) {
 /**
  * Extract custom labels from label segments
  */
-function extractCustomLabels(labels) {
-  const customLabels = new Set();
+function extractCustomLabels(labels: LabelSegment[]): string[] {
+  const customLabels = new Set<string>();
   for (const segment of labels) {
     if (segment.labels?.custom) {
       segment.labels.custom.forEach(l => customLabels.add(l));
@@ -85,16 +146,16 @@ function extractCustomLabels(labels) {
 /**
  * Parse visualization files into session-grouped structure
  */
-function groupVisualizationsBySession(blobs) {
-  const sessions = new Map();
+function groupVisualizationsBySession(blobs: BlobItem[]): Map<string, SessionData> {
+  const sessions = new Map<string, SessionData>();
 
   for (const blob of blobs) {
     const path = blob.pathname.replace('visualizations/', '');
 
-    let timestamp = null;
-    let imageType = null;
-    let windowNum = null;
-    let subPath = null;
+    let timestamp: string | null = null;
+    let imageType: string | null = null;
+    let windowNum: number | null = null;
+    let subPath: string | null = null;
 
     // Match composite/calibration/orientation/raw_axes images
     const compositeMatch = path.match(/^(composite|calibration_stages|orientation_3d|orientation_track|raw_axes)_(.+?)\.png$/);
@@ -135,7 +196,8 @@ function groupVisualizationsBySession(blobs) {
         // Metadata (will be populated from session JSON)
         duration: 0,
         sample_rate: 50,
-        device: null,
+        sample_count: 0,
+        device: 'GAMBIT',
         firmware_version: null,
         session_type: 'recording',
         hand: 'unknown',
@@ -146,7 +208,7 @@ function groupVisualizationsBySession(blobs) {
       });
     }
 
-    const session = sessions.get(timestamp);
+    const session = sessions.get(timestamp)!;
 
     // Assign to appropriate field
     switch (imageType) {
@@ -162,32 +224,36 @@ function groupVisualizationsBySession(blobs) {
         session.raw_images.push(blob.url);
         break;
       case 'trajectory_comparison':
-        const trajType = subPath.replace('.png', '').replace('_3d', '');
-        session.trajectory_comparison_images[trajType] = blob.url;
+        if (subPath) {
+          const trajType = subPath.replace('.png', '').replace('_3d', '');
+          session.trajectory_comparison_images[trajType] = blob.url;
+        }
         break;
       case 'window': {
-        let window = session.windows.find(w => w.window_num === windowNum);
-        if (!window) {
-          window = {
-            window_num: windowNum,
-            filepath: blob.url,
-            time_start: windowNum,  // Approximate - actual times from session data
-            time_end: windowNum + 1,
-            accel_mag_mean: 0,
-            gyro_mag_mean: 0,
-            images: {},
-            trajectory_images: {},
-          };
-          session.windows.push(window);
-        }
-        const imageName = subPath.replace('.png', '');
-        if (imageName.startsWith('trajectory_') && !imageName.includes('accel') && !imageName.includes('gyro') && !imageName.includes('mag') && !imageName.includes('combined')) {
-          const trajKey = imageName.replace('trajectory_', '');
-          window.trajectory_images[trajKey] = blob.url;
-        } else if (imageName === 'composite' || imageName === 'window_composite') {
-          window.filepath = blob.url;
-        } else {
-          window.images[imageName] = blob.url;
+        if (windowNum !== null && subPath) {
+          let window = session.windows.find(w => w.window_num === windowNum);
+          if (!window) {
+            window = {
+              window_num: windowNum,
+              filepath: blob.url,
+              time_start: windowNum,  // Approximate - actual times from session data
+              time_end: windowNum + 1,
+              accel_mag_mean: 0,
+              gyro_mag_mean: 0,
+              images: {},
+              trajectory_images: {},
+            };
+            session.windows.push(window);
+          }
+          const imageName = subPath.replace('.png', '');
+          if (imageName.startsWith('trajectory_') && !imageName.includes('accel') && !imageName.includes('gyro') && !imageName.includes('mag') && !imageName.includes('combined')) {
+            const trajKey = imageName.replace('trajectory_', '');
+            window.trajectory_images[trajKey] = blob.url;
+          } else if (imageName === 'composite' || imageName === 'window_composite') {
+            window.filepath = blob.url;
+          } else {
+            window.images[imageName] = blob.url;
+          }
         }
         break;
       }
@@ -202,18 +268,23 @@ function groupVisualizationsBySession(blobs) {
   return sessions;
 }
 
-export default async function handler(request, response) {
+// ===== Main Handler =====
+
+export default async function handler(request: Request): Promise<Response> {
   if (request.method !== 'GET') {
-    return response.status(405).json({ error: 'Method not allowed' });
+    return new Response(JSON.stringify({ error: 'Method not allowed' } as ErrorResponse), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   try {
     // Fetch all visualizations
-    let allVizBlobs = [];
-    let cursor = undefined;
+    let allVizBlobs: BlobItem[] = [];
+    let cursor: string | undefined = undefined;
 
     do {
-      const result = await list({
+      const result: { blobs: BlobItem[]; cursor?: string } = await list({
         prefix: 'visualizations/',
         limit: 1000,
         cursor,
@@ -232,7 +303,7 @@ export default async function handler(request, response) {
     });
 
     // Create lookup map for session URLs
-    const sessionUrls = new Map();
+    const sessionUrls = new Map<string, string>();
     for (const blob of sessionBlobs) {
       if (blob.pathname.endsWith('.json')) {
         // Extract timestamp from filename
@@ -263,21 +334,29 @@ export default async function handler(request, response) {
 
     // Convert to array sorted by timestamp (newest first)
     const sessions = Array.from(sessionMap.values())
-      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-    // Set cache headers
-    response.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
-
-    return response.status(200).json({
+    const responseData: ExplorerResponse = {
       sessions,
       count: sessions.length,
       generatedAt: new Date().toISOString(),
+    };
+
+    return new Response(JSON.stringify(responseData), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 's-maxage=300, stale-while-revalidate=600',
+      },
     });
   } catch (error) {
     console.error('Explorer data error:', error);
-    return response.status(500).json({
+    return new Response(JSON.stringify({
       error: 'Failed to load explorer data',
-      message: error.message,
+      message: (error as Error).message,
+    } as ErrorResponse), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
     });
   }
 }
