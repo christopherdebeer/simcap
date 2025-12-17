@@ -4,8 +4,6 @@
  */
 
 import { state, resetSession, GambitClient } from './modules/state.js';
-// Import gambit-client to set window.GambitClient (used by connection-manager)
-import './gambit-client';
 import { initLogger, log } from './modules/logger.js';
 import { KalmanFilter3D } from './kalman';
 import { MadgwickAHRS } from './filters';

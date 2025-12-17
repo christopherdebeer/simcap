@@ -6,6 +6,7 @@
 import { state } from './state.js';
 import { log } from './logger.js';
 import { onTelemetry } from './telemetry-handler.js';
+import { GambitClient } from '../gambit-client';
 
 // ===== Type Definitions =====
 
@@ -68,8 +69,7 @@ export async function connect(): Promise<boolean> {
     log('Connecting...');
 
     try {
-        // GambitClient is a global from puck.js
-        state.gambitClient = new (window as any).GambitClient({
+        state.gambitClient = new GambitClient({
             debug: true,
             autoKeepalive: true  // Enable keepalive to prevent 30s firmware timeout during recording
         });
