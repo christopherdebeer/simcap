@@ -88,21 +88,12 @@ export async function uploadToBlob(options) {
 
     try {
         // Use the @vercel/blob/client upload function for two-phase upload
+        // Pass auth secret via clientPayload since custom headers aren't supported
         const result = await upload(pathname, blob, {
             access: 'public',
             handleUploadUrl: UPLOAD_API_ENDPOINT,
-            clientPayload: JSON.stringify({ filename }),
+            clientPayload: JSON.stringify({ secret, filename }),
             multipart: false,
-            // Pass the secret header to the handleUpload endpoint
-            fetch: (url, init) => {
-                return fetch(url, {
-                    ...init,
-                    headers: {
-                        ...init?.headers,
-                        'x-upload-secret': secret,
-                    },
-                });
-            },
         });
 
         onProgress?.({
@@ -205,19 +196,25 @@ export async function validateUploadSecret() {
     }
 
     try {
-        // Make a minimal request to check auth
-        // The two-phase protocol requires specific body format,
-        // so we just check if auth passes (non-401 response)
+        // Make a minimal request to check auth using the two-phase protocol format
+        // The secret is passed via clientPayload
         const response = await fetch(UPLOAD_API_ENDPOINT, {
             method: 'POST',
             headers: {
-                'x-upload-secret': secret,
                 'content-type': 'application/json',
             },
-            body: JSON.stringify({ type: 'blob.generate-client-token', payload: { pathname: 'sessions/.validate', callbackUrl: '' } }),
+            body: JSON.stringify({
+                type: 'blob.generate-client-token',
+                payload: {
+                    pathname: 'sessions/.validate.json',
+                    callbackUrl: window.location.origin + UPLOAD_API_ENDPOINT,
+                    multipart: false,
+                    clientPayload: JSON.stringify({ secret }),
+                }
+            }),
         });
 
-        // 401 means auth failed, anything else means auth passed
+        // 401 means auth failed, anything else means auth passed (400 for invalid path is expected)
         return response.status !== 401;
     } catch (e) {
         return false;
