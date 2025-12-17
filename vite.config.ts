@@ -83,6 +83,7 @@ export default defineConfig({
         // Current structure (will migrate to apps/ later)
         gambit: resolve(__dirname, 'src/web/GAMBIT/index.html'),
         collector: resolve(__dirname, 'src/web/GAMBIT/collector.html'),
+        synth: resolve(__dirname, 'src/web/GAMBIT/synth.html'),
         viz: resolve(__dirname, 'src/web/VIZ/index.html'),
         loader: resolve(__dirname, 'src/web/loader/index.html'),
       }
