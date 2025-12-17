@@ -25,6 +25,8 @@
  * @requires puck.js
  */
 
+import type { TelemetrySample } from '@core/types';
+
 // ===== Type Definitions =====
 
 export interface FirmwareInfo {
@@ -259,6 +261,16 @@ export class GambitClient {
 
   // ===== Event Handling =====
 
+  // Method overloads for type-safe event handling
+  on(event: 'data', handler: (data: TelemetrySample) => void): this;
+  on(event: 'firmware', handler: (info: FirmwareInfo) => void): this;
+  on(event: 'disconnect', handler: () => void): this;
+  on(event: 'close', handler: () => void): this;
+  on(event: 'error', handler: (error: Error) => void): this;
+  on(event: 'connect', handler: (conn: PuckConnection) => void): this;
+  on(event: 'streamStart', handler: () => void): this;
+  on(event: 'streamStop', handler: () => void): this;
+  on<T = unknown>(event: string, handler: EventHandler<T>): this;
   on<T = unknown>(event: string, handler: EventHandler<T>): this {
     if (!this.eventHandlers[event]) {
       this.eventHandlers[event] = [];
@@ -267,7 +279,14 @@ export class GambitClient {
     return this;
   }
 
-  off(event: string, handler?: EventHandler): this {
+  // Method overloads for type-safe event unsubscription
+  off(event: 'data', handler?: (data: TelemetrySample) => void): this;
+  off(event: 'firmware', handler?: (info: FirmwareInfo) => void): this;
+  off(event: 'disconnect', handler?: () => void): this;
+  off(event: 'close', handler?: () => void): this;
+  off(event: 'error', handler?: (error: Error) => void): this;
+  off(event: string, handler?: EventHandler): this;
+  off(event: string, handler?: ((...args: any[]) => void)): this {
     if (!this.eventHandlers[event]) return this;
     if (handler) {
       this.eventHandlers[event] = this.eventHandlers[event].filter(h => h !== handler);
@@ -702,15 +721,3 @@ export class GambitClient {
   }
 }
 
-// Export as globals for backward compatibility
-declare global {
-  interface Window {
-    GambitClient: typeof GambitClient;
-    GAMBITClient: typeof GambitClient;
-  }
-}
-
-if (typeof window !== 'undefined') {
-  window.GambitClient = GambitClient;
-  window.GAMBITClient = GambitClient;
-}

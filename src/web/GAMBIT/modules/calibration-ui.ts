@@ -9,6 +9,7 @@ import { CALIBRATION_CONFIG, validateSampleCount } from '../calibration-config.j
 import { formatFieldData } from '../shared/geomagnetic-field.js';
 import { UnifiedMagCalibration } from '../shared/unified-mag-calibration.js';
 import { magLsbToMicroTesla } from '../shared/sensor-units.js';
+import type { TelemetrySample } from '@core/types';
 
 // ===== Type Definitions =====
 
@@ -202,8 +203,8 @@ export async function runCalibrationStep(
     if (progressDiv) progressDiv.textContent = 'Starting...';
 
     try {
-        const dataHandler = (sample: CalibrationSample) => {
-            buffer.push(sample);
+        const dataHandler = (sample: TelemetrySample) => {
+            buffer.push(sample as CalibrationSample);
             const progress = Math.min(100, (buffer.length / sampleCount) * 100);
             if (progressDiv) progressDiv.textContent = `${buffer.length}/${sampleCount} (${progress.toFixed(0)}%)`;
         };
@@ -351,7 +352,7 @@ export function initCalibrationUI(): void {
             calibrationInstance?.startBaselineCapture();
 
             try {
-                const dataHandler = (sample: CalibrationSample) => {
+                const dataHandler = (sample: TelemetrySample) => {
                     const magUT = {
                         x: magLsbToMicroTesla(sample.mx),
                         y: magLsbToMicroTesla(sample.my),

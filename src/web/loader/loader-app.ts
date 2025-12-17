@@ -1,21 +1,8 @@
 /**
  * Firmware Loader Application Entry Point
  *
- * This module imports GambitClient and exposes it globally
- * for the inline loader script in index.html.
- *
- * Future: Extract inline script into proper TypeScript modules.
+ * The loader uses Puck.js library directly for BLE communication,
+ * so no additional imports are needed here.
  */
 
-import { GambitClient } from '../GAMBIT/gambit-client';
-
-// Expose GambitClient globally for inline script
-declare global {
-    interface Window {
-        GambitClient: typeof GambitClient;
-    }
-}
-
-window.GambitClient = GambitClient;
-
-console.log('[loader-app] GambitClient loaded and available globally');
+console.log('[loader-app] Firmware loader initialized');
