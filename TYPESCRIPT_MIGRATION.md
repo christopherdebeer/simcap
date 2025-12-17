@@ -11,20 +11,22 @@
   - `src/web/GAMBIT/shared/*.js` - All deleted except test file (12 files)
   - `src/web/GAMBIT/calibration-config.js`, `collector-app.js` - Deleted
 
-### 🔄 Remaining JS Files (Global Scripts)
-These files are loaded via `<script src="...">` in HTML and need conversion:
-- `src/web/GAMBIT/filters.js` - Madgwick AHRS, motion detection
-- `src/web/GAMBIT/kalman.js` - Kalman filter
-- `src/web/GAMBIT/puck.js` - BLE device communication
-- `src/web/GAMBIT/gambit-client.js` - Device protocol
-- `src/web/GAMBIT/gesture-inference.js` - ML inference
-- `src/web/GAMBIT/hand-model.js` - Hand pose model
-- `api/explorer.js` - API route (not critical)
+### 🔄 Remaining Work
+- `src/web/GAMBIT/puck.js` - External BLE library (keep as-is, non-module)
+- `src/web/GAMBIT/synth.html` - Still uses JS globals, needs TypeScript entry point
+- `api/explorer.js` - API route (low priority)
 
-### ❌ Not Started
+### ✅ Recently Converted (all now .ts)
+- `filters.ts` - MadgwickAHRS, ComplementaryFilter, MotionDetector
+- `kalman.ts` - KalmanFilter, KalmanFilter3D
+- `gambit-client.ts` - GambitClient BLE protocol
+- `gesture-inference.ts` - TensorFlow.js gesture recognition
+- `hand-model.ts` - Hand geometry types
+
+### ❌ Not Started (Future Phases)
 - Phase 3: Create `packages/filters/`, `packages/orientation/`, `packages/puck/`
 - Phase 4: Restructure to `apps/` directory
-- Phase 5: Extract inline scripts from HTML
+- Phase 5: Extract remaining inline scripts (synth.html)
 
 ---
 

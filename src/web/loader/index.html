@@ -10,8 +10,10 @@
     <!-- Eruda Dev Console for Mobile Debugging -->
     <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
     <script>eruda.init();</script>
+    <!-- External BLE library (non-module) -->
     <script src="../GAMBIT/puck.js"></script>
-    <script src="../GAMBIT/gambit-client.js"></script>
+    <!-- Load GambitClient via TypeScript module -->
+    <script type="module" src="./loader-app.ts"></script>
     <style>
         /* Page-specific styles */
         body {
