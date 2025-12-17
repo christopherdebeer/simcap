@@ -2,6 +2,7 @@
  * Vercel Blob Upload Utility
  *
  * Uploads session data files to Vercel Blob storage using client-side upload.
+ * Uses the two-phase upload protocol from @vercel/blob/client.
  * Requires an upload secret stored in localStorage for authorization.
  *
  * Usage:
@@ -17,6 +18,8 @@
  *     onProgress: (progress) => console.log(progress)
  *   });
  */
+
+import { upload } from 'https://esm.sh/@vercel/blob@0.27.1/client';
 
 const STORAGE_KEY = 'simcap_upload_secret';
 const UPLOAD_API_ENDPOINT = '/api/upload';
@@ -60,7 +63,7 @@ export function hasUploadSecret() {
 }
 
 /**
- * Upload file to Vercel Blob
+ * Upload file to Vercel Blob using client-side upload
  * @param {Object} options - Upload options
  * @param {string} options.filename - Filename for the blob (e.g., '2025-01-01T00_00_00.000Z.json')
  * @param {string} options.content - File content to upload
@@ -84,24 +87,23 @@ export async function uploadToBlob(options) {
     onProgress?.({ stage: 'uploading', message: 'Uploading to Vercel Blob...' });
 
     try {
-        // Use fetch to call our upload API with the secret header
-        // This will get a signed URL and handle the upload
-        const response = await fetch(UPLOAD_API_ENDPOINT, {
-            method: 'POST',
-            headers: {
-                'x-upload-secret': secret,
-                'x-vercel-blob-pathname': pathname,
-                'content-type': 'application/json',
+        // Use the @vercel/blob/client upload function for two-phase upload
+        const result = await upload(pathname, blob, {
+            access: 'public',
+            handleUploadUrl: UPLOAD_API_ENDPOINT,
+            clientPayload: JSON.stringify({ filename }),
+            multipart: false,
+            // Pass the secret header to the handleUpload endpoint
+            fetch: (url, init) => {
+                return fetch(url, {
+                    ...init,
+                    headers: {
+                        ...init?.headers,
+                        'x-upload-secret': secret,
+                    },
+                });
             },
-            body: blob,
         });
-
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({ error: response.statusText }));
-            throw new Error(error.error || `Upload failed: ${response.status}`);
-        }
-
-        const result = await response.json();
 
         onProgress?.({
             stage: 'complete',
@@ -203,19 +205,19 @@ export async function validateUploadSecret() {
     }
 
     try {
-        // Send minimal request to validate
+        // Make a minimal request to check auth
+        // The two-phase protocol requires specific body format,
+        // so we just check if auth passes (non-401 response)
         const response = await fetch(UPLOAD_API_ENDPOINT, {
             method: 'POST',
             headers: {
                 'x-upload-secret': secret,
-                'x-vercel-blob-pathname': 'sessions/.validate',
                 'content-type': 'application/json',
             },
-            body: '{}',
+            body: JSON.stringify({ type: 'blob.generate-client-token', payload: { pathname: 'sessions/.validate', callbackUrl: '' } }),
         });
 
-        // 400 means auth passed but validation of content failed (expected)
-        // 401 means auth failed
+        // 401 means auth failed, anything else means auth passed
         return response.status !== 401;
     } catch (e) {
         return false;
