@@ -231,7 +231,7 @@ import {
     generateDiagnosticReport,
     quaternionToEuler,
     testEulerOrders
-} from './shared/orientation-calibration.js';
+} from './shared/orientation-calibration.ts';
 
 // ===== GambitClient for Frame-Based Protocol =====
 const gambitClient = new GambitClient({ debug: true });
