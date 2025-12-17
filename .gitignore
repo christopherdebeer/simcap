@@ -13,3 +13,6 @@ __pycache__/
 
 # Data directory visualizations (temporary test outputs)
 data/GAMBIT/visualizations/
+
+# Build output
+dist/
