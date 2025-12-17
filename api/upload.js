@@ -22,8 +22,6 @@ export default async function handler(request, response) {
     return response.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Validate upload secret
-  const clientSecret = request.headers['x-upload-secret'];
   const serverSecret = process.env.SIMCAP_UPLOAD_SECRET;
 
   if (!serverSecret) {
@@ -31,15 +29,24 @@ export default async function handler(request, response) {
     return response.status(500).json({ error: 'Server configuration error' });
   }
 
-  if (!clientSecret || clientSecret !== serverSecret) {
-    return response.status(401).json({ error: 'Unauthorized: Invalid upload secret' });
-  }
-
   try {
     const jsonResponse = await handleUpload({
       body: request,
       request,
-      onBeforeGenerateToken: async (pathname) => {
+      onBeforeGenerateToken: async (pathname, clientPayload) => {
+        // Parse and validate the client payload containing auth secret
+        let payload;
+        try {
+          payload = clientPayload ? JSON.parse(clientPayload) : {};
+        } catch {
+          throw new Error('Invalid client payload');
+        }
+
+        // Validate upload secret from clientPayload
+        if (!payload.secret || payload.secret !== serverSecret) {
+          throw new Error('Unauthorized: Invalid upload secret');
+        }
+
         // Validate pathname - only allow sessions directory
         if (!pathname.startsWith('sessions/')) {
           throw new Error('Invalid upload path: must be in sessions/ directory');
@@ -64,7 +71,9 @@ export default async function handler(request, response) {
     return response.status(200).json(jsonResponse);
   } catch (error) {
     console.error('Upload error:', error);
-    return response.status(400).json({
+    // Return 401 for auth errors, 400 for others
+    const status = error.message?.includes('Unauthorized') ? 401 : 400;
+    return response.status(status).json({
       error: error.message || 'Upload failed'
     });
   }
