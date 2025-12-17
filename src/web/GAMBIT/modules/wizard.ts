@@ -55,7 +55,7 @@ interface AppState {
 
 interface WizardDependencies {
   state: AppState | null;
-  startRecording: (() => Promise<void>) | null;
+  startRecording: (() => Promise<boolean | void>) | null;
   $: ((id: string) => HTMLElement | null) | null;
   log: ((msg: string) => void) | null;
 }

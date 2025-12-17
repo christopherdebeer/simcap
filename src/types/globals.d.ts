@@ -188,3 +188,8 @@ declare class GambitClient implements GambitClient {
   constructor(options?: GambitClientOptions);
 }
 
+// ===== Three.js =====
+
+// THREE is loaded as a script tag globally
+declare const THREE: typeof import('three');
+

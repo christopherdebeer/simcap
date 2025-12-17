@@ -35,7 +35,7 @@ interface ThreeHandSkeleton {
 
 interface WizardState {
   active: boolean;
-  phase: string;
+  phase: string | null;
   currentStep: number;
   steps: Array<{ id: string }>;
 }
@@ -56,7 +56,7 @@ interface Dependencies {
   updatePoseEstimation: ((data: PoseUpdateData) => void) | null;
   updateMagTrajectory: ((data: { fused_mx: number; fused_my: number; fused_mz: number }) => void) | null;
   updateUI: (() => void) | null;
-  $: ((id: string) => HTMLElement) | null;
+  $: ((id: string) => HTMLElement | null) | null;
   threeHandSkeleton: ThreeHandSkeleton | (() => ThreeHandSkeleton | null) | null;
 }
 
@@ -263,27 +263,42 @@ export function onTelemetry(telemetry: RawTelemetry): void {
  * @param decorated - Decorated telemetry with processed fields
  */
 function updateLiveDisplay(raw: RawTelemetry, decorated: DecoratedTelemetry): void {
-    const $ = deps.$!;
+    const $ = deps.$;
+    if (!$) return;
 
     // Raw IMU values
-    $('ax').textContent = String(raw.ax);
-    $('ay').textContent = String(raw.ay);
-    $('az').textContent = String(raw.az);
-    $('gx').textContent = String(raw.gx);
-    $('gy').textContent = String(raw.gy);
-    $('gz').textContent = String(raw.gz);
+    const axEl = $('ax');
+    const ayEl = $('ay');
+    const azEl = $('az');
+    const gxEl = $('gx');
+    const gyEl = $('gy');
+    const gzEl = $('gz');
+    if (axEl) axEl.textContent = String(raw.ax);
+    if (ayEl) ayEl.textContent = String(raw.ay);
+    if (azEl) azEl.textContent = String(raw.az);
+    if (gxEl) gxEl.textContent = String(raw.gx);
+    if (gyEl) gyEl.textContent = String(raw.gy);
+    if (gzEl) gzEl.textContent = String(raw.gz);
 
     // Calibrated magnetometer (show calibrated if available, otherwise raw)
-    $('mx').textContent = (decorated.calibrated_mx ?? raw.mx).toFixed(2);
-    $('my').textContent = (decorated.calibrated_my ?? raw.my).toFixed(2);
-    $('mz').textContent = (decorated.calibrated_mz ?? raw.mz).toFixed(2);
+    const mxEl = $('mx');
+    const myEl = $('my');
+    const mzEl = $('mz');
+    if (mxEl) mxEl.textContent = (decorated.calibrated_mx ?? raw.mx).toFixed(2);
+    if (myEl) myEl.textContent = (decorated.calibrated_my ?? raw.my).toFixed(2);
+    if (mzEl) mzEl.textContent = (decorated.calibrated_mz ?? raw.mz).toFixed(2);
 
     // Residual magnetic field display (finger magnet signals)
     // TelemetryProcessor outputs residual_mx/my/mz (Earth field subtracted)
+    const fusedMxEl = $('fused_mx');
+    const fusedMyEl = $('fused_my');
+    const fusedMzEl = $('fused_mz');
+    const residualMagEl = $('residual_magnitude');
+
     if (decorated.residual_mx !== undefined) {
-        $('fused_mx').textContent = decorated.residual_mx.toFixed(2);
-        $('fused_my').textContent = decorated.residual_my!.toFixed(2);
-        $('fused_mz').textContent = decorated.residual_mz!.toFixed(2);
+        if (fusedMxEl) fusedMxEl.textContent = decorated.residual_mx.toFixed(2);
+        if (fusedMyEl) fusedMyEl.textContent = decorated.residual_my!.toFixed(2);
+        if (fusedMzEl) fusedMzEl.textContent = decorated.residual_mz!.toFixed(2);
 
         // Display residual magnitude
         const residualMag = decorated.residual_magnitude ?? Math.sqrt(
@@ -291,7 +306,7 @@ function updateLiveDisplay(raw: RawTelemetry, decorated: DecoratedTelemetry): vo
             decorated.residual_my! ** 2 +
             decorated.residual_mz! ** 2
         );
-        $('residual_magnitude').textContent = residualMag.toFixed(2) + ' μT';
+        if (residualMagEl) residualMagEl.textContent = residualMag.toFixed(2) + ' μT';
 
         // Update 3D magnetic trajectory visualization
         if (deps.updateMagTrajectory) {
@@ -302,10 +317,10 @@ function updateLiveDisplay(raw: RawTelemetry, decorated: DecoratedTelemetry): vo
             });
         }
     } else {
-        $('fused_mx').textContent = '-';
-        $('fused_my').textContent = '-';
-        $('fused_mz').textContent = '-';
-        $('residual_magnitude').textContent = '-';
+        if (fusedMxEl) fusedMxEl.textContent = '-';
+        if (fusedMyEl) fusedMyEl.textContent = '-';
+        if (fusedMzEl) fusedMzEl.textContent = '-';
+        if (residualMagEl) residualMagEl.textContent = '-';
     }
 }
 

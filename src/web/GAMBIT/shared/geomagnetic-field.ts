@@ -318,8 +318,8 @@ export function getLocationsByCountry(country: string): GeomagneticLocation[] {
  * Get default location (Edinburgh, UK - where development occurred)
  * @returns Edinburgh location data
  */
-export function getDefaultLocation(): GeomagneticLocation | undefined {
-    return GEOMAGNETIC_LOOKUP.find(loc => loc.city === 'Edinburgh');
+export function getDefaultLocation(): GeomagneticLocation | null {
+    return GEOMAGNETIC_LOOKUP.find(loc => loc.city === 'Edinburgh') ?? null;
 }
 
 // ===== Formatting Functions =====

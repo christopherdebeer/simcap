@@ -31,11 +31,8 @@ export interface CurrentLabels {
   custom: string[];
 }
 
-export interface CustomLabelDefinition {
-  id: string;
-  name: string;
-  color?: string;
-}
+// Custom label definitions are simple strings (label names)
+export type CustomLabelDefinition = string;
 
 // GambitClient type - matches gambit-client.js global
 export interface GambitClient {
