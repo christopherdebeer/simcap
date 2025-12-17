@@ -2175,9 +2175,9 @@ async function initPlayback() {
     playbackElements.speedSelect = document.getElementById('playbackSpeed');
 
     // Create SessionPlayback instance using the module
+    // Create SessionPlayback instance using the module
+    // Uses /api/sessions endpoint by default (configured in session-playback.js)
     sessionPlayback = new SessionPlayback({
-        manifestUrl: '../../../data/GAMBIT/manifest.json',
-        dataBaseUrl: '../../../data/GAMBIT/',
         sampleRate: 20,
         
         // Feed samples through updateData (same as live data)
@@ -2269,4 +2269,3 @@ try {
 } catch (e) {
     console.error('[GAMBIT] Failed to init playback:', e);
 }
-

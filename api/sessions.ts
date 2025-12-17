@@ -8,7 +8,6 @@
  */
 
 import { list } from '@vercel/blob';
-import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 interface SessionInfo {
   filename: string;
@@ -31,13 +30,13 @@ interface ErrorResponse {
   message?: string;
 }
 
-export default async function handler(
-  request: VercelRequest,
-  response: VercelResponse
-) {
+export default async function handler(request: Request): Promise<Response> {
   // Only allow GET requests
   if (request.method !== 'GET') {
-    return response.status(405).json({ error: 'Method not allowed' });
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   try {
@@ -67,20 +66,31 @@ export default async function handler(
       })
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()); // Newest first
 
-    // Set cache headers for efficient CDN caching
-    response.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
-
-    return response.status(200).json({
+    const responseData: SessionsResponse = {
       sessions,
       count: sessions.length,
       generatedAt: new Date().toISOString(),
+    };
+
+    return new Response(JSON.stringify(responseData), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 's-maxage=60, stale-while-revalidate=300',
+      },
     });
   } catch (error) {
     console.error('Sessions list error:', error);
     const message = error instanceof Error ? error.message : 'Unknown error';
-    return response.status(500).json({
+    
+    const errorResponse: ErrorResponse = {
       error: 'Failed to list sessions',
       message,
+    };
+
+    return new Response(JSON.stringify(errorResponse), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
     });
   }
 }

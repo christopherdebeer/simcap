@@ -11,8 +11,8 @@
  * Default configuration
  */
 const DEFAULT_CONFIG = {
-    manifestUrl: '../../../data/GAMBIT/manifest.json',
-    dataBaseUrl: '../../../data/GAMBIT/',
+    manifestUrl: '/api/sessions',  // Use API endpoint for Vercel Blob sessions
+    dataBaseUrl: '',               // Sessions have full URLs from API
     sampleRate: 20,  // Hz - assumed sample rate for time calculations
     defaultSpeed: 1
 };
@@ -132,7 +132,8 @@ export class SessionPlayback {
         try {
             console.log('[SessionPlayback] Loading session:', session.filename);
             
-            const url = this.config.dataBaseUrl + session.filename;
+            // Use session's URL directly if available (from API), otherwise construct from base URL
+            const url = session.url || session.downloadUrl || (this.config.dataBaseUrl + session.filename);
             const response = await fetch(url);
             
             if (!response.ok) {
