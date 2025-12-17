@@ -2422,7 +2422,7 @@
                         sample_rate: 26,
                         device: 'GAMBIT',
                         firmware_version: firmwareVersion || 'unknown',
-                        calibration: calibration ? calibration.toJSON() : null,
+                        calibration: telemetryProcessor.getMagCalibration()?.toJSON(),
                         location: exportLocationMetadata(geomagneticLocation),
                         subject_id: 'unknown',
                         environment: 'unknown',
@@ -2506,7 +2506,7 @@
                         sample_rate: 26,  // Match firmware accelOn rate
                         device: 'GAMBIT',
                         firmware_version: firmwareVersion || 'unknown',
-                        calibration: calibration ? calibration.toJSON() : null,
+                        calibration: telemetryProcessor.getMagCalibration()?.toJSON(),
                         location: exportLocationMetadata(geomagneticLocation),
                         subject_id: 'unknown',
                         environment: 'unknown',
