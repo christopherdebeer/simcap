@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "baseUrl": ".",
+    "paths": {
+      "@core/*": ["packages/core/src/*"],
+      "@filters/*": ["packages/filters/src/*"],
+      "@orientation/*": ["packages/orientation/src/*"],
+      "@puck/*": ["packages/puck/src/*"]
+    }
+  },
+  "include": [
+    "api/**/*",
+    "src/**/*",
+    "packages/**/*",
+    "apps/**/*",
+    "vite.config.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}

@@ -8,8 +8,33 @@
  */
 
 import { list } from '@vercel/blob';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-export default async function handler(request, response) {
+interface SessionInfo {
+  filename: string;
+  pathname: string;
+  url: string;
+  downloadUrl: string;
+  size: number;
+  uploadedAt: string;
+  timestamp: string;
+}
+
+interface SessionsResponse {
+  sessions: SessionInfo[];
+  count: number;
+  generatedAt: string;
+}
+
+interface ErrorResponse {
+  error: string;
+  message?: string;
+}
+
+export default async function handler(
+  request: VercelRequest,
+  response: VercelResponse
+) {
   // Only allow GET requests
   if (request.method !== 'GET') {
     return response.status(405).json({ error: 'Method not allowed' });
@@ -23,7 +48,7 @@ export default async function handler(request, response) {
     });
 
     // Transform blob list into session manifest format
-    const sessions = blobs
+    const sessions: SessionInfo[] = blobs
       .filter(blob => blob.pathname.endsWith('.json'))
       .map(blob => {
         // Extract timestamp from filename (e.g., "sessions/2025-12-15T22_35_15.567Z.json")
@@ -36,11 +61,11 @@ export default async function handler(request, response) {
           url: blob.url,
           downloadUrl: blob.downloadUrl,
           size: blob.size,
-          uploadedAt: blob.uploadedAt,
+          uploadedAt: blob.uploadedAt.toISOString(),
           timestamp,
         };
       })
-      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)); // Newest first
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()); // Newest first
 
     // Set cache headers for efficient CDN caching
     response.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
@@ -52,9 +77,10 @@ export default async function handler(request, response) {
     });
   } catch (error) {
     console.error('Sessions list error:', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
     return response.status(500).json({
       error: 'Failed to list sessions',
-      message: error.message,
+      message,
     });
   }
 }

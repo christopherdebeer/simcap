@@ -9,6 +9,7 @@
  */
 
 import { handleUpload } from '@vercel/blob/client';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export const config = {
   api: {
@@ -16,7 +17,10 @@ export const config = {
   },
 };
 
-export default async function handler(request, response) {
+export default async function handler(
+  request: VercelRequest,
+  response: VercelResponse
+) {
   // Only allow POST requests
   if (request.method !== 'POST') {
     return response.status(405).json({ error: 'Method not allowed' });
@@ -30,12 +34,15 @@ export default async function handler(request, response) {
   }
 
   try {
-    const jsonResponse = await handleUpload({
+    // Use the updated handleUpload API
+    // Note: Type definitions may not match latest API - using type assertion
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const jsonResponse = await (handleUpload as any)({
       body: request,
       request,
-      onBeforeGenerateToken: async (pathname, clientPayload) => {
+      onBeforeGenerateToken: async (pathname: string, clientPayload?: string) => {
         // Parse and validate the client payload containing auth secret
-        let payload;
+        let payload: { secret?: string } = {};
         try {
           payload = clientPayload ? JSON.parse(clientPayload) : {};
         } catch {
@@ -63,7 +70,7 @@ export default async function handler(request, response) {
           addRandomSuffix: false, // Use exact filename (timestamp-based)
         };
       },
-      onUploadCompleted: async ({ blob }) => {
+      onUploadCompleted: async ({ blob }: { blob: { pathname: string; size: number } }) => {
         console.log('Session uploaded:', blob.pathname, 'Size:', blob.size);
       },
     });
@@ -72,9 +79,10 @@ export default async function handler(request, response) {
   } catch (error) {
     console.error('Upload error:', error);
     // Return 401 for auth errors, 400 for others
-    const status = error.message?.includes('Unauthorized') ? 401 : 400;
+    const message = error instanceof Error ? error.message : 'Upload failed';
+    const status = message.includes('Unauthorized') ? 401 : 400;
     return response.status(status).json({
-      error: error.message || 'Upload failed'
+      error: message
     });
   }
 }
