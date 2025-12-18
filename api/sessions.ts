@@ -8,7 +8,28 @@
  */
 
 import { list } from '@vercel/blob';
-import type { SessionInfo, SessionsResponse, ApiError } from '@api/types';
+
+// Types defined locally (path aliases don't work in Vercel serverless)
+interface SessionInfo {
+  filename: string;
+  pathname: string;
+  url: string;
+  downloadUrl: string;
+  size: number;
+  uploadedAt: string;
+  timestamp: string;
+}
+
+interface SessionsResponse {
+  sessions: SessionInfo[];
+  count: number;
+  generatedAt: string;
+}
+
+interface ApiError {
+  error: string;
+  message?: string;
+}
 
 export default async function handler(request: Request): Promise<Response> {
   // Only allow GET requests
@@ -62,7 +83,7 @@ export default async function handler(request: Request): Promise<Response> {
   } catch (error) {
     console.error('Sessions list error:', error);
     const message = error instanceof Error ? error.message : 'Unknown error';
-    
+
     const errorResponse: ApiError = {
       error: 'Failed to list sessions',
       message,

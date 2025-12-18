@@ -9,34 +9,71 @@
  */
 
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
-import type { UploadClientPayload } from '@api/types';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+
+/** Client payload sent with upload token request */
+interface UploadClientPayload {
+  secret: string;
+}
 
 /**
- * Web API handler for Vercel Edge/Serverless
- * Uses Request/Response instead of VercelRequest/VercelResponse
+ * Read request body as JSON
+ * Handles both VercelRequest (Node.js) and Web API Request
  */
-export default async function handler(request: Request): Promise<Response> {
+async function readBodyAsJson(request: VercelRequest | Request): Promise<HandleUploadBody> {
+  // Check if it's a Web API Request (has .json method)
+  if ('json' in request && typeof request.json === 'function') {
+    return (await (request as Request).json()) as HandleUploadBody;
+  }
+
+  // It's a VercelRequest - read from body stream
+  const vercelReq = request as VercelRequest;
+
+  // If body is already parsed (e.g., by body-parser), return it
+  if (vercelReq.body && typeof vercelReq.body === 'object') {
+    return vercelReq.body as HandleUploadBody;
+  }
+
+  // Read body from stream
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    vercelReq.on('data', (chunk: Buffer) => chunks.push(chunk));
+    vercelReq.on('end', () => {
+      try {
+        const body = Buffer.concat(chunks).toString();
+        resolve(JSON.parse(body) as HandleUploadBody);
+      } catch (e) {
+        reject(new Error('Failed to parse request body'));
+      }
+    });
+    vercelReq.on('error', reject);
+  });
+}
+
+/**
+ * Vercel Serverless Function handler
+ */
+export default async function handler(
+  request: VercelRequest,
+  response: VercelResponse
+): Promise<void> {
   // Only allow POST requests
   if (request.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    response.status(405).json({ error: 'Method not allowed' });
+    return;
   }
 
   const serverSecret = process.env.SIMCAP_UPLOAD_SECRET;
 
   if (!serverSecret) {
     console.error('SIMCAP_UPLOAD_SECRET environment variable not configured');
-    return new Response(JSON.stringify({ error: 'Server configuration error' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    response.status(500).json({ error: 'Server configuration error' });
+    return;
   }
 
   try {
-    // Parse the request body as HandleUploadBody
-    const body = (await request.json()) as HandleUploadBody;
+    // Parse the request body
+    const body = await readBodyAsJson(request);
 
     // Call handleUpload with parsed body
     const jsonResponse = await handleUpload({
@@ -77,18 +114,12 @@ export default async function handler(request: Request): Promise<Response> {
       },
     });
 
-    return new Response(JSON.stringify(jsonResponse), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    response.status(200).json(jsonResponse);
   } catch (error) {
     console.error('Upload error:', error);
     // Return 401 for auth errors, 400 for others
     const message = error instanceof Error ? error.message : 'Upload failed';
     const status = message.includes('Unauthorized') ? 401 : 400;
-    return new Response(JSON.stringify({ error: message }), {
-      status,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    response.status(status).json({ error: message });
   }
 }

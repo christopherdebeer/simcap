@@ -9,7 +9,26 @@
 
 import { list } from '@vercel/blob';
 import type { ListBlobResultBlob } from '@vercel/blob';
-import type { WindowEntry, SessionVisualization } from '@api/types';
+
+// Types defined locally (path aliases don't work in Vercel serverless)
+interface WindowEntry {
+  window_num: number;
+  filepath: string;
+  images: Record<string, string>;
+  trajectory_images: Record<string, string>;
+}
+
+interface SessionVisualization {
+  timestamp: string;
+  filename: string;
+  composite_image: string | null;
+  calibration_stages_image: string | null;
+  orientation_3d_image: string | null;
+  orientation_track_image: string | null;
+  raw_axes_image: string | null;
+  trajectory_comparison_images: Record<string, string>;
+  windows: WindowEntry[];
+}
 
 /**
  * Normalize timestamp by converting underscores to colons
