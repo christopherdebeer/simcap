@@ -19,7 +19,9 @@
     "fetch:sessions": "node scripts/fetch-sessions.js",
     "fetch:visualizations": "node scripts/fetch-visualizations.js",
     "fetch:all": "npm run fetch:sessions && npm run fetch:visualizations",
-    "upload:sessions": "node scripts/upload-local-sessions.js"
+    "upload:sessions": "node scripts/upload-local-sessions.js",
+    "upload:visualizations": "node scripts/upload-local-visualizations.js",
+    "upload:all": "npm run upload:sessions && npm run upload:visualizations"
   },
   "repository": {
     "type": "git",
