@@ -1,5 +1,5 @@
 // @ts-nocheck
-// TODO: Remove @ts-nocheck and add proper type annotations incrementally
+// TODO: Add proper type annotations (object literals need interfaces, callback types needed)
 /**
  * Orientation Calibration System
  *

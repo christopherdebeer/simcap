@@ -80,12 +80,12 @@ export default defineConfig({
       input: {
         // Root landing page
         main: resolve(__dirname, 'index.html'),
-        // Current structure (will migrate to apps/ later)
-        gambit: resolve(__dirname, 'src/web/GAMBIT/index.html'),
-        collector: resolve(__dirname, 'src/web/GAMBIT/collector.html'),
-        synth: resolve(__dirname, 'src/web/GAMBIT/synth.html'),
-        viz: resolve(__dirname, 'src/web/VIZ/index.html'),
-        loader: resolve(__dirname, 'src/web/loader/index.html'),
+        // Apps directory structure
+        gambit: resolve(__dirname, 'apps/gambit/index.html'),
+        collector: resolve(__dirname, 'apps/gambit/collector.html'),
+        synth: resolve(__dirname, 'apps/gambit/synth.html'),
+        viz: resolve(__dirname, 'apps/viz/index.html'),
+        loader: resolve(__dirname, 'apps/loader/index.html'),
       }
     }
   },
