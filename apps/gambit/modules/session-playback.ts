@@ -14,9 +14,18 @@ import type { TelemetrySample } from '@core/types';
 export interface SessionMetadata {
     filename: string;
     timestamp: string;
+    /** Direct URL to session data (from Vercel Blob) */
+    url?: string;
+    /** Download URL for session data */
+    downloadUrl?: string;
+    /** File size in bytes */
+    size?: number;
+    /** Upload timestamp */
+    uploadedAt?: string;
+    /** Calculated duration in seconds */
     durationSec?: number;
+    /** Number of samples */
     sampleCount?: number;
-    [key: string]: any;
 }
 
 export interface SessionManifest {
@@ -209,7 +218,7 @@ export class SessionPlayback {
             console.log('[SessionPlayback] Loading session:', session.filename);
 
             // Use session's URL directly if available (from API), otherwise construct from base URL
-            const url = (session as any).url || (session as any).downloadUrl || (this.config.dataBaseUrl + session.filename);
+            const url = session.url || session.downloadUrl || (this.config.dataBaseUrl + session.filename);
             const response = await fetch(url);
 
             if (!response.ok) {
@@ -482,10 +491,21 @@ export function formatSessionDisplay(session: SessionMetadata): string {
     const date = new Date(session.timestamp);
     const dateStr = date.toLocaleDateString();
     const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const duration = session.durationSec ? formatTime(session.durationSec) : '?';
-    const samples = session.sampleCount || '?';
 
-    return `${dateStr} ${timeStr} - ${duration} (${samples} samples)`;
+    // Show duration/samples if available, otherwise show file size
+    let info: string;
+    if (session.durationSec) {
+        const duration = formatTime(session.durationSec);
+        const samples = session.sampleCount || '?';
+        info = `${duration} (${samples} samples)`;
+    } else if (session.size) {
+        const sizeKB = Math.round(session.size / 1024);
+        info = `${sizeKB} KB`;
+    } else {
+        info = 'unknown size';
+    }
+
+    return `${dateStr} ${timeStr} - ${info}`;
 }
 
 /**
