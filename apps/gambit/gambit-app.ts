@@ -8,7 +8,10 @@
  */
 
 import type { GeomagneticLocation } from './shared/geomagnetic-field.js';
-import type { EulerAngles, Quaternion } from '@core/types';
+import type { EulerAngles, Quaternion, TelemetrySample } from '@core/types';
+import type { ReferencePose, ValidationQuestion, CouplingQuestion, Observation } from './shared/orientation-calibration.js';
+import type { SessionMetadata, PlaybackState } from './modules/session-playback.js';
+import type { GestureUIController } from './modules/gesture-inference-module.js';
 
 // ===== Import Global Classes (previously loaded via <script> tags) =====
 // These are now ES modules that also export to window for backward compatibility
@@ -18,20 +21,6 @@ import { MadgwickAHRS, ComplementaryFilter, MotionDetector } from './filters';
 import { GestureInference, FingerTrackingInference } from './gesture-inference';
 
 // ===== Type Definitions =====
-
-interface TelemetrySample {
-    ax: number;
-    ay: number;
-    az: number;
-    gx: number;
-    gy: number;
-    gz: number;
-    mx: number;
-    my: number;
-    mz: number;
-    t: number;
-    [key: string]: any;
-}
 
 interface DataStageInfo {
     label: string;
@@ -57,6 +46,47 @@ interface CalibrationState {
     earthWorld: { x: number; y: number; z: number };
     hardIronCalibrated: boolean;
     softIronCalibrated: boolean;
+}
+
+/** Tracking state for min/max normalization */
+interface MinMaxEntry {
+    values: number[];
+    min: number;
+    max: number;
+    kalman: KalmanFilter;
+    kalmanValues: number[];
+}
+
+/** Playback UI element references */
+interface PlaybackUIElements {
+    select: HTMLSelectElement | null;
+    playBtn: HTMLButtonElement | null;
+    stopBtn: HTMLButtonElement | null;
+    slider: HTMLInputElement | null;
+    timeEl: HTMLElement | null;
+    statusEl: HTMLElement | null;
+    card: HTMLElement | null;
+    speedSelect: HTMLSelectElement | null;
+}
+
+/** Extended telemetry with optional legacy firmware fields and computed values */
+interface ExtendedTelemetry extends TelemetrySample {
+    /** Legacy field - loop counter */
+    l?: number;
+    /** Legacy field - sensor status */
+    s?: number;
+    /** Legacy field - calibration status */
+    c?: number;
+    /** Legacy field - notification flags */
+    n?: number;
+    /** Legacy field - battery level */
+    b?: number;
+    /** Pre-computed Euler roll from session playback */
+    euler_roll?: number;
+    /** Pre-computed Euler pitch from session playback */
+    euler_pitch?: number;
+    /** Pre-computed Euler yaw from session playback */
+    euler_yaw?: number;
 }
 
 // ===== Window Augmentation =====
@@ -658,7 +688,7 @@ function updateMagTrajectoryStats() {
 
 // ===== CALIBRATION SYSTEM =====
 const observationStore = new ObservationStore();
-let currentCalibrationPose: any = null;
+let currentCalibrationPose: ReferencePose | null = null;
 let currentUserAnswers: Record<string, string> = {};
 let latestSensorData: TelemetrySample | null = null;
 let latestAhrsOutput: EulerAngles | null = null;
@@ -674,8 +704,8 @@ function initCalibrationUI() {
 
     // Pose selection handler
     poseSelect?.addEventListener('change', (e) => {
-        const poseId = (e.target as HTMLSelectElement).value;
-        if (poseId && (REFERENCE_POSES as any)[poseId]) {
+        const poseId = (e.target as HTMLSelectElement).value as keyof typeof REFERENCE_POSES;
+        if (poseId && REFERENCE_POSES[poseId]) {
             selectCalibrationPose(poseId);
         } else {
             clearCalibrationPose();
@@ -704,8 +734,8 @@ function initCalibrationUI() {
     applyBtn?.addEventListener('click', applyCalibrationRecommendation);
 }
 
-function selectCalibrationPose(poseId: string) {
-    currentCalibrationPose = (REFERENCE_POSES as any)[poseId];
+function selectCalibrationPose(poseId: keyof typeof REFERENCE_POSES) {
+    currentCalibrationPose = REFERENCE_POSES[poseId];
     currentUserAnswers = {};
 
     // Show instructions
@@ -724,7 +754,7 @@ function selectCalibrationPose(poseId: string) {
         let questionsHtml = '';
 
         // Render each validation question
-        currentCalibrationPose.validationQuestions.forEach((q: any) => {
+        currentCalibrationPose.validationQuestions.forEach((q: ValidationQuestion) => {
             if (q.type === 'position') {
                 // Simple yes/no/mostly for static position questions
                 questionsHtml += `
@@ -752,7 +782,7 @@ function selectCalibrationPose(poseId: string) {
                     <div style="margin: 8px 0; padding: 6px; background: rgba(255,255,255,0.03); border-radius: 4px;">
                         <div style="font-weight: bold; margin-bottom: 4px;">${q.question}</div>
                         <div style="display: flex; flex-direction: column; gap: 4px;">
-                            ${q.options.map((opt: any) => `
+                            ${q.options.map((opt) => `
                                 <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
                                     <input type="radio" name="q_${q.id}" class="calibration-radio" data-qid="${q.id}" value="${opt.value}">
                                     <span>${opt.label}</span>
@@ -766,12 +796,12 @@ function selectCalibrationPose(poseId: string) {
 
         // Add coupling question if present
         if (currentCalibrationPose.couplingQuestion) {
-            const cq = currentCalibrationPose.couplingQuestion;
+            const cq: CouplingQuestion = currentCalibrationPose.couplingQuestion;
             questionsHtml += `
                 <div style="margin: 8px 0; padding: 6px; background: rgba(255,200,0,0.1); border-radius: 4px; border-left: 3px solid rgba(255,200,0,0.5);">
                     <div style="font-weight: bold; margin-bottom: 4px;">${cq.question}</div>
                     <div style="display: flex; flex-direction: column; gap: 4px;">
-                        ${cq.options.map((opt: any) => `
+                        ${cq.options.map((opt) => `
                             <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
                                 <input type="radio" name="q_coupling" class="calibration-radio" data-qid="coupling" value="${opt.value}">
                                 <span>${opt.label}</span>
@@ -882,7 +912,7 @@ function updateObservationLog() {
         if (observations.length === 0) {
             logEl.innerHTML = 'No observations yet. Start with FLAT_PALM_UP to set baseline.';
         } else {
-            logEl.innerHTML = observations.map((obs: any, i: number) => {
+            logEl.innerHTML = observations.map((obs: Observation, i: number) => {
                 const coupling = obs.analysis?.coupling;
                 const couplingColor = !coupling || coupling.type === 'none' ? 'green' :
                     coupling.type === 'partial' ? 'orange' : 'red';
@@ -934,7 +964,7 @@ function updateAnalysis() {
     // Count coupling issues
     let couplingCount = 0;
     let wrongAxisCount = 0;
-    observations.forEach((obs: any) => {
+    observations.forEach((obs: Observation) => {
         if (obs.analysis?.coupling?.type === 'all_coupled' || obs.analysis?.coupling?.type === 'partial') {
             couplingCount++;
         }
@@ -1054,7 +1084,7 @@ let lastTimestamp = null;
 
 // ===== GambitClient Event Handlers =====
 // Handle telemetry data from frame-based protocol
-gambitClient.on('data', function(t: any) {
+gambitClient.on('data', function(t: ExtendedTelemetry) {
     wrappedUpdateData(t);
     
     // Auto-upload to GitHub after 1s of no data
@@ -1084,7 +1114,7 @@ gambitClient.on('firmware', function(fw) {
     firmwareVersion = fw.version || 'unknown';
 });
 
-const minMaxs: Record<string, any> = {}
+const minMaxs: Record<string, MinMaxEntry> = {}
 
 function updateMinMaxsReturnNorm(key: string, val: number): number {
     if (typeof minMaxs[key] === 'undefined') {
@@ -1113,7 +1143,7 @@ function updateMinMaxsReturnNorm(key: string, val: number): number {
     return (val - minMaxs[key].min) / (minMaxs[key].max - minMaxs[key].min)
 }
 
-function normalise(t: any) {
+function normalise(t: ExtendedTelemetry) {
     return {
         l: t.l,
         t: t.t,
@@ -1140,7 +1170,7 @@ function normalise(t: any) {
 /**
  * Update magnet detection UI display
  */
-function updateMagnetDetectionUI(decoratedData: any) {
+function updateMagnetDetectionUI(_decoratedData?: TelemetrySample) {
     const statusEl = document.getElementById('magnetStatusValue');
     const confEl = document.getElementById('magnetConfidenceValue');
     const barEl = document.getElementById('magnetConfidenceBar');
@@ -1340,7 +1370,7 @@ function updateCalibrationConfidenceUI() {
     }
 }
 
-function updateData(prenorm: any) {
+function updateData(prenorm: ExtendedTelemetry) {
     // Process telemetry through shared TelemetryProcessor
     // This handles: unit conversion, IMU fusion, gyro bias, mag calibration (unified), filtering
     const decoratedData = telemetryProcessor.process(prenorm);
@@ -1623,7 +1653,7 @@ async function getFileShaForLFS(token: string, owner: string, repo: string, path
 
 // ===== Vercel Blob Upload =====
 // Uses the shared blob-upload module with two-phase @vercel/blob/client protocol
-async function blobPutData(rawSessionData: any[]) {
+async function blobPutData(rawSessionData: TelemetrySample[]) {
     // Check for secret using the module's function (reads from localStorage)
     if (!hasUploadSecret()) {
         console.log("blobPutData: No upload secret configured. Skipping upload.");
@@ -1697,7 +1727,7 @@ function updateUploadStatus(message: string, type: string) {
 }
 
 // Dispatcher function - routes to blob or github based on uploadMethod
-async function uploadSessionData(rawSessionData: any[]) {
+async function uploadSessionData(rawSessionData: TelemetrySample[]) {
     if (uploadMethod === 'blob') {
         return blobPutData(rawSessionData);
     } else {
@@ -1705,7 +1735,7 @@ async function uploadSessionData(rawSessionData: any[]) {
     }
 }
 
-async function ghPutData(rawSessionData: any[]) {
+async function ghPutData(rawSessionData: TelemetrySample[]) {
 
     if (!ghToken) {
         console.log("ghToken not found. skipping upload.");
@@ -1969,8 +1999,10 @@ window.getdata.onclick = async function() {
 }
 
 // ===== Gesture Inference (using module) =====
-let gestureInference: any = null;
-let gestureUI: any = null;
+// Note: GestureInference type comes from dynamically loaded script
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let gestureInference: { load: () => Promise<void>; isReady: boolean; addSample: (sample: TelemetrySample) => void; labels: string[] } | null = null;
+let gestureUI: GestureUIController | null = null;
 
 // Initialize gesture inference using the module
 async function initGestureInference() {
@@ -1999,30 +2031,32 @@ async function initGestureInference() {
             confidenceThreshold: 0.3,
             onPrediction: (result) => {
                 console.log('[GAMBIT] Prediction:', result.gesture, result.confidence.toFixed(2));
-                gestureUI.updatePrediction(result);
+                gestureUI?.updatePrediction(result);
             },
             onReady: () => {
                 console.log('[GAMBIT] ✓ Model ready');
-                gestureUI.setStatus('ready', 'Model ready (v1)');
-                gestureUI.initProbabilityBars(gestureInference.labels);
+                gestureUI?.setStatus('ready', 'Model ready (v1)');
+                if (gestureInference) {
+                    gestureUI?.initProbabilityBars(gestureInference.labels);
+                }
             },
             onError: (error: Error) => {
                 console.error('[GAMBIT] Model error:', error.message);
-                gestureUI.setStatus('error', 'Model error: ' + error.message);
+                gestureUI?.setStatus('error', 'Model error: ' + error.message);
             }
         });
 
-        await gestureInference.load();
+        await gestureInference!.load();
     } catch (error) {
         console.error('[GAMBIT] Failed to initialize gesture inference:', error);
-        gestureUI.setStatus('error', 'Model unavailable: ' + (error as Error).message);
+        gestureUI?.setStatus('error', 'Model unavailable: ' + (error as Error).message);
     }
 }
 
 // Hook into data updates to feed inference
 const originalUpdateData = updateData;
 let sampleCount = 0;
-const wrappedUpdateData = function(prenorm: any) {
+const wrappedUpdateData = function(prenorm: ExtendedTelemetry) {
     // Call original function
     originalUpdateData(prenorm);
 
@@ -2089,10 +2123,10 @@ document.getElementById('threeResetBtn')?.addEventListener('click', () => {
 });
 
 // ===== Session Playback System (using module) =====
-let sessionPlayback: any = null;
+let sessionPlayback: SessionPlayback | null = null;
 
 // UI elements for playback
-const playbackElements: Record<string, any> = {
+const playbackElements: PlaybackUIElements = {
     select: null,
     playBtn: null,
     stopBtn: null,
@@ -2104,7 +2138,7 @@ const playbackElements: Record<string, any> = {
 };
 
 // Update UI based on playback state
-function updatePlaybackUI(state: any) {
+function updatePlaybackUI(state: PlaybackState) {
     if (!playbackElements.timeEl) return;
 
     // Update time display
@@ -2113,7 +2147,7 @@ function updatePlaybackUI(state: any) {
     
     // Update slider
     if (playbackElements.slider) {
-        playbackElements.slider.value = state.currentIndex;
+        playbackElements.slider.value = String(state.currentIndex);
     }
 
     // Update button states
@@ -2149,12 +2183,12 @@ function updatePlaybackUI(state: any) {
 }
 
 // Populate session selector
-function populateSessionSelect(sessions: any[]) {
+function populateSessionSelect(sessions: SessionMetadata[]) {
     if (!playbackElements.select) return;
 
     playbackElements.select.innerHTML = '<option value="">-- Select a session --</option>';
 
-    sessions.forEach((session: any, index: number) => {
+    sessions.forEach((session: SessionMetadata, index: number) => {
         const option = document.createElement('option');
         option.value = String(index);
         option.textContent = formatSessionDisplay(session);
@@ -2169,14 +2203,14 @@ function populateSessionSelect(sessions: any[]) {
 // Initialize playback system using the module
 async function initPlayback() {
     // Cache UI elements
-    playbackElements.select = document.getElementById('sessionSelect');
-    playbackElements.playBtn = document.getElementById('playBtn');
-    playbackElements.stopBtn = document.getElementById('stopBtn');
-    playbackElements.slider = document.getElementById('playbackSlider');
+    playbackElements.select = document.getElementById('sessionSelect') as HTMLSelectElement | null;
+    playbackElements.playBtn = document.getElementById('playBtn') as HTMLButtonElement | null;
+    playbackElements.stopBtn = document.getElementById('stopBtn') as HTMLButtonElement | null;
+    playbackElements.slider = document.getElementById('playbackSlider') as HTMLInputElement | null;
     playbackElements.timeEl = document.getElementById('playbackTime');
     playbackElements.statusEl = document.getElementById('playbackStatus');
     playbackElements.card = document.getElementById('playbackCard');
-    playbackElements.speedSelect = document.getElementById('playbackSpeed');
+    playbackElements.speedSelect = document.getElementById('playbackSpeed') as HTMLSelectElement | null;
 
     // Create SessionPlayback instance using the module
     // Create SessionPlayback instance using the module
@@ -2206,8 +2240,8 @@ async function initPlayback() {
             }
             if (playbackElements.slider) {
                 playbackElements.slider.disabled = false;
-                playbackElements.slider.max = sampleCount - 1;
-                playbackElements.slider.value = 0;
+                playbackElements.slider.max = String(sampleCount - 1);
+                playbackElements.slider.value = '0';
             }
         },
         
@@ -2223,47 +2257,57 @@ async function initPlayback() {
     // Wire up UI controls
     if (playbackElements.select) {
         playbackElements.select.addEventListener('change', async (e: Event) => {
-            sessionPlayback.stop();
+            sessionPlayback?.stop();
             if ((e.target as HTMLSelectElement).value !== '') {
-                playbackElements.statusEl.textContent = 'Loading session...';
-                playbackElements.playBtn.disabled = true;
-                await sessionPlayback.loadSession(parseInt((e.target as HTMLSelectElement).value));
+                if (playbackElements.statusEl) {
+                    playbackElements.statusEl.textContent = 'Loading session...';
+                }
+                if (playbackElements.playBtn) {
+                    playbackElements.playBtn.disabled = true;
+                }
+                await sessionPlayback?.loadSession(parseInt((e.target as HTMLSelectElement).value));
             }
         });
     }
 
     if (playbackElements.playBtn) {
         playbackElements.playBtn.addEventListener('click', () => {
-            sessionPlayback.toggle();
+            sessionPlayback?.toggle();
         });
     }
 
     if (playbackElements.stopBtn) {
         playbackElements.stopBtn.addEventListener('click', () => {
-            sessionPlayback.stop();
+            sessionPlayback?.stop();
         });
     }
 
     if (playbackElements.slider) {
         playbackElements.slider.addEventListener('input', (e: Event) => {
-            sessionPlayback.pause();
-            sessionPlayback.seekTo(parseInt((e.target as HTMLInputElement).value));
+            sessionPlayback?.pause();
+            sessionPlayback?.seekTo(parseInt((e.target as HTMLInputElement).value));
         });
     }
 
     if (playbackElements.speedSelect) {
         playbackElements.speedSelect.addEventListener('change', (e: Event) => {
-            sessionPlayback.setSpeed(parseFloat((e.target as HTMLSelectElement).value));
+            sessionPlayback?.setSpeed(parseFloat((e.target as HTMLSelectElement).value));
         });
     }
 
     // Load manifest
     try {
-        playbackElements.statusEl.textContent = 'Loading sessions...';
-        await sessionPlayback.loadManifest();
+        if (playbackElements.statusEl) {
+            playbackElements.statusEl.textContent = 'Loading sessions...';
+        }
+        await sessionPlayback?.loadManifest();
     } catch (error) {
-        playbackElements.statusEl.textContent = 'Failed to load sessions';
-        playbackElements.select.innerHTML = '<option value="">-- Error loading --</option>';
+        if (playbackElements.statusEl) {
+            playbackElements.statusEl.textContent = 'Failed to load sessions';
+        }
+        if (playbackElements.select) {
+            playbackElements.select.innerHTML = '<option value="">-- Error loading --</option>';
+        }
     }
 }
 
