@@ -1,9 +1,3 @@
-// @ts-nocheck
-// TODO: Fix ~221 type errors (DOM element casting, null checks, parameter types)
-// Common fixes needed:
-// - Cast getElementById results to specific types (HTMLInputElement, HTMLCanvasElement)
-// - Add null checks for optional DOM elements
-// - Add explicit parameter types for event handlers
 /**
  * =====================================================================
  * GAMBIT Application Entry Point
@@ -262,7 +256,7 @@ function updateConnectionStatus(connected: boolean): void {
         window.getdata.disabled = false
         if (deviceStatus) {
             deviceStatus.classList.add('ready');
-            deviceStatus.querySelector('span:last-child').textContent = 'Connected';
+            deviceStatus.querySelector('span:last-child')!.textContent = 'Connected';
         }
     } else {
         window.connect.innerHTML = "Connect"
@@ -271,7 +265,7 @@ function updateConnectionStatus(connected: boolean): void {
         window.getdata.innerHTML = "Get data"
         if (deviceStatus) {
             deviceStatus.classList.remove('ready');
-            deviceStatus.querySelector('span:last-child').textContent = 'Disconnected';
+            deviceStatus.querySelector('span:last-child')!.textContent = 'Disconnected';
         }
     }
 }
@@ -318,7 +312,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const select = document.getElementById('dataStageSelect');
     if (select) {
         select.addEventListener('change', (e) => {
-            currentDataStage = e.target.value;
+            currentDataStage = (e.target as HTMLSelectElement).value as DataStage;
             updateDataStageUI();
             console.log('[GAMBIT] Data stage:', currentDataStage);
         });
@@ -368,9 +362,9 @@ async function initGeomagneticLocation() {
         geomagneticLocation = getDefaultLocation();
 
         const locationStr = formatLocation(geomagneticLocation);
-        console.warn('[GAMBIT] Geolocation failed, using default:', error.message);
+        console.warn('[GAMBIT] Geolocation failed, using default:', (error as Error).message);
         console.log(`[GAMBIT] Location: ${locationStr} (default)`);
-        console.log(`[GAMBIT] Magnetic field: ${geomagneticLocation.intensity.toFixed(1)} µT, Declination: ${geomagneticLocation.declination.toFixed(1)}°`);
+        console.log(`[GAMBIT] Magnetic field: ${geomagneticLocation!.intensity.toFixed(1)} µT, Declination: ${geomagneticLocation!.declination.toFixed(1)}°`);
     }
     
 }
@@ -455,9 +449,9 @@ function initThreeHandSkeleton() {
 
         // ===== DEBUG OFFSET CONTROLS =====
         // Real-time offset adjustment for debugging orientation mapping
-        const rollSlider = document.getElementById('rollOffsetSlider');
-        const pitchSlider = document.getElementById('pitchOffsetSlider');
-        const yawSlider = document.getElementById('yawOffsetSlider');
+        const rollSlider = document.getElementById('rollOffsetSlider') as HTMLInputElement | null;
+        const pitchSlider = document.getElementById('pitchOffsetSlider') as HTMLInputElement | null;
+        const yawSlider = document.getElementById('yawOffsetSlider') as HTMLInputElement | null;
         const rollValue = document.getElementById('rollOffsetValue');
         const pitchValue = document.getElementById('pitchOffsetValue');
         const yawValue = document.getElementById('yawOffsetValue');
@@ -489,9 +483,9 @@ function initThreeHandSkeleton() {
         const offsetResetBtn = document.getElementById('threeOffsetReset');
         if (offsetResetBtn) {
             offsetResetBtn.addEventListener('click', () => {
-                if (rollSlider) rollSlider.value = 180;
-                if (pitchSlider) pitchSlider.value = 180;
-                if (yawSlider) yawSlider.value = -180;
+                if (rollSlider) rollSlider.value = '180';
+                if (pitchSlider) pitchSlider.value = '180';
+                if (yawSlider) yawSlider.value = '-180';
                 updateOffsets();
                 console.log('[ThreeHand] Offsets reset to default');
             });
@@ -501,9 +495,9 @@ function initThreeHandSkeleton() {
         const offsetZeroBtn = document.getElementById('threeOffsetZero');
         if (offsetZeroBtn) {
             offsetZeroBtn.addEventListener('click', () => {
-                if (rollSlider) rollSlider.value = 0;
-                if (pitchSlider) pitchSlider.value = 0;
-                if (yawSlider) yawSlider.value = 0;
+                if (rollSlider) rollSlider.value = '0';
+                if (pitchSlider) pitchSlider.value = '0';
+                if (yawSlider) yawSlider.value = '0';
                 updateOffsets();
                 console.log('[ThreeHand] Offsets zeroed');
             });
@@ -513,7 +507,7 @@ function initThreeHandSkeleton() {
         const handLeftBtn = document.getElementById('handLeft');
         const handRightBtn = document.getElementById('handRight');
 
-        function setHandChirality(hand) {
+        function setHandChirality(hand: 'left' | 'right') {
             if (threeHandSkeleton) {
                 threeHandSkeleton.setHandedness(hand);
 
@@ -568,9 +562,9 @@ function initThreeHandSkeleton() {
 
         // ===== AXIS SIGN TOGGLES =====
         // Allow user to toggle axis negation to fix inversions
-        const negateRollToggle = document.getElementById('negateRollToggle');
-        const negatePitchToggle = document.getElementById('negatePitchToggle');
-        const negateYawToggle = document.getElementById('negateYawToggle');
+        const negateRollToggle = document.getElementById('negateRollToggle') as HTMLInputElement | null;
+        const negatePitchToggle = document.getElementById('negatePitchToggle') as HTMLInputElement | null;
+        const negateYawToggle = document.getElementById('negateYawToggle') as HTMLInputElement | null;
 
         function updateAxisSigns() {
             if (threeHandSkeleton) {
@@ -608,7 +602,7 @@ function initMagneticTrajectory() {
     }
 
     try {
-        magTrajectory = new MagneticTrajectory(canvas, {
+        magTrajectory = new MagneticTrajectory(canvas as HTMLCanvasElement, {
             maxPoints: 150,
             scale: 0.35,
             autoNormalize: true,
@@ -628,7 +622,7 @@ function initMagneticTrajectory() {
         const toggle = document.getElementById('magTrajectoryToggle');
         if (toggle) {
             toggle.addEventListener('change', (e) => {
-                magTrajectoryEnabled = e.target.checked;
+                magTrajectoryEnabled = (e.target as HTMLInputElement).checked;
                 console.log('[MagTrajectory]', magTrajectoryEnabled ? 'ON' : 'OFF');
             });
         }
@@ -664,11 +658,11 @@ function updateMagTrajectoryStats() {
 
 // ===== CALIBRATION SYSTEM =====
 const observationStore = new ObservationStore();
-let currentCalibrationPose = null;
-let currentUserAnswers = {};
-let latestSensorData = null;
-let latestAhrsOutput = null;
-let baselineAhrsOutput = null;  // Stored from FLAT_PALM_UP pose
+let currentCalibrationPose: any = null;
+let currentUserAnswers: Record<string, string> = {};
+let latestSensorData: TelemetrySample | null = null;
+let latestAhrsOutput: EulerAngles | null = null;
+let baselineAhrsOutput: EulerAngles | null = null;  // Stored from FLAT_PALM_UP pose
 
 // Initialize calibration UI
 function initCalibrationUI() {
@@ -680,8 +674,8 @@ function initCalibrationUI() {
 
     // Pose selection handler
     poseSelect?.addEventListener('change', (e) => {
-        const poseId = e.target.value;
-        if (poseId && REFERENCE_POSES[poseId]) {
+        const poseId = (e.target as HTMLSelectElement).value;
+        if (poseId && (REFERENCE_POSES as any)[poseId]) {
             selectCalibrationPose(poseId);
         } else {
             clearCalibrationPose();
@@ -698,7 +692,7 @@ function initCalibrationUI() {
         baselineAhrsOutput = null;  // Clear baseline
         updateObservationLog();
         updateAnalysis();
-        poseSelect.value = '';
+        (poseSelect as HTMLSelectElement)!.value = '';
         clearCalibrationPose();
         console.log('[Calibration] Reset - baseline cleared');
     });
@@ -710,8 +704,8 @@ function initCalibrationUI() {
     applyBtn?.addEventListener('click', applyCalibrationRecommendation);
 }
 
-function selectCalibrationPose(poseId) {
-    currentCalibrationPose = REFERENCE_POSES[poseId];
+function selectCalibrationPose(poseId: string) {
+    currentCalibrationPose = (REFERENCE_POSES as any)[poseId];
     currentUserAnswers = {};
 
     // Show instructions
@@ -719,7 +713,7 @@ function selectCalibrationPose(poseId) {
     const instructionsList = document.getElementById('poseInstructionsList');
     if (instructionsDiv && instructionsList) {
         instructionsList.innerHTML = currentCalibrationPose.instructions
-            .map(i => `<li>${i}</li>`).join('');
+            .map((i: string) => `<li>${i}</li>`).join('');
         instructionsDiv.style.display = 'block';
     }
 
@@ -730,7 +724,7 @@ function selectCalibrationPose(poseId) {
         let questionsHtml = '';
 
         // Render each validation question
-        currentCalibrationPose.validationQuestions.forEach(q => {
+        currentCalibrationPose.validationQuestions.forEach((q: any) => {
             if (q.type === 'position') {
                 // Simple yes/no/mostly for static position questions
                 questionsHtml += `
@@ -758,7 +752,7 @@ function selectCalibrationPose(poseId) {
                     <div style="margin: 8px 0; padding: 6px; background: rgba(255,255,255,0.03); border-radius: 4px;">
                         <div style="font-weight: bold; margin-bottom: 4px;">${q.question}</div>
                         <div style="display: flex; flex-direction: column; gap: 4px;">
-                            ${q.options.map(opt => `
+                            ${q.options.map((opt: any) => `
                                 <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
                                     <input type="radio" name="q_${q.id}" class="calibration-radio" data-qid="${q.id}" value="${opt.value}">
                                     <span>${opt.label}</span>
@@ -777,7 +771,7 @@ function selectCalibrationPose(poseId) {
                 <div style="margin: 8px 0; padding: 6px; background: rgba(255,200,0,0.1); border-radius: 4px; border-left: 3px solid rgba(255,200,0,0.5);">
                     <div style="font-weight: bold; margin-bottom: 4px;">${cq.question}</div>
                     <div style="display: flex; flex-direction: column; gap: 4px;">
-                        ${cq.options.map(opt => `
+                        ${cq.options.map((opt: any) => `
                             <label style="display: flex; align-items: center; gap: 4px; cursor: pointer;">
                                 <input type="radio" name="q_coupling" class="calibration-radio" data-qid="coupling" value="${opt.value}">
                                 <span>${opt.label}</span>
@@ -794,7 +788,8 @@ function selectCalibrationPose(poseId) {
         // Add change handlers for all radio buttons
         questionsList.querySelectorAll('.calibration-radio').forEach(radio => {
             radio.addEventListener('change', (e) => {
-                currentUserAnswers[e.target.dataset.qid] = e.target.value;
+                const target = e.target as HTMLInputElement;
+                currentUserAnswers[target.dataset.qid!] = target.value;
                 updateCaptureButton();
             });
         });
@@ -806,8 +801,8 @@ function selectCalibrationPose(poseId) {
 function clearCalibrationPose() {
     currentCalibrationPose = null;
     currentUserAnswers = {};
-    document.getElementById('poseInstructions').style.display = 'none';
-    document.getElementById('validationQuestions').style.display = 'none';
+    document.getElementById('poseInstructions')!.style.display = 'none';
+    document.getElementById('validationQuestions')!.style.display = 'none';
     updateCaptureButton();
 }
 
@@ -816,7 +811,7 @@ function updateCaptureButton() {
     if (btn) {
         // Enable if pose selected and primary question answered
         const hasAnswers = Object.keys(currentUserAnswers).length > 0;
-        btn.disabled = !currentCalibrationPose || !hasAnswers;
+        (btn as HTMLButtonElement).disabled = !currentCalibrationPose || !hasAnswers;
     }
 }
 
@@ -828,21 +823,17 @@ function captureCurrentObservation() {
 
     // Get current mapping config from UI
     const mappingConfig = {
-        negateRoll: document.getElementById('negateRollToggle')?.checked || false,
-        negatePitch: document.getElementById('negatePitchToggle')?.checked || false,
-        negateYaw: document.getElementById('negateYawToggle')?.checked || false,
-        rollOffset: parseInt(document.getElementById('rollOffsetSlider')?.value) || 180,
-        pitchOffset: parseInt(document.getElementById('pitchOffsetSlider')?.value) || 180,
-        yawOffset: parseInt(document.getElementById('yawOffsetSlider')?.value) || -180,
+        negateRoll: (document.getElementById('negateRollToggle') as HTMLInputElement)?.checked || false,
+        negatePitch: (document.getElementById('negatePitchToggle') as HTMLInputElement)?.checked || false,
+        negateYaw: (document.getElementById('negateYawToggle') as HTMLInputElement)?.checked || false,
+        rollOffset: parseInt((document.getElementById('rollOffsetSlider') as HTMLInputElement)?.value) || 180,
+        pitchOffset: parseInt((document.getElementById('pitchOffsetSlider') as HTMLInputElement)?.value) || 180,
+        yawOffset: parseInt((document.getElementById('yawOffsetSlider') as HTMLInputElement)?.value) || -180,
         eulerOrder: 'YXZ'
     };
 
     // Get render state from ThreeJS skeleton
-    let renderState = { x: 0, y: 0, z: 0, order: 'YXZ' };
-    if (threeHandSkeleton && threeHandSkeleton.handGroup) {
-        const rot = threeHandSkeleton.handGroup.rotation;
-        renderState = { x: rot.x, y: rot.y, z: rot.z, order: rot.order };
-    }
+    const renderState = threeHandSkeleton ? threeHandSkeleton.getRenderState() : { x: 0, y: 0, z: 0, order: 'YXZ' };
 
     // Store baseline if this is FLAT_PALM_UP pose
     if (currentCalibrationPose.id === 'FLAT_PALM_UP') {
@@ -854,11 +845,11 @@ function captureCurrentObservation() {
     const observation = createObservation(
         currentCalibrationPose.id,
         latestSensorData || { ax: 0, ay: 0, az: 0, gx: 0, gy: 0, gz: 0 },
-        latestAhrsOutput,
+        latestAhrsOutput!,
         renderState,
         currentUserAnswers,
         mappingConfig,
-        baselineAhrsOutput  // Pass baseline for delta analysis
+        baselineAhrsOutput as any  // Pass baseline for delta analysis
     );
 
     observationStore.add(observation);
@@ -875,7 +866,7 @@ function captureCurrentObservation() {
     updateAnalysis();
 
     // Reset for next observation
-    document.querySelectorAll('.calibration-radio').forEach(r => r.checked = false);
+    document.querySelectorAll('.calibration-radio').forEach(r => (r as HTMLInputElement).checked = false);
     currentUserAnswers = {};
     updateCaptureButton();
 }
@@ -885,13 +876,13 @@ function updateObservationLog() {
     const logEl = document.getElementById('observationLog');
     const observations = observationStore.getAll();
 
-    if (countEl) countEl.textContent = observations.length;
+    if (countEl) countEl.textContent = String(observations.length);
 
     if (logEl) {
         if (observations.length === 0) {
             logEl.innerHTML = 'No observations yet. Start with FLAT_PALM_UP to set baseline.';
         } else {
-            logEl.innerHTML = observations.map((obs, i) => {
+            logEl.innerHTML = observations.map((obs: any, i: number) => {
                 const coupling = obs.analysis?.coupling;
                 const couplingColor = !coupling || coupling.type === 'none' ? 'green' :
                     coupling.type === 'partial' ? 'orange' : 'red';
@@ -932,18 +923,18 @@ function updateAnalysis() {
 
     const observations = observationStore.getAll();
     if (observations.length < 1) {
-        analysisDiv.style.display = 'none';
-        applyBtn.style.display = 'none';
+        analysisDiv!.style.display = 'none';
+        applyBtn!.style.display = 'none';
         return;
     }
 
     const analysis = observationStore.analyzeAll();
-    analysisDiv.style.display = 'block';
+    analysisDiv!.style.display = 'block';
 
     // Count coupling issues
     let couplingCount = 0;
     let wrongAxisCount = 0;
-    observations.forEach(obs => {
+    observations.forEach((obs: any) => {
         if (obs.analysis?.coupling?.type === 'all_coupled' || obs.analysis?.coupling?.type === 'partial') {
             couplingCount++;
         }
@@ -978,21 +969,21 @@ function updateAnalysis() {
     html += `<div>• Negate Yaw: ${analysis.negateYaw ? 'YES' : 'NO'} (confidence: ${(analysis.confidence.yaw * 100).toFixed(0)}%)</div>`;
     html += `</div>`;
 
-    resultsEl.innerHTML = html;
+    resultsEl!.innerHTML = html;
 
     // Show apply button if we have recommendations with decent confidence
     const hasConfidence = analysis.confidence.pitch > 0.3 || analysis.confidence.roll > 0.3 || analysis.confidence.yaw > 0.3;
-    applyBtn.style.display = hasConfidence && couplingCount === 0 ? 'block' : 'none';
-    window._calibrationRecommendation = analysis;
+    applyBtn!.style.display = hasConfidence && couplingCount === 0 ? 'block' : 'none';
+    (window as any)._calibrationRecommendation = analysis;
 }
 
 function applyCalibrationRecommendation() {
-    const rec = window._calibrationRecommendation;
+    const rec = (window as any)._calibrationRecommendation;
     if (!rec) return;
 
-    document.getElementById('negateRollToggle').checked = rec.negateRoll;
-    document.getElementById('negatePitchToggle').checked = rec.negatePitch;
-    document.getElementById('negateYawToggle').checked = rec.negateYaw;
+    (document.getElementById('negateRollToggle') as HTMLInputElement)!.checked = rec.negateRoll;
+    (document.getElementById('negatePitchToggle') as HTMLInputElement)!.checked = rec.negatePitch;
+    (document.getElementById('negateYawToggle') as HTMLInputElement)!.checked = rec.negateYaw;
 
     // Trigger update
     if (threeHandSkeleton) {
@@ -1024,7 +1015,7 @@ function exportObservationsToFile() {
 }
 
 // Update sensor state display
-function updateCalibrationSensorDisplay(euler, sensorData) {
+function updateCalibrationSensorDisplay(euler: EulerAngles | null, sensorData: TelemetrySample | null) {
     latestAhrsOutput = euler;
     latestSensorData = sensorData;
 
@@ -1041,7 +1032,7 @@ function updateCalibrationSensorDisplay(euler, sensorData) {
 setTimeout(initCalibrationUI, 100);
 
 // Legacy validation panel update (kept for compatibility)
-function updateValidationPanel(euler) {
+function updateValidationPanel(euler: EulerAngles | null) {
     updateCalibrationSensorDisplay(euler, latestSensorData);
 }
 
@@ -1063,8 +1054,8 @@ let lastTimestamp = null;
 
 // ===== GambitClient Event Handlers =====
 // Handle telemetry data from frame-based protocol
-gambitClient.on('data', function(t) {
-    updateData(t);
+gambitClient.on('data', function(t: any) {
+    wrappedUpdateData(t);
     
     // Auto-upload to GitHub after 1s of no data
     if (uploadTimeout) clearTimeout(uploadTimeout);
@@ -1093,9 +1084,9 @@ gambitClient.on('firmware', function(fw) {
     firmwareVersion = fw.version || 'unknown';
 });
 
-var minMaxs = {}
+const minMaxs: Record<string, any> = {}
 
-function updateMinMaxsReturnNorm(key, val) {
+function updateMinMaxsReturnNorm(key: string, val: number): number {
     if (typeof minMaxs[key] === 'undefined') {
         var k = new KalmanFilter({R: 0.01, Q: 3})
         minMaxs[key] = {
@@ -1122,7 +1113,7 @@ function updateMinMaxsReturnNorm(key, val) {
     return (val - minMaxs[key].min) / (minMaxs[key].max - minMaxs[key].min)
 }
 
-function normalise(t) {
+function normalise(t: any) {
     return {
         l: t.l,
         t: t.t,
@@ -1149,7 +1140,7 @@ function normalise(t) {
 /**
  * Update magnet detection UI display
  */
-function updateMagnetDetectionUI(decoratedData) {
+function updateMagnetDetectionUI(decoratedData: any) {
     const statusEl = document.getElementById('magnetStatusValue');
     const confEl = document.getElementById('magnetConfidenceValue');
     const barEl = document.getElementById('magnetConfidenceBar');
@@ -1349,7 +1340,7 @@ function updateCalibrationConfidenceUI() {
     }
 }
 
-function updateData(prenorm) {
+function updateData(prenorm: any) {
     // Process telemetry through shared TelemetryProcessor
     // This handles: unit conversion, IMU fusion, gyro bias, mag calibration (unified), filtering
     const decoratedData = telemetryProcessor.process(prenorm);
@@ -1368,13 +1359,13 @@ function updateData(prenorm) {
     // ===== Update UI displays =====
     // Battery
     if (prenorm.b !== null && prenorm.b !== undefined) {
-        window.b.value = Math.floor(prenorm.b);
-        window.b.title = prenorm.b + '% battery';
+        (window as any).b.value = Math.floor(prenorm.b);
+        (window as any).b.title = prenorm.b + '% battery';
     }
 
     // Button state
-    window.state.innerHTML = prenorm.s || 0;
-    window.count.innerHTML = prenorm.n || 0;
+    (window as any).state.innerHTML = prenorm.s || 0;
+    (window as any).count.innerHTML = prenorm.n || 0;
 
     // Sensor values display based on selected data stage
     let mx, my, mz, ax, ay, az, gx, gy, gz;
@@ -1398,9 +1389,9 @@ function updateData(prenorm) {
             break;
         case 'calibrated':
             // Iron-corrected magnetometer (hard/soft iron compensation)
-            mx = decoratedData.calibrated_mx ?? decoratedData.mx_ut ?? 0;
-            my = decoratedData.calibrated_my ?? decoratedData.my_ut ?? 0;
-            mz = decoratedData.calibrated_mz ?? decoratedData.mz_ut ?? 0;
+            mx = (decoratedData as any).calibrated_mx ?? decoratedData.mx_ut ?? 0;
+            my = (decoratedData as any).calibrated_my ?? decoratedData.my_ut ?? 0;
+            mz = (decoratedData as any).calibrated_mz ?? decoratedData.mz_ut ?? 0;
             ax = decoratedData.ax_g || 0;
             ay = decoratedData.ay_g || 0;
             az = decoratedData.az_g || 0;
@@ -1448,30 +1439,30 @@ function updateData(prenorm) {
     }
     
     // Update display
-    window.mX.innerHTML = mx.toFixed(magDecimals);
-    window.mY.innerHTML = my.toFixed(magDecimals);
-    window.mZ.innerHTML = mz.toFixed(magDecimals);
-    window.aX.innerHTML = ax.toFixed(accDecimals);
-    window.aY.innerHTML = ay.toFixed(accDecimals);
-    window.aZ.innerHTML = az.toFixed(accDecimals);
-    window.gX.innerHTML = gx.toFixed(gyrDecimals);
-    window.gY.innerHTML = gy.toFixed(gyrDecimals);
-    window.gZ.innerHTML = gz.toFixed(gyrDecimals);
+    (window as any).mX.innerHTML = mx.toFixed(magDecimals);
+    (window as any).mY.innerHTML = my.toFixed(magDecimals);
+    (window as any).mZ.innerHTML = mz.toFixed(magDecimals);
+    (window as any).aX.innerHTML = ax.toFixed(accDecimals);
+    (window as any).aY.innerHTML = ay.toFixed(accDecimals);
+    (window as any).aZ.innerHTML = az.toFixed(accDecimals);
+    (window as any).gX.innerHTML = gx.toFixed(gyrDecimals);
+    (window as any).gY.innerHTML = gy.toFixed(gyrDecimals);
+    (window as any).gZ.innerHTML = gz.toFixed(gyrDecimals);
 
     // Update calibration status indicator
-    const dataStageInfo = document.getElementById('dataStageInfo');
-    if (dataStageInfo && currentDataStage === 'fused') {
-        if (decoratedData.fused_incomplete) {
-            if (decoratedData.fused_uncalibrated) {
-                dataStageInfo.innerHTML = '⚠️ <b>Best Effort:</b> Showing raw magnetic field (iron calibration missing)';
-                dataStageInfo.style.color = '#ff9500';
+    const dataStageInfoEl = document.getElementById('dataStageInfo');
+    if (dataStageInfoEl && currentDataStage === 'fused') {
+        if ((decoratedData as any).fused_incomplete) {
+            if ((decoratedData as any).fused_uncalibrated) {
+                dataStageInfoEl.innerHTML = '⚠️ <b>Best Effort:</b> Showing raw magnetic field (iron calibration missing)';
+                dataStageInfoEl.style.color = '#ff9500';
             } else {
-                dataStageInfo.innerHTML = '⚠️ <b>Best Effort:</b> Showing iron-corrected field (Earth field calibration missing)';
-                dataStageInfo.style.color = '#ff9500';
+                dataStageInfoEl.innerHTML = '⚠️ <b>Best Effort:</b> Showing iron-corrected field (Earth field calibration missing)';
+                dataStageInfoEl.style.color = '#ff9500';
             }
         } else {
-            dataStageInfo.innerHTML = dataStages['fused'].info;
-            dataStageInfo.style.color = 'var(--fg-muted)';
+            dataStageInfoEl.innerHTML = dataStageInfo['fused'].info;
+            dataStageInfoEl.style.color = 'var(--fg-muted)';
         }
     }
 
@@ -1491,14 +1482,14 @@ function updateData(prenorm) {
     const filteredAccRoll = cubeFilters.acc.x.filter(accRoll);
     const filteredAccPitch = cubeFilters.acc.y.filter(accPitch);
     
-    window.cubeA.style = `transform: rotateX(${filteredAccPitch}deg) rotateY(${filteredAccRoll}deg) rotateZ(0deg);`;
+    (window as any).cubeA.style = `transform: rotateX(${filteredAccPitch}deg) rotateY(${filteredAccRoll}deg) rotateZ(0deg);`;
 
     // --- GYROSCOPE CUBE: Fused orientation from TelemetryProcessor ---
     const filteredGyroRoll = cubeFilters.gyro.x.filter(euler.roll);
     const filteredGyroPitch = cubeFilters.gyro.y.filter(euler.pitch);
     const filteredGyroYaw = cubeFilters.gyro.z.filter(euler.yaw);
 
-    window.cubeG.style = `transform: rotateX(${filteredGyroPitch}deg) rotateY(${filteredGyroRoll}deg) rotateZ(${filteredGyroYaw}deg);`;
+    (window as any).cubeG.style = `transform: rotateX(${filteredGyroPitch}deg) rotateY(${filteredGyroRoll}deg) rotateZ(${filteredGyroYaw}deg);`;
 
     // Update hand 3D renderer with orientation
     // Use stored orientation from playback if available, otherwise use live AHRS
@@ -1516,19 +1507,19 @@ function updateData(prenorm) {
     // Update magnetic trajectory with residual field
     if (magTrajectory && magTrajectoryEnabled && decoratedData.residual_mx !== undefined) {
         magTrajectory.addPoint(
-            decoratedData.residual_mx,
-            decoratedData.residual_my,
-            decoratedData.residual_mz
+            decoratedData.residual_mx!,
+            decoratedData.residual_my!,
+            decoratedData.residual_mz!
         );
 
         // Update stats every 50 points to reduce DOM updates
-        if (magTrajectory.points && magTrajectory.points.length % 50 === 0) {
+        if ((magTrajectory as any).points && (magTrajectory as any).points.length % 50 === 0) {
             updateMagTrajectoryStats();
         }
     }
 
     // Update calibration system with current sensor state
-    latestSensorData = { ax, ay, az, gx, gy, gz, mx, my, mz };
+    latestSensorData = { ax, ay, az, gx, gy, gz, mx, my, mz, t: prenorm.t || 0 };
     updateValidationPanel(handEuler);
 
     // Update Euler debug display
@@ -1553,19 +1544,19 @@ function updateData(prenorm) {
     const filteredMagElevation = cubeFilters.mag.x.filter(magElevation);
     const filteredMagRoll = cubeFilters.mag.y.filter(magRoll);
     
-    window.cubeM.style = `transform: rotateZ(${-filteredMagAzimuth}deg) rotateX(${filteredMagElevation}deg) rotateY(${filteredMagRoll}deg);`;
+    (window as any).cubeM.style = `transform: rotateZ(${-filteredMagAzimuth}deg) rotateX(${filteredMagElevation}deg) rotateY(${filteredMagRoll}deg);`;
 }
 
 var newlineRegex = /\n/g;
 
-const btoa = (str) => {
+const btoa = (str: string): string => {
 if (typeof window === 'undefined' || !window.btoa)  {
     // const Buffer = require('buffer')
     return Buffer.from(str, 'binary').toString('base64')
 } else return window.btoa(str)
 }
 
-const atob = (str) => {
+const atob = (str: string): string => {
 if (typeof window === 'undefined' || !window.atob)  {
     // const Buffer = require('buffer')
     return Buffer.from(str, 'base64').toString('binary')
@@ -1573,13 +1564,13 @@ if (typeof window === 'undefined' || !window.atob)  {
 else return window.atob(str)
 }
 
-function b64EncodeUnicode(str) {
-return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1) {
-    return String.fromCharCode('0x' + p1);
+function b64EncodeUnicode(str: string): string {
+return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match: string, p1: string) {
+    return String.fromCharCode(parseInt('0x' + p1));
 }));
 }
 
-function b64DecodeUnicode(str) {
+function b64DecodeUnicode(str: string): string {
     // atob on Mobile Safari for iOS 9 will throw an exception if there's a newline.
     var b64Decoded = atob(str.replace(newlineRegex, ''));
     var decodedWithUnicodeHexesRestored = Array.prototype.map.call(
@@ -1591,14 +1582,14 @@ function b64DecodeUnicode(str) {
     return decodeURIComponent(decodedWithUnicodeHexesRestored);
 }
 
-function hexEncodeCharCode(c) {
+function hexEncodeCharCode(c: string): string {
     return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
 }
 
 // GitHub LFS Upload - ensures large files are stored properly in Git LFS
 // (Inline version of shared/github-lfs-upload.js for non-module scripts)
 
-async function sha256ForLFS(content) {
+async function sha256ForLFS(content: string): Promise<string> {
     const encoder = new TextEncoder();
     const data = encoder.encode(content);
     const hashBuffer = await crypto.subtle.digest('SHA-256', data);
@@ -1606,11 +1597,11 @@ async function sha256ForLFS(content) {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-function createLFSPointer(oid, size) {
+function createLFSPointer(oid: string, size: number): string {
     return `version https://git-lfs.github.com/spec/v1\noid sha256:${oid}\nsize ${size}\n`;
 }
 
-async function getFileShaForLFS(token, owner, repo, path) {
+async function getFileShaForLFS(token: string, owner: string, repo: string, path: string): Promise<string | null> {
     const endpoint = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
     try {
         const response = await fetch(endpoint, {
@@ -1632,7 +1623,7 @@ async function getFileShaForLFS(token, owner, repo, path) {
 
 // ===== Vercel Blob Upload =====
 // Uses the shared blob-upload module with two-phase @vercel/blob/client protocol
-async function blobPutData(rawSessionData) {
+async function blobPutData(rawSessionData: any[]) {
     // Check for secret using the module's function (reads from localStorage)
     if (!hasUploadSecret()) {
         console.log("blobPutData: No upload secret configured. Skipping upload.");
@@ -1689,13 +1680,13 @@ async function blobPutData(rawSessionData) {
         return result;
     } catch (err) {
         console.error("blobPutData: Upload failed", err);
-        updateUploadStatus(`✗ Upload failed: ${err.message}`, 'error');
+        updateUploadStatus(`✗ Upload failed: ${(err as Error).message}`, 'error');
         throw err;
     }
 }
 
 // Helper to update upload status in UI
-function updateUploadStatus(message, type) {
+function updateUploadStatus(message: string, type: string) {
     const statusEl = document.getElementById('uploadStatus');
     if (statusEl) {
         statusEl.textContent = message;
@@ -1706,7 +1697,7 @@ function updateUploadStatus(message, type) {
 }
 
 // Dispatcher function - routes to blob or github based on uploadMethod
-async function uploadSessionData(rawSessionData) {
+async function uploadSessionData(rawSessionData: any[]) {
     if (uploadMethod === 'blob') {
         return blobPutData(rawSessionData);
     } else {
@@ -1714,7 +1705,7 @@ async function uploadSessionData(rawSessionData) {
     }
 }
 
-async function ghPutData(rawSessionData) {
+async function ghPutData(rawSessionData: any[]) {
 
     if (!ghToken) {
         console.log("ghToken not found. skipping upload.");
@@ -1827,7 +1818,7 @@ async function ghPutData(rawSessionData) {
         };
         
         if (existingSha) {
-            commitBody.sha = existingSha;
+            (commitBody as any).sha = existingSha;
         }
 
         const commitResponse = await fetch(commitEndpoint, {
@@ -1852,7 +1843,7 @@ async function ghPutData(rawSessionData) {
 
     } catch(err) {
         console.error("ghPutData: Upload failed", err);
-        updateUploadStatus(`✗ Upload failed: ${err.message}`, 'error');
+        updateUploadStatus(`✗ Upload failed: ${(err as Error).message}`, 'error');
     }
 
 }
@@ -1864,7 +1855,7 @@ try {
     const s = getUploadSecret();
     if (s) {
         blobSecret = s;
-        const blobSecretInput = document.getElementById('blobSecret');
+        const blobSecretInput = document.getElementById('blobSecret') as HTMLInputElement;
         if (blobSecretInput) blobSecretInput.value = s;
     }
 
@@ -1872,7 +1863,7 @@ try {
     const m = localStorage.getItem("simcap_upload_method");
     if (m && (m === 'blob' || m === 'github')) {
         uploadMethod = m;
-        const methodSelect = document.getElementById('uploadMethod');
+        const methodSelect = document.getElementById('uploadMethod') as HTMLSelectElement;
         if (methodSelect) methodSelect.value = m;
     }
 
@@ -1880,7 +1871,7 @@ try {
     const t = localStorage.getItem("ghToken");
     if (t) {
         ghToken = t;
-        const tokenInput = document.getElementById('token');
+        const tokenInput = document.getElementById('token') as HTMLInputElement;
         if (tokenInput) tokenInput.value = t;
     }
     else console.log("No ghToken in localStorage");
@@ -1903,7 +1894,7 @@ function updateUploadMethodUI() {
 const uploadMethodSelect = document.getElementById('uploadMethod');
 if (uploadMethodSelect) {
     uploadMethodSelect.addEventListener('change', function(e) {
-        uploadMethod = e.target.value;
+        uploadMethod = (e.target as HTMLSelectElement).value as 'blob' | 'github';
         localStorage.setItem("simcap_upload_method", uploadMethod);
         updateUploadMethodUI();
         console.log("Upload method changed to:", uploadMethod);
@@ -1914,8 +1905,8 @@ if (uploadMethodSelect) {
 const blobSecretInput = document.getElementById('blobSecret');
 if (blobSecretInput) {
     blobSecretInput.addEventListener('change', function(e) {
-        blobSecret = e.target.value;
-        setUploadSecret(blobSecret);  // Use module function
+        blobSecret = (e.target as HTMLInputElement).value;
+        setUploadSecret(blobSecret || null);  // Use module function
         console.log("Blob secret updated");
     });
 }
@@ -1924,7 +1915,7 @@ if (blobSecretInput) {
 const tokenInput = document.getElementById('token');
 if (tokenInput) {
     tokenInput.addEventListener('change', function(e) {
-        ghToken = e.target.value;
+        ghToken = (e.target as HTMLInputElement).value;
         localStorage.setItem("ghToken", ghToken);
         console.log("GitHub token updated");
     });
@@ -1978,8 +1969,8 @@ window.getdata.onclick = async function() {
 }
 
 // ===== Gesture Inference (using module) =====
-let gestureInference = null;
-let gestureUI = null;
+let gestureInference: any = null;
+let gestureUI: any = null;
 
 // Initialize gesture inference using the module
 async function initGestureInference() {
@@ -2015,7 +2006,7 @@ async function initGestureInference() {
                 gestureUI.setStatus('ready', 'Model ready (v1)');
                 gestureUI.initProbabilityBars(gestureInference.labels);
             },
-            onError: (error) => {
+            onError: (error: Error) => {
                 console.error('[GAMBIT] Model error:', error.message);
                 gestureUI.setStatus('error', 'Model error: ' + error.message);
             }
@@ -2024,14 +2015,14 @@ async function initGestureInference() {
         await gestureInference.load();
     } catch (error) {
         console.error('[GAMBIT] Failed to initialize gesture inference:', error);
-        gestureUI.setStatus('error', 'Model unavailable: ' + error.message);
+        gestureUI.setStatus('error', 'Model unavailable: ' + (error as Error).message);
     }
 }
 
 // Hook into data updates to feed inference
 const originalUpdateData = updateData;
 let sampleCount = 0;
-updateData = function(prenorm) {
+const wrappedUpdateData = function(prenorm: any) {
     // Call original function
     originalUpdateData(prenorm);
 
@@ -2098,10 +2089,10 @@ document.getElementById('threeResetBtn')?.addEventListener('click', () => {
 });
 
 // ===== Session Playback System (using module) =====
-let sessionPlayback = null;
+let sessionPlayback: any = null;
 
 // UI elements for playback
-const playbackElements = {
+const playbackElements: Record<string, any> = {
     select: null,
     playBtn: null,
     stopBtn: null,
@@ -2113,7 +2104,7 @@ const playbackElements = {
 };
 
 // Update UI based on playback state
-function updatePlaybackUI(state) {
+function updatePlaybackUI(state: any) {
     if (!playbackElements.timeEl) return;
 
     // Update time display
@@ -2158,16 +2149,16 @@ function updatePlaybackUI(state) {
 }
 
 // Populate session selector
-function populateSessionSelect(sessions) {
+function populateSessionSelect(sessions: any[]) {
     if (!playbackElements.select) return;
 
     playbackElements.select.innerHTML = '<option value="">-- Select a session --</option>';
 
-    sessions.forEach((session, index) => {
+    sessions.forEach((session: any, index: number) => {
         const option = document.createElement('option');
-        option.value = index;
+        option.value = String(index);
         option.textContent = formatSessionDisplay(session);
-        playbackElements.select.appendChild(option);
+        playbackElements.select!.appendChild(option);
     });
 
     if (playbackElements.statusEl) {
@@ -2231,12 +2222,12 @@ async function initPlayback() {
 
     // Wire up UI controls
     if (playbackElements.select) {
-        playbackElements.select.addEventListener('change', async (e) => {
+        playbackElements.select.addEventListener('change', async (e: Event) => {
             sessionPlayback.stop();
-            if (e.target.value !== '') {
+            if ((e.target as HTMLSelectElement).value !== '') {
                 playbackElements.statusEl.textContent = 'Loading session...';
                 playbackElements.playBtn.disabled = true;
-                await sessionPlayback.loadSession(parseInt(e.target.value));
+                await sessionPlayback.loadSession(parseInt((e.target as HTMLSelectElement).value));
             }
         });
     }
@@ -2254,15 +2245,15 @@ async function initPlayback() {
     }
 
     if (playbackElements.slider) {
-        playbackElements.slider.addEventListener('input', (e) => {
+        playbackElements.slider.addEventListener('input', (e: Event) => {
             sessionPlayback.pause();
-            sessionPlayback.seekTo(parseInt(e.target.value));
+            sessionPlayback.seekTo(parseInt((e.target as HTMLInputElement).value));
         });
     }
 
     if (playbackElements.speedSelect) {
-        playbackElements.speedSelect.addEventListener('change', (e) => {
-            sessionPlayback.setSpeed(parseFloat(e.target.value));
+        playbackElements.speedSelect.addEventListener('change', (e: Event) => {
+            sessionPlayback.setSpeed(parseFloat((e.target as HTMLSelectElement).value));
         });
     }
 

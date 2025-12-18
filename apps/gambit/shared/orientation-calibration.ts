@@ -1,11 +1,253 @@
-// @ts-nocheck
-// TODO: Add proper type annotations (object literals need interfaces, callback types needed)
 /**
  * Orientation Calibration System
  *
  * A first-principles framework for determining the correct mapping between
  * sensor orientation data and 3D hand model orientation.
  *
+ * =============================================================================
+ * TYPE DEFINITIONS
+ * =============================================================================
+ */
+
+// Type definitions for the calibration system
+export interface SensorData {
+    ax: number;
+    ay: number;
+    az: number;
+    gx: number;
+    gy: number;
+    gz: number;
+    mx?: number;
+    my?: number;
+    mz?: number;
+    accelUnit?: string;
+    gyroUnit?: string;
+    magUnit?: string;
+}
+
+export interface AhrsOutput {
+    roll: number;
+    pitch: number;
+    yaw: number;
+    quaternion?: Quaternion;
+}
+
+export interface Quaternion {
+    w: number;
+    x: number;
+    y: number;
+    z: number;
+}
+
+export interface RenderState {
+    x: number;
+    y: number;
+    z: number;
+    order: string;
+}
+
+export interface MappingConfig {
+    negateRoll: boolean;
+    negatePitch: boolean;
+    negateYaw: boolean;
+    rollOffset: number;
+    pitchOffset: number;
+    yawOffset: number;
+    eulerOrder?: string;
+}
+
+export interface UserAnswers {
+    [key: string]: string | undefined;
+    coupling?: string;
+}
+
+export interface ValidationQuestion {
+    id: string;
+    question: string;
+    type: string;
+    axis: string | null;
+    options?: Array<{ id: string; label: string; value: string }>;
+}
+
+export interface CouplingQuestion {
+    id: string;
+    question: string;
+    options: Array<{ id: string; label: string; value: string }>;
+}
+
+export interface ReferencePose {
+    id: string;
+    name: string;
+    description: string;
+    instructions: string[];
+    physicalState: {
+        deviceOrientation: string;
+        gravityDirection?: string;
+        primaryAxis?: string;
+        expectedAngles: { roll: number | string; pitch: number | string; yaw: number | string };
+    };
+    expectedVisual: {
+        palmFacing: string;
+        fingerPointing: string;
+        thumbPosition: string;
+        pinkyPosition?: string;
+    };
+    primaryAxis: string | null;
+    validationQuestions: ValidationQuestion[];
+    couplingQuestion: CouplingQuestion | null;
+}
+
+export interface DerivedState {
+    pitchInverted: boolean | null;
+    rollInverted: boolean | null;
+    yawInverted: boolean | null;
+    pitchWrongAxis: boolean;
+    rollWrongAxis: boolean;
+    yawWrongAxis: boolean;
+    coupling: string | null;
+    matchesExpected: boolean | null;
+}
+
+export interface AxisIssue {
+    axis: string;
+    issue: string;
+    evidence: string;
+}
+
+export interface Analysis {
+    angleDeviations: Record<string, number>;
+    axisIssues: AxisIssue[];
+    suggestions: string[];
+    couplingDetected: boolean;
+    primaryAxisStatus: string | null;
+    visualStatus: string | null;
+}
+
+export interface CouplingAnalysis {
+    type: string;
+    details: string;
+    deltas?: { roll: number; pitch: number; yaw: number };
+    expectedPrimaryAxis?: string;
+    primaryAxisMoved?: boolean;
+    otherAxesMoved?: Record<string, boolean>;
+    ahrsShowsCoupling?: boolean;
+    isExpectedBehavior: boolean;
+    isRealProblem?: boolean;
+    visualStatus?: string | null;
+    note?: string | null;
+    visualOverride?: null;
+}
+
+export interface DiagnosticIssue {
+    type: string;
+    severity: string;
+    details: string;
+    visualStatus?: string;
+}
+
+export interface DiagnosticRecommendation {
+    type: string;
+    recommendation: string;
+    confidence: string;
+    details?: Array<{ order: string; angles: { roll: number; pitch: number; yaw: number }; error: number }>;
+}
+
+export interface DiagnosticInfo {
+    type: string;
+    details: string;
+    note: string;
+}
+
+export interface DiagnosticReport {
+    timestamp: string;
+    pose: string;
+    visualStatus: string;
+    issues: DiagnosticIssue[];
+    recommendations: DiagnosticRecommendation[];
+    info: DiagnosticInfo[];
+    summary?: {
+        visualValidationPassed: boolean;
+        hasRealProblems: boolean;
+        ahrsCouplingIsExpected: boolean;
+        actionRequired: boolean;
+    };
+}
+
+export interface Observation {
+    meta: {
+        version: string;
+        timestamp: number;
+        isoTimestamp: string;
+        poseId: string;
+        poseName: string;
+    };
+    referencePose: {
+        id: string;
+        name: string;
+        description: string;
+        physicalState: ReferencePose['physicalState'];
+        expectedVisual: ReferencePose['expectedVisual'];
+        primaryAxis: string | null;
+    };
+    sensor: {
+        accelerometer: { x: number; y: number; z: number; unit: string };
+        gyroscope: { x: number; y: number; z: number; unit: string };
+        magnetometer: { x: number; y: number; z: number; unit: string } | null;
+    };
+    ahrs: {
+        euler: { roll: number; pitch: number; yaw: number; unit: string };
+        quaternion: Quaternion | null;
+        deltaFromBaseline: { roll: number; pitch: number; yaw: number } | null;
+    };
+    mapping: {
+        axisSigns: { negateRoll: boolean; negatePitch: boolean; negateYaw: boolean };
+        offsets: { roll: number; pitch: number; yaw: number };
+        eulerOrder: string;
+    };
+    render: {
+        euler: { x: number; y: number; z: number; order: string };
+        eulerDegrees: { x: number; y: number; z: number };
+    };
+    userObservations: {
+        answers: UserAnswers;
+        couplingAnswer: string | null;
+        visualStatus: string;
+        derivedState: DerivedState;
+    };
+    analysis: Analysis & {
+        coupling: CouplingAnalysis;
+        visualValidationPassed: boolean;
+        ahrsCouplingIsExpected: boolean;
+        hasRealProblem: boolean;
+    };
+}
+
+export interface CalibrationRecommendation {
+    negatePitch: boolean;
+    negateRoll: boolean;
+    negateYaw: boolean;
+    confidence: {
+        pitch: number;
+        roll: number;
+        yaw: number;
+    };
+    votes: {
+        pitch: { inverted: number; correct: number };
+        roll: { inverted: number; correct: number };
+        yaw: { inverted: number; correct: number };
+    };
+    totalObservations: number;
+}
+
+export interface ExportedData {
+    sessionId: string;
+    exportedAt: string;
+    observationCount: number;
+    observations: Observation[];
+    analysis: CalibrationRecommendation;
+}
+
+/**
  * =============================================================================
  * PROBLEM STATEMENT
  * =============================================================================
@@ -617,17 +859,25 @@ export const REFERENCE_POSES = {
 /**
  * Create an observation record (v2 with enhanced feedback)
  *
- * @param {string} poseId - Reference pose ID
- * @param {Object} sensorData - Raw sensor readings
- * @param {Object} ahrsOutput - AHRS filter output
- * @param {Object} renderState - Applied Three.js rotation
- * @param {Object} userAnswers - User's answers to validation questions (multi-choice)
- * @param {Object} mappingConfig - Current axis sign and offset configuration
- * @param {Object} baselineAhrs - Optional AHRS from FLAT_PALM_UP for delta analysis
- * @returns {Object} Complete observation record
+ * @param poseId - Reference pose ID
+ * @param sensorData - Raw sensor readings
+ * @param ahrsOutput - AHRS filter output
+ * @param renderState - Applied Three.js rotation
+ * @param userAnswers - User's answers to validation questions (multi-choice)
+ * @param mappingConfig - Current axis sign and offset configuration
+ * @param baselineAhrs - Optional AHRS from FLAT_PALM_UP for delta analysis
+ * @returns Complete observation record
  */
-export function createObservation(poseId, sensorData, ahrsOutput, renderState, userAnswers, mappingConfig, baselineAhrs = null) {
-    const pose = REFERENCE_POSES[poseId];
+export function createObservation(
+    poseId: string,
+    sensorData: SensorData,
+    ahrsOutput: AhrsOutput,
+    renderState: RenderState,
+    userAnswers: UserAnswers,
+    mappingConfig: MappingConfig,
+    baselineAhrs: AhrsOutput | null = null
+): Observation {
+    const pose = REFERENCE_POSES[poseId as keyof typeof REFERENCE_POSES];
     if (!pose) {
         throw new Error(`Unknown pose: ${poseId}`);
     }
@@ -636,7 +886,7 @@ export function createObservation(poseId, sensorData, ahrsOutput, renderState, u
     const isoTimestamp = new Date(timestamp).toISOString();
 
     // Calculate deltas from baseline if provided
-    let deltaFromBaseline = null;
+    let deltaFromBaseline: { roll: number; pitch: number; yaw: number } | null = null;
     if (baselineAhrs) {
         deltaFromBaseline = {
             roll: ahrsOutput.roll - baselineAhrs.roll,
@@ -700,7 +950,7 @@ export function createObservation(poseId, sensorData, ahrsOutput, renderState, u
                 z: sensorData.gz,
                 unit: sensorData.gyroUnit || 'unknown'
             },
-            magnetometer: sensorData.mx !== undefined ? {
+            magnetometer: sensorData.mx !== undefined && sensorData.my !== undefined && sensorData.mz !== undefined ? {
                 x: sensorData.mx,
                 y: sensorData.my,
                 z: sensorData.mz,
@@ -777,13 +1027,18 @@ export function createObservation(poseId, sensorData, ahrsOutput, renderState, u
  * vs YXZ application). This function analyzes AHRS angles for diagnostic purposes,
  * but the real validation is VISUAL correctness reported by the user.
  *
- * @param {Object} pose - Reference pose definition
- * @param {Object} ahrsOutput - AHRS Euler angles
- * @param {Object} deltaFromBaseline - Change from baseline pose
- * @param {string} visualStatus - User-reported visual validation status (optional)
- * @returns {Object} Coupling analysis with visual override
+ * @param pose - Reference pose definition
+ * @param ahrsOutput - AHRS Euler angles
+ * @param deltaFromBaseline - Change from baseline pose
+ * @param visualStatus - User-reported visual validation status (optional)
+ * @returns Coupling analysis with visual override
  */
-function analyzeAxisCoupling(pose, ahrsOutput, deltaFromBaseline, visualStatus = null) {
+function analyzeAxisCoupling(
+    pose: ReferencePose,
+    ahrsOutput: AhrsOutput,
+    deltaFromBaseline: { roll: number; pitch: number; yaw: number } | null,
+    visualStatus: string | null = null
+): CouplingAnalysis {
     if (!pose.primaryAxis || !deltaFromBaseline) {
         return {
             type: COUPLING_TYPES.NONE,
@@ -802,12 +1057,12 @@ function analyzeAxisCoupling(pose, ahrsOutput, deltaFromBaseline, visualStatus =
         yaw: Math.abs(deltaFromBaseline.yaw)
     };
 
-    const primaryAxis = pose.primaryAxis;
-    const otherAxes = ['roll', 'pitch', 'yaw'].filter(a => a !== primaryAxis);
+    const primaryAxis = pose.primaryAxis as 'roll' | 'pitch' | 'yaw';
+    const otherAxes = (['roll', 'pitch', 'yaw'] as const).filter(a => a !== primaryAxis);
 
     const primaryMoved = deltas[primaryAxis] > PRIMARY_THRESHOLD;
-    const other0Moved = deltas[otherAxes[0]] > SIGNIFICANT_THRESHOLD;
-    const other1Moved = deltas[otherAxes[1]] > SIGNIFICANT_THRESHOLD;
+    const other0Moved = deltas[otherAxes[0]!] > SIGNIFICANT_THRESHOLD;
+    const other1Moved = deltas[otherAxes[1]!] > SIGNIFICANT_THRESHOLD;
 
     // Determine coupling type (in AHRS angle space)
     let type;
@@ -842,12 +1097,12 @@ function analyzeAxisCoupling(pose, ahrsOutput, deltaFromBaseline, visualStatus =
     // Only a problem if VISUAL also shows wrong behavior
     const ahrsShowsCoupling = type === COUPLING_TYPES.PARTIAL || type === COUPLING_TYPES.ALL_COUPLED;
     const visualIsCorrect = visualStatus === VISUAL_STATUS.CORRECT || visualStatus === 'correct';
-    const visualHasProblem = visualStatus && visualStatus !== VISUAL_STATUS.CORRECT && visualStatus !== 'correct' && visualStatus !== VISUAL_STATUS.UNKNOWN;
+    const visualHasProblem = !!visualStatus && visualStatus !== VISUAL_STATUS.CORRECT && visualStatus !== 'correct' && visualStatus !== VISUAL_STATUS.UNKNOWN;
 
     // AHRS coupling + visual correct = expected behavior, no problem
     // AHRS coupling + visual wrong = real mapping problem
     const isExpectedBehavior = ahrsShowsCoupling && visualIsCorrect;
-    const isRealProblem = ahrsShowsCoupling && visualHasProblem;
+    const isRealProblem: boolean = ahrsShowsCoupling && visualHasProblem;
 
     return {
         type,
@@ -870,8 +1125,8 @@ function analyzeAxisCoupling(pose, ahrsOutput, deltaFromBaseline, visualStatus =
 /**
  * Derive axis inversion state from user answers (v2 multi-choice format)
  */
-function deriveStateFromAnswersV2(answers, pose) {
-    const state = {
+function deriveStateFromAnswersV2(answers: UserAnswers, pose: ReferencePose): DerivedState {
+    const state: DerivedState = {
         pitchInverted: null,
         rollInverted: null,
         yawInverted: null,
@@ -886,13 +1141,15 @@ function deriveStateFromAnswersV2(answers, pose) {
         const answer = answers[q.id];
         if (answer === undefined || !q.axis) continue;
 
+        const axis = q.axis as 'pitch' | 'roll' | 'yaw';
+
         // Multi-choice answers store the value directly
         if (answer === 'correct') {
-            state[`${q.axis}Inverted`] = false;
+            state[`${axis}Inverted`] = false;
         } else if (answer === 'opposite') {
-            state[`${q.axis}Inverted`] = true;
+            state[`${axis}Inverted`] = true;
         } else if (answer === 'wrong_axis') {
-            state[`${q.axis}WrongAxis`] = true;
+            state[`${axis}WrongAxis`] = true;
         } else if (answer === 'coupled') {
             state.coupling = 'detected';
         }
@@ -918,14 +1175,19 @@ function deriveStateFromAnswersV2(answers, pose) {
  * IMPORTANT: This function now considers VISUAL validation status when generating suggestions.
  * AHRS coupling is EXPECTED and should not generate warnings if visual is correct.
  *
- * @param {Object} pose - Reference pose
- * @param {Object} ahrsOutput - AHRS Euler angles
- * @param {Object} userAnswers - User's answers to validation questions
- * @param {string} visualStatus - Derived visual validation status
- * @returns {Object} Analysis with suggestions
+ * @param pose - Reference pose
+ * @param ahrsOutput - AHRS Euler angles
+ * @param userAnswers - User's answers to validation questions
+ * @param visualStatus - Derived visual validation status
+ * @returns Analysis with suggestions
  */
-function analyzeObservationV2(pose, ahrsOutput, userAnswers, visualStatus = null) {
-    const analysis = {
+function analyzeObservationV2(
+    pose: ReferencePose,
+    ahrsOutput: AhrsOutput,
+    userAnswers: UserAnswers,
+    visualStatus: string | null = null
+): Analysis {
+    const analysis: Analysis = {
         angleDeviations: {},
         axisIssues: [],
         suggestions: [],
@@ -1011,15 +1273,15 @@ function analyzeObservationV2(pose, ahrsOutput, userAnswers, visualStatus = null
 }
 
 // Keep old functions for backwards compatibility
-function deriveStateFromAnswers(answers, pose) {
+function deriveStateFromAnswers(answers: UserAnswers, pose: ReferencePose): DerivedState {
     return deriveStateFromAnswersV2(answers, pose);
 }
 
-function analyzeObservation(pose, ahrsOutput, userAnswers) {
+function analyzeObservation(pose: ReferencePose, ahrsOutput: AhrsOutput, userAnswers: UserAnswers): Analysis {
     return analyzeObservationV2(pose, ahrsOutput, userAnswers);
 }
 
-function capitalize(s) {
+function capitalize(s: string): string {
     return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
@@ -1053,11 +1315,11 @@ export const EULER_ORDERS = [
  * Convert quaternion to Euler angles with specified order
  * This allows testing different extraction orders to find the correct one
  *
- * @param {Object} q - Quaternion {w, x, y, z}
- * @param {string} order - Euler order (e.g., 'YXZ', 'ZYX')
- * @returns {Object} {roll, pitch, yaw} in degrees
+ * @param q - Quaternion {w, x, y, z}
+ * @param order - Euler order (e.g., 'YXZ', 'ZYX')
+ * @returns {roll, pitch, yaw} in degrees
  */
-export function quaternionToEuler(q, order = 'YXZ') {
+export function quaternionToEuler(q: Quaternion, order: string = 'YXZ'): { roll: number; pitch: number; yaw: number } {
     const { w, x, y, z } = q;
 
     // Normalize quaternion
@@ -1127,11 +1389,14 @@ export function quaternionToEuler(q, order = 'YXZ') {
  * Test all Euler extraction orders against observation data
  * Helps identify which Euler order the AHRS filter is using
  *
- * @param {Object} quaternion - Raw quaternion from AHRS
- * @param {Object} expectedAngles - Expected approximate angles {roll, pitch, yaw}
- * @returns {Array} Sorted array of {order, angles, error} by error
+ * @param quaternion - Raw quaternion from AHRS
+ * @param expectedAngles - Expected approximate angles {roll, pitch, yaw}
+ * @returns Sorted array of {order, angles, error} by error
  */
-export function testEulerOrders(quaternion, expectedAngles) {
+export function testEulerOrders(
+    quaternion: Quaternion,
+    expectedAngles: { roll: number | string; pitch: number | string; yaw: number | string }
+): Array<{ order: string; angles: { roll: number; pitch: number; yaw: number }; error: number }> {
     const results = [];
 
     for (const order of ['ZYX', 'YXZ', 'XYZ', 'XZY', 'YZX', 'ZXY']) {
@@ -1163,10 +1428,15 @@ export function testEulerOrders(quaternion, expectedAngles) {
  * Analyze quaternion for gimbal lock proximity
  * Gimbal lock occurs when pitch approaches ±90°
  *
- * @param {Object} q - Quaternion {w, x, y, z}
- * @returns {Object} Gimbal lock analysis
+ * @param q - Quaternion {w, x, y, z}
+ * @returns Gimbal lock analysis
  */
-export function analyzeGimbalLock(q) {
+export function analyzeGimbalLock(q: Quaternion): {
+    isNearGimbalLock: boolean;
+    sinPitch: number;
+    estimatedPitch: number;
+    warning: string;
+} {
     // The gimbal lock singularity occurs when the pitch component
     // of the rotation approaches ±90°
 
@@ -1196,11 +1466,11 @@ export function analyzeGimbalLock(q) {
  * visual issues (real problems). AHRS coupling is not flagged as an issue if
  * visual validation passed.
  *
- * @param {Object} observation - Full observation record
- * @returns {Object} Diagnostic report
+ * @param observation - Full observation record
+ * @returns Diagnostic report
  */
-export function generateDiagnosticReport(observation) {
-    const report = {
+export function generateDiagnosticReport(observation: Observation): DiagnosticReport {
+    const report: DiagnosticReport = {
         timestamp: new Date().toISOString(),
         pose: observation.referencePose.id,
         visualStatus: observation.userObservations?.visualStatus || VISUAL_STATUS.UNKNOWN,
@@ -1269,8 +1539,11 @@ export function generateDiagnosticReport(observation) {
             });
         }
 
-        for (const axis of ['pitch', 'roll', 'yaw']) {
-            if (derived[`${axis}WrongAxis`]) {
+        for (const axis of ['pitch', 'roll', 'yaw'] as const) {
+            const wrongAxisKey = `${axis}WrongAxis` as const;
+            const invertedKey = `${axis}Inverted` as const;
+
+            if (derived[wrongAxisKey]) {
                 report.issues.push({
                     type: 'visual_wrong_axis',
                     severity: 'high',
@@ -1282,7 +1555,7 @@ export function generateDiagnosticReport(observation) {
                     confidence: 'medium'
                 });
             }
-            if (derived[`${axis}Inverted`]) {
+            if (derived[invertedKey]) {
                 report.issues.push({
                     type: 'visual_inverted',
                     severity: 'high',
@@ -1312,29 +1585,36 @@ export function generateDiagnosticReport(observation) {
  * Observation store - collects multiple observations
  */
 export class ObservationStore {
+    private observations: Observation[] = [];
+    private sessionId: string = `cal_${Date.now()}`;
+
     constructor() {
         this.observations = [];
         this.sessionId = `cal_${Date.now()}`;
     }
 
-    add(observation) {
+    add(observation: Observation): number {
         this.observations.push(observation);
         return this.observations.length - 1;
     }
 
-    getAll() {
+    getAll(): Observation[] {
         return this.observations;
     }
 
-    clear() {
+    clear(): void {
         this.observations = [];
     }
 
     /**
      * Analyze all observations to derive calibration
      */
-    analyzeAll() {
-        const axisVotes = {
+    analyzeAll(): CalibrationRecommendation {
+        const axisVotes: {
+            pitch: { inverted: number; correct: number };
+            roll: { inverted: number; correct: number };
+            yaw: { inverted: number; correct: number };
+        } = {
             pitch: { inverted: 0, correct: 0 },
             roll: { inverted: 0, correct: 0 },
             yaw: { inverted: 0, correct: 0 }
@@ -1342,7 +1622,7 @@ export class ObservationStore {
 
         for (const obs of this.observations) {
             const derived = obs.userObservations.derivedState;
-            for (const axis of ['pitch', 'roll', 'yaw']) {
+            for (const axis of ['pitch', 'roll', 'yaw'] as const) {
                 if (derived[`${axis}Inverted`] === true) {
                     axisVotes[axis].inverted++;
                 } else if (derived[`${axis}Inverted`] === false) {
@@ -1351,7 +1631,7 @@ export class ObservationStore {
             }
         }
 
-        const recommendation = {
+        const recommendation: CalibrationRecommendation = {
             negatePitch: axisVotes.pitch.inverted > axisVotes.pitch.correct,
             negateRoll: axisVotes.roll.inverted > axisVotes.roll.correct,
             negateYaw: axisVotes.yaw.inverted > axisVotes.yaw.correct,
@@ -1370,7 +1650,7 @@ export class ObservationStore {
     /**
      * Export all observations as JSON for later analysis
      */
-    export() {
+    export(): ExportedData {
         return {
             sessionId: this.sessionId,
             exportedAt: new Date().toISOString(),
@@ -1383,7 +1663,7 @@ export class ObservationStore {
     /**
      * Import previously exported observations
      */
-    import(data) {
+    import(data: ExportedData): void {
         if (data.observations) {
             this.observations = data.observations;
             this.sessionId = data.sessionId || this.sessionId;
@@ -1394,7 +1674,7 @@ export class ObservationStore {
 /**
  * Get ordered list of calibration poses for systematic calibration
  */
-export function getCalibrationSequence() {
+export function getCalibrationSequence(): string[] {
     return [
         'FLAT_PALM_UP',      // Baseline
         'PITCH_FORWARD_45',  // Test pitch sign
