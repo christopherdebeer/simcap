@@ -9,9 +9,8 @@
 
 import type { Vector3, Quaternion } from '@core/types';
 
-// Import filter classes from TypeScript modules
-import { MadgwickAHRS, MotionDetector } from '../filters';
-import { KalmanFilter, KalmanFilter3D } from '../kalman';
+// Import filter classes from @filters package
+import { MadgwickAHRS, MotionDetector, KalmanFilter, KalmanFilter3D } from '@filters';
 
 // ===== Sensor Scale Constants =====
 

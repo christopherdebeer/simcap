@@ -1,19 +1,31 @@
 /**
  * Visualizations Listing API Handler
  *
- * Lists all visualization assets stored in Vercel Blob.
- * Returns structured data for VIZ explorer compatible with session-data.js format.
+ * Lists visualization manifests stored in Vercel Blob.
+ * Uses manifest-based system for efficient listing and versioning.
+ *
+ * Manifest naming: visualizations/manifests/{session_ts}_{generated_ts}.json
+ * - session_ts: Session timestamp (underscore format)
+ * - generated_ts: When manifest was generated (underscore format)
+ *
+ * Endpoints:
+ * - GET /api/visualizations - List all sessions with latest manifests
+ * - GET /api/visualizations?session={timestamp} - Get latest manifest for session
+ * - GET /api/visualizations?session={timestamp}&history=true - Get all manifest versions
  *
  * No authentication required - visualizations are public.
  */
 
-import { list } from '@vercel/blob';
+import { list, head } from '@vercel/blob';
 import type { ListBlobResultBlob } from '@vercel/blob';
 
 // Types defined locally (path aliases don't work in Vercel serverless)
 interface WindowEntry {
   window_num: number;
   filepath: string;
+  time_start?: number;
+  time_end?: number;
+  sample_count?: number;
   images: Record<string, string>;
   trajectory_images: Record<string, string>;
 }
@@ -30,143 +42,203 @@ interface SessionVisualization {
   windows: WindowEntry[];
 }
 
+// Additional types needed by this handler (also defined locally for serverless compatibility)
+interface VisualizationManifest {
+  version: '1.0';
+  sessionTimestamp: string;
+  generatedAt: string;
+  manifestId: string;
+  session: {
+    filename: string;
+    duration: number;
+    sample_count: number;
+    sample_rate: number;
+    device?: string;
+    firmware_version?: string | null;
+    session_type?: string;
+    hand?: string;
+    magnet_type?: string;
+    notes?: string | null;
+    custom_labels?: string[];
+  };
+  images: {
+    composite?: string;
+    calibration_stages?: string;
+    orientation_3d?: string;
+    orientation_track?: string;
+    raw_axes?: string;
+  };
+  trajectory_comparison: Record<string, string>;
+  windows: Array<{
+    window_num: number;
+    composite: string;
+    time_start?: number;
+    time_end?: number;
+    sample_count?: number;
+    images: Record<string, string>;
+    trajectory_images: Record<string, string>;
+  }>;
+}
+
+interface VisualizationSessionSummary {
+  sessionTimestamp: string;
+  latestManifestId: string;
+  generatedAt: string;
+  previousVersions: number;
+  filename: string;
+  duration?: number;
+  windowCount: number;
+  hasVisualizations: boolean;
+}
+
 /**
  * Normalize timestamp by converting underscores to colons
  * Filenames use underscores (2025-12-15T22_35_15.567Z) because colons are invalid
  * But session timestamps use colons (2025-12-15T22:35:15.567Z)
  */
 function normalizeTimestamp(timestamp: string): string {
-  // Convert underscores in time portion to colons: T22_35_15 -> T22:35:15
   return timestamp.replace(/T(\d{2})_(\d{2})_(\d{2})/, 'T$1:$2:$3');
 }
 
-type ImageType = 'composite' | 'calibration_stages' | 'orientation_3d' | 'orientation_track' | 'raw_axes' | 'window' | 'trajectory_comparison';
+/**
+ * Denormalize timestamp by converting colons to underscores (filename safe)
+ */
+function denormalizeTimestamp(timestamp: string): string {
+  return timestamp.replace(/T(\d{2}):(\d{2}):(\d{2})/, 'T$1_$2_$3');
+}
 
 /**
- * Parse visualization files into session-grouped structure
+ * Parse manifest filename to extract session and generated timestamps
+ * Format: {session_ts}_{generated_ts}.json
+ * 
+ * Handles variations:
+ * - Session timestamps may have colons (2025-12-15T22:40:44.984Z) or underscores (2025-12-15T22_35_15.567Z)
+ * - Generated timestamps may have 3-6 decimal places (.567Z or .652014Z)
  */
-function groupVisualizationsBySession(blobs: ListBlobResultBlob[]): SessionVisualization[] {
-  const sessions = new Map<string, SessionVisualization>();
+function parseManifestFilename(filename: string): { sessionTs: string; generatedTs: string } | null {
+  // Remove .json extension
+  const base = filename.replace('.json', '');
+  
+  // Split on the second timestamp (look for pattern like _2025-12-...)
+  // The manifest ID format is: 2025-12-15T22_35_15.567Z_2025-12-18T14_00_00.000000Z
+  // Handle both colon and underscore formats, and 3-6 decimal places
+  const match = base.match(/^(.+?)_(\d{4}-\d{2}-\d{2}T[\d_:]+\.\d{3,6}Z)$/);
+  
+  if (!match) {
+    console.log('[visualizations] Failed to parse manifest filename:', filename);
+    return null;
+  }
+  
+  return {
+    sessionTs: match[1],
+    generatedTs: match[2],
+  };
+}
 
+/**
+ * Group manifests by session timestamp, keeping track of versions
+ */
+interface ManifestGroup {
+  sessionTs: string;
+  latestManifest: ListBlobResultBlob;
+  latestGeneratedTs: string;
+  allVersions: Array<{ blob: ListBlobResultBlob; generatedTs: string }>;
+}
+
+function groupManifestsBySession(blobs: ListBlobResultBlob[]): Map<string, ManifestGroup> {
+  const groups = new Map<string, ManifestGroup>();
+  
   for (const blob of blobs) {
-    const path = blob.pathname.replace('visualizations/', '');
-
-    // Extract timestamp from filename patterns:
-    // - composite_2025-12-15T22:40:44.984Z.png
-    // - windows_2025-12-15T22:40:44.984Z/window_001/timeseries_accel.png
-    // - trajectory_comparison_2025-12-15T22:40:44.984Z/raw_3d.png
-
-    let timestamp: string | null = null;
-    let imageType: ImageType | null = null;
-    let windowNum: number | null = null;
-    let subPath: string | null = null;
-
-    // Match composite/calibration/orientation/raw_axes images
-    const compositeMatch = path.match(/^(composite|calibration_stages|orientation_3d|orientation_track|raw_axes)_(.+?)\.png$/);
-    if (compositeMatch) {
-      imageType = compositeMatch[1] as ImageType;
-      timestamp = compositeMatch[2];
-    }
-
-    // Match window images
-    const windowMatch = path.match(/^windows_(.+?)\/window_(\d+)\/(.+)$/);
-    if (windowMatch) {
-      timestamp = windowMatch[1];
-      windowNum = parseInt(windowMatch[2], 10);
-      subPath = windowMatch[3];
-      imageType = 'window';
-    }
-
-    // Match trajectory comparison images
-    const trajMatch = path.match(/^trajectory_comparison_(.+?)\/(.+)$/);
-    if (trajMatch) {
-      timestamp = trajMatch[1];
-      subPath = trajMatch[2];
-      imageType = 'trajectory_comparison';
-    }
-
-    if (!timestamp) continue;
-
-    // Normalize timestamp (convert underscores to colons for consistency with session timestamps)
-    const normalizedTimestamp = normalizeTimestamp(timestamp);
-
-    // Initialize session entry
-    if (!sessions.has(normalizedTimestamp)) {
-      sessions.set(normalizedTimestamp, {
-        timestamp: normalizedTimestamp,
-        filename: `${timestamp.replace(/:/g, '_')}.json`, // Keep underscores in filename
-        composite_image: null,
-        calibration_stages_image: null,
-        orientation_3d_image: null,
-        orientation_track_image: null,
-        raw_axes_image: null,
-        trajectory_comparison_images: {},
-        windows: [],
+    // Extract filename from pathname
+    const filename = blob.pathname.split('/').pop() || '';
+    const parsed = parseManifestFilename(filename);
+    
+    if (!parsed) continue;
+    
+    const { sessionTs, generatedTs } = parsed;
+    
+    if (!groups.has(sessionTs)) {
+      groups.set(sessionTs, {
+        sessionTs,
+        latestManifest: blob,
+        latestGeneratedTs: generatedTs,
+        allVersions: [],
       });
     }
-
-    const session = sessions.get(normalizedTimestamp)!;
-
-    // Assign to appropriate field
-    switch (imageType) {
-      case 'composite':
-        session.composite_image = blob.url;
-        break;
-      case 'calibration_stages':
-        session.calibration_stages_image = blob.url;
-        break;
-      case 'orientation_3d':
-        session.orientation_3d_image = blob.url;
-        break;
-      case 'orientation_track':
-        session.orientation_track_image = blob.url;
-        break;
-      case 'raw_axes':
-        session.raw_axes_image = blob.url;
-        break;
-      case 'trajectory_comparison':
-        if (subPath) {
-          // e.g., raw_3d.png, filtered_3d.png, combined_overlay.png
-          const trajType = subPath.replace('.png', '').replace('_3d', '');
-          session.trajectory_comparison_images[trajType] = blob.url;
-        }
-        break;
-      case 'window':
-        if (windowNum !== null && subPath) {
-          // Find or create window entry
-          let window = session.windows.find(w => w.window_num === windowNum);
-          if (!window) {
-            window = {
-              window_num: windowNum,
-              filepath: `windows_${timestamp}/window_${String(windowNum).padStart(3, '0')}.png`,
-              images: {},
-              trajectory_images: {},
-            };
-            session.windows.push(window);
-          }
-          // Parse subPath to determine image type
-          // e.g., timeseries_accel.png, trajectory_raw.png, signature.png
-          const imageName = subPath.replace('.png', '');
-          if (imageName.startsWith('trajectory_') && !imageName.includes('accel') && !imageName.includes('gyro') && !imageName.includes('mag') && !imageName.includes('combined')) {
-            // trajectory_raw, trajectory_iron, trajectory_fused, trajectory_filtered, etc.
-            const trajKey = imageName.replace('trajectory_', '');
-            window.trajectory_images[trajKey] = blob.url;
-          } else {
-            window.images[imageName] = blob.url;
-          }
-        }
-        break;
+    
+    const group = groups.get(sessionTs)!;
+    group.allVersions.push({ blob, generatedTs });
+    
+    // Update latest if this is newer
+    if (generatedTs > group.latestGeneratedTs) {
+      group.latestManifest = blob;
+      group.latestGeneratedTs = generatedTs;
     }
   }
-
-  // Sort windows within each session
-  for (const session of sessions.values()) {
-    session.windows.sort((a, b) => a.window_num - b.window_num);
+  
+  // Sort versions within each group (newest first)
+  for (const group of groups.values()) {
+    group.allVersions.sort((a, b) => b.generatedTs.localeCompare(a.generatedTs));
   }
+  
+  return groups;
+}
 
-  // Convert to array sorted by timestamp (newest first)
-  return Array.from(sessions.values())
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+/**
+ * Fetch and parse a manifest from blob storage
+ */
+async function fetchManifest(url: string): Promise<VisualizationManifest | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    return await response.json() as VisualizationManifest;
+  } catch (error) {
+    console.error('[visualizations] Failed to fetch manifest:', error);
+    return null;
+  }
+}
+
+/**
+ * Convert manifest to SessionVisualization format (for backward compatibility)
+ */
+function manifestToSessionVisualization(manifest: VisualizationManifest): SessionVisualization {
+  return {
+    timestamp: manifest.sessionTimestamp,
+    filename: manifest.session.filename,
+    composite_image: manifest.images.composite || null,
+    calibration_stages_image: manifest.images.calibration_stages || null,
+    orientation_3d_image: manifest.images.orientation_3d || null,
+    orientation_track_image: manifest.images.orientation_track || null,
+    raw_axes_image: manifest.images.raw_axes || null,
+    trajectory_comparison_images: manifest.trajectory_comparison,
+    windows: manifest.windows.map(w => ({
+      window_num: w.window_num,
+      filepath: w.composite,
+      time_start: w.time_start,
+      time_end: w.time_end,
+      sample_count: w.sample_count,
+      images: w.images,
+      trajectory_images: w.trajectory_images,
+    })),
+  };
+}
+
+/**
+ * Create session summary from manifest group
+ */
+function createSessionSummary(group: ManifestGroup): VisualizationSessionSummary {
+  const normalizedTs = normalizeTimestamp(group.sessionTs);
+  const normalizedGenTs = normalizeTimestamp(group.latestGeneratedTs);
+  
+  return {
+    sessionTimestamp: normalizedTs,
+    latestManifestId: `${group.sessionTs}_${group.latestGeneratedTs}`,
+    generatedAt: normalizedGenTs,
+    previousVersions: group.allVersions.length - 1,
+    filename: `${group.sessionTs}.json`,
+    windowCount: 0, // Will be populated when manifest is fetched
+    hasVisualizations: true,
+  };
 }
 
 export default async function handler(request: Request): Promise<Response> {
@@ -182,73 +254,127 @@ export default async function handler(request: Request): Promise<Response> {
     // Parse query parameters from URL
     const url = new URL(request.url);
     const sessionParam = url.searchParams.get('session');
-    const sessionFilter = sessionParam ? normalizeTimestamp(sessionParam) : null;
+    const historyParam = url.searchParams.get('history') === 'true';
+    
+    // Normalize session param if provided
+    const sessionFilter = sessionParam ? denormalizeTimestamp(sessionParam) : null;
 
     console.log('[visualizations] Request URL:', request.url);
     console.log('[visualizations] Session param:', sessionParam);
-    console.log('[visualizations] Session filter (normalized):', sessionFilter);
+    console.log('[visualizations] Session filter (denormalized):', sessionFilter);
+    console.log('[visualizations] History mode:', historyParam);
 
-    // Build prefix for blob listing
-    const prefix = 'visualizations/';
-    
-    // List visualizations from blob storage
-    // Note: list() has a default limit, so we may need to paginate for large stores
-    let allBlobs: ListBlobResultBlob[] = [];
+    // List manifests from blob storage
+    const manifestPrefix = 'visualizations/manifests/';
+    let allManifestBlobs: ListBlobResultBlob[] = [];
     let cursor: string | undefined = undefined;
 
-    console.log('[visualizations] Listing blobs with prefix:', prefix);
+    console.log('[visualizations] Listing manifests with prefix:', manifestPrefix);
 
     do {
       const result: { blobs: ListBlobResultBlob[]; cursor?: string } = await list({
-        prefix,
+        prefix: manifestPrefix,
         limit: 1000,
         cursor,
       });
-      console.log('[visualizations] Blob list result - count:', result.blobs.length, 'cursor:', result.cursor);
-      allBlobs = allBlobs.concat(result.blobs);
+      console.log('[visualizations] Manifest list result - count:', result.blobs.length, 'cursor:', result.cursor);
+      allManifestBlobs = allManifestBlobs.concat(result.blobs);
       cursor = result.cursor;
     } while (cursor);
 
-    console.log('[visualizations] Total blobs found:', allBlobs.length);
-    if (allBlobs.length > 0) {
-      console.log('[visualizations] First few blob paths:', allBlobs.slice(0, 5).map(b => b.pathname));
-    }
+    console.log('[visualizations] Total manifests found:', allManifestBlobs.length);
 
-    // Group into session structure
-    let sessions = groupVisualizationsBySession(allBlobs);
+    // Group manifests by session
+    const groups = groupManifestsBySession(allManifestBlobs);
+    console.log('[visualizations] Sessions with manifests:', groups.size);
 
-    console.log('[visualizations] Sessions found:', sessions.length);
-    if (sessions.length > 0) {
-      console.log('[visualizations] Session timestamps:', sessions.map(s => s.timestamp));
-    }
-
-    // Filter to specific session if requested
+    // Handle single session request
     if (sessionFilter) {
-      console.log('[visualizations] Filtering for session:', sessionFilter);
-      sessions = sessions.filter(s => s.timestamp === sessionFilter);
-      console.log('[visualizations] After filter - sessions found:', sessions.length);
-    }
+      const group = groups.get(sessionFilter);
+      
+      if (!group) {
+        console.log('[visualizations] No manifest found for session:', sessionFilter);
+        return new Response(JSON.stringify({
+          session: null,
+          found: false,
+          generatedAt: new Date().toISOString(),
+        }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 's-maxage=60, stale-while-revalidate=300',
+          },
+        });
+      }
 
-    // Return single session object if filtering, array otherwise
-    if (sessionFilter) {
-      const session = sessions[0] || null;
+      // History mode: return all versions
+      if (historyParam) {
+        const versions = group.allVersions.map(v => ({
+          manifestId: `${group.sessionTs}_${v.generatedTs}`,
+          generatedAt: normalizeTimestamp(v.generatedTs),
+          url: v.blob.url,
+        }));
+        
+        return new Response(JSON.stringify({
+          sessionTimestamp: normalizeTimestamp(group.sessionTs),
+          versions,
+          count: versions.length,
+          generatedAt: new Date().toISOString(),
+        }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 's-maxage=60, stale-while-revalidate=300',
+          },
+        });
+      }
+
+      // Fetch latest manifest
+      const manifest = await fetchManifest(group.latestManifest.url);
+      
+      if (!manifest) {
+        return new Response(JSON.stringify({
+          session: null,
+          found: false,
+          error: 'Failed to fetch manifest',
+          generatedAt: new Date().toISOString(),
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Return in backward-compatible format
+      const session = manifestToSessionVisualization(manifest);
+      
       return new Response(JSON.stringify({
         session,
-        found: session !== null,
+        manifest, // Also include full manifest for new clients
+        previousVersions: group.allVersions.length - 1,
+        found: true,
         generatedAt: new Date().toISOString(),
       }), {
         status: 200,
         headers: {
           'Content-Type': 'application/json',
-          'Cache-Control': 's-maxage=300, stale-while-revalidate=600',
+          'Cache-Control': 's-maxage=60, stale-while-revalidate=300',
         },
       });
     }
 
+    // List all sessions
+    const summaries: VisualizationSessionSummary[] = [];
+    
+    for (const group of groups.values()) {
+      summaries.push(createSessionSummary(group));
+    }
+
+    // Sort by session timestamp (newest first)
+    summaries.sort((a, b) => b.sessionTimestamp.localeCompare(a.sessionTimestamp));
+
     return new Response(JSON.stringify({
-      sessions,
-      count: sessions.length,
-      totalFiles: allBlobs.length,
+      sessions: summaries,
+      count: summaries.length,
       generatedAt: new Date().toISOString(),
     }), {
       status: 200,

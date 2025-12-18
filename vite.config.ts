@@ -1,6 +1,10 @@
-import { defineConfig, Plugin } from 'vite';
+import { defineConfig, Plugin, loadEnv } from 'vite';
 import { resolve } from 'path';
 import { IncomingMessage, ServerResponse } from 'http';
+import { config as dotenvConfig } from 'dotenv';
+
+// Load .env.local for server-side API handlers
+dotenvConfig({ path: '.env.local' });
 
 // API handler plugin for development
 function apiPlugin(): Plugin {
@@ -18,8 +22,8 @@ function apiPlugin(): Plugin {
           const apiPath = urlPath.replace('/api/', '');
           const handlerPath = resolve(__dirname, `api/${apiPath}.ts`);
 
-          // Dynamically import the handler
-          const handler = await import(handlerPath);
+          // Use Vite's ssrLoadModule to properly handle TypeScript
+          const handler = await server.ssrLoadModule(handlerPath);
           
           // Collect request body for POST/PUT
           let body = '';

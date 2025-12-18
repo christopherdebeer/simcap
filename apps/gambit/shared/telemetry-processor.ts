@@ -22,8 +22,8 @@ import {
 } from './sensor-config.js';
 
 // Import actual types from filter modules
-import type { MadgwickAHRS as MadgwickAHRSClass, MotionDetector as MotionDetectorClass } from '../filters';
-import type { KalmanFilter3D as KalmanFilter3DClass } from '../kalman';
+import type { MadgwickAHRS as MadgwickAHRSClass, MotionDetector as MotionDetectorClass } from '@filters';
+import type { KalmanFilter3D as KalmanFilter3DClass } from '@filters';
 
 import {
     magLsbToMicroTesla,

@@ -5,8 +5,8 @@
 
 import { state, resetSession, GambitClient } from './modules/state.js';
 import { initLogger, log } from './modules/logger.js';
-import { KalmanFilter3D } from './kalman';
-import { MadgwickAHRS } from './filters';
+import { KalmanFilter3D } from '@filters';
+import { MadgwickAHRS } from '@filters';
 import {
     initCalibration,
     updateCalibrationStatus,

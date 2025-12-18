@@ -16,8 +16,7 @@ import type { GestureUIController } from './modules/gesture-inference-module.js'
 // ===== Import Global Classes (previously loaded via <script> tags) =====
 // These are now ES modules that also export to window for backward compatibility
 import { GambitClient } from './gambit-client';
-import { KalmanFilter, KalmanFilter3D } from './kalman';
-import { MadgwickAHRS, ComplementaryFilter, MotionDetector } from './filters';
+import { KalmanFilter, KalmanFilter3D, MadgwickAHRS, ComplementaryFilter, MotionDetector } from '@filters';
 import { GestureInference, FingerTrackingInference } from './gesture-inference';
 
 // ===== Type Definitions =====

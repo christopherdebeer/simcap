@@ -45,9 +45,71 @@ export interface SessionsResponse {
 /** Window visualization entry */
 export interface WindowEntry {
   window_num: number;
-  filepath: string;
+  filepath?: string;
+  time_start?: number;
+  time_end?: number;
+  sample_count?: number;
+  composite?: string;
   images: Record<string, string>;
   trajectory_images: Record<string, string>;
+}
+
+/** Visualization manifest (stored in blob storage) */
+export interface VisualizationManifest {
+  /** Manifest schema version */
+  version: '1.0';
+  /** Session timestamp (with colons) */
+  sessionTimestamp: string;
+  /** When this manifest was generated (ISO string) */
+  generatedAt: string;
+  /** Unique manifest ID: {session_ts}_{generated_ts} */
+  manifestId: string;
+  /** Session metadata */
+  session: {
+    filename: string;
+    duration: number;
+    sample_count: number;
+    sample_rate: number;
+    device?: string;
+    firmware_version?: string | null;
+    session_type?: string;
+    hand?: string;
+    magnet_type?: string;
+    notes?: string | null;
+    custom_labels?: string[];
+  };
+  /** Session-level images */
+  images: {
+    composite?: string;
+    calibration_stages?: string;
+    orientation_3d?: string;
+    orientation_track?: string;
+    raw_axes?: string;
+  };
+  /** Session-level trajectory comparison images */
+  trajectory_comparison: Record<string, string>;
+  /** Per-window visualizations */
+  windows: WindowEntry[];
+}
+
+/** Session summary for listing (derived from manifest) */
+export interface VisualizationSessionSummary {
+  /** Session timestamp */
+  sessionTimestamp: string;
+  /** Latest manifest ID */
+  latestManifestId: string;
+  /** When latest manifest was generated */
+  generatedAt: string;
+  /** Number of previous manifest versions */
+  previousVersions: number;
+  /** Session filename */
+  filename: string;
+  /** Session duration */
+  duration?: number;
+  /** Number of windows */
+  windowCount: number;
+  /** Whether session has visualizations */
+  hasVisualizations: boolean;
 }
 
 /** Session visualization data */
