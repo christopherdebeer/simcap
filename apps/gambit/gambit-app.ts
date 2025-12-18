@@ -1,5 +1,9 @@
 // @ts-nocheck
-// TODO: Remove @ts-nocheck and fix remaining type errors incrementally
+// TODO: Fix ~221 type errors (DOM element casting, null checks, parameter types)
+// Common fixes needed:
+// - Cast getElementById results to specific types (HTMLInputElement, HTMLCanvasElement)
+// - Add null checks for optional DOM elements
+// - Add explicit parameter types for event handlers
 /**
  * =====================================================================
  * GAMBIT Application Entry Point

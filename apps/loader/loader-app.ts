@@ -59,25 +59,25 @@ const FIRMWARE: Record<string, FirmwareDefinition> = {
     gambit: {
         name: "GAMBIT",
         description: "9-DoF IMU telemetry for ML data collection",
-        path: "../../device/GAMBIT/app.js",
+        path: "/src/device/GAMBIT/app.js",
         size: "~4 KB"
     },
     mouse: {
         name: "MOUSE",
         description: "BLE HID Mouse - tilt to move cursor",
-        path: "../../device/MOUSE/app.js",
+        path: "/src/device/MOUSE/app.js",
         size: "~3 KB"
     },
     keyboard: {
         name: "KEYBOARD",
         description: "BLE HID Keyboard - macros & gestures",
-        path: "../../device/KEYBOARD/app.js",
+        path: "/src/device/KEYBOARD/app.js",
         size: "~5 KB"
     },
     bae: {
         name: "BAE",
         description: "Bluetooth Advertise Everything (reference)",
-        path: "../../device/BAE/app.js",
+        path: "/src/device/BAE/app.js",
         size: "~2 KB"
     }
 };
