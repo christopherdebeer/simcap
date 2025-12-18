@@ -9,6 +9,7 @@
 
 import { list } from '@vercel/blob';
 import type { ListBlobResultBlob } from '@vercel/blob';
+import type { WindowEntry, SessionVisualization } from '@api/types';
 
 /**
  * Normalize timestamp by converting underscores to colons
@@ -18,26 +19,6 @@ import type { ListBlobResultBlob } from '@vercel/blob';
 function normalizeTimestamp(timestamp: string): string {
   // Convert underscores in time portion to colons: T22_35_15 -> T22:35:15
   return timestamp.replace(/T(\d{2})_(\d{2})_(\d{2})/, 'T$1:$2:$3');
-}
-
-// Types for visualization structure
-interface WindowEntry {
-  window_num: number;
-  filepath: string;
-  images: Record<string, string>;
-  trajectory_images: Record<string, string>;
-}
-
-interface SessionVisualization {
-  timestamp: string;
-  filename: string;
-  composite_image: string | null;
-  calibration_stages_image: string | null;
-  orientation_3d_image: string | null;
-  orientation_track_image: string | null;
-  raw_axes_image: string | null;
-  trajectory_comparison_images: Record<string, string>;
-  windows: WindowEntry[];
 }
 
 type ImageType = 'composite' | 'calibration_stages' | 'orientation_3d' | 'orientation_track' | 'raw_axes' | 'window' | 'trajectory_comparison';

@@ -8,27 +8,7 @@
  */
 
 import { list } from '@vercel/blob';
-
-interface SessionInfo {
-  filename: string;
-  pathname: string;
-  url: string;
-  downloadUrl: string;
-  size: number;
-  uploadedAt: string;
-  timestamp: string;
-}
-
-interface SessionsResponse {
-  sessions: SessionInfo[];
-  count: number;
-  generatedAt: string;
-}
-
-interface ErrorResponse {
-  error: string;
-  message?: string;
-}
+import type { SessionInfo, SessionsResponse, ApiError } from '@api/types';
 
 export default async function handler(request: Request): Promise<Response> {
   // Only allow GET requests
@@ -83,7 +63,7 @@ export default async function handler(request: Request): Promise<Response> {
     console.error('Sessions list error:', error);
     const message = error instanceof Error ? error.message : 'Unknown error';
     
-    const errorResponse: ErrorResponse = {
+    const errorResponse: ApiError = {
       error: 'Failed to list sessions',
       message,
     };
