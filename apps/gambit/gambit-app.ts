@@ -307,6 +307,7 @@ const CONFIDENCE_UPDATE_INTERVAL = 500;  // Update UI every 500ms
 // Handles: unit conversion, IMU fusion, gyro bias calibration, mag calibration, filtering
 // Calibration (iron + Earth) is loaded from localStorage by TelemetryProcessor
 const telemetryProcessor = new TelemetryProcessor({
+    useMagnetometer: false,
     onGyroBiasCalibrated: () => {
         console.log('[AHRS] Gyroscope bias calibration complete');
         // Update visual indicator
