@@ -538,11 +538,14 @@
         let dataLoaded = false;
         let loadError = null;
 
+        // Cache for loaded session metadata
+        const sessionMetadataCache = new Map();
+
         // API base URL - use relative path for same-origin, or configure for cross-origin
         const API_BASE = '';
 
         /**
-         * Fetch explorer data from API
+         * Fetch explorer data from API (returns URLs and basic metadata only)
          */
         async function fetchExplorerData() {
             try {
@@ -556,6 +559,108 @@
                 console.error('Failed to fetch explorer data:', error);
                 throw error;
             }
+        }
+
+        /**
+         * Fetch full session metadata from sessionUrl
+         */
+        async function fetchSessionMetadata(sessionUrl) {
+            if (!sessionUrl) return null;
+
+            // Check cache first
+            if (sessionMetadataCache.has(sessionUrl)) {
+                return sessionMetadataCache.get(sessionUrl);
+            }
+
+            try {
+                const response = await fetch(sessionUrl);
+                if (!response.ok) return null;
+
+                const data = await response.json();
+                let metadata = null;
+
+                // Extract metadata from v2.x format
+                if (data.samples && Array.isArray(data.samples)) {
+                    const samples = data.samples;
+                    const meta = data.metadata || {};
+                    const labels = data.labels || [];
+
+                    const sampleCount = samples.length;
+                    const sampleRate = meta.sample_rate || 50;
+                    const duration = sampleCount / sampleRate;
+
+                    metadata = {
+                        sample_rate: sampleRate,
+                        duration,
+                        sample_count: sampleCount,
+                        device: meta.device || 'GAMBIT',
+                        firmware_version: meta.firmware_version || null,
+                        session_type: meta.session_type || 'recording',
+                        hand: meta.hand || 'unknown',
+                        magnet_type: meta.magnet_type || 'unknown',
+                        notes: meta.notes || null,
+                        custom_labels: extractCustomLabels(labels),
+                        labels,
+                    };
+                } else if (Array.isArray(data)) {
+                    // v1.x format - direct array
+                    metadata = {
+                        sample_rate: 50,
+                        duration: data.length / 50,
+                        sample_count: data.length,
+                        device: 'GAMBIT',
+                        firmware_version: null,
+                        session_type: 'recording',
+                        hand: 'unknown',
+                        magnet_type: 'unknown',
+                        notes: null,
+                        custom_labels: [],
+                        labels: [],
+                    };
+                }
+
+                // Cache the result
+                if (metadata) {
+                    sessionMetadataCache.set(sessionUrl, metadata);
+                }
+                return metadata;
+            } catch (error) {
+                console.error(`Failed to fetch session metadata: ${error.message}`);
+                return null;
+            }
+        }
+
+        /**
+         * Extract custom labels from label segments
+         */
+        function extractCustomLabels(labels) {
+            const customLabels = new Set();
+            for (const segment of labels) {
+                if (segment.labels?.custom) {
+                    segment.labels.custom.forEach(l => customLabels.add(l));
+                }
+            }
+            return Array.from(customLabels);
+        }
+
+        /**
+         * Enrich a session with full metadata (called on expand)
+         */
+        async function enrichSessionMetadata(session) {
+            if (session._metadataLoaded) return session;
+
+            const metadata = await fetchSessionMetadata(session.sessionUrl);
+            if (metadata) {
+                Object.assign(session, metadata);
+            } else {
+                // Provide defaults if metadata can't be loaded
+                session.duration = session.duration || 0;
+                session.sample_rate = session.sample_rate || 50;
+                session.labels = session.labels || [];
+                session.custom_labels = session.custom_labels || [];
+            }
+            session._metadataLoaded = true;
+            return session;
         }
 
         /**
@@ -700,20 +805,25 @@
 
         // Render windows for a session (separate function to avoid template literal issues)
         function renderWindows(session) {
-            return session.windows.map(w => {
+            return (session.windows || []).map(w => {
                 const windowLabels = getLabelsForWindow(session, w);
+                const timeRange = (w.time_start !== undefined && w.time_end !== undefined)
+                    ? `${w.time_start.toFixed(2)}s - ${w.time_end.toFixed(2)}s`
+                    : '';
+                const statsText = (w.accel_mag_mean !== undefined && w.gyro_mag_mean !== undefined)
+                    ? `Accel: ${w.accel_mag_mean.toFixed(0)} | Gyro: ${w.gyro_mag_mean.toFixed(0)}`
+                    : '';
+
                 let html = `
                 <div style="margin-bottom: var(--space-xl); padding: var(--space-lg); background: var(--bg-elevated); border: 1px solid var(--border);">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-md);">
                         <h4 style="margin: 0; font-size: 0.875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
-                            Window ${w.window_num} | ${w.time_start.toFixed(2)}s - ${w.time_end.toFixed(2)}s
+                            Window ${w.window_num}${timeRange ? ` | ${timeRange}` : ''}
                             <span class="chips-container">
                                 ${formatWindowLabels(windowLabels)}
                             </span>
                         </h4>
-                        <div style="font-size: 0.625rem; color: var(--fg-muted); text-transform: uppercase;">
-                            Accel: ${w.accel_mag_mean.toFixed(0)} | Gyro: ${w.gyro_mag_mean.toFixed(0)}
-                        </div>
+                        ${statsText ? `<div style="font-size: 0.625rem; color: var(--fg-muted); text-transform: uppercase;">${statsText}</div>` : ''}
                     </div>
                     <div class="trajectory-grid">`;
                 
@@ -896,10 +1006,11 @@
         function updateStats() {
             document.getElementById('total-sessions').textContent = filteredSessions.length;
 
-            const totalWindows = filteredSessions.reduce((sum, s) => sum + s.windows.length, 0);
+            const totalWindows = filteredSessions.reduce((sum, s) => sum + (s.windows?.length || 0), 0);
             document.getElementById('total-windows').textContent = totalWindows;
 
-            const totalDuration = filteredSessions.reduce((sum, s) => sum + s.duration, 0);
+            // Only count duration from sessions with loaded metadata
+            const totalDuration = filteredSessions.reduce((sum, s) => sum + (s.duration || 0), 0);
             document.getElementById('total-duration').textContent = totalDuration.toFixed(1);
         }
 
@@ -911,112 +1022,176 @@
                 return;
             }
 
-            container.innerHTML = filteredSessions.map((session, idx) => `
+            container.innerHTML = filteredSessions.map((session, idx) => {
+                // Show minimal info for sessions without loaded metadata
+                const hasMetadata = session._metadataLoaded;
+                const durationText = hasMetadata ? `${(session.duration || 0).toFixed(1)}s @ ${session.sample_rate || 50}Hz | ` : '';
+                const sizeText = !hasMetadata && session.size ? `${(session.size / 1024).toFixed(0)}KB | ` : '';
+
+                return `
                 <div class="session-card ${defaultExpanded ? 'expanded' : ''}" id="session-${idx}">
                     <div class="session-header" onclick="toggleSession(${idx})">
                         <div>
                             <div class="session-title">${session.filename}</div>
                             <div class="session-info">
-                                ${formatTimestamp(session.timestamp.replaceAll('_', ':'))} | 
-                                ${session.duration.toFixed(1)}s @ ${session.sample_rate || 50}Hz | 
-                                ${session.windows.length} windows
-                                ${session.device ? ` | ${session.device}` : ''}
-                                ${session.firmware_version ? ` (fw:${session.firmware_version})` : ''}
+                                ${formatTimestamp(session.timestamp.replaceAll('_', ':'))} |
+                                ${durationText}${sizeText}${session.windows.length} windows
+                                ${hasMetadata && session.device ? ` | ${session.device}` : ''}
+                                ${hasMetadata && session.firmware_version ? ` (fw:${session.firmware_version})` : ''}
                                 <span class="chips-container">
-                                    ${session.session_type && session.session_type !== 'recording' ? `<span class="chip" style="background: var(--warning);">${session.session_type}</span>` : ''}
-                                    ${session.hand && session.hand !== 'unknown' ? `<span class="chip">${session.hand} hand</span>` : ''}
-                                    ${session.magnet_type && session.magnet_type !== 'unknown' && session.magnet_type !== 'none' ? `<span class="chip" style="background: var(--success);">${session.magnet_type}</span>` : ''}
-                                    ${session.custom_labels?.map(l => `<span class="chip">${l}</span>`).join('') || ''}
+                                    ${hasMetadata && session.session_type && session.session_type !== 'recording' ? `<span class="chip" style="background: var(--warning);">${session.session_type}</span>` : ''}
+                                    ${hasMetadata && session.hand && session.hand !== 'unknown' ? `<span class="chip">${session.hand} hand</span>` : ''}
+                                    ${hasMetadata && session.magnet_type && session.magnet_type !== 'unknown' && session.magnet_type !== 'none' ? `<span class="chip" style="background: var(--success);">${session.magnet_type}</span>` : ''}
+                                    ${hasMetadata ? (session.custom_labels?.map(l => `<span class="chip">${l}</span>`).join('') || '') : ''}
                                 </span>
                             </div>
-                            ${session.notes ? `<div class="session-notes" style="font-size: 0.75rem; color: var(--fg-muted); margin-top: var(--space-xs); font-style: italic;">📝 ${session.notes}</div>` : ''}
+                            ${hasMetadata && session.notes ? `<div class="session-notes" style="font-size: 0.75rem; color: var(--fg-muted); margin-top: var(--space-xs); font-style: italic;">📝 ${session.notes}</div>` : ''}
                         </div>
                         <div class="expand-icon">▼</div>
                     </div>
                     <div class="session-content">
-                        ${session.composite_image ? `
-                        <div class="image-section composite-section ${viewSettings.showComposite ? '' : 'hidden'}">
-                            <h3 class="section-title">Composite Session View</h3>
-                            <img src="${getImageUrl(session.composite_image)}" class="composite-image" onclick="openModal(this.src)" alt="Composite view">
-                        </div>
-                        ` : ''}
-
-                        ${session.calibration_stages_image ? `
-                        <div class="image-section calibration-section ${viewSettings.showCalibration ? '' : 'hidden'}">
-                            <h3 class="section-title">Magnetometer Calibration Stages</h3>
-                            <img src="${getImageUrl(session.calibration_stages_image)}" class="composite-image" onclick="openModal(this.src)" alt="Calibration stages comparison">
-                        </div>
-                        ` : ''}
-
-                        ${session.trajectory_comparison_images && Object.keys(session.trajectory_comparison_images).length > 0 ? `
-                        <div class="image-section trajectory-section">
-                            <h3 class="section-title">Session-Level 3D Trajectory Comparison</h3>
-                            <div class="trajectory-grid">
-                                ${session.trajectory_comparison_images.raw && viewSettings.showWinTrajRaw ? `
-                                <div class="trajectory-card" data-type="raw" onclick="openModal('${getImageUrl(session.trajectory_comparison_images.raw)}')">
-                                    <img src="${getImageUrl(session.trajectory_comparison_images.raw)}" class="trajectory-image" alt="Raw trajectory">
-                                    <div class="trajectory-label">Raw</div>
-                                </div>
-                                ` : ''}
-                                ${session.trajectory_comparison_images.iron && viewSettings.showWinTrajIron ? `
-                                <div class="trajectory-card" data-type="iron" onclick="openModal('${getImageUrl(session.trajectory_comparison_images.iron)}')">
-                                    <img src="${getImageUrl(session.trajectory_comparison_images.iron)}" class="trajectory-image" alt="Iron corrected trajectory">
-                                    <div class="trajectory-label">Iron Corrected</div>
-                                </div>
-                                ` : ''}
-                                ${session.trajectory_comparison_images.fused && viewSettings.showWinTrajFused ? `
-                                <div class="trajectory-card" data-type="fused" onclick="openModal('${getImageUrl(session.trajectory_comparison_images.fused)}')">
-                                    <img src="${getImageUrl(session.trajectory_comparison_images.fused)}" class="trajectory-image" alt="Residual trajectory">
-                                    <div class="trajectory-label">Residual</div>
-                                </div>
-                                ` : ''}
-                                ${session.trajectory_comparison_images.filtered && viewSettings.showWinTrajFiltered ? `
-                                <div class="trajectory-card" data-type="filtered" onclick="openModal('${getImageUrl(session.trajectory_comparison_images.filtered)}')">
-                                    <img src="${getImageUrl(session.trajectory_comparison_images.filtered)}" class="trajectory-image" alt="Filtered trajectory">
-                                    <div class="trajectory-label">Filtered</div>
-                                </div>
-                                ` : ''}
-                                ${session.trajectory_comparison_images.combined && viewSettings.showWinTrajCombined ? `
-                                <div class="trajectory-card" data-type="combined" onclick="openModal('${getImageUrl(session.trajectory_comparison_images.combined)}')">
-                                    <img src="${getImageUrl(session.trajectory_comparison_images.combined)}" class="trajectory-image" alt="Combined overlay">
-                                    <div class="trajectory-label">Combined Overlay</div>
-                                </div>
-                                ` : ''}
-                                ${session.trajectory_comparison_images.statistics && viewSettings.showWinTrajStats ? `
-                                <div class="trajectory-card" data-type="statistics" onclick="openModal('${getImageUrl(session.trajectory_comparison_images.statistics)}')">
-                                    <img src="${getImageUrl(session.trajectory_comparison_images.statistics)}" class="trajectory-image" alt="Statistics">
-                                    <div class="trajectory-label">Statistics</div>
-                                </div>
-                                ` : ''}
-                            </div>
-                        </div>
-                        ` : ''}
-
-                        ${session.windows && session.windows.length > 0 ? `
-                        <div class="image-section windows-section ${viewSettings.showWindows ? '' : 'hidden'}">
-                            <h3 class="section-title">Per-Window Analysis (${session.windows.length} windows)</h3>
-                            ${renderWindows(session)}
-                        </div>
-                        ` : ''}
-
-                        ${session.raw_images && session.raw_images.length > 0 ? `
-                        <div class="image-section raw-section ${viewSettings.showRaw ? '' : 'hidden'}">
-                            <h3 class="section-title">Raw Axis & Orientation Views</h3>
-                            <div class="raw-images">
-                                ${session.raw_images.map(img => `
-                                    <img src="${getImageUrl(img)}" class="raw-image" onclick="openModal(this.src)" alt="Raw axis view">
-                                `).join('')}
-                            </div>
-                        </div>
-                        ` : ''}
+                        ${hasMetadata ? renderSessionContent(session) : '<div style="padding: var(--space-lg); text-align: center; color: var(--fg-muted);">Click to load session details...</div>'}
                     </div>
                 </div>
-            `).join('');
+            `}).join('');
         }
 
-        function toggleSession(idx) {
+        async function toggleSession(idx) {
             const card = document.getElementById(`session-${idx}`);
-            card.classList.toggle('expanded');
+            const session = filteredSessions[idx];
+
+            // If expanding and metadata not yet loaded, fetch it first
+            if (!card.classList.contains('expanded') && !session._metadataLoaded && session.sessionUrl) {
+                // Show loading indicator
+                const content = card.querySelector('.session-content');
+                const originalContent = content.innerHTML;
+                content.innerHTML = '<div style="padding: var(--space-lg); text-align: center; color: var(--fg-muted);">Loading session data...</div>';
+                card.classList.add('expanded');
+
+                await enrichSessionMetadata(session);
+
+                // Re-render this specific session card
+                renderSessionCard(session, idx, card);
+            } else {
+                card.classList.toggle('expanded');
+            }
+        }
+
+        function renderSessionCard(session, idx, card) {
+            // Update header with loaded metadata
+            const header = card.querySelector('.session-header');
+            const content = card.querySelector('.session-content');
+
+            header.innerHTML = `
+                <div>
+                    <div class="session-title">${session.filename}</div>
+                    <div class="session-info">
+                        ${formatTimestamp(session.timestamp.replaceAll('_', ':'))} |
+                        ${(session.duration || 0).toFixed(1)}s @ ${session.sample_rate || 50}Hz |
+                        ${session.windows.length} windows
+                        ${session.device ? ` | ${session.device}` : ''}
+                        ${session.firmware_version ? ` (fw:${session.firmware_version})` : ''}
+                        <span class="chips-container">
+                            ${session.session_type && session.session_type !== 'recording' ? `<span class="chip" style="background: var(--warning);">${session.session_type}</span>` : ''}
+                            ${session.hand && session.hand !== 'unknown' ? `<span class="chip">${session.hand} hand</span>` : ''}
+                            ${session.magnet_type && session.magnet_type !== 'unknown' && session.magnet_type !== 'none' ? `<span class="chip" style="background: var(--success);">${session.magnet_type}</span>` : ''}
+                            ${(session.custom_labels || []).map(l => `<span class="chip">${l}</span>`).join('')}
+                        </span>
+                    </div>
+                    ${session.notes ? `<div class="session-notes" style="font-size: 0.75rem; color: var(--fg-muted); margin-top: var(--space-xs); font-style: italic;">📝 ${session.notes}</div>` : ''}
+                </div>
+                <div class="expand-icon">▼</div>
+            `;
+            header.onclick = () => toggleSession(idx);
+
+            content.innerHTML = renderSessionContent(session);
+        }
+
+        function renderSessionContent(session) {
+            let html = '';
+
+            if (session.composite_image) {
+                html += `
+                <div class="image-section composite-section ${viewSettings.showComposite ? '' : 'hidden'}">
+                    <h3 class="section-title">Composite Session View</h3>
+                    <img src="${getImageUrl(session.composite_image)}" class="composite-image" onclick="openModal(this.src)" alt="Composite view">
+                </div>`;
+            }
+
+            if (session.calibration_stages_image) {
+                html += `
+                <div class="image-section calibration-section ${viewSettings.showCalibration ? '' : 'hidden'}">
+                    <h3 class="section-title">Magnetometer Calibration Stages</h3>
+                    <img src="${getImageUrl(session.calibration_stages_image)}" class="composite-image" onclick="openModal(this.src)" alt="Calibration stages comparison">
+                </div>`;
+            }
+
+            if (session.trajectory_comparison_images && Object.keys(session.trajectory_comparison_images).length > 0) {
+                html += `
+                <div class="image-section trajectory-section">
+                    <h3 class="section-title">Session-Level 3D Trajectory Comparison</h3>
+                    <div class="trajectory-grid">
+                        ${session.trajectory_comparison_images.raw && viewSettings.showWinTrajRaw ? `
+                        <div class="trajectory-card" data-type="raw" onclick="openModal('${getImageUrl(session.trajectory_comparison_images.raw)}')">
+                            <img src="${getImageUrl(session.trajectory_comparison_images.raw)}" class="trajectory-image" alt="Raw trajectory">
+                            <div class="trajectory-label">Raw</div>
+                        </div>` : ''}
+                        ${session.trajectory_comparison_images.iron && viewSettings.showWinTrajIron ? `
+                        <div class="trajectory-card" data-type="iron" onclick="openModal('${getImageUrl(session.trajectory_comparison_images.iron)}')">
+                            <img src="${getImageUrl(session.trajectory_comparison_images.iron)}" class="trajectory-image" alt="Iron corrected trajectory">
+                            <div class="trajectory-label">Iron Corrected</div>
+                        </div>` : ''}
+                        ${session.trajectory_comparison_images.fused && viewSettings.showWinTrajFused ? `
+                        <div class="trajectory-card" data-type="fused" onclick="openModal('${getImageUrl(session.trajectory_comparison_images.fused)}')">
+                            <img src="${getImageUrl(session.trajectory_comparison_images.fused)}" class="trajectory-image" alt="Residual trajectory">
+                            <div class="trajectory-label">Residual</div>
+                        </div>` : ''}
+                        ${session.trajectory_comparison_images.filtered && viewSettings.showWinTrajFiltered ? `
+                        <div class="trajectory-card" data-type="filtered" onclick="openModal('${getImageUrl(session.trajectory_comparison_images.filtered)}')">
+                            <img src="${getImageUrl(session.trajectory_comparison_images.filtered)}" class="trajectory-image" alt="Filtered trajectory">
+                            <div class="trajectory-label">Filtered</div>
+                        </div>` : ''}
+                        ${session.trajectory_comparison_images.combined && viewSettings.showWinTrajCombined ? `
+                        <div class="trajectory-card" data-type="combined" onclick="openModal('${getImageUrl(session.trajectory_comparison_images.combined)}')">
+                            <img src="${getImageUrl(session.trajectory_comparison_images.combined)}" class="trajectory-image" alt="Combined overlay">
+                            <div class="trajectory-label">Combined Overlay</div>
+                        </div>` : ''}
+                        ${session.trajectory_comparison_images.statistics && viewSettings.showWinTrajStats ? `
+                        <div class="trajectory-card" data-type="statistics" onclick="openModal('${getImageUrl(session.trajectory_comparison_images.statistics)}')">
+                            <img src="${getImageUrl(session.trajectory_comparison_images.statistics)}" class="trajectory-image" alt="Statistics">
+                            <div class="trajectory-label">Statistics</div>
+                        </div>` : ''}
+                    </div>
+                </div>`;
+            }
+
+            if (session.windows && session.windows.length > 0) {
+                html += `
+                <div class="image-section windows-section ${viewSettings.showWindows ? '' : 'hidden'}">
+                    <h3 class="section-title">Per-Window Analysis (${session.windows.length} windows)</h3>
+                    ${renderWindows(session)}
+                </div>`;
+            }
+
+            const rawImages = [
+                session.orientation_3d_image,
+                session.orientation_track_image,
+                session.raw_axes_image
+            ].filter(Boolean);
+
+            if (rawImages.length > 0) {
+                html += `
+                <div class="image-section raw-section ${viewSettings.showRaw ? '' : 'hidden'}">
+                    <h3 class="section-title">Raw Axis & Orientation Views</h3>
+                    <div class="raw-images">
+                        ${rawImages.map(img => `
+                            <img src="${getImageUrl(img)}" class="raw-image" onclick="openModal(this.src)" alt="Raw axis view">
+                        `).join('')}
+                    </div>
+                </div>`;
+            }
+
+            return html;
         }
 
         function expandAll() {

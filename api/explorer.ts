@@ -1,8 +1,8 @@
 /**
  * Explorer Data API Handler
  *
- * Provides combined session + visualization data for the VIZ explorer.
- * Fetches visualizations list and enriches with session metadata.
+ * Provides lightweight session + visualization metadata for the VIZ explorer.
+ * Returns URLs and identifiers only - clients fetch individual session data directly.
  *
  * No authentication required - explorer data is public.
  */
@@ -11,54 +11,37 @@ import { list } from '@vercel/blob';
 
 // ===== Type Definitions =====
 
-interface LabelSegment {
-  labels?: {
-    custom?: string[];
-  };
-}
-
-interface SessionMetadata {
-  sample_rate: number;
-  duration: number;
-  sample_count: number;
-  device: string;
-  firmware_version: string | null;
-  session_type: string;
-  hand: string;
-  magnet_type: string;
-  notes: string | null;
-  custom_labels: string[];
-  labels: LabelSegment[];
-}
-
-interface WindowData {
+interface WindowEntry {
   window_num: number;
-  filepath: string;
-  time_start: number;
-  time_end: number;
-  accel_mag_mean: number;
-  gyro_mag_mean: number;
   images: Record<string, string>;
   trajectory_images: Record<string, string>;
 }
 
-interface SessionData extends SessionMetadata {
+interface SessionEntry {
   timestamp: string;
+  sessionUrl: string | null;        // URL to fetch full session JSON
   filename: string;
+  size: number | null;
+  uploadedAt: string | null;
+  // Visualization URLs (not data)
   composite_image: string | null;
   calibration_stages_image: string | null;
-  raw_images: string[];
+  orientation_3d_image: string | null;
+  orientation_track_image: string | null;
+  raw_axes_image: string | null;
   trajectory_comparison_images: Record<string, string>;
-  windows: WindowData[];
+  windows: WindowEntry[];
 }
 
 interface BlobItem {
   pathname: string;
   url: string;
+  size?: number;
+  uploadedAt?: Date;
 }
 
 interface ExplorerResponse {
-  sessions: SessionData[];
+  sessions: SessionEntry[];
   count: number;
   generatedAt: string;
 }
@@ -71,83 +54,10 @@ interface ErrorResponse {
 // ===== Helper Functions =====
 
 /**
- * Fetch and parse a session JSON file from blob storage
+ * Parse visualization files into session-grouped structure (URLs only, no data fetching)
  */
-async function fetchSessionMetadata(sessionUrl: string): Promise<SessionMetadata | null> {
-  try {
-    const response = await fetch(sessionUrl);
-    if (!response.ok) return null;
-
-    const data = await response.json();
-
-    // Extract metadata from v2.x format
-    if (data.samples && Array.isArray(data.samples)) {
-      const samples = data.samples;
-      const metadata = data.metadata || {};
-      const labels = data.labels || [];
-
-      // Calculate duration
-      const sampleCount = samples.length;
-      const sampleRate = metadata.sample_rate || 50;
-      const duration = sampleCount / sampleRate;
-
-      return {
-        sample_rate: sampleRate,
-        duration,
-        sample_count: sampleCount,
-        device: metadata.device || 'GAMBIT',
-        firmware_version: metadata.firmware_version || null,
-        session_type: metadata.session_type || 'recording',
-        hand: metadata.hand || 'unknown',
-        magnet_type: metadata.magnet_type || 'unknown',
-        notes: metadata.notes || null,
-        custom_labels: extractCustomLabels(labels),
-        labels,
-      };
-    }
-
-    // v1.x format - direct array
-    if (Array.isArray(data)) {
-      return {
-        sample_rate: 50,
-        duration: data.length / 50,
-        sample_count: data.length,
-        device: 'GAMBIT',
-        firmware_version: null,
-        session_type: 'recording',
-        hand: 'unknown',
-        magnet_type: 'unknown',
-        notes: null,
-        custom_labels: [],
-        labels: [],
-      };
-    }
-
-    return null;
-  } catch (error) {
-    console.error(`Failed to fetch session metadata: ${(error as Error).message}`);
-    return null;
-  }
-}
-
-/**
- * Extract custom labels from label segments
- */
-function extractCustomLabels(labels: LabelSegment[]): string[] {
-  const customLabels = new Set<string>();
-  for (const segment of labels) {
-    if (segment.labels?.custom) {
-      segment.labels.custom.forEach(l => customLabels.add(l));
-    }
-  }
-  return Array.from(customLabels);
-}
-
-/**
- * Parse visualization files into session-grouped structure
- */
-function groupVisualizationsBySession(blobs: BlobItem[]): Map<string, SessionData> {
-  const sessions = new Map<string, SessionData>();
+function groupVisualizationsBySession(blobs: BlobItem[]): Map<string, SessionEntry> {
+  const sessions = new Map<string, SessionEntry>();
 
   for (const blob of blobs) {
     const path = blob.pathname.replace('visualizations/', '');
@@ -187,24 +97,17 @@ function groupVisualizationsBySession(blobs: BlobItem[]): Map<string, SessionDat
     if (!sessions.has(timestamp)) {
       sessions.set(timestamp, {
         timestamp,
+        sessionUrl: null,  // Will be populated from sessions list
         filename: `${timestamp.replace(/:/g, '_')}.json`,
+        size: null,
+        uploadedAt: null,
         composite_image: null,
         calibration_stages_image: null,
-        raw_images: [],
+        orientation_3d_image: null,
+        orientation_track_image: null,
+        raw_axes_image: null,
         trajectory_comparison_images: {},
         windows: [],
-        // Metadata (will be populated from session JSON)
-        duration: 0,
-        sample_rate: 50,
-        sample_count: 0,
-        device: 'GAMBIT',
-        firmware_version: null,
-        session_type: 'recording',
-        hand: 'unknown',
-        magnet_type: 'unknown',
-        notes: null,
-        custom_labels: [],
-        labels: [],
       });
     }
 
@@ -219,9 +122,13 @@ function groupVisualizationsBySession(blobs: BlobItem[]): Map<string, SessionDat
         session.calibration_stages_image = blob.url;
         break;
       case 'orientation_3d':
+        session.orientation_3d_image = blob.url;
+        break;
       case 'orientation_track':
+        session.orientation_track_image = blob.url;
+        break;
       case 'raw_axes':
-        session.raw_images.push(blob.url);
+        session.raw_axes_image = blob.url;
         break;
       case 'trajectory_comparison':
         if (subPath) {
@@ -235,11 +142,6 @@ function groupVisualizationsBySession(blobs: BlobItem[]): Map<string, SessionDat
           if (!window) {
             window = {
               window_num: windowNum,
-              filepath: blob.url,
-              time_start: windowNum,  // Approximate - actual times from session data
-              time_end: windowNum + 1,
-              accel_mag_mean: 0,
-              gyro_mag_mean: 0,
               images: {},
               trajectory_images: {},
             };
@@ -249,8 +151,6 @@ function groupVisualizationsBySession(blobs: BlobItem[]): Map<string, SessionDat
           if (imageName.startsWith('trajectory_') && !imageName.includes('accel') && !imageName.includes('gyro') && !imageName.includes('mag') && !imageName.includes('combined')) {
             const trajKey = imageName.replace('trajectory_', '');
             window.trajectory_images[trajKey] = blob.url;
-          } else if (imageName === 'composite' || imageName === 'window_composite') {
-            window.filepath = blob.url;
           } else {
             window.images[imageName] = blob.url;
           }
@@ -279,57 +179,70 @@ export default async function handler(request: Request): Promise<Response> {
   }
 
   try {
-    // Fetch all visualizations
-    let allVizBlobs: BlobItem[] = [];
-    let cursor: string | undefined = undefined;
+    // Fetch visualizations and sessions in parallel
+    const [vizResult, sessionsResult] = await Promise.all([
+      (async () => {
+        let allVizBlobs: BlobItem[] = [];
+        let cursor: string | undefined = undefined;
+        do {
+          const result: { blobs: BlobItem[]; cursor?: string } = await list({
+            prefix: 'visualizations/',
+            limit: 1000,
+            cursor,
+          });
+          allVizBlobs = allVizBlobs.concat(result.blobs);
+          cursor = result.cursor;
+        } while (cursor);
+        return allVizBlobs;
+      })(),
+      list({ prefix: 'sessions/', limit: 1000 }),
+    ]);
 
-    do {
-      const result: { blobs: BlobItem[]; cursor?: string } = await list({
-        prefix: 'visualizations/',
-        limit: 1000,
-        cursor,
-      });
-      allVizBlobs = allVizBlobs.concat(result.blobs);
-      cursor = result.cursor;
-    } while (cursor);
+    // Group visualizations by session (URLs only)
+    const sessionMap = groupVisualizationsBySession(vizResult);
 
-    // Group visualizations by session
-    const sessionMap = groupVisualizationsBySession(allVizBlobs);
-
-    // Fetch session list to get metadata URLs
-    const { blobs: sessionBlobs } = await list({
-      prefix: 'sessions/',
-      limit: 1000,
-    });
-
-    // Create lookup map for session URLs
-    const sessionUrls = new Map<string, string>();
-    for (const blob of sessionBlobs) {
+    // Create lookup for session metadata (URL, size, uploadedAt)
+    const sessionInfo = new Map<string, { url: string; size: number; uploadedAt: Date }>();
+    for (const blob of sessionsResult.blobs) {
       if (blob.pathname.endsWith('.json')) {
-        // Extract timestamp from filename
         const filename = blob.pathname.replace('sessions/', '');
         const timestamp = filename.replace('.json', '').replace(/_/g, ':');
-        sessionUrls.set(timestamp, blob.url);
+        sessionInfo.set(timestamp, {
+          url: blob.url,
+          size: blob.size,
+          uploadedAt: blob.uploadedAt,
+        });
       }
     }
 
-    // Enrich sessions with metadata (fetch in parallel, limit concurrency)
-    const sessionEntries = Array.from(sessionMap.entries());
-    const batchSize = 10;
+    // Link session URLs to visualization entries (no data fetching)
+    for (const [timestamp, session] of sessionMap) {
+      const info = sessionInfo.get(timestamp);
+      if (info) {
+        session.sessionUrl = info.url;
+        session.size = info.size;
+        session.uploadedAt = info.uploadedAt.toISOString();
+      }
+    }
 
-    for (let i = 0; i < sessionEntries.length; i += batchSize) {
-      const batch = sessionEntries.slice(i, i + batchSize);
-      await Promise.all(
-        batch.map(async ([timestamp, session]) => {
-          const sessionUrl = sessionUrls.get(timestamp);
-          if (sessionUrl) {
-            const metadata = await fetchSessionMetadata(sessionUrl);
-            if (metadata) {
-              Object.assign(session, metadata);
-            }
-          }
-        })
-      );
+    // Also add sessions that have no visualizations yet
+    for (const [timestamp, info] of sessionInfo) {
+      if (!sessionMap.has(timestamp)) {
+        sessionMap.set(timestamp, {
+          timestamp,
+          sessionUrl: info.url,
+          filename: `${timestamp.replace(/:/g, '_')}.json`,
+          size: info.size,
+          uploadedAt: info.uploadedAt.toISOString(),
+          composite_image: null,
+          calibration_stages_image: null,
+          orientation_3d_image: null,
+          orientation_track_image: null,
+          raw_axes_image: null,
+          trajectory_comparison_images: {},
+          windows: [],
+        });
+      }
     }
 
     // Convert to array sorted by timestamp (newest first)
@@ -346,7 +259,7 @@ export default async function handler(request: Request): Promise<Response> {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
-        'Cache-Control': 's-maxage=300, stale-while-revalidate=600',
+        'Cache-Control': 's-maxage=60, stale-while-revalidate=300',
       },
     });
   } catch (error) {
