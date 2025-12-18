@@ -2268,3 +2268,71 @@ try {
 } catch (e) {
     console.error('[GAMBIT] Failed to init playback:', e);
 }
+
+// ===== Global Debug Functions =====
+// Expose diagnostic functions for mobile debugging (call from console)
+
+/**
+ * Get magnetometer diagnostic log
+ * Usage: getMagDiagLog() - returns array of log entries
+ *        getMagDiagLog(true) - also prints to console
+ */
+(window as any).getMagDiagLog = function(print: boolean = false): string[] {
+    const log = telemetryProcessor.getDiagnosticLog();
+    if (print) {
+        console.log('=== MAG DIAGNOSTIC LOG ===');
+        log.forEach(entry => console.log(entry));
+        console.log('=== END LOG ===');
+    }
+    return log;
+};
+
+/**
+ * Get magnetometer diagnostic summary
+ * Usage: getMagDiagSummary()
+ */
+(window as any).getMagDiagSummary = function(): void {
+    const summary = telemetryProcessor.getDiagnosticSummary();
+    const calState = telemetryProcessor.getMagCalibration().getState();
+
+    console.log('=== MAG DIAGNOSTIC SUMMARY ===');
+    console.log(`useMag: ${summary.useMagnetometer}, trust: ${summary.magTrust}`);
+    console.log(`hasIronCal: ${summary.hasIronCal}`);
+    console.log(`geomagRef: ${summary.geomagRef ? `H=${summary.geomagRef.horizontal.toFixed(1)} V=${summary.geomagRef.vertical.toFixed(1)} D=${summary.geomagRef.declination.toFixed(1)}` : 'none'}`);
+    console.log(`lastResidual: ${summary.lastResidual.toFixed(1)} µT (should be ~0 without magnets)`);
+    console.log(`lastYaw: ${summary.lastYaw.toFixed(1)}°`);
+    console.log(`samples: ${summary.sampleCount}`);
+    console.log(`calReady: ${calState.ready}, confidence: ${(calState.confidence * 100).toFixed(0)}%`);
+    console.log(`earthMag: ${calState.earthMagnitude.toFixed(1)} µT`);
+    console.log('==============================');
+};
+
+/**
+ * Export diagnostic log as downloadable file
+ * Usage: exportMagDiagLog()
+ */
+(window as any).exportMagDiagLog = function(): void {
+    const log = telemetryProcessor.getDiagnosticLog();
+    const summary = telemetryProcessor.getDiagnosticSummary();
+    const content = [
+        `=== MAG DIAGNOSTIC EXPORT ===`,
+        `Time: ${new Date().toISOString()}`,
+        `useMag: ${summary.useMagnetometer}, trust: ${summary.magTrust}`,
+        `hasIronCal: ${summary.hasIronCal}`,
+        `geomagRef: ${summary.geomagRef ? `H=${summary.geomagRef.horizontal.toFixed(1)} V=${summary.geomagRef.vertical.toFixed(1)}` : 'none'}`,
+        `samples: ${summary.sampleCount}`,
+        ``,
+        `=== LOG ENTRIES ===`,
+        ...log,
+        `=== END ===`
+    ].join('\n');
+
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `mag-diag-${Date.now()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    console.log('Diagnostic log exported');
+};
