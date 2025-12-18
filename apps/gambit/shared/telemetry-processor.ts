@@ -205,6 +205,10 @@ export class TelemetryProcessor {
     private _magResidualHistory: { x: number; y: number; z: number; mag: number; yaw: number }[] = [];
     private _lastDiagnosticLog: number = 0;
 
+    // Persistent diagnostic log buffer (survives console clear)
+    private _diagnosticLog: string[] = [];
+    private static readonly MAX_LOG_ENTRIES = 200;
+
     /**
      * Create a TelemetryProcessor instance
      */
@@ -252,6 +256,76 @@ export class TelemetryProcessor {
         this.onProcessed = options.onProcessed || null;
         this.onOrientationUpdate = options.onOrientationUpdate || null;
         this.onGyroBiasCalibrated = options.onGyroBiasCalibrated || null;
+
+        // Log startup calibration state
+        this._logStartupState();
+    }
+
+    /**
+     * Log to persistent diagnostic buffer (and console)
+     */
+    private _logDiagnostic(message: string, alsoConsole: boolean = true): void {
+        const timestamp = new Date().toISOString().substr(11, 12); // HH:MM:SS.mmm
+        const entry = `[${timestamp}] ${message}`;
+        this._diagnosticLog.push(entry);
+        if (this._diagnosticLog.length > TelemetryProcessor.MAX_LOG_ENTRIES) {
+            this._diagnosticLog.shift();
+        }
+        if (alsoConsole) {
+            console.log(message);
+        }
+    }
+
+    /**
+     * Log startup calibration state for debugging
+     */
+    private _logStartupState(): void {
+        const calState = this.magCalibration.getState();
+        const hasIron = this.magCalibration.hasIronCalibration();
+
+        this._logDiagnostic(`[MagDiag] === STARTUP STATE ===`);
+        this._logDiagnostic(`[MagDiag] useMagnetometer: ${this.useMagnetometer}, magTrust: ${this.magTrust}`);
+        this._logDiagnostic(`[MagDiag] Iron calibration loaded: ${hasIron}`);
+
+        if (hasIron) {
+            // Get saved calibration data
+            const calJson = this.magCalibration.toJSON();
+            this._logDiagnostic(`[MagDiag] Hard iron offset: [${calJson.hardIronOffset.x.toFixed(1)}, ${calJson.hardIronOffset.y.toFixed(1)}, ${calJson.hardIronOffset.z.toFixed(1)}] µT`);
+        }
+
+        this._logDiagnostic(`[MagDiag] Earth field estimate: ${calState.earthMagnitude.toFixed(1)} µT`);
+        this._logDiagnostic(`[MagDiag] Cal ready: ${calState.ready}, confidence: ${(calState.confidence * 100).toFixed(0)}%`);
+    }
+
+    /**
+     * Get the diagnostic log buffer (for export/display)
+     */
+    getDiagnosticLog(): string[] {
+        return [...this._diagnosticLog];
+    }
+
+    /**
+     * Get diagnostic summary for UI display
+     */
+    getDiagnosticSummary(): {
+        useMagnetometer: boolean;
+        magTrust: number;
+        hasIronCal: boolean;
+        geomagRef: GeomagneticRef | null;
+        lastResidual: number;
+        lastYaw: number;
+        sampleCount: number;
+    } {
+        const lastHist = this._magResidualHistory[this._magResidualHistory.length - 1];
+        return {
+            useMagnetometer: this.useMagnetometer,
+            magTrust: this.magTrust,
+            hasIronCal: this.magCalibration.hasIronCalibration(),
+            geomagRef: this.geomagneticRef,
+            lastResidual: lastHist?.mag ?? 0,
+            lastYaw: lastHist?.yaw ?? 0,
+            sampleCount: this._sampleCount
+        };
     }
 
     /**
@@ -291,17 +365,17 @@ export class TelemetryProcessor {
         const defaultLoc = getDefaultLocation();
         if (defaultLoc) {
             this._setGeomagneticRef(defaultLoc);
-            console.log('[TelemetryProcessor] Using default geomagnetic reference:', defaultLoc.city);
+            this._logDiagnostic(`[MagDiag] GeomagRef (default): ${defaultLoc.city} H=${defaultLoc.horizontal.toFixed(1)}µT V=${defaultLoc.vertical.toFixed(1)}µT D=${defaultLoc.declination.toFixed(1)}°`);
         }
 
         // Try to get browser location (async, updates if successful)
         try {
             const browserLoc = await getBrowserLocation({ timeout: 5000 });
             this._setGeomagneticRef(browserLoc.selected);
-            console.log('[TelemetryProcessor] Updated geomagnetic reference from browser location:', browserLoc.selected.city);
+            this._logDiagnostic(`[MagDiag] GeomagRef (browser): ${browserLoc.selected.city} H=${browserLoc.selected.horizontal.toFixed(1)}µT V=${browserLoc.selected.vertical.toFixed(1)}µT`);
         } catch (e) {
             const error = e as Error;
-            console.debug('[TelemetryProcessor] Browser location unavailable, using default:', error.message);
+            this._logDiagnostic(`[MagDiag] Browser location unavailable: ${error.message}`, false);
         }
     }
 
@@ -506,12 +580,15 @@ export class TelemetryProcessor {
                     const yawDrift = avgRecentYaw - avgOlderYaw;
                     const isStationary = !motionState.isMoving;
 
-                    console.log(
-                        `[AHRS Mag Diagnostic] ` +
-                        `residual: ${residualMag.toFixed(1)}µT | ` +
-                        `yaw: ${yaw.toFixed(1)}° | ` +
-                        `drift(${(this._magResidualHistory.length/50).toFixed(0)}s): mag=${magDrift.toFixed(2)}µT yaw=${yawDrift.toFixed(1)}° | ` +
-                        `stationary: ${isStationary}`
+                    // Also log raw mag reading for comparison
+                    const rawMagMag = Math.sqrt(mx_ut ** 2 + my_ut ** 2 + mz_ut ** 2);
+
+                    this._logDiagnostic(
+                        `[MagDiag] ` +
+                        `res=${residualMag.toFixed(1)}µT raw=${rawMagMag.toFixed(1)}µT | ` +
+                        `yaw=${yaw.toFixed(1)}° | ` +
+                        `Δ(${(this._magResidualHistory.length/50).toFixed(0)}s): mag=${magDrift.toFixed(1)} yaw=${yawDrift.toFixed(1)}° | ` +
+                        `${isStationary ? 'STILL' : 'moving'}`
                     );
                 }
             }
