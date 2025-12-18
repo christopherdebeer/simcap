@@ -5,6 +5,9 @@
  * These declarations are only for external libraries that remain as global scripts.
  */
 
+// Make this file a module to allow `declare global`
+export {};
+
 // ===== Common Types (used by inline scripts) =====
 
 interface Quaternion {
@@ -35,31 +38,6 @@ interface PuckConnectionCallback {
 interface PuckWriteCallback {
   (): void;
 }
-
-declare const Puck: {
-  debug: number;
-  flowControl: boolean;
-  chunkSize: number;
-
-  connect(callback: PuckConnectionCallback): Promise<void>;
-  write(data: string, callback?: PuckWriteCallback): void;
-  eval(expression: string, callback: (result: any) => void): void;
-  close(): void;
-  isConnected(): boolean;
-
-  setTime(): void;
-  getBattery(): Promise<number>;
-  LED1: { write: (value: boolean) => void };
-  LED2: { write: (value: boolean) => void };
-  LED3: { write: (value: boolean) => void };
-
-  // Optional logging function (set dynamically)
-  log?: (level: number, message: string) => void;
-};
-
-// ===== Three.js (loaded via CDN) =====
-
-declare const THREE: typeof import('three');
 
 // ===== GambitClient (exposed by entry point modules) =====
 // Note: The actual class is in gambit-client.ts, but synth-app.ts
@@ -100,8 +78,29 @@ interface GambitClientInterface {
   checkCompatibility(minVersion: string): GambitCompatibilityResult;
 }
 
-// Declare GambitClient as available on window (set by synth-app.ts/loader-app.ts)
+// Declare globals available on window (set by synth-app.ts/loader-app.ts)
 declare global {
+  // Three.js is loaded via CDN
+  const THREE: any;
+  
+  // Puck.js BLE library
+  const Puck: {
+    debug: number;
+    flowControl: boolean;
+    chunkSize: number;
+    connect(callback: PuckConnectionCallback): Promise<void>;
+    write(data: string, callback?: PuckWriteCallback): void;
+    eval(expression: string, callback: (result: any) => void): void;
+    close(): void;
+    isConnected(): boolean;
+    setTime(): void;
+    getBattery(): Promise<number>;
+    LED1: { write: (value: boolean) => void };
+    LED2: { write: (value: boolean) => void };
+    LED3: { write: (value: boolean) => void };
+    log?: (level: number, message: string) => void;
+  };
+  
   interface Window {
     GambitClient: new (options?: GambitClientOptions) => GambitClientInterface;
   }

@@ -8,7 +8,7 @@
  */
 
 import type { GeomagneticLocation } from './shared/geomagnetic-field.js';
-import type { EulerAngles, Quaternion, TelemetrySample } from '@core/types';
+import type { EulerAngles, TelemetrySample } from '@core/types';
 import type { ReferencePose, ValidationQuestion, CouplingQuestion, Observation } from './shared/orientation-calibration.js';
 import type { SessionMetadata, PlaybackState } from './modules/session-playback.js';
 import type { GestureUIController } from './modules/gesture-inference-module.js';
@@ -16,8 +16,7 @@ import type { GestureUIController } from './modules/gesture-inference-module.js'
 // ===== Import Global Classes (previously loaded via <script> tags) =====
 // These are now ES modules that also export to window for backward compatibility
 import { GambitClient } from './gambit-client';
-import { KalmanFilter, KalmanFilter3D, MadgwickAHRS, ComplementaryFilter, MotionDetector } from '@filters';
-import { GestureInference, FingerTrackingInference } from './gesture-inference';
+import { KalmanFilter } from '@filters';
 
 // ===== Type Definitions =====
 
@@ -30,22 +29,6 @@ interface DataStageInfo {
 }
 
 type DataStage = 'raw' | 'converted' | 'calibrated' | 'fused' | 'filtered';
-
-interface CalibrationQuality {
-    quality: number;
-    diversityRatio: number;
-    windowFill: number;
-}
-
-interface CalibrationState {
-    ready: boolean;
-    confidence: number;
-    meanResidual: number;
-    earthMagnitude: number;
-    earthWorld: { x: number; y: number; z: number };
-    hardIronCalibrated: boolean;
-    softIronCalibrated: boolean;
-}
 
 /** Tracking state for min/max normalization */
 interface MinMaxEntry {
@@ -102,21 +85,6 @@ declare global {
 
 // ===== DOM Helpers =====
 
-function $id(id: string): HTMLElement | null {
-    return document.getElementById(id);
-}
-
-function $input(id: string): HTMLInputElement | null {
-    return document.getElementById(id) as HTMLInputElement | null;
-}
-
-function $select(id: string): HTMLSelectElement | null {
-    return document.getElementById(id) as HTMLSelectElement | null;
-}
-
-function $button(id: string): HTMLButtonElement | null {
-    return document.getElementById(id) as HTMLButtonElement | null;
-}
 
 /**
  * =====================================================================
@@ -222,16 +190,6 @@ function $button(id: string): HTMLButtonElement | null {
 
 // ===== Import shared modules =====
 import {
-    ACCEL_SCALE,
-    GYRO_SCALE,
-    STATIONARY_SAMPLES_FOR_CALIBRATION,
-    accelLsbToG,
-    gyroLsbToDps,
-    createMadgwickAHRS,
-    createKalmanFilter3D,
-    createMotionDetector,
-    createGyroBiasState,
-    createLowPassFilter,
     LowPassFilter
 } from './shared/sensor-config.js';
 import { TelemetryProcessor } from './shared/telemetry-processor.js';
@@ -243,8 +201,7 @@ import {
 import {
     createGesture,
     createGestureUI,
-    isGestureInferenceAvailable,
-    GESTURE_LABELS_V1
+    isGestureInferenceAvailable
 } from './modules/gesture-inference-module.js';
 import {
     getBrowserLocation,
@@ -254,17 +211,11 @@ import {
 } from './shared/geomagnetic-field.js';
 import { ThreeJSHandSkeleton } from './shared/threejs-hand-skeleton.js';
 import { MagneticTrajectory } from './modules/magnetic-trajectory.js';
-import { describeExpectedPose, getValidationTestCases } from './shared/orientation-model.js';
 import {
     REFERENCE_POSES,
-    ANSWER_OPTIONS,
-    COUPLING_TYPES,
     createObservation,
     ObservationStore,
-    getCalibrationSequence,
-    generateDiagnosticReport,
-    quaternionToEuler,
-    testEulerOrders
+    generateDiagnosticReport
 } from './shared/orientation-calibration.js';
 import {
     uploadToBlob,
@@ -1999,7 +1950,7 @@ window.getdata.onclick = async function() {
 
 // ===== Gesture Inference (using module) =====
 // Note: GestureInference type comes from dynamically loaded script
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 let gestureInference: { load: () => Promise<void>; isReady: boolean; addSample: (sample: TelemetrySample) => void; labels: string[] } | null = null;
 let gestureUI: GestureUIController | null = null;
 

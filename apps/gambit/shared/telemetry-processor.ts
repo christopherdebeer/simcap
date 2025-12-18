@@ -420,7 +420,7 @@ export class TelemetryProcessor {
         if (this.imuInitialized) {
             const magDataValid = mx_ut !== 0 || my_ut !== 0 || mz_ut !== 0;
 
-            if (false && this.useMagnetometer && magDataValid && this.geomagneticRef) {
+            if (this.useMagnetometer && magDataValid && this.geomagneticRef) {
                 // 9-DOF fusion with magnetometer for absolute yaw reference
                 const ironCorrected = this.magCalibration.applyIronCorrection({ x: mx_ut, y: my_ut, z: mz_ut });
 
