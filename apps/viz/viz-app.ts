@@ -23,8 +23,41 @@ interface WindowEntry {
     time_end?: number;
     accel_mag_mean?: number;
     gyro_mag_mean?: number;
+    sample_count?: number;
+    has_visualizations?: boolean;
     images?: Record<string, string>;
     trajectory_images?: Record<string, string>;
+}
+
+interface SensorSample {
+    ax: number;
+    ay: number;
+    az: number;
+    gx: number;
+    gy: number;
+    gz: number;
+    mx: number;
+    my: number;
+    mz: number;
+    // Converted values (may or may not be present)
+    ax_g?: number;
+    ay_g?: number;
+    az_g?: number;
+    gx_dps?: number;
+    gy_dps?: number;
+    gz_dps?: number;
+    mx_ut?: number;
+    my_ut?: number;
+    mz_ut?: number;
+    // Other fields
+    l?: number;
+    t?: number;
+    c?: number;
+    s?: number;
+    b?: number;
+    n?: number;
+    dt?: number;
+    [key: string]: unknown;
 }
 
 interface SessionEntry {
@@ -67,6 +100,7 @@ interface SessionMetadata {
     notes: string | null;
     custom_labels: string[];
     labels: LabelSegment[];
+    samples?: SensorSample[]; // Include samples for window calculation
 }
 
 interface WindowLabels {
@@ -149,18 +183,93 @@ function getEl(id: string): HTMLElement | null {
 
 // ===== API Functions =====
 
-async function fetchExplorerData(): Promise<SessionEntry[]> {
+interface SessionsApiResponse {
+    sessions: Array<{
+        filename: string;
+        pathname: string;
+        url: string;
+        downloadUrl: string;
+        size: number;
+        uploadedAt: string;
+        timestamp: string;
+    }>;
+    count: number;
+    generatedAt: string;
+}
+
+interface VisualizationsApiResponse {
+    session: {
+        timestamp: string;
+        filename: string;
+        composite_image: string | null;
+        calibration_stages_image: string | null;
+        orientation_3d_image: string | null;
+        orientation_track_image: string | null;
+        raw_axes_image: string | null;
+        trajectory_comparison_images: Record<string, string>;
+        windows: WindowEntry[];
+    } | null;
+    found: boolean;
+    generatedAt: string;
+}
+
+/**
+ * Fetch session list from /api/sessions
+ */
+async function fetchSessionsList(): Promise<SessionEntry[]> {
     try {
-        const response = await fetch(`${API_BASE}/api/explorer`);
+        const response = await fetch(`${API_BASE}/api/sessions`);
         if (!response.ok) {
             throw new Error(`API error: ${response.status} ${response.statusText}`);
         }
-        const data = await response.json();
-        return data.sessions || [];
+        const data: SessionsApiResponse = await response.json();
+
+        // Transform sessions API response to SessionEntry format
+        return (data.sessions || []).map(s => ({
+            timestamp: s.timestamp,
+            sessionUrl: s.url,
+            filename: s.filename,
+            size: s.size,
+            uploadedAt: s.uploadedAt,
+            // Visualization fields - will be populated lazily
+            composite_image: null,
+            calibration_stages_image: null,
+            orientation_3d_image: null,
+            orientation_track_image: null,
+            raw_axes_image: null,
+            trajectory_comparison_images: {},
+            windows: [],
+        }));
     } catch (error) {
-        console.error('Failed to fetch explorer data:', error);
+        console.error('Failed to fetch sessions list:', error);
         throw error;
     }
+}
+
+/**
+ * Fetch visualizations for a specific session from /api/visualizations?session=TIMESTAMP
+ */
+async function fetchSessionVisualizations(timestamp: string): Promise<VisualizationsApiResponse['session']> {
+    try {
+        const response = await fetch(`${API_BASE}/api/visualizations?session=${encodeURIComponent(timestamp)}`);
+        if (!response.ok) {
+            console.warn(`Failed to fetch visualizations for ${timestamp}: ${response.status}`);
+            return null;
+        }
+        const data: VisualizationsApiResponse = await response.json();
+        return data.session;
+    } catch (error) {
+        console.error(`Failed to fetch visualizations for ${timestamp}:`, error);
+        return null;
+    }
+}
+
+/**
+ * Fetch session list (replaces fetchExplorerData)
+ * Now uses /api/sessions instead of /api/explorer
+ */
+async function fetchExplorerData(): Promise<SessionEntry[]> {
+    return fetchSessionsList();
 }
 
 async function fetchSessionMetadata(sessionUrl: string): Promise<SessionMetadata | null> {
@@ -200,6 +309,7 @@ async function fetchSessionMetadata(sessionUrl: string): Promise<SessionMetadata
                 notes: meta.notes || null,
                 custom_labels: extractCustomLabels(labels),
                 labels,
+                samples, // Include samples for window calculation
             };
         } else if (Array.isArray(data)) {
             // v1.x format - direct array
@@ -215,6 +325,7 @@ async function fetchSessionMetadata(sessionUrl: string): Promise<SessionMetadata
                 notes: null,
                 custom_labels: [],
                 labels: [],
+                samples: data as SensorSample[], // Include samples for window calculation
             };
         }
 
@@ -239,12 +350,142 @@ function extractCustomLabels(labels: LabelSegment[]): string[] {
     return Array.from(customLabels);
 }
 
+// ===== Window Calculation Functions =====
+
+const WINDOW_DURATION = 1.0; // seconds per window
+
+/**
+ * Calculate windows from sample data
+ * Each window is 1 second of data based on sample rate
+ */
+function calculateWindowsFromSamples(
+    samples: SensorSample[],
+    sampleRate: number,
+    existingWindows: WindowEntry[] = []
+): WindowEntry[] {
+    if (!samples || samples.length === 0) {
+        return existingWindows;
+    }
+
+    const samplesPerWindow = Math.floor(sampleRate * WINDOW_DURATION);
+    const numWindows = Math.ceil(samples.length / samplesPerWindow);
+
+    // Create a map of existing windows by window_num for merging
+    const existingWindowMap = new Map<number, WindowEntry>();
+    for (const w of existingWindows) {
+        existingWindowMap.set(w.window_num, w);
+    }
+
+    const windows: WindowEntry[] = [];
+
+    for (let i = 0; i < numWindows; i++) {
+        const windowNum = i + 1;
+        const startSample = i * samplesPerWindow;
+        const endSample = Math.min((i + 1) * samplesPerWindow, samples.length);
+        const windowSamples = samples.slice(startSample, endSample);
+
+        const timeStart = startSample / sampleRate;
+        const timeEnd = endSample / sampleRate;
+
+        // Calculate statistics
+        const stats = calculateWindowStats(windowSamples);
+
+        // Check if we have an existing window with visualizations
+        const existingWindow = existingWindowMap.get(windowNum);
+        const hasVisualizations = !!(
+            existingWindow?.filepath ||
+            (existingWindow?.images && Object.keys(existingWindow.images).length > 0) ||
+            (existingWindow?.trajectory_images && Object.keys(existingWindow.trajectory_images).length > 0)
+        );
+
+        // Merge with existing window data (preserving visualization URLs)
+        const window: WindowEntry = {
+            window_num: windowNum,
+            time_start: timeStart,
+            time_end: timeEnd,
+            sample_count: windowSamples.length,
+            accel_mag_mean: stats.accelMagMean,
+            gyro_mag_mean: stats.gyroMagMean,
+            has_visualizations: hasVisualizations,
+            // Preserve existing visualization data
+            filepath: existingWindow?.filepath,
+            images: existingWindow?.images || {},
+            trajectory_images: existingWindow?.trajectory_images || {},
+        };
+
+        windows.push(window);
+    }
+
+    return windows;
+}
+
+/**
+ * Calculate statistics for a window of samples
+ */
+function calculateWindowStats(samples: SensorSample[]): {
+    accelMagMean: number;
+    gyroMagMean: number;
+} {
+    if (samples.length === 0) {
+        return { accelMagMean: 0, gyroMagMean: 0 };
+    }
+
+    let accelMagSum = 0;
+    let gyroMagSum = 0;
+
+    for (const s of samples) {
+        // Use converted values if available, otherwise use raw
+        const ax = s.ax_g !== undefined ? s.ax_g : s.ax / 16384; // Approximate conversion
+        const ay = s.ay_g !== undefined ? s.ay_g : s.ay / 16384;
+        const az = s.az_g !== undefined ? s.az_g : s.az / 16384;
+
+        const gx = s.gx_dps !== undefined ? s.gx_dps : s.gx / 131; // Approximate conversion
+        const gy = s.gy_dps !== undefined ? s.gy_dps : s.gy / 131;
+        const gz = s.gz_dps !== undefined ? s.gz_dps : s.gz / 131;
+
+        accelMagSum += Math.sqrt(ax * ax + ay * ay + az * az);
+        gyroMagSum += Math.sqrt(gx * gx + gy * gy + gz * gz);
+    }
+
+    return {
+        accelMagMean: accelMagSum / samples.length,
+        gyroMagMean: gyroMagSum / samples.length,
+    };
+}
+
 async function enrichSessionMetadata(session: SessionEntry): Promise<SessionEntry> {
     if (session._metadataLoaded) return session;
 
-    const metadata = await fetchSessionMetadata(session.sessionUrl!);
+    // Fetch session metadata and visualizations in parallel
+    const [metadata, visualizations] = await Promise.all([
+        fetchSessionMetadata(session.sessionUrl!),
+        fetchSessionVisualizations(session.timestamp),
+    ]);
+
+    // Apply visualization data first (so windows can be merged with sample-calculated windows)
+    if (visualizations) {
+        session.composite_image = visualizations.composite_image;
+        session.calibration_stages_image = visualizations.calibration_stages_image;
+        session.orientation_3d_image = visualizations.orientation_3d_image;
+        session.orientation_track_image = visualizations.orientation_track_image;
+        session.raw_axes_image = visualizations.raw_axes_image;
+        session.trajectory_comparison_images = visualizations.trajectory_comparison_images || {};
+        // Store visualization windows for merging
+        session.windows = visualizations.windows || [];
+        console.log(`[viz-app] Loaded ${session.windows.length} visualization windows for ${session.timestamp}`);
+    }
+
     if (metadata) {
-        Object.assign(session, metadata);
+        // Copy metadata fields (except samples which we'll use for window calculation)
+        const { samples, ...metadataWithoutSamples } = metadata;
+        Object.assign(session, metadataWithoutSamples);
+
+        // Calculate windows from samples, merging with any existing visualization-based windows
+        if (samples && samples.length > 0) {
+            const sampleRate = metadata.sample_rate || 50;
+            session.windows = calculateWindowsFromSamples(samples, sampleRate, session.windows);
+            console.log(`[viz-app] Calculated ${session.windows.length} windows from ${samples.length} samples @ ${sampleRate}Hz`);
+        }
     } else {
         // Provide defaults if metadata can't be loaded
         session.duration = session.duration || 0;
@@ -396,14 +637,15 @@ function renderWindows(session: SessionEntry): string {
             ? `${w.time_start.toFixed(2)}s - ${w.time_end.toFixed(2)}s`
             : '';
         const statsText = (w.accel_mag_mean !== undefined && w.gyro_mag_mean !== undefined)
-            ? `Accel: ${w.accel_mag_mean.toFixed(0)} | Gyro: ${w.gyro_mag_mean.toFixed(0)}`
+            ? `Accel: ${w.accel_mag_mean.toFixed(2)}g | Gyro: ${w.gyro_mag_mean.toFixed(1)}°/s`
             : '';
+        const sampleCountText = w.sample_count ? `${w.sample_count} samples` : '';
 
         let html = `
         <div style="margin-bottom: var(--space-xl); padding: var(--space-lg); background: var(--bg-elevated); border: 1px solid var(--border);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-md);">
                 <h4 style="margin: 0; font-size: 0.875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
-                    Window ${w.window_num}${timeRange ? ` | ${timeRange}` : ''}
+                    Window ${w.window_num}${timeRange ? ` | ${timeRange}` : ''}${sampleCountText ? ` | ${sampleCountText}` : ''}
                     <span class="chips-container">
                         ${formatWindowLabels(windowLabels)}
                     </span>
@@ -509,6 +751,14 @@ function renderWindows(session: SessionEntry): string {
             </div>`;
         }
 
+        // Show placeholder if no visualizations exist for this window
+        if (!w.has_visualizations && !w.filepath) {
+            html += `<div style="grid-column: 1 / -1; padding: var(--space-lg); text-align: center; color: var(--fg-muted); font-size: 0.75rem; border: 1px dashed var(--border); border-radius: 4px;">
+                <div style="margin-bottom: var(--space-xs);">📊 No visualizations generated</div>
+                <div style="font-size: 0.625rem;">Run <code>python -m ml.visualize --session ${w.window_num > 0 ? 'TIMESTAMP' : ''}</code> to generate</div>
+            </div>`;
+        }
+
         html += `</div></div>`;
         return html;
     }).join('');
@@ -516,6 +766,7 @@ function renderWindows(session: SessionEntry): string {
 
 function renderSessionContent(session: SessionEntry): string {
     let html = '';
+    console.log(`Session content`, session);
 
     if (session.composite_image) {
         html += `

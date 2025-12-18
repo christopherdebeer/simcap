@@ -9,7 +9,16 @@
 
 import { list } from '@vercel/blob';
 import type { ListBlobResultBlob } from '@vercel/blob';
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+
+/**
+ * Normalize timestamp by converting underscores to colons
+ * Filenames use underscores (2025-12-15T22_35_15.567Z) because colons are invalid
+ * But session timestamps use colons (2025-12-15T22:35:15.567Z)
+ */
+function normalizeTimestamp(timestamp: string): string {
+  // Convert underscores in time portion to colons: T22_35_15 -> T22:35:15
+  return timestamp.replace(/T(\d{2})_(\d{2})_(\d{2})/, 'T$1:$2:$3');
+}
 
 // Types for visualization structure
 interface WindowEntry {
@@ -29,18 +38,6 @@ interface SessionVisualization {
   raw_axes_image: string | null;
   trajectory_comparison_images: Record<string, string>;
   windows: WindowEntry[];
-}
-
-interface VisualizationsResponse {
-  sessions: SessionVisualization[];
-  count: number;
-  totalFiles: number;
-  generatedAt: string;
-}
-
-interface ErrorResponse {
-  error: string;
-  message?: string;
 }
 
 type ImageType = 'composite' | 'calibration_stages' | 'orientation_3d' | 'orientation_track' | 'raw_axes' | 'window' | 'trajectory_comparison';
@@ -90,11 +87,14 @@ function groupVisualizationsBySession(blobs: ListBlobResultBlob[]): SessionVisua
 
     if (!timestamp) continue;
 
+    // Normalize timestamp (convert underscores to colons for consistency with session timestamps)
+    const normalizedTimestamp = normalizeTimestamp(timestamp);
+
     // Initialize session entry
-    if (!sessions.has(timestamp)) {
-      sessions.set(timestamp, {
-        timestamp,
-        filename: `${timestamp}.json`,
+    if (!sessions.has(normalizedTimestamp)) {
+      sessions.set(normalizedTimestamp, {
+        timestamp: normalizedTimestamp,
+        filename: `${timestamp.replace(/:/g, '_')}.json`, // Keep underscores in filename
         composite_image: null,
         calibration_stages_image: null,
         orientation_3d_image: null,
@@ -105,7 +105,7 @@ function groupVisualizationsBySession(blobs: ListBlobResultBlob[]): SessionVisua
       });
     }
 
-    const session = sessions.get(timestamp)!;
+    const session = sessions.get(normalizedTimestamp)!;
 
     // Assign to appropriate field
     switch (imageType) {
@@ -169,49 +169,104 @@ function groupVisualizationsBySession(blobs: ListBlobResultBlob[]): SessionVisua
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 }
 
-export default async function handler(
-  request: VercelRequest,
-  response: VercelResponse
-) {
+export default async function handler(request: Request): Promise<Response> {
   // Only allow GET requests
   if (request.method !== 'GET') {
-    return response.status(405).json({ error: 'Method not allowed' });
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   try {
-    // List all visualizations from blob storage
+    // Parse query parameters from URL
+    const url = new URL(request.url);
+    const sessionParam = url.searchParams.get('session');
+    const sessionFilter = sessionParam ? normalizeTimestamp(sessionParam) : null;
+
+    console.log('[visualizations] Request URL:', request.url);
+    console.log('[visualizations] Session param:', sessionParam);
+    console.log('[visualizations] Session filter (normalized):', sessionFilter);
+
+    // Build prefix for blob listing
+    const prefix = 'visualizations/';
+    
+    // List visualizations from blob storage
     // Note: list() has a default limit, so we may need to paginate for large stores
     let allBlobs: ListBlobResultBlob[] = [];
     let cursor: string | undefined = undefined;
 
+    console.log('[visualizations] Listing blobs with prefix:', prefix);
+
     do {
       const result: { blobs: ListBlobResultBlob[]; cursor?: string } = await list({
-        prefix: 'visualizations/',
+        prefix,
         limit: 1000,
         cursor,
       });
+      console.log('[visualizations] Blob list result - count:', result.blobs.length, 'cursor:', result.cursor);
       allBlobs = allBlobs.concat(result.blobs);
       cursor = result.cursor;
     } while (cursor);
 
+    console.log('[visualizations] Total blobs found:', allBlobs.length);
+    if (allBlobs.length > 0) {
+      console.log('[visualizations] First few blob paths:', allBlobs.slice(0, 5).map(b => b.pathname));
+    }
+
     // Group into session structure
-    const sessions = groupVisualizationsBySession(allBlobs);
+    let sessions = groupVisualizationsBySession(allBlobs);
 
-    // Set cache headers
-    response.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
+    console.log('[visualizations] Sessions found:', sessions.length);
+    if (sessions.length > 0) {
+      console.log('[visualizations] Session timestamps:', sessions.map(s => s.timestamp));
+    }
 
-    return response.status(200).json({
+    // Filter to specific session if requested
+    if (sessionFilter) {
+      console.log('[visualizations] Filtering for session:', sessionFilter);
+      sessions = sessions.filter(s => s.timestamp === sessionFilter);
+      console.log('[visualizations] After filter - sessions found:', sessions.length);
+    }
+
+    // Return single session object if filtering, array otherwise
+    if (sessionFilter) {
+      const session = sessions[0] || null;
+      return new Response(JSON.stringify({
+        session,
+        found: session !== null,
+        generatedAt: new Date().toISOString(),
+      }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 's-maxage=300, stale-while-revalidate=600',
+        },
+      });
+    }
+
+    return new Response(JSON.stringify({
       sessions,
       count: sessions.length,
       totalFiles: allBlobs.length,
       generatedAt: new Date().toISOString(),
+    }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 's-maxage=300, stale-while-revalidate=600',
+      },
     });
   } catch (error) {
     console.error('Visualizations list error:', error);
     const message = error instanceof Error ? error.message : 'Unknown error';
-    return response.status(500).json({
+    
+    return new Response(JSON.stringify({
       error: 'Failed to list visualizations',
       message,
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
     });
   }
 }
