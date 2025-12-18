@@ -370,6 +370,14 @@ export class ThreeJSHandSkeleton {
     });
   }
 
+  getRenderState(): { x: number; y: number; z: number; order: string } {
+    if (this.handGroup && this.handGroup.rotation) {
+      const rot = this.handGroup.rotation;
+      return { x: rot.x, y: rot.y, z: rot.z, order: rot.order };
+    }
+    return { x: 0, y: 0, z: 0, order: 'YXZ' };
+  }
+
   private _applyFingerCurls(): void {
     Object.keys(this.fingerBones).forEach((fingerName) => {
       const bones = this.fingerBones[fingerName];
