@@ -23,34 +23,17 @@
  */
 
 import { upload } from '@vercel/blob/client';
+import type {
+  UploadStage,
+  UploadProgress,
+  UploadOptions,
+  UploadWithRetryOptions,
+  UploadResult,
+  UploadClientPayload,
+} from '@api/types';
 
-// ===== Type Definitions =====
-
-export type UploadStage = 'preparing' | 'uploading' | 'complete' | 'error' | 'attempt' | 'retry';
-
-export interface UploadProgress {
-  stage: UploadStage;
-  message: string;
-  url?: string;
-}
-
-export interface UploadOptions {
-  filename: string;
-  content: string;
-  onProgress?: (progress: UploadProgress) => void;
-}
-
-export interface UploadWithRetryOptions extends UploadOptions {
-  maxRetries?: number;
-}
-
-export interface UploadResult {
-  success: boolean;
-  url: string;
-  pathname: string;
-  size: number;
-  filename: string;
-}
+// Re-export types for backward compatibility
+export type { UploadStage, UploadProgress, UploadOptions, UploadWithRetryOptions, UploadResult };
 
 // ===== Constants =====
 
@@ -124,11 +107,12 @@ export async function uploadToBlob(options: UploadOptions): Promise<UploadResult
         // Use @vercel/blob/client upload() for two-phase protocol:
         // 1. Requests token from our API endpoint (which validates the secret)
         // 2. Uploads directly to Vercel Blob
+        const clientPayload: UploadClientPayload = { secret };
         const result = await upload(pathname, blob, {
             access: 'public',
             handleUploadUrl: UPLOAD_API_ENDPOINT,
             // Pass secret in clientPayload - server validates in onBeforeGenerateToken
-            clientPayload: JSON.stringify({ secret }),
+            clientPayload: JSON.stringify(clientPayload),
         });
 
         onProgress?.({
@@ -233,10 +217,11 @@ export async function validateUploadSecret(): Promise<boolean> {
         // Try a minimal upload to validate the secret
         // The server will reject invalid secrets in onBeforeGenerateToken
         const testBlob = new Blob(['{}'], { type: 'application/json' });
+        const clientPayload: UploadClientPayload = { secret };
         await upload('sessions/.validate.json', testBlob, {
             access: 'public',
             handleUploadUrl: UPLOAD_API_ENDPOINT,
-            clientPayload: JSON.stringify({ secret }),
+            clientPayload: JSON.stringify(clientPayload),
         });
         // If we get here, secret is valid (upload succeeded)
         return true;
