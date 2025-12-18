@@ -602,16 +602,21 @@ function updateUI(): void {
             labelsList.innerHTML = '<div style="color: #666; text-align: center; padding: 10px;">No labels yet.</div>';
         } else {
             labelsList.innerHTML = state.labels.map((l: any, i: number) => {
-                const duration = ((l.end_sample - l.start_sample) / 50).toFixed(1);
+                // Handle both flat format (collector) and nested format (wizard)
+                const startSample = l.start_sample ?? l.startIndex ?? 0;
+                const endSample = l.end_sample ?? l.endIndex ?? 0;
+                const labels = l.labels ?? l; // Use nested labels or flat structure
+
+                const duration = ((endSample - startSample) / 50).toFixed(1);
                 const tags: string[] = [];
 
-                if (l.labels.pose) {
-                    tags.push(`<span class="label-tag pose">${l.labels.pose}</span>`);
+                if (labels.pose) {
+                    tags.push(`<span class="label-tag pose">${labels.pose}</span>`);
                 }
-                if (l.labels.fingers) {
+                if (labels.fingers) {
                     const fs = ['thumb', 'index', 'middle', 'ring', 'pinky']
                         .map(f => {
-                            const s = l.labels.fingers[f];
+                            const s = labels.fingers[f];
                             if (s === 'extended') return '0';
                             if (s === 'partial') return '1';
                             if (s === 'flexed') return '2';
@@ -621,16 +626,16 @@ function updateUI(): void {
                         tags.push(`<span class="label-tag finger">${fs}</span>`);
                     }
                 }
-                if (l.labels.calibration && l.labels.calibration !== 'none') {
-                    tags.push(`<span class="label-tag calibration">${l.labels.calibration}</span>`);
+                if (labels.calibration && labels.calibration !== 'none') {
+                    tags.push(`<span class="label-tag calibration">${labels.calibration}</span>`);
                 }
-                (l.labels.custom || []).forEach((c: string) => {
+                (labels.custom || []).forEach((c: string) => {
                     tags.push(`<span class="label-tag custom">${c}</span>`);
                 });
 
                 return `
                     <div class="label-item">
-                        <span class="time-range">${l.start_sample}-${l.end_sample} (${duration}s)</span>
+                        <span class="time-range">${startSample}-${endSample} (${duration}s)</span>
                         <div class="label-tags">${tags.join('')}</div>
                         <button class="btn-danger btn-tiny" onclick="window.deleteLabel(${i})">×</button>
                     </div>

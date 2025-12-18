@@ -200,6 +200,11 @@ export class TelemetryProcessor {
     private _loggedMagFusion: boolean = false;
     private _loggedMagnetDetection: boolean = false;
 
+    // Diagnostic tracking for magnetometer residual drift
+    private _sampleCount: number = 0;
+    private _magResidualHistory: { x: number; y: number; z: number; mag: number; yaw: number }[] = [];
+    private _lastDiagnosticLog: number = 0;
+
     /**
      * Create a TelemetryProcessor instance
      */
@@ -465,6 +470,50 @@ export class TelemetryProcessor {
                 decorated.ahrs_mag_residual_y = magResidual.y;
                 decorated.ahrs_mag_residual_z = magResidual.z;
                 decorated.ahrs_mag_residual_magnitude = this.imuFusion.getMagResidualMagnitude();
+
+                // Diagnostic logging for magnetometer drift analysis
+                this._sampleCount++;
+                const yaw = euler?.yaw ?? 0;
+                const residualMag = decorated.ahrs_mag_residual_magnitude;
+
+                // Track residual history (keep last 500 samples = ~10s at 50Hz)
+                this._magResidualHistory.push({
+                    x: magResidual.x,
+                    y: magResidual.y,
+                    z: magResidual.z,
+                    mag: residualMag,
+                    yaw
+                });
+                if (this._magResidualHistory.length > 500) {
+                    this._magResidualHistory.shift();
+                }
+
+                // Log diagnostics every 2 seconds (100 samples at 50Hz)
+                const now = performance.now();
+                if (now - this._lastDiagnosticLog > 2000 && this._magResidualHistory.length >= 50) {
+                    this._lastDiagnosticLog = now;
+
+                    // Compute drift metrics
+                    const recent = this._magResidualHistory.slice(-50); // last 1 second
+                    const older = this._magResidualHistory.slice(0, 50); // first 1 second in window
+
+                    const avgRecentMag = recent.reduce((s, r) => s + r.mag, 0) / recent.length;
+                    const avgOlderMag = older.length > 0 ? older.reduce((s, r) => s + r.mag, 0) / older.length : avgRecentMag;
+                    const avgRecentYaw = recent.reduce((s, r) => s + r.yaw, 0) / recent.length;
+                    const avgOlderYaw = older.length > 0 ? older.reduce((s, r) => s + r.yaw, 0) / older.length : avgRecentYaw;
+
+                    const magDrift = avgRecentMag - avgOlderMag;
+                    const yawDrift = avgRecentYaw - avgOlderYaw;
+                    const isStationary = !motionState.isMoving;
+
+                    console.log(
+                        `[AHRS Mag Diagnostic] ` +
+                        `residual: ${residualMag.toFixed(1)}µT | ` +
+                        `yaw: ${yaw.toFixed(1)}° | ` +
+                        `drift(${(this._magResidualHistory.length/50).toFixed(0)}s): mag=${magDrift.toFixed(2)}µT yaw=${yawDrift.toFixed(1)}° | ` +
+                        `stationary: ${isStationary}`
+                    );
+                }
             }
         }
 
@@ -561,6 +610,11 @@ export class TelemetryProcessor {
         this._loggedCalibrationMissing = false;
         this._loggedMagFusion = false;
         this._loggedMagnetDetection = false;
+
+        // Reset diagnostic tracking
+        this._sampleCount = 0;
+        this._magResidualHistory = [];
+        this._lastDiagnosticLog = 0;
 
         this.magCalibration.reset();
         this.magnetDetector.reset();

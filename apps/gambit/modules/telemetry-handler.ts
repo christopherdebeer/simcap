@@ -141,7 +141,7 @@ export function setDependencies(dependencies: Partial<Dependencies>): void {
  */
 export function initProcessor(): void {
     telemetryProcessor = new TelemetryProcessor({
-        useMagnetometer: false,
+        useMagnetometer: true, // Re-enabled for drift investigation
         calibration: deps.calibrationInstance,
         magCalibrationDebug: true, // Enable debug logging for mag calibration
         onOrientationUpdate: (euler: EulerAngles, quaternion: Quaternion) => {
