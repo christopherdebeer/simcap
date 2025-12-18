@@ -8,20 +8,11 @@
  */
 
 import type { TelemetrySample } from '@core/types';
+import { ApiClient, type SessionInfo, type SessionData as ApiSessionData } from '@api/client';
 
 // ===== Type Definitions =====
 
-export interface SessionMetadata {
-    filename: string;
-    timestamp: string;
-    /** Direct URL to session data (from Vercel Blob) */
-    url?: string;
-    /** Download URL for session data */
-    downloadUrl?: string;
-    /** File size in bytes */
-    size?: number;
-    /** Upload timestamp */
-    uploadedAt?: string;
+export interface SessionMetadata extends Omit<SessionInfo, 'pathname'> {
     /** Calculated duration in seconds */
     durationSec?: number;
     /** Number of samples */
@@ -34,7 +25,7 @@ export interface SessionManifest {
 
 export interface SessionData {
     samples?: TelemetrySample[];
-    [key: string]: any;
+    [key: string]: unknown;
 }
 
 export interface PlaybackState {
@@ -102,6 +93,7 @@ const DEFAULT_CONFIG: SessionPlaybackConfig = {
  */
 export class SessionPlayback {
     private config: SessionPlaybackConfig;
+    private apiClient: ApiClient;
 
     // State
     private sessions: SessionMetadata[];
@@ -121,6 +113,7 @@ export class SessionPlayback {
 
     constructor(options: SessionPlaybackOptions = {}) {
         this.config = { ...DEFAULT_CONFIG, ...options };
+        this.apiClient = new ApiClient();
 
         // State
         this.sessions = [];
@@ -151,15 +144,19 @@ export class SessionPlayback {
      */
     async loadManifest(): Promise<SessionMetadata[]> {
         try {
-            console.log('[SessionPlayback] Loading manifest from:', this.config.manifestUrl);
+            console.log('[SessionPlayback] Loading manifest via API client');
 
-            const response = await fetch(this.config.manifestUrl);
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
+            const response = await this.apiClient.listSessions();
 
-            const manifest: SessionManifest = await response.json();
-            this.sessions = manifest.sessions || [];
+            // Transform SessionInfo to SessionMetadata
+            this.sessions = response.sessions.map(s => ({
+                filename: s.filename,
+                timestamp: s.timestamp,
+                url: s.url,
+                downloadUrl: s.downloadUrl,
+                size: s.size,
+                uploadedAt: s.uploadedAt,
+            }));
 
             console.log('[SessionPlayback] Loaded manifest with', this.sessions.length, 'sessions');
 
@@ -219,17 +216,13 @@ export class SessionPlayback {
 
             // Use session's URL directly if available (from API), otherwise construct from base URL
             const url = session.url || session.downloadUrl || (this.config.dataBaseUrl + session.filename);
-            const response = await fetch(url);
 
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-
-            const data: TelemetrySample[] | SessionData = await response.json();
+            // Use API client to fetch session data
+            const data = await this.apiClient.fetchSessionData(url);
 
             // Handle both v1.0 (array) and v2.0 (object with samples) formats
             if (Array.isArray(data)) {
-                this.samples = data;
+                this.samples = data as TelemetrySample[];
             } else if (data.samples && Array.isArray(data.samples)) {
                 this.samples = data.samples;
             } else {

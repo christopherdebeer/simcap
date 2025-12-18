@@ -3,6 +3,11 @@
  * Interactive viewer for 9-axis IMU sensor data and gesture recognition
  */
 
+import { ApiClient, type SessionInfo, type VisualizationSessionResponse } from '@api/client';
+
+// Create API client instance
+const apiClient = new ApiClient();
+
 // ===== Type Definitions =====
 
 interface LabelSegment {
@@ -183,49 +188,15 @@ function getEl(id: string): HTMLElement | null {
 
 // ===== API Functions =====
 
-interface SessionsApiResponse {
-    sessions: Array<{
-        filename: string;
-        pathname: string;
-        url: string;
-        downloadUrl: string;
-        size: number;
-        uploadedAt: string;
-        timestamp: string;
-    }>;
-    count: number;
-    generatedAt: string;
-}
-
-interface VisualizationsApiResponse {
-    session: {
-        timestamp: string;
-        filename: string;
-        composite_image: string | null;
-        calibration_stages_image: string | null;
-        orientation_3d_image: string | null;
-        orientation_track_image: string | null;
-        raw_axes_image: string | null;
-        trajectory_comparison_images: Record<string, string>;
-        windows: WindowEntry[];
-    } | null;
-    found: boolean;
-    generatedAt: string;
-}
-
 /**
- * Fetch session list from /api/sessions
+ * Fetch session list from /api/sessions using API client
  */
 async function fetchSessionsList(): Promise<SessionEntry[]> {
     try {
-        const response = await fetch(`${API_BASE}/api/sessions`);
-        if (!response.ok) {
-            throw new Error(`API error: ${response.status} ${response.statusText}`);
-        }
-        const data: SessionsApiResponse = await response.json();
+        const response = await apiClient.listSessions();
 
         // Transform sessions API response to SessionEntry format
-        return (data.sessions || []).map(s => ({
+        return (response.sessions || []).map(s => ({
             timestamp: s.timestamp,
             sessionUrl: s.url,
             filename: s.filename,
@@ -247,17 +218,12 @@ async function fetchSessionsList(): Promise<SessionEntry[]> {
 }
 
 /**
- * Fetch visualizations for a specific session from /api/visualizations?session=TIMESTAMP
+ * Fetch visualizations for a specific session using API client
  */
-async function fetchSessionVisualizations(timestamp: string): Promise<VisualizationsApiResponse['session']> {
+async function fetchSessionVisualizations(timestamp: string): Promise<VisualizationSessionResponse['session']> {
     try {
-        const response = await fetch(`${API_BASE}/api/visualizations?session=${encodeURIComponent(timestamp)}`);
-        if (!response.ok) {
-            console.warn(`Failed to fetch visualizations for ${timestamp}: ${response.status}`);
-            return null;
-        }
-        const data: VisualizationsApiResponse = await response.json();
-        return data.session;
+        const response = await apiClient.getSessionVisualization(timestamp);
+        return response.session;
     } catch (error) {
         console.error(`Failed to fetch visualizations for ${timestamp}:`, error);
         return null;
@@ -266,7 +232,7 @@ async function fetchSessionVisualizations(timestamp: string): Promise<Visualizat
 
 /**
  * Fetch session list (replaces fetchExplorerData)
- * Now uses /api/sessions instead of /api/explorer
+ * Now uses /api/sessions via API client
  */
 async function fetchExplorerData(): Promise<SessionEntry[]> {
     return fetchSessionsList();
