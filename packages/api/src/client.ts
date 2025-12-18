@@ -19,6 +19,8 @@ import type {
   UploadResult,
   UploadProgress,
   UploadClientPayload,
+  VisualizationManifest,
+  VisualizationSessionSummary,
 } from './types';
 
 // Re-export types for convenience
@@ -36,6 +38,8 @@ export type {
   UploadResult,
   UploadProgress,
   UploadClientPayload,
+  VisualizationManifest,
+  VisualizationSessionSummary,
 };
 
 // ===== Configuration =====
@@ -123,18 +127,33 @@ export class ApiClient {
   // ===== Visualizations API =====
 
   /**
-   * List all visualizations
+   * List all visualization sessions (manifest-based)
+   * Returns session summaries with manifest metadata
    */
-  async listVisualizations(): Promise<VisualizationsListResponse> {
-    return this.fetch<VisualizationsListResponse>('/api/visualizations');
+  async listVisualizations(): Promise<{ sessions: VisualizationSessionSummary[]; count: number; generatedAt: string }> {
+    return this.fetch<{ sessions: VisualizationSessionSummary[]; count: number; generatedAt: string }>('/api/visualizations');
   }
 
   /**
    * Get visualizations for a specific session
+   * Returns both backward-compatible SessionVisualization and full manifest
    */
-  async getSessionVisualization(sessionTimestamp: string): Promise<VisualizationSessionResponse> {
+  async getSessionVisualization(sessionTimestamp: string): Promise<VisualizationSessionResponse & { manifest?: VisualizationManifest }> {
     const encoded = encodeURIComponent(sessionTimestamp);
-    return this.fetch<VisualizationSessionResponse>(`/api/visualizations?session=${encoded}`);
+    return this.fetch<VisualizationSessionResponse & { manifest?: VisualizationManifest }>(`/api/visualizations?session=${encoded}`);
+  }
+
+  /**
+   * Get manifest history for a session
+   */
+  async getManifestHistory(sessionTimestamp: string): Promise<{
+    sessionTimestamp: string;
+    versions: Array<{ manifestId: string; generatedAt: string; url: string }>;
+    count: number;
+    generatedAt: string;
+  }> {
+    const encoded = encodeURIComponent(sessionTimestamp);
+    return this.fetch(`/api/visualizations?session=${encoded}&history=true`);
   }
 
   // ===== Combined Session + Visualization Data =====
@@ -142,6 +161,9 @@ export class ApiClient {
   /**
    * Fetch sessions with their visualization data combined
    * This merges data from /api/sessions and /api/visualizations
+   * 
+   * Note: With manifest-based system, this fetches session summaries first,
+   * then lazily loads full manifests when needed.
    */
   async listSessionsWithVisualizations(): Promise<SessionEntry[]> {
     // Fetch both in parallel
@@ -151,26 +173,60 @@ export class ApiClient {
     ]);
 
     // Create visualization lookup by timestamp
-    const vizByTimestamp = new Map<string, SessionVisualization>();
+    const vizByTimestamp = new Map<string, VisualizationSessionSummary>();
     for (const viz of vizRes.sessions) {
-      vizByTimestamp.set(viz.timestamp, viz);
+      vizByTimestamp.set(viz.sessionTimestamp, viz);
     }
 
-    // Merge sessions with visualizations
+    // Merge sessions with visualization summaries
+    // Note: Full visualization data requires fetching individual manifests
     return sessionsRes.sessions.map((session): SessionEntry => {
       const viz = vizByTimestamp.get(session.timestamp);
       return {
         ...session,
         sessionUrl: session.url,
-        composite_image: viz?.composite_image ?? null,
-        calibration_stages_image: viz?.calibration_stages_image ?? null,
-        orientation_3d_image: viz?.orientation_3d_image ?? null,
-        orientation_track_image: viz?.orientation_track_image ?? null,
-        raw_axes_image: viz?.raw_axes_image ?? null,
-        trajectory_comparison_images: viz?.trajectory_comparison_images ?? {},
-        windows: viz?.windows ?? [],
-      };
+        // These will be null until manifest is fetched
+        composite_image: null,
+        calibration_stages_image: null,
+        orientation_3d_image: null,
+        orientation_track_image: null,
+        raw_axes_image: null,
+        trajectory_comparison_images: {},
+        windows: [],
+        // Add manifest metadata for lazy loading
+        hasVisualizations: viz?.hasVisualizations ?? false,
+        manifestId: viz?.latestManifestId,
+      } as SessionEntry & { hasVisualizations?: boolean; manifestId?: string };
     });
+  }
+
+  /**
+   * Fetch full session entry with visualization data from manifest
+   */
+  async getSessionEntryWithVisualizations(sessionTimestamp: string): Promise<SessionEntry | null> {
+    // Fetch session info and visualization manifest in parallel
+    const [sessionsRes, vizRes] = await Promise.all([
+      this.listSessions(),
+      this.getSessionVisualization(sessionTimestamp),
+    ]);
+
+    // Find the session
+    const session = sessionsRes.sessions.find(s => s.timestamp === sessionTimestamp);
+    if (!session) return null;
+
+    const viz = vizRes.session;
+    
+    return {
+      ...session,
+      sessionUrl: session.url,
+      composite_image: viz?.composite_image ?? null,
+      calibration_stages_image: viz?.calibration_stages_image ?? null,
+      orientation_3d_image: viz?.orientation_3d_image ?? null,
+      orientation_track_image: viz?.orientation_track_image ?? null,
+      raw_axes_image: viz?.raw_axes_image ?? null,
+      trajectory_comparison_images: viz?.trajectory_comparison_images ?? {},
+      windows: viz?.windows ?? [],
+    };
   }
 }
 

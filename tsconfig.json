@@ -12,10 +12,15 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "baseUrl": ".",
     "paths": {
+      "@api": ["packages/api/src/index"],
       "@api/*": ["packages/api/src/*"],
+      "@core": ["packages/core/src/index"],
       "@core/*": ["packages/core/src/*"],
+      "@filters": ["packages/filters/src/index"],
       "@filters/*": ["packages/filters/src/*"],
+      "@orientation": ["packages/orientation/src/index"],
       "@orientation/*": ["packages/orientation/src/*"],
+      "@puck": ["packages/puck/src/index"],
       "@puck/*": ["packages/puck/src/*"]
     }
   },

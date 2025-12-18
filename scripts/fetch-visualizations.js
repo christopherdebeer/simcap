@@ -3,6 +3,7 @@
  * Fetch Visualizations from Vercel Blob
  *
  * Downloads visualization assets from Vercel Blob storage to local directory.
+ * Uses the manifest-based visualization system.
  *
  * Usage:
  *   npm run fetch:visualizations                    # Fetch all visualizations
@@ -26,7 +27,7 @@ const VIZ_DIR = join(PROJECT_ROOT, 'visualizations');
 const API_BASE = process.env.SIMCAP_API_URL || 'https://simcap.vercel.app';
 
 /**
- * Fetch visualization list from API
+ * Fetch visualization list from API (manifest-based)
  */
 async function fetchVisualizationList() {
   const response = await fetch(`${API_BASE}/api/visualizations`);
@@ -34,6 +35,7 @@ async function fetchVisualizationList() {
     throw new Error(`API error: ${response.status} ${response.statusText}`);
   }
   const data = await response.json();
+  // New manifest-based response format
   return data.sessions || [];
 }
 
@@ -81,49 +83,53 @@ function getRelativePath(url, prefix = 'visualizations/') {
 }
 
 /**
- * Collect all URLs from session visualization data
+ * Collect all URLs from session visualization manifest
+ * Updated for manifest-based format
  */
-function collectUrls(session) {
+function collectUrls(manifest) {
   const urls = [];
 
-  // Composite and calibration images
-  if (session.composite_image) {
-    urls.push({ url: session.composite_image, type: 'composite' });
-  }
-  if (session.calibration_stages_image) {
-    urls.push({ url: session.calibration_stages_image, type: 'calibration' });
-  }
-  if (session.orientation_3d_image) {
-    urls.push({ url: session.orientation_3d_image, type: 'orientation_3d' });
-  }
-  if (session.orientation_track_image) {
-    urls.push({ url: session.orientation_track_image, type: 'orientation_track' });
-  }
-  if (session.raw_axes_image) {
-    urls.push({ url: session.raw_axes_image, type: 'raw_axes' });
-  }
-
-  // Trajectory comparison images
-  if (session.trajectory_comparison_images) {
-    for (const [key, url] of Object.entries(session.trajectory_comparison_images)) {
-      urls.push({ url, type: `trajectory_${key}` });
+  // Session-level images from manifest.images
+  if (manifest.images) {
+    for (const [type, url] of Object.entries(manifest.images)) {
+      if (url && typeof url === 'string') {
+        urls.push({ url, type });
+      }
     }
   }
 
-  // Window images
-  if (session.windows) {
-    for (const window of session.windows) {
-      if (window.filepath) {
-        urls.push({ url: window.filepath, type: 'window_composite' });
+  // Trajectory comparison images from manifest.trajectory_comparison
+  if (manifest.trajectory_comparison) {
+    for (const [type, url] of Object.entries(manifest.trajectory_comparison)) {
+      if (url && typeof url === 'string') {
+        urls.push({ url, type: `trajectory_${type}` });
       }
+    }
+  }
+
+  // Window images from manifest.windows
+  if (manifest.windows && Array.isArray(manifest.windows)) {
+    for (const window of manifest.windows) {
+      // Composite window image
+      if (window.composite) {
+        urls.push({ url: window.composite, type: 'window_composite' });
+      }
+
+      // Individual window images
       if (window.images) {
         for (const [key, url] of Object.entries(window.images)) {
-          urls.push({ url, type: `window_${key}` });
+          if (url && typeof url === 'string') {
+            urls.push({ url, type: `window_${key}` });
+          }
         }
       }
+
+      // Window trajectory images
       if (window.trajectory_images) {
         for (const [key, url] of Object.entries(window.trajectory_images)) {
-          urls.push({ url, type: `window_traj_${key}` });
+          if (url && typeof url === 'string') {
+            urls.push({ url, type: `window_traj_${key}` });
+          }
         }
       }
     }
@@ -144,46 +150,48 @@ async function main() {
   console.log('Fetching visualization list from Vercel Blob...\n');
 
   try {
-    const sessions = await fetchVisualizationList();
+    const manifests = await fetchVisualizationList();
 
-    if (sessions.length === 0) {
+    if (manifests.length === 0) {
       console.log('No visualizations found in blob storage.');
       return;
     }
 
     // Apply filter if specified
-    let filteredSessions = sessions;
+    let filteredManifests = manifests;
     if (sessionFilter) {
-      filteredSessions = sessions.filter(s =>
-        s.timestamp.includes(sessionFilter) || s.filename?.includes(sessionFilter)
+      filteredManifests = manifests.filter(m =>
+        m.sessionTimestamp?.includes(sessionFilter) || 
+        m.session?.filename?.includes(sessionFilter)
       );
-      if (filteredSessions.length === 0) {
+      if (filteredManifests.length === 0) {
         console.log(`No sessions matching "${sessionFilter}" found.`);
         return;
       }
     }
 
-    console.log(`Found ${filteredSessions.length} session(s) with visualizations:\n`);
+    console.log(`Found ${filteredManifests.length} session(s) with visualizations:\n`);
 
     // Collect all file URLs
     const allUrls = [];
-    for (const session of filteredSessions) {
-      const urls = collectUrls(session);
+    for (const manifest of filteredManifests) {
+      const urls = collectUrls(manifest);
       for (const item of urls) {
-        item.session = session.timestamp;
+        item.session = manifest.sessionTimestamp;
       }
       allUrls.push(...urls);
     }
 
     // List mode
     if (listOnly) {
-      for (const session of filteredSessions) {
-        const urls = collectUrls(session);
-        console.log(`  ${session.timestamp}`);
+      for (const manifest of filteredManifests) {
+        const urls = collectUrls(manifest);
+        console.log(`  ${manifest.sessionTimestamp}`);
         console.log(`    Files: ${urls.length}`);
-        console.log(`    Windows: ${session.windows?.length || 0}\n`);
+        console.log(`    Windows: ${manifest.windows?.length || 0}`);
+        console.log(`    Version: ${manifest.version || 'unknown'}\n`);
       }
-      console.log(`Total: ${filteredSessions.length} sessions, ${allUrls.length} files`);
+      console.log(`Total: ${filteredManifests.length} sessions, ${allUrls.length} files`);
       return;
     }
 
