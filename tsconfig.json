@@ -12,6 +12,7 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "baseUrl": ".",
     "paths": {
+      "@api/*": ["packages/api/src/*"],
       "@core/*": ["packages/core/src/*"],
       "@filters/*": ["packages/filters/src/*"],
       "@orientation/*": ["packages/orientation/src/*"],

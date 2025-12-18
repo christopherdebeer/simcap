@@ -5,46 +5,48 @@
  * Uses the two-phase upload protocol from @vercel/blob/client.
  *
  * Requires SIMCAP_UPLOAD_SECRET environment variable for authorization.
- * Client must provide x-upload-secret header matching the env var.
+ * Client must provide secret in clientPayload.
  */
 
-import { handleUpload } from '@vercel/blob/client';
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
+import type { UploadClientPayload } from '@api/types';
 
-export const config = {
-  api: {
-    bodyParser: false, // Required for handleUpload
-  },
-};
-
-export default async function handler(
-  request: VercelRequest,
-  response: VercelResponse
-) {
+/**
+ * Web API handler for Vercel Edge/Serverless
+ * Uses Request/Response instead of VercelRequest/VercelResponse
+ */
+export default async function handler(request: Request): Promise<Response> {
   // Only allow POST requests
   if (request.method !== 'POST') {
-    return response.status(405).json({ error: 'Method not allowed' });
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   const serverSecret = process.env.SIMCAP_UPLOAD_SECRET;
 
   if (!serverSecret) {
     console.error('SIMCAP_UPLOAD_SECRET environment variable not configured');
-    return response.status(500).json({ error: 'Server configuration error' });
+    return new Response(JSON.stringify({ error: 'Server configuration error' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   try {
-    // Use the updated handleUpload API
-    // Note: Type definitions may not match latest API - using type assertion
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const jsonResponse = await (handleUpload as any)({
-      body: request,
+    // Parse the request body as HandleUploadBody
+    const body = (await request.json()) as HandleUploadBody;
+
+    // Call handleUpload with parsed body
+    const jsonResponse = await handleUpload({
+      body,
       request,
-      onBeforeGenerateToken: async (pathname: string, clientPayload?: string) => {
+      onBeforeGenerateToken: async (pathname: string, clientPayload: string | null, _multipart: boolean) => {
         // Parse and validate the client payload containing auth secret
-        let payload: { secret?: string } = {};
+        let payload: UploadClientPayload = { secret: '' };
         try {
-          payload = clientPayload ? JSON.parse(clientPayload) : {};
+          payload = clientPayload ? JSON.parse(clientPayload) : { secret: '' };
         } catch {
           throw new Error('Invalid client payload');
         }
@@ -70,19 +72,23 @@ export default async function handler(
           addRandomSuffix: false, // Use exact filename (timestamp-based)
         };
       },
-      onUploadCompleted: async ({ blob }: { blob: { pathname: string; size: number } }) => {
-        console.log('Session uploaded:', blob.pathname, 'Size:', blob.size);
+      onUploadCompleted: async ({ blob }) => {
+        console.log('Session uploaded:', blob.pathname);
       },
     });
 
-    return response.status(200).json(jsonResponse);
+    return new Response(JSON.stringify(jsonResponse), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (error) {
     console.error('Upload error:', error);
     // Return 401 for auth errors, 400 for others
     const message = error instanceof Error ? error.message : 'Upload failed';
     const status = message.includes('Unauthorized') ? 401 : 400;
-    return response.status(status).json({
-      error: message
+    return new Response(JSON.stringify({ error: message }), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
     });
   }
 }

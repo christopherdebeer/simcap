@@ -67,6 +67,7 @@ export default defineConfig({
   // Path aliases matching tsconfig
   resolve: {
     alias: {
+      '@api': resolve(__dirname, 'packages/api/src'),
       '@core': resolve(__dirname, 'packages/core/src'),
       '@filters': resolve(__dirname, 'packages/filters/src'),
       '@orientation': resolve(__dirname, 'packages/orientation/src'),
