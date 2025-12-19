@@ -1190,8 +1190,72 @@ function updateCalibrationConfidenceUI() {
     const calibQualityEl = document.getElementById('calibQuality');
     const calibDiversityEl = document.getElementById('calibDiversity');
 
+    // Auto hard iron progress UI elements
+    const autoProgressEl = document.getElementById('autoHardIronProgress');
+    const autoBarEl = document.getElementById('autoHardIronBar');
+    const autoStatusEl = document.getElementById('autoHardIronStatus');
+    const softIronScaleEl = document.getElementById('softIronScale');
+    const autoRangesEl = document.getElementById('autoHardIronRanges');
+
+    // Update auto hard iron progress
+    const autoProgress = Math.round(state.autoHardIronProgress * 100);
+    if (autoProgressEl) {
+        autoProgressEl.textContent = `${autoProgress}%`;
+        if (state.autoHardIronReady) {
+            autoProgressEl.style.color = 'var(--success)';
+        } else if (autoProgress >= 50) {
+            autoProgressEl.style.color = 'var(--warning)';
+        } else {
+            autoProgressEl.style.color = 'var(--fg-muted)';
+        }
+    }
+
+    if (autoBarEl) {
+        autoBarEl.style.width = `${autoProgress}%`;
+        if (state.autoHardIronReady) {
+            autoBarEl.style.background = 'var(--success)';
+        } else if (autoProgress >= 50) {
+            autoBarEl.style.background = 'var(--warning)';
+        } else {
+            autoBarEl.style.background = 'var(--accent)';
+        }
+    }
+
+    if (autoStatusEl) {
+        if (state.autoHardIronReady) {
+            autoStatusEl.textContent = '✓ Auto calibration complete';
+            autoStatusEl.style.color = 'var(--success)';
+        } else if (autoProgress >= 50) {
+            autoStatusEl.textContent = 'Keep rotating...';
+            autoStatusEl.style.color = 'var(--warning)';
+        } else {
+            autoStatusEl.textContent = 'Rotate device to calibrate...';
+            autoStatusEl.style.color = 'var(--fg-muted)';
+        }
+    }
+
+    // Soft iron scale factors
+    if (softIronScaleEl) {
+        if (state.autoHardIronReady) {
+            const scale = state.autoSoftIronScale;
+            softIronScaleEl.textContent = `${scale.x.toFixed(2)}, ${scale.y.toFixed(2)}, ${scale.z.toFixed(2)}`;
+        } else {
+            softIronScaleEl.textContent = '--';
+        }
+    }
+
+    // Auto hard iron ranges
+    if (autoRangesEl) {
+        const ranges = state.autoHardIronRanges;
+        if (ranges.x > 0 || ranges.y > 0 || ranges.z > 0) {
+            autoRangesEl.textContent = `${ranges.x.toFixed(0)}, ${ranges.y.toFixed(0)}, ${ranges.z.toFixed(0)}`;
+        } else {
+            autoRangesEl.textContent = '--';
+        }
+    }
+
     if (overallEl) overallEl.textContent = `${overall}%`;
-    if (hardIronEl) hardIronEl.textContent = state.hardIronCalibrated ? '✓' : '--';
+    if (hardIronEl) hardIronEl.textContent = state.hardIronCalibrated ? '✓ Wizard' : (state.autoHardIronReady ? '✓ Auto' : '--');
     if (softIronEl) softIronEl.textContent = state.softIronCalibrated ? '✓' : '--';
     if (earthFieldEl) earthFieldEl.textContent = state.ready ? '✓ Auto' : 'Building...';
 

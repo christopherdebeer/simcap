@@ -116,6 +116,8 @@ export interface CalibrationState {
   autoHardIronEstimate: Vector3;
   autoHardIronSampleCount: number;
   autoHardIronRanges: Vector3;
+  autoHardIronProgress: number;
+  autoSoftIronScale: Vector3;
 }
 
 export interface CalibrationQuality {
@@ -257,6 +259,10 @@ export class UnifiedMagCalibration {
     private _autoHardIronMin: Vector3 = { x: Infinity, y: Infinity, z: Infinity };
     private _autoHardIronMax: Vector3 = { x: -Infinity, y: -Infinity, z: -Infinity };
     private _autoHardIronMinRangeRequired: number = 80;  // Minimum range (µT) per axis - needs ~80% of full rotation
+
+    // Auto soft iron scale factors (computed from min-max ranges)
+    private _autoSoftIronScale: Vector3 = { x: 1, y: 1, z: 1 };
+    private _autoSoftIronEnabled: boolean = true;  // Apply soft iron correction when auto hard iron is ready
 
     // Geomagnetic reference (from tables, not estimated)
     private _geomagneticRef: GeomagneticReference | null = null;
@@ -415,6 +421,10 @@ export class UnifiedMagCalibration {
      * Apply progressive iron correction using current best estimate
      * Unlike applyIronCorrection, this ALWAYS applies current estimate even if not "ready"
      * For use with progressive 9-DOF fusion during calibration warmup
+     *
+     * Applies both hard iron (offset) and soft iron (scale) correction:
+     * 1. Hard iron: subtract offset to center the ellipsoid at origin
+     * 2. Soft iron: scale each axis to normalize ellipsoid to sphere
      */
     applyProgressiveIronCorrection(raw: Vector3): Vector3 {
         // Wizard calibration always takes priority
@@ -433,11 +443,22 @@ export class UnifiedMagCalibration {
         // Use current auto estimate even if not "ready"
         // This enables progressive calibration - estimate improves as rotation occurs
         const offset = this._autoHardIronEstimate;
-        return {
+        let corrected: Vector3 = {
             x: raw.x - offset.x,
             y: raw.y - offset.y,
             z: raw.z - offset.z
         };
+
+        // Apply auto soft iron scale factors (normalizes ellipsoid to sphere)
+        if (this._autoSoftIronEnabled && this._autoHardIronReady) {
+            corrected = {
+                x: corrected.x * this._autoSoftIronScale.x,
+                y: corrected.y * this._autoSoftIronScale.y,
+                z: corrected.z * this._autoSoftIronScale.z
+            };
+        }
+
+        return corrected;
     }
 
     /**
@@ -691,7 +712,9 @@ export class UnifiedMagCalibration {
             if (this.debug) console.log('[UnifiedMagCal] Auto-baseline capture started');
         }
 
-        const ironCorrected = this.applyIronCorrection({ x: mx_ut, y: my_ut, z: mz_ut });
+        // Use progressive iron correction for Earth field estimation
+        // This ensures consistency with AHRS fusion and residual calculation
+        const ironCorrected = this.applyProgressiveIronCorrection({ x: mx_ut, y: my_ut, z: mz_ut });
 
         if (this.debug && !this._loggedFirstSample) {
             const mag = Math.sqrt(ironCorrected.x**2 + ironCorrected.y**2 + ironCorrected.z**2);
@@ -820,6 +843,36 @@ export class UnifiedMagCalibration {
             const maxRange = Math.max(rangeX, rangeY, rangeZ);
             const sphericity = minRange / maxRange;
 
+            // Compute soft iron scale factors to normalize ellipsoid to sphere
+            // Strategy: scale each axis so the corrected magnitude matches expected Earth field
+            //
+            // The range on each axis should be 2x the Earth field magnitude (full swing from -E to +E)
+            // So expected range = 2 * expectedMag
+            //
+            // Scale factor = expectedRange / actualRange = (2 * expectedMag) / actualRange
+            //
+            // This ensures the corrected magnitude matches the expected Earth field magnitude
+
+            // Get expected magnitude from geomagnetic reference, or use 50 µT default
+            let expectedMag = 50.0;  // Default Earth field magnitude
+            if (this._geomagneticRef) {
+                expectedMag = Math.sqrt(
+                    this._geomagneticRef.horizontal ** 2 +
+                    this._geomagneticRef.vertical ** 2
+                );
+            }
+            const expectedRange = 2 * expectedMag;
+
+            // Scale factors: expectedRange / actualRange
+            // This normalizes each axis to the expected Earth field swing
+            // If range is too small, clamp to avoid extreme scaling
+            const minAllowedRange = 20;  // µT - prevent division by very small numbers
+            this._autoSoftIronScale = {
+                x: rangeX > minAllowedRange ? expectedRange / rangeX : 1,
+                y: rangeY > minAllowedRange ? expectedRange / rangeY : 1,
+                z: rangeZ > minAllowedRange ? expectedRange / rangeZ : 1
+            };
+
             if (this.debug && !this._loggedAutoHardIron) {
                 const est = this._autoHardIronEstimate;
                 const estMag = Math.sqrt(est.x**2 + est.y**2 + est.z**2);
@@ -827,6 +880,21 @@ export class UnifiedMagCalibration {
                 console.log(`  Offset: [${est.x.toFixed(1)}, ${est.y.toFixed(1)}, ${est.z.toFixed(1)}] µT (|offset|=${estMag.toFixed(1)} µT)`);
                 console.log(`  Ranges: [${rangeX.toFixed(1)}, ${rangeY.toFixed(1)}, ${rangeZ.toFixed(1)}] µT`);
                 console.log(`  Sphericity: ${sphericity.toFixed(2)} (${sphericity > 0.7 ? 'good' : 'fair'})`);
+
+                // Soft iron diagnostics
+                console.log(`  Soft iron scale: [${this._autoSoftIronScale.x.toFixed(3)}, ${this._autoSoftIronScale.y.toFixed(3)}, ${this._autoSoftIronScale.z.toFixed(3)}]`);
+                console.log(`  Target range: ${expectedRange.toFixed(1)} µT (2x expected Earth field)`);
+
+                // Axis asymmetry investigation
+                const xDeviation = ((rangeX - expectedRange) / expectedRange * 100).toFixed(1);
+                const yDeviation = ((rangeY - expectedRange) / expectedRange * 100).toFixed(1);
+                const zDeviation = ((rangeZ - expectedRange) / expectedRange * 100).toFixed(1);
+                console.log(`  Axis deviation from target: X=${xDeviation}%, Y=${yDeviation}%, Z=${zDeviation}%`);
+
+                // Min/max values for investigation
+                console.log(`  Min values: [${this._autoHardIronMin.x.toFixed(1)}, ${this._autoHardIronMin.y.toFixed(1)}, ${this._autoHardIronMin.z.toFixed(1)}] µT`);
+                console.log(`  Max values: [${this._autoHardIronMax.x.toFixed(1)}, ${this._autoHardIronMax.y.toFixed(1)}, ${this._autoHardIronMax.z.toFixed(1)}] µT`);
+
                 this._loggedAutoHardIron = true;
             }
         }
@@ -924,7 +992,9 @@ export class UnifiedMagCalibration {
             return null;
         }
 
-        const ironCorrected = this.applyIronCorrection({ x: mx_ut, y: my_ut, z: mz_ut });
+        // Use progressive iron correction (includes soft iron scaling when available)
+        // This ensures residual calculation matches what's used in AHRS fusion
+        const ironCorrected = this.applyProgressiveIronCorrection({ x: mx_ut, y: my_ut, z: mz_ut });
 
         const R = this._quaternionToRotationMatrix(orientation);
         const earthSensor: Vector3 = {
@@ -1055,7 +1125,9 @@ export class UnifiedMagCalibration {
                 x: this._autoHardIronMax.x - this._autoHardIronMin.x,
                 y: this._autoHardIronMax.y - this._autoHardIronMin.y,
                 z: this._autoHardIronMax.z - this._autoHardIronMin.z
-            }
+            },
+            autoHardIronProgress: this.getAutoHardIronProgress(),
+            autoSoftIronScale: { ...this._autoSoftIronScale }
         };
     }
 
@@ -1086,6 +1158,9 @@ export class UnifiedMagCalibration {
         this._loggedAutoHardIron = false;
         this._autoHardIronMin = { x: Infinity, y: Infinity, z: Infinity };
         this._autoHardIronMax = { x: -Infinity, y: -Infinity, z: -Infinity };
+
+        // Reset auto soft iron
+        this._autoSoftIronScale = { x: 1, y: 1, z: 1 };
 
         if (this.debug) console.log('[UnifiedMagCal] Full reset');
     }

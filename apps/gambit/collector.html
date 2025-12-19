@@ -372,7 +372,7 @@
         #log {
             font-family: var(--font-mono);
             font-size: 10px;
-            max-height: 100px;
+            max-height: 50vh;
             overflow-y: auto;
             background: var(--bg);
             padding: 5px;
@@ -702,6 +702,17 @@
                 <div id="calibrationConfidence" style="margin-bottom: var(--space-sm); padding: var(--space-xs); background: var(--bg); border-radius: var(--radius-sm);">
                     <strong style="font-size: 11px;">📊 Live Calibration:</strong>
                     <div style="margin-top: 4px;">
+                        <!-- Auto Hard Iron Progress -->
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <span style="font-size: 10px;">Auto Cal Progress:</span>
+                            <span id="autoHardIronProgress" style="font-weight: bold; color: var(--warning); font-size: 11px;">0%</span>
+                        </div>
+                        <div style="background: #333; border-radius: 3px; height: 6px; margin-bottom: 6px;">
+                            <div id="autoHardIronBar" style="height: 100%; border-radius: 3px; width: 0%; background: var(--accent); transition: width 0.3s, background 0.3s;"></div>
+                        </div>
+                        <div id="autoHardIronStatus" style="font-size: 9px; color: var(--fg-muted); margin-bottom: 6px;">Rotate device to calibrate...</div>
+                        
+                        <!-- Overall Confidence -->
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                             <span style="font-size: 10px;">Overall Confidence:</span>
                             <span id="overallConfidence" style="font-weight: bold; color: var(--warning); font-size: 11px;">0%</span>
@@ -713,6 +724,10 @@
                             <div style="display: flex; justify-content: space-between;">
                                 <span>Hard Iron: <span id="hardIronConf">--</span></span>
                                 <span>Earth Field: <span id="earthFieldConf">--</span></span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; margin-top: 2px;">
+                                <span>Soft Iron: <span id="softIronScale">--</span></span>
+                                <span>Ranges: <span id="autoHardIronRanges">--</span></span>
                             </div>
                             <div style="display: flex; justify-content: space-between; margin-top: 2px;">
                                 <span>Samples: <span id="calibSamples">0</span></span>
@@ -1002,7 +1017,7 @@
                 </div>
                 <!-- Canvas container -->
                 <div style="position: relative;width: auto;margin: 0 auto;">
-                    <canvas id="magTrajectoryCanvas" width="400" height="400" style="left: 1em; top: 1em; border: 1px solid #efefef; background: transparent; border-radius: 8px; position: absolute; width: 20%; z-index: 9999;"></canvas>
+                    <canvas id="magTrajectoryCanvas" width="400" height="400" style="left: 1em; top: 1em; border: 1px solid #efefef; background: transparent; border-radius: 8px;"></canvas>
                     <div id="threeHandContainer" style="width: 400px; height: 400px; border: 1px solid var(--border); background: #1a1a2e; border-radius: 8px;"></div>
                 </div>
                 <div id="handPreviewDescription" style="text-align: center; color: var(--fg-muted); font-size: 12px; margin-top: 10px;">

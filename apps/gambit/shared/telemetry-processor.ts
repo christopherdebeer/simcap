@@ -475,6 +475,18 @@ export class TelemetryProcessor {
 
                 if (!this.gyroBiasState.calibrated) {
                     this.gyroBiasState.calibrated = true;
+                    
+                    // Log the actual bias values
+                    const bias = (this.imuFusion as any).getGyroBiasDegrees?.() || 
+                                 (this.imuFusion as any).gyroBias;
+                    if (bias) {
+                        const bx = typeof bias.x === 'number' ? bias.x : 0;
+                        const by = typeof bias.y === 'number' ? bias.y : 0;
+                        const bz = typeof bias.z === 'number' ? bias.z : 0;
+                        // Convert from radians if needed (check magnitude)
+                        const scale = Math.abs(bx) < 0.1 && Math.abs(by) < 0.1 && Math.abs(bz) < 0.1 ? 180/Math.PI : 1;
+                        this._logDiagnostic(`[MagDiag] Gyro bias calibrated: [${(bx*scale).toFixed(3)}, ${(by*scale).toFixed(3)}, ${(bz*scale).toFixed(3)}] °/s`);
+                    }
                     console.log('[TelemetryProcessor] Gyroscope bias calibration complete');
 
                     if (this.onGyroBiasCalibrated) {
@@ -551,10 +563,44 @@ export class TelemetryProcessor {
                 // Log when calibration reaches 100%
                 if (calState.autoHardIronReady && this._loggedMagFusionDisabled) {
                     const autoEstMag = Math.sqrt(autoEst.x**2 + autoEst.y**2 + autoEst.z**2);
+                    const expectedMag = this.geomagneticRef
+                        ? Math.sqrt(this.geomagneticRef.horizontal**2 + this.geomagneticRef.vertical**2)
+                        : 50;
                     this._logDiagnostic(`[MagDiag] ✅ Calibration COMPLETE - full trust now active`);
                     this._logDiagnostic(`[MagDiag]   Final offset: [${autoEst.x.toFixed(1)}, ${autoEst.y.toFixed(1)}, ${autoEst.z.toFixed(1)}] µT (|${autoEstMag.toFixed(1)}|)`);
                     this._logDiagnostic(`[MagDiag]   Final ranges: [${ranges.x.toFixed(1)}, ${ranges.y.toFixed(1)}, ${ranges.z.toFixed(1)}] µT`);
-                    this._logDiagnostic(`[MagDiag]   Iron-corrected mag: ${corrMag.toFixed(1)} µT (expected ~50 µT) ${Math.abs(corrMag - 50) < 5 ? '✓' : '⚠️'}`);
+
+                    // Soft iron correction analysis - use actual scale from calibration state
+                    const softIronScale = calState.autoSoftIronScale;
+                    const avgRange = (ranges.x + ranges.y + ranges.z) / 3;
+                    const sphericity = Math.min(ranges.x, ranges.y, ranges.z) / Math.max(ranges.x, ranges.y, ranges.z);
+                    this._logDiagnostic(`[MagDiag]   Soft iron scale: [${softIronScale.x.toFixed(3)}, ${softIronScale.y.toFixed(3)}, ${softIronScale.z.toFixed(3)}]`);
+                    this._logDiagnostic(`[MagDiag]   Sphericity: ${sphericity.toFixed(2)} (${sphericity > 0.7 ? 'good' : sphericity > 0.5 ? 'fair' : 'poor'})`);
+
+                    // Axis asymmetry analysis
+                    const xDev = ((ranges.x - avgRange) / avgRange * 100).toFixed(1);
+                    const yDev = ((ranges.y - avgRange) / avgRange * 100).toFixed(1);
+                    const zDev = ((ranges.z - avgRange) / avgRange * 100).toFixed(1);
+                    this._logDiagnostic(`[MagDiag]   Axis deviation: X=${xDev}%, Y=${yDev}%, Z=${zDev}%`);
+
+                    // Re-compute corrected magnitude WITH soft iron applied (since corrMag above may not have it yet)
+                    // This gives accurate diagnostic of final calibration quality
+                    const hardIronCorrected = {
+                        x: mx_ut - autoEst.x,
+                        y: my_ut - autoEst.y,
+                        z: mz_ut - autoEst.z
+                    };
+                    const fullyCorrected = {
+                        x: hardIronCorrected.x * softIronScale.x,
+                        y: hardIronCorrected.y * softIronScale.y,
+                        z: hardIronCorrected.z * softIronScale.z
+                    };
+                    const fullyCorrectedMag = Math.sqrt(fullyCorrected.x**2 + fullyCorrected.y**2 + fullyCorrected.z**2);
+
+                    // Final corrected magnitude check
+                    const magError = Math.abs(fullyCorrectedMag - expectedMag);
+                    const magErrorPct = (magError / expectedMag * 100).toFixed(1);
+                    this._logDiagnostic(`[MagDiag]   Iron-corrected mag: ${fullyCorrectedMag.toFixed(1)} µT (expected ~${expectedMag.toFixed(1)} µT, error: ${magErrorPct}%) ${magError < 5 ? '✓' : '⚠️'}`);
                     this._loggedMagFusionDisabled = false;
                 }
 
@@ -638,9 +684,6 @@ export class TelemetryProcessor {
                     const yawDrift = avgRecentYaw - avgOlderYaw;
                     const isStationary = !motionState.isMoving;
 
-                    // Also log raw mag reading for comparison
-                    const rawMagMag = Math.sqrt(mx_ut ** 2 + my_ut ** 2 + mz_ut ** 2);
-
                     // Get calibration state for diagnostics
                     const calProgress = this.magCalibration.getAutoHardIronProgress();
                     const calState = this.magCalibration.getState();
@@ -650,9 +693,19 @@ export class TelemetryProcessor {
                     const ironCorrected = this.magCalibration.applyProgressiveIronCorrection({ x: mx_ut, y: my_ut, z: mz_ut });
                     const corrMag = Math.sqrt(ironCorrected.x**2 + ironCorrected.y**2 + ironCorrected.z**2);
 
+                    // Get Earth-subtracted residual (the one that matters for finger detection)
+                    // This should be ~0 µT without finger magnets if calibration is correct
+                    let earthResidualMag = 0;
+                    if (orientation && calState.ready) {
+                        const earthResidual = this.magCalibration.getResidual(mx_ut, my_ut, mz_ut, orientation);
+                        if (earthResidual) {
+                            earthResidualMag = earthResidual.magnitude;
+                        }
+                    }
+
                     this._logDiagnostic(
                         `[MagDiag] ` +
-                        `res=${residualMag.toFixed(1)}µT corrMag=${corrMag.toFixed(1)}µT | ` +
+                        `earthRes=${earthResidualMag.toFixed(1)}µT corrMag=${corrMag.toFixed(1)}µT | ` +
                         `yaw=${yaw.toFixed(1)}° | ` +
                         `cal=${(calProgress*100).toFixed(0)}% trust=${effectiveTrust.toFixed(2)} | ` +
                         `Δ: mag=${magDrift.toFixed(1)} yaw=${yawDrift.toFixed(1)}° | ` +
@@ -668,12 +721,12 @@ export class TelemetryProcessor {
         }
 
         // ===== Step 5: Magnetometer Calibration (Unified) =====
-        if (this.magCalibration.hasIronCalibration()) {
-            const ironCorrected = this.magCalibration.applyIronCorrection({ x: mx_ut, y: my_ut, z: mz_ut });
-            decorated.iron_mx = ironCorrected.x;
-            decorated.iron_my = ironCorrected.y;
-            decorated.iron_mz = ironCorrected.z;
-        }
+        // Always use progressive iron correction (includes soft iron scaling when available)
+        // This ensures consistency with AHRS fusion and residual calculation
+        const ironCorrected = this.magCalibration.applyProgressiveIronCorrection({ x: mx_ut, y: my_ut, z: mz_ut });
+        decorated.iron_mx = ironCorrected.x;
+        decorated.iron_my = ironCorrected.y;
+        decorated.iron_mz = ironCorrected.z;
 
         if (orientation) {
             this.magCalibration.update(mx_ut, my_ut, mz_ut, orientation);
