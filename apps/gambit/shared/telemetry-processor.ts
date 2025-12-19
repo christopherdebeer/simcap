@@ -436,9 +436,19 @@ export class TelemetryProcessor {
         decorated.gy_dps = gy_dps;
         decorated.gz_dps = gz_dps;
 
-        const mx_ut = magLsbToMicroTesla(raw.mx || 0);
-        const my_ut = magLsbToMicroTesla(raw.my || 0);
-        const mz_ut = magLsbToMicroTesla(raw.mz || 0);
+        // Convert magnetometer to µT (raw sensor frame)
+        const mx_ut_raw = magLsbToMicroTesla(raw.mx || 0);
+        const my_ut_raw = magLsbToMicroTesla(raw.my || 0);
+        const mz_ut_raw = magLsbToMicroTesla(raw.mz || 0);
+
+        // ===== Magnetometer Axis Alignment =====
+        // Puck.js has different axis orientation for magnetometer vs accel/gyro:
+        //   Accel/Gyro: X→aerial, Y→IR LEDs, Z→into PCB
+        //   Magnetometer: X→IR LEDs, Y→aerial, Z→into PCB
+        // Swap X and Y to align magnetometer to accel/gyro frame
+        const mx_ut = my_ut_raw;  // Mag Y (aerial) -> aligned X (aerial)
+        const my_ut = mx_ut_raw;  // Mag X (IR LEDs) -> aligned Y (IR LEDs)
+        const mz_ut = mz_ut_raw;  // Z unchanged
 
         decorated.mx_ut = mx_ut;
         decorated.my_ut = my_ut;
@@ -502,7 +512,8 @@ export class TelemetryProcessor {
                 );
 
                 if (!this._loggedMagFusion) {
-                    this._logDiagnostic(`[MagDiag] Using 9-DOF fusion with iron-corrected magnetometer (trust: ${this.magTrust})`);
+                    this._logDiagnostic(`[MagDiag] Using 9-DOF fusion with axis-aligned, iron-corrected magnetometer (trust: ${this.magTrust})`);
+                    this._logDiagnostic(`[MagDiag] ⚠️ Note: Axis alignment fix applied (X/Y swapped). Re-run calibration wizard if residual is high!`);
                     this._loggedMagFusion = true;
                 }
             } else {
