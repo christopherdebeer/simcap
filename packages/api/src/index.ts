@@ -24,8 +24,6 @@ export {
   getUploadSecret,
   setUploadSecret,
   hasUploadSecret,
-  uploadToBlob,
-  uploadWithRetry,
 } from './client';
 
 // Default export is the client instance

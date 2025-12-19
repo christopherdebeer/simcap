@@ -218,11 +218,11 @@ import {
     generateDiagnosticReport
 } from './shared/orientation-calibration.js';
 import {
-    uploadToBlob,
+    uploadViaProxy,
     getUploadSecret,
     setUploadSecret,
     hasUploadSecret
-} from './shared/blob-upload.js';
+} from './shared/github-upload.js';
 import { initLogger, log, getLogBuffer, exportLog } from './modules/logger.js';
 
 // ===== GambitClient for Frame-Based Protocol =====
@@ -252,8 +252,8 @@ function updateConnectionStatus(connected: boolean): void {
 }
 
 let ghToken: string | undefined;
-let blobSecret: string | undefined;  // Vercel Blob upload secret
-let uploadMethod: 'blob' | 'github' = 'blob';
+let proxySecret: string | undefined;  // GitHub upload API proxy secret
+let uploadMethod: 'proxy' | 'github' = 'proxy';
 let firmwareVersion: string | null = null;  // Store firmware version for session metadata
 let geomagneticLocation: GeomagneticLocation | null = null;  // Store geomagnetic location for session metadata
 
@@ -1672,12 +1672,12 @@ async function getFileShaForLFS(token: string, owner: string, repo: string, path
     }
 }
 
-// ===== Vercel Blob Upload =====
-// Uses the shared blob-upload module with two-phase @vercel/blob/client protocol
-async function blobPutData(rawSessionData: TelemetrySample[]) {
+// ===== GitHub Upload via API Proxy =====
+// Uses the shared github-upload module with /api/github-upload endpoint
+async function proxyPutData(rawSessionData: TelemetrySample[]) {
     // Check for secret using the module's function (reads from localStorage)
     if (!hasUploadSecret()) {
-        console.log("blobPutData: No upload secret configured. Skipping upload.");
+        console.log("proxyPutData: No upload secret configured. Skipping upload.");
         updateUploadStatus('No upload secret configured', 'error');
         return;
     }
@@ -1710,27 +1710,29 @@ async function blobPutData(rawSessionData: TelemetrySample[]) {
 
     const content = JSON.stringify(exportData, null, 2);
 
-    console.log("blobPutData: Starting Vercel Blob upload for", filename);
+    console.log("proxyPutData: Starting GitHub upload for", filename);
     updateUploadStatus('Uploading...', 'progress');
 
     try {
-        // Use the shared blob-upload module (two-phase protocol)
-        const result = await uploadToBlob({
-            filename,
+        // Use the shared github-upload module (API proxy)
+        const result = await uploadViaProxy({
+            branch: 'data',
+            path: `GAMBIT/${filename}`,
             content,
+            message: 'GAMBIT session data',
             onProgress: (progress) => {
-                console.log(`blobPutData: ${progress.stage} - ${progress.message}`);
+                console.log(`proxyPutData: ${progress.stage} - ${progress.message}`);
                 if (progress.stage === 'uploading') {
                     updateUploadStatus('Uploading...', 'progress');
                 }
             }
         });
 
-        console.log("blobPutData: ✓ Upload complete!", result.url);
+        console.log("proxyPutData: ✓ Upload complete!", result.url);
         updateUploadStatus(`✓ Uploaded: ${filename}`, 'success');
         return result;
     } catch (err) {
-        console.error("blobPutData: Upload failed", err);
+        console.error("proxyPutData: Upload failed", err);
         updateUploadStatus(`✗ Upload failed: ${(err as Error).message}`, 'error');
         throw err;
     }
@@ -1747,10 +1749,10 @@ function updateUploadStatus(message: string, type: string) {
     }
 }
 
-// Dispatcher function - routes to blob or github based on uploadMethod
+// Dispatcher function - routes to proxy or direct github based on uploadMethod
 async function uploadSessionData(rawSessionData: TelemetrySample[]) {
-    if (uploadMethod === 'blob') {
-        return blobPutData(rawSessionData);
+    if (uploadMethod === 'proxy') {
+        return proxyPutData(rawSessionData);
     } else {
         return ghPutData(rawSessionData);
     }
@@ -1902,17 +1904,17 @@ async function ghPutData(rawSessionData: TelemetrySample[]) {
 // ===== Cloud Upload Storage & Event Handlers =====
 // Load upload settings from localStorage
 try {
-    // Load blob secret - use the module's getter for consistency
+    // Load proxy secret - use the module's getter for consistency
     const s = getUploadSecret();
     if (s) {
-        blobSecret = s;
-        const blobSecretInput = document.getElementById('blobSecret') as HTMLInputElement;
-        if (blobSecretInput) blobSecretInput.value = s;
+        proxySecret = s;
+        const proxySecretInput = document.getElementById('proxySecret') as HTMLInputElement;
+        if (proxySecretInput) proxySecretInput.value = s;
     }
 
     // Load upload method preference
     const m = localStorage.getItem("simcap_upload_method");
-    if (m && (m === 'blob' || m === 'github')) {
+    if (m && (m === 'proxy' || m === 'github')) {
         uploadMethod = m;
         const methodSelect = document.getElementById('uploadMethod') as HTMLSelectElement;
         if (methodSelect) methodSelect.value = m;
@@ -1935,9 +1937,9 @@ try {
 
 // Helper to show/hide upload method rows
 function updateUploadMethodUI() {
-    const blobRow = document.getElementById('blobSecretRow');
+    const proxyRow = document.getElementById('proxySecretRow');
     const ghRow = document.getElementById('ghTokenRow');
-    if (blobRow) blobRow.style.display = uploadMethod === 'blob' ? 'flex' : 'none';
+    if (proxyRow) proxyRow.style.display = uploadMethod === 'proxy' ? 'flex' : 'none';
     if (ghRow) ghRow.style.display = uploadMethod === 'github' ? 'flex' : 'none';
 }
 
@@ -1945,20 +1947,20 @@ function updateUploadMethodUI() {
 const uploadMethodSelect = document.getElementById('uploadMethod');
 if (uploadMethodSelect) {
     uploadMethodSelect.addEventListener('change', function(e) {
-        uploadMethod = (e.target as HTMLSelectElement).value as 'blob' | 'github';
+        uploadMethod = (e.target as HTMLSelectElement).value as 'proxy' | 'github';
         localStorage.setItem("simcap_upload_method", uploadMethod);
         updateUploadMethodUI();
         console.log("Upload method changed to:", uploadMethod);
     });
 }
 
-// Blob secret input - use the module's setter for consistency
-const blobSecretInput = document.getElementById('blobSecret');
-if (blobSecretInput) {
-    blobSecretInput.addEventListener('change', function(e) {
-        blobSecret = (e.target as HTMLInputElement).value;
-        setUploadSecret(blobSecret || null);  // Use module function
-        console.log("Blob secret updated");
+// Proxy secret input - use the module's setter for consistency
+const proxySecretInput = document.getElementById('proxySecret');
+if (proxySecretInput) {
+    proxySecretInput.addEventListener('change', function(e) {
+        proxySecret = (e.target as HTMLInputElement).value;
+        setUploadSecret(proxySecret || null);  // Use module function
+        console.log("Proxy secret updated");
     });
 }
 

@@ -21,9 +21,8 @@
     "fetch:sessions": "node scripts/fetch-sessions.js",
     "fetch:visualizations": "node scripts/fetch-visualizations.js",
     "fetch:all": "npm run fetch:sessions && npm run fetch:visualizations",
-    "upload:sessions": "node scripts/upload-local-sessions.js",
-    "upload:visualizations": "node scripts/upload-local-visualizations.js",
-    "upload:all": "npm run upload:sessions && npm run upload:visualizations"
+    "upload:visualizations": "python -m ml.github_upload --input-dir visualizations --manifest",
+    "generate:manifests": "python scripts/generate-manifests.py --all"
   },
   "repository": {
     "type": "git",
@@ -33,7 +32,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@vercel/blob": "^0.27.0",
     "playwright": "^1.57.0"
   },
   "devDependencies": {
