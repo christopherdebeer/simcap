@@ -35,13 +35,13 @@ import {
     formatFieldData,
     GeomagneticLocation
 } from './shared/geomagnetic-field.js';
-import { uploadToGitHubLFS } from './shared/github-lfs-upload.js';
 import {
     uploadSessionWithRetry,
+    uploadToGitHub as uploadDirectToGitHub,
     getUploadSecret,
     setUploadSecret,
     hasUploadSecret
-} from './shared/blob-upload.js';
+} from './shared/github-upload.js';
 
 // ===== Type Definitions =====
 
@@ -181,7 +181,7 @@ let mlModelLoaded = false;
 // GitHub token (for upload functionality)
 let ghToken: string | null = null;
 
-// Upload method: 'blob' (Vercel Blob) or 'github' (GitHub LFS)
+// Upload method: 'blob' (via API proxy) or 'github' (direct with PAT)
 let uploadMethod: 'blob' | 'github' = 'blob';
 
 // Live calibration UI update interval
@@ -542,7 +542,7 @@ async function init(): Promise<void> {
             uploadMethodSelect.value = uploadMethod;
             uploadMethodSelect.addEventListener('change', (e) => {
                 uploadMethod = (e.target as HTMLSelectElement).value as 'blob' | 'github';
-                log(`Upload method: ${uploadMethod === 'blob' ? 'Vercel Blob' : 'GitHub LFS'}`);
+                log(`Upload method: ${uploadMethod === 'blob' ? 'API Proxy' : 'Direct GitHub'}`);
                 updateUI();
             });
         }
@@ -1480,7 +1480,7 @@ async function uploadSession(): Promise<void> {
 }
 
 /**
- * Upload to Vercel Blob
+ * Upload to GitHub via API proxy (recommended - keeps token server-side)
  */
 async function uploadToBlob(): Promise<void> {
     if (state.sessionData.length === 0) {
@@ -1499,7 +1499,7 @@ async function uploadToBlob(): Promise<void> {
     try {
         uploadBtn.disabled = true;
         uploadBtn.textContent = 'Uploading...';
-        log('Uploading to Vercel Blob...');
+        log('Uploading to GitHub (data branch)...');
 
         const data = buildExportData();
 
@@ -1508,6 +1508,7 @@ async function uploadToBlob(): Promise<void> {
         const content = JSON.stringify(data, null, 2);
 
         const result = await uploadSessionWithRetry({
+            branch: 'data',
             filename,
             content,
             onProgress: (progress) => {
@@ -1520,7 +1521,7 @@ async function uploadToBlob(): Promise<void> {
         log(`URL: ${result.url}`);
 
     } catch (e) {
-        console.error('[GAMBIT] Blob upload failed:', e);
+        console.error('[GAMBIT] GitHub upload failed:', e);
         log(`Upload failed: ${(e as Error).message}`);
     } finally {
         uploadBtn.disabled = state.sessionData.length === 0 || state.recording || !hasUploadSecret();
@@ -1572,7 +1573,7 @@ function storeCalibrationSessionData(samples: CalibrationSample[], stepName: str
 }
 
 /**
- * Upload to GitHub
+ * Upload to GitHub directly (requires personal GitHub token)
  */
 async function uploadToGitHub(): Promise<void> {
     if (state.sessionData.length === 0) {
@@ -1591,7 +1592,7 @@ async function uploadToGitHub(): Promise<void> {
     try {
         uploadBtn.disabled = true;
         uploadBtn.textContent = 'Uploading...';
-        log('Uploading to GitHub (LFS)...');
+        log('Uploading to GitHub (data branch)...');
 
         const exportData = buildExportData();
 
@@ -1599,20 +1600,20 @@ async function uploadToGitHub(): Promise<void> {
         const filename = `${timestamp}.json`;
         const content = JSON.stringify(exportData, null, 2);
 
-        const result = await uploadToGitHubLFS({
+        const result = await uploadDirectToGitHub({
             token: ghToken,
-            owner: 'christopherdebeer',
-            repo: 'simcap',
-            path: `data/GAMBIT/${filename}`,
+            branch: 'data',
+            path: `GAMBIT/${filename}`,
             content: content,
-            message: `GAMBIT Data ingest ${filename}`,
+            message: `GAMBIT session: ${filename}`,
             onProgress: (progress) => {
                 uploadBtn.textContent = progress.message;
                 log(`Upload: ${progress.message}`);
             }
         });
 
-        log(`✓ Uploaded: ${result.filename} (LFS: ${result.lfsOid?.substring(0, 8)}...)`);
+        log(`Uploaded: ${result.filename} (${(result.size / 1024).toFixed(1)} KB)`);
+        log(`URL: ${result.url}`);
 
     } catch (e) {
         console.error('[GAMBIT] Upload failed:', e);

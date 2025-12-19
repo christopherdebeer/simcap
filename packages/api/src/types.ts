@@ -195,6 +195,84 @@ export interface UploadClientPayload {
   secret: string;
 }
 
+// ===== GitHub Storage Types =====
+
+/** GitHub repository configuration */
+export interface GitHubRepoConfig {
+  owner: string;
+  repo: string;
+  dataBranch: string;
+  imagesBranch: string;
+}
+
+/** Default GitHub configuration */
+export const DEFAULT_GITHUB_CONFIG: GitHubRepoConfig = {
+  owner: 'christopherdebeer',
+  repo: 'simcap',
+  dataBranch: 'data',
+  imagesBranch: 'images',
+};
+
+/** GitHub upload request (for API proxy) */
+export interface GitHubUploadRequest {
+  secret: string;
+  branch: string;
+  path: string;
+  content: string;
+  message: string;
+  validate?: boolean;
+}
+
+/** GitHub upload response */
+export interface GitHubUploadResponse {
+  success: boolean;
+  url: string;
+  pathname: string;
+  branch: string;
+  commitSha?: string;
+  htmlUrl?: string;
+}
+
+/** GitHub-based session info (extends SessionInfo with GitHub URLs) */
+export interface GitHubSessionInfo extends SessionInfo {
+  /** Branch where session is stored */
+  branch: string;
+  /** Raw GitHub URL */
+  rawUrl: string;
+}
+
+/** Session manifest stored in main branch */
+export interface SessionManifest {
+  generated: string;
+  directory: string;
+  branch: string;
+  baseUrl: string;
+  sessionCount: number;
+  sessions: Array<{
+    filename: string;
+    timestamp: string;
+    size: number;
+    version?: string;
+    sampleCount?: number;
+    durationSec?: number;
+    url: string;
+  }>;
+}
+
+/** Visualization manifest index (stored in main branch) */
+export interface VisualizationManifestIndex {
+  generated: string;
+  imageBranch: string;
+  baseImageUrl: string;
+  sessions: Array<{
+    sessionTimestamp: string;
+    generatedAt: string;
+    hasComposite: boolean;
+    windowCount: number;
+    manifestPath: string;
+  }>;
+}
+
 // ===== Combined Session Entry (for VIZ/Explorer) =====
 
 /** Combined session with optional visualization data */
