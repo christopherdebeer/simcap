@@ -512,8 +512,13 @@ export class TelemetryProcessor {
                 );
 
                 if (!this._loggedMagFusion) {
+                    const calType = this.magCalibration.isUsingAutoHardIron() ? 'auto' : 'wizard';
+                    const autoEst = this.magCalibration.getAutoHardIronEstimate();
                     this._logDiagnostic(`[MagDiag] Using 9-DOF fusion with axis-aligned, iron-corrected magnetometer (trust: ${this.magTrust})`);
-                    this._logDiagnostic(`[MagDiag] ⚠️ Note: Axis alignment fix applied (X/Y swapped). Re-run calibration wizard if residual is high!`);
+                    this._logDiagnostic(`[MagDiag] Iron calibration: ${calType.toUpperCase()}`);
+                    if (calType === 'auto' && autoEst) {
+                        this._logDiagnostic(`[MagDiag] Auto hard iron: [${autoEst.x.toFixed(1)}, ${autoEst.y.toFixed(1)}, ${autoEst.z.toFixed(1)}] µT`);
+                    }
                     this._loggedMagFusion = true;
                 }
             } else {
@@ -522,7 +527,7 @@ export class TelemetryProcessor {
 
                 // Log once why mag fusion is skipped
                 if (this.useMagnetometer && !this._loggedMagFusion && !hasIronCal) {
-                    this._logDiagnostic(`[MagDiag] ⚠️ Mag fusion DISABLED - no iron calibration. Run calibration wizard!`);
+                    this._logDiagnostic(`[MagDiag] ⚠️ Mag fusion DISABLED - no iron calibration yet (auto calibration building...)`);
                     this._loggedMagFusion = true; // Only log once
                 }
             }

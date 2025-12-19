@@ -34,6 +34,9 @@ export interface CalibrationOptions {
   baselineMinSamples?: number;
   confidenceResidualThreshold?: number;
   autoBaseline?: boolean;
+  autoHardIron?: boolean;           // Enable auto hard iron estimation from residual feedback
+  autoHardIronMinSamples?: number;  // Min samples before applying auto hard iron
+  autoHardIronAlpha?: number;       // Exponential smoothing factor for auto hard iron (0-1)
 }
 
 export interface HardIronResult {
@@ -73,6 +76,8 @@ export interface UpdateResult {
   capturingBaseline?: boolean;
   baselineSampleCount?: number;
   autoBaselineResult?: BaselineCaptureResult | null;
+  autoHardIronReady?: boolean;
+  autoHardIronEstimate?: Vector3 | null;
 }
 
 export interface ResidualResult extends Vector3 {
@@ -100,6 +105,10 @@ export interface CalibrationState {
   autoBaselineEnabled: boolean;
   autoBaselineRetryCount: number;
   autoBaselineMaxRetries: number;
+  autoHardIronEnabled: boolean;
+  autoHardIronReady: boolean;
+  autoHardIronEstimate: Vector3;
+  autoHardIronSampleCount: number;
 }
 
 export interface CalibrationQuality {
@@ -228,6 +237,15 @@ export class UnifiedMagCalibration {
     private _loggedFirstSample: boolean = false;
     private _loggedEarthComputed: boolean = false;
 
+    // Auto Hard Iron estimation (live calibration from residual feedback)
+    private _autoHardIronEnabled: boolean = false;
+    private _autoHardIronMinSamples: number = 100;
+    private _autoHardIronAlpha: number = 0.02;  // Slow adaptation rate
+    private _autoHardIronEstimate: Vector3 = { x: 0, y: 0, z: 0 };
+    private _autoHardIronSampleCount: number = 0;
+    private _autoHardIronReady: boolean = false;
+    private _loggedAutoHardIron: boolean = false;
+
     /**
      * Create instance
      */
@@ -243,6 +261,11 @@ export class UnifiedMagCalibration {
         this.baselineMinSamples = options.baselineMinSamples || 50;
         this.autoBaseline = options.autoBaseline !== false;
         this.confidenceResidualThreshold = options.confidenceResidualThreshold || 50;
+
+        // Auto Hard Iron configuration
+        this._autoHardIronEnabled = options.autoHardIron !== false;  // Enabled by default
+        this._autoHardIronMinSamples = options.autoHardIronMinSamples || 100;
+        this._autoHardIronAlpha = options.autoHardIronAlpha || 0.02;
 
         // Apply pre-computed baseline if provided
         if (options.extendedBaseline) {
@@ -345,16 +368,24 @@ export class UnifiedMagCalibration {
 
     /**
      * Apply iron correction (hard + soft) to raw reading
+     * Uses wizard calibration if available, otherwise falls back to auto estimate
      */
     applyIronCorrection(raw: Vector3): Vector3 {
-        if (!this.hardIronCalibrated) {
+        // Determine which offset to use: wizard calibration takes priority
+        let offset: Vector3;
+        if (this.hardIronCalibrated) {
+            offset = this.hardIronOffset;
+        } else if (this._autoHardIronReady) {
+            offset = this._autoHardIronEstimate;
+        } else {
+            // No calibration available
             return { x: raw.x, y: raw.y, z: raw.z };
         }
 
         let corrected: Vector3 = {
-            x: raw.x - this.hardIronOffset.x,
-            y: raw.y - this.hardIronOffset.y,
-            z: raw.z - this.hardIronOffset.z
+            x: raw.x - offset.x,
+            y: raw.y - offset.y,
+            z: raw.z - offset.z
         };
 
         if (this.softIronCalibrated) {
@@ -365,10 +396,24 @@ export class UnifiedMagCalibration {
     }
 
     /**
-     * Check if any iron calibration available
+     * Check if any iron calibration available (wizard or auto)
      */
     hasIronCalibration(): boolean {
-        return this.hardIronCalibrated || this.softIronCalibrated;
+        return this.hardIronCalibrated || this.softIronCalibrated || this._autoHardIronReady;
+    }
+
+    /**
+     * Check if using auto hard iron (vs wizard calibration)
+     */
+    isUsingAutoHardIron(): boolean {
+        return !this.hardIronCalibrated && this._autoHardIronReady;
+    }
+
+    /**
+     * Get current auto hard iron estimate
+     */
+    getAutoHardIronEstimate(): Vector3 | null {
+        return this._autoHardIronReady ? { ...this._autoHardIronEstimate } : null;
     }
 
     // =========================================================================
@@ -570,6 +615,11 @@ export class UnifiedMagCalibration {
                     }
                 }
             }
+
+            // Auto Hard Iron estimation from residual (only if no wizard calibration)
+            if (this._autoHardIronEnabled && !this.hardIronCalibrated) {
+                this._updateAutoHardIron(mx_ut, my_ut, mz_ut, orientation);
+            }
         }
 
         return {
@@ -578,8 +628,60 @@ export class UnifiedMagCalibration {
             earthMagnitude: this._earthFieldMagnitude,
             capturingBaseline: this._baselineCapturing,
             baselineSampleCount: this._baselineCaptureSamples.length,
-            autoBaselineResult
+            autoBaselineResult,
+            autoHardIronReady: this._autoHardIronReady,
+            autoHardIronEstimate: this._autoHardIronReady ? { ...this._autoHardIronEstimate } : null
         };
+    }
+
+    /**
+     * Update auto hard iron estimate from raw residual
+     * Computes residual using raw mag (not iron-corrected) and updates estimate
+     */
+    private _updateAutoHardIron(mx_ut: number, my_ut: number, mz_ut: number, orientation: Quaternion): void {
+        if (!this._earthFieldMagnitude) return;
+
+        // Compute expected Earth field in sensor frame
+        const R = this._quaternionToRotationMatrix(orientation);
+        const earthSensor: Vector3 = {
+            x: R[0][0] * this._earthFieldWorld.x + R[0][1] * this._earthFieldWorld.y + R[0][2] * this._earthFieldWorld.z,
+            y: R[1][0] * this._earthFieldWorld.x + R[1][1] * this._earthFieldWorld.y + R[1][2] * this._earthFieldWorld.z,
+            z: R[2][0] * this._earthFieldWorld.x + R[2][1] * this._earthFieldWorld.y + R[2][2] * this._earthFieldWorld.z
+        };
+
+        // Compute residual from RAW reading (not iron-corrected)
+        // residual_raw = raw - expected_earth = hard_iron + finger_magnets
+        // When no finger magnets present, residual converges to hard_iron
+        const residualRaw: Vector3 = {
+            x: mx_ut - earthSensor.x,
+            y: my_ut - earthSensor.y,
+            z: mz_ut - earthSensor.z
+        };
+
+        this._autoHardIronSampleCount++;
+
+        // Exponential smoothing to estimate hard iron
+        // First samples: initialize estimate directly
+        if (this._autoHardIronSampleCount === 1) {
+            this._autoHardIronEstimate = { ...residualRaw };
+        } else {
+            const alpha = this._autoHardIronAlpha;
+            this._autoHardIronEstimate = {
+                x: this._autoHardIronEstimate.x * (1 - alpha) + residualRaw.x * alpha,
+                y: this._autoHardIronEstimate.y * (1 - alpha) + residualRaw.y * alpha,
+                z: this._autoHardIronEstimate.z * (1 - alpha) + residualRaw.z * alpha
+            };
+        }
+
+        // Mark as ready once we have enough samples
+        if (!this._autoHardIronReady && this._autoHardIronSampleCount >= this._autoHardIronMinSamples) {
+            this._autoHardIronReady = true;
+            if (this.debug && !this._loggedAutoHardIron) {
+                const est = this._autoHardIronEstimate;
+                console.log(`[UnifiedMagCal] Auto hard iron ready: [${est.x.toFixed(1)}, ${est.y.toFixed(1)}, ${est.z.toFixed(1)}] µT`);
+                this._loggedAutoHardIron = true;
+            }
+        }
     }
 
     /**
@@ -789,7 +891,11 @@ export class UnifiedMagCalibration {
             windowFill: calibrationQuality.windowFill,
             autoBaselineEnabled: this.autoBaseline,
             autoBaselineRetryCount: this._autoBaselineRetryCount,
-            autoBaselineMaxRetries: this._autoBaselineMaxRetries
+            autoBaselineMaxRetries: this._autoBaselineMaxRetries,
+            autoHardIronEnabled: this._autoHardIronEnabled,
+            autoHardIronReady: this._autoHardIronReady,
+            autoHardIronEstimate: { ...this._autoHardIronEstimate },
+            autoHardIronSampleCount: this._autoHardIronSampleCount
         };
     }
 
@@ -812,6 +918,12 @@ export class UnifiedMagCalibration {
         this.clearExtendedBaseline();
         this._totalSamples = 0;
         this._loggedFirstSample = false;
+
+        // Reset auto hard iron
+        this._autoHardIronEstimate = { x: 0, y: 0, z: 0 };
+        this._autoHardIronSampleCount = 0;
+        this._autoHardIronReady = false;
+        this._loggedAutoHardIron = false;
 
         if (this.debug) console.log('[UnifiedMagCal] Full reset');
     }
