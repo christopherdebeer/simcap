@@ -677,6 +677,17 @@
                         <div id="calibrationConfidence" style="margin-bottom: var(--space-sm); padding: var(--space-xs); background: var(--bg); border-radius: var(--radius-sm);">
                             <strong>📊 Live Calibration:</strong>
                             <div style="margin-top: 4px;">
+                                <!-- Auto Hard Iron Progress -->
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                    <span>Auto Cal Progress:</span>
+                                    <span id="autoHardIronProgress" style="font-weight: bold; color: var(--warning);">0%</span>
+                                </div>
+                                <div style="background: #333; border-radius: 3px; height: 6px; margin-bottom: 6px;">
+                                    <div id="autoHardIronBar" style="height: 100%; border-radius: 3px; width: 0%; background: var(--accent); transition: width 0.3s, background 0.3s;"></div>
+                                </div>
+                                <div id="autoHardIronStatus" style="font-size: 0.55rem; color: var(--fg-muted); margin-bottom: 6px;">Rotate device to calibrate...</div>
+                                
+                                <!-- Overall Confidence -->
                                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                                     <span>Overall Confidence:</span>
                                     <span id="overallConfidence" style="font-weight: bold; color: var(--warning);">0%</span>
@@ -692,6 +703,10 @@
                                     <div style="display: flex; justify-content: space-between; margin-top: 2px;">
                                         <span>Earth Field: <span id="earthFieldConf">--</span></span>
                                         <span>Baseline: <span id="baselineConf">--</span></span>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; margin-top: 2px;">
+                                        <span>Soft Scale: <span id="softIronScale">--</span></span>
+                                        <span>Ranges: <span id="autoHardIronRanges">--</span></span>
                                     </div>
                                     <div style="display: flex; justify-content: space-between; margin-top: 2px;">
                                         <span>Samples: <span id="calibSamples">0</span></span>

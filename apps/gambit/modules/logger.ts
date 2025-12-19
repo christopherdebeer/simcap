@@ -6,7 +6,7 @@
 let logElement: HTMLElement | null = null;
 const logBuffer: string[] = [];
 const MAX_BUFFER_SIZE = 500;
-const MAX_UI_MESSAGES = 50;
+const MAX_UI_MESSAGES = 250;
 
 /**
  * Initialize logger with DOM element
@@ -38,7 +38,7 @@ export function log(msg: string, toConsole: boolean = true): void {
 
     // Update UI if element exists
     if (logElement) {
-        logElement.innerHTML = `${entry}<br>` + logElement.innerHTML;
+        logElement.innerHTML = logElement.innerHTML + `<br>${entry}`;
 
         // Keep UI manageable
         const lines = logElement.innerHTML.split('<br>');

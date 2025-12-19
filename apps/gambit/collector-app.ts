@@ -212,8 +212,72 @@ function updateCalibrationConfidenceUI(): void {
     const meanResidualEl = $('meanResidual');
     const residualQualityEl = $('residualQuality');
 
+    // Auto hard iron progress UI elements
+    const autoProgressEl = $('autoHardIronProgress');
+    const autoBarEl = $('autoHardIronBar');
+    const autoStatusEl = $('autoHardIronStatus');
+    const softIronScaleEl = $('softIronScale');
+    const autoRangesEl = $('autoHardIronRanges');
+
+    // Update auto hard iron progress
+    const autoProgress = Math.round(calState.autoHardIronProgress * 100);
+    if (autoProgressEl) {
+        autoProgressEl.textContent = `${autoProgress}%`;
+        if (calState.autoHardIronReady) {
+            autoProgressEl.style.color = 'var(--success)';
+        } else if (autoProgress >= 50) {
+            autoProgressEl.style.color = 'var(--warning)';
+        } else {
+            autoProgressEl.style.color = 'var(--fg-muted)';
+        }
+    }
+
+    if (autoBarEl) {
+        (autoBarEl as HTMLElement).style.width = `${autoProgress}%`;
+        if (calState.autoHardIronReady) {
+            (autoBarEl as HTMLElement).style.background = 'var(--success)';
+        } else if (autoProgress >= 50) {
+            (autoBarEl as HTMLElement).style.background = 'var(--warning)';
+        } else {
+            (autoBarEl as HTMLElement).style.background = 'var(--accent)';
+        }
+    }
+
+    if (autoStatusEl) {
+        if (calState.autoHardIronReady) {
+            autoStatusEl.textContent = '✓ Auto calibration complete';
+            autoStatusEl.style.color = 'var(--success)';
+        } else if (autoProgress >= 50) {
+            autoStatusEl.textContent = 'Keep rotating...';
+            autoStatusEl.style.color = 'var(--warning)';
+        } else {
+            autoStatusEl.textContent = 'Rotate device to calibrate...';
+            autoStatusEl.style.color = 'var(--fg-muted)';
+        }
+    }
+
+    // Soft iron scale factors
+    if (softIronScaleEl) {
+        if (calState.autoHardIronReady) {
+            const scale = calState.autoSoftIronScale;
+            softIronScaleEl.textContent = `${scale.x.toFixed(2)}, ${scale.y.toFixed(2)}, ${scale.z.toFixed(2)}`;
+        } else {
+            softIronScaleEl.textContent = '--';
+        }
+    }
+
+    // Auto hard iron ranges
+    if (autoRangesEl) {
+        const ranges = calState.autoHardIronRanges;
+        if (ranges.x > 0 || ranges.y > 0 || ranges.z > 0) {
+            autoRangesEl.textContent = `${ranges.x.toFixed(0)}, ${ranges.y.toFixed(0)}, ${ranges.z.toFixed(0)}`;
+        } else {
+            autoRangesEl.textContent = '--';
+        }
+    }
+
     if (overallEl) overallEl.textContent = `${overall}%`;
-    if (hardIronEl) hardIronEl.textContent = calState.hardIronCalibrated ? '✓' : '--';
+    if (hardIronEl) hardIronEl.textContent = calState.hardIronCalibrated ? '✓ Wizard' : (calState.autoHardIronReady ? '✓ Auto' : '--');
     if (earthFieldEl) earthFieldEl.textContent = calState.ready ? '✓ Auto' : 'Building...';
     if (samplesEl) samplesEl.textContent = totalSamples.toString();
 
@@ -1212,7 +1276,7 @@ function initHandVisualization(): void {
             threeHandSkeleton = new ThreeJSHandSkeleton(container as HTMLElement, {
                 width: 400,
                 height: 400,
-                backgroundColor: 0x1a1a2e,
+                backgroundColor: 0xffffff,
                 lerpFactor: 0.15,
                 handedness: 'right'
             });

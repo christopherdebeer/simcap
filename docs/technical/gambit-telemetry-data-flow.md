@@ -492,3 +492,205 @@ private _updateAutoHardIron(mx_ut, my_ut, mz_ut, _orientation): void {
 
 1. **Initial (residual-based):** Used 6-DOF orientation + geomag reference → corrupted by yaw drift
 2. **Final (min-max):** Orientation-independent, tracks min/max over rotation → robust to yaw drift
+
+---
+
+## Auto Soft Iron Correction (2025-12-19)
+
+### Problem: Axis Asymmetry
+
+After implementing min-max hard iron calibration, we observed that the iron-corrected magnitude was still ~30% higher than expected Earth field (~65-80 µT vs expected ~50 µT). Analysis of the min-max ranges revealed significant axis asymmetry:
+
+```
+Ranges: [84.2, 98.6, 158.2] µT
+Sphericity: 0.53 (fair)
+```
+
+The Z-axis range (158 µT) is nearly double the X-axis range (84 µT). This indicates **soft iron distortion** - the magnetometer ellipsoid is stretched along certain axes.
+
+### Solution: Auto Soft Iron Scale Factors
+
+When auto hard iron calibration completes, we now also compute soft iron scale factors to normalize the ellipsoid to a sphere:
+
+```typescript
+// Target range = 2 * Earth field magnitude (full swing from -E to +E)
+const targetRange = geomagRef ? geomagMagnitude * 2 : avgRange;
+
+// Scale factors: targetRange / actualRange
+this._autoSoftIronScale = {
+    x: targetRange / rangeX,  // e.g., 100.8 / 84.2 = 1.197
+    y: targetRange / rangeY,  // e.g., 100.8 / 98.6 = 1.022
+    z: targetRange / rangeZ   // e.g., 100.8 / 158.2 = 0.637
+};
+```
+
+### Application in Progressive Correction
+
+The soft iron scale factors are applied in `applyProgressiveIronCorrection()`:
+
+```typescript
+applyProgressiveIronCorrection(raw: Vector3): Vector3 {
+    // 1. Hard iron: subtract offset to center ellipsoid at origin
+    let corrected = {
+        x: raw.x - offset.x,
+        y: raw.y - offset.y,
+        z: raw.z - offset.z
+    };
+
+    // 2. Soft iron: scale each axis to normalize ellipsoid to sphere
+    if (this._autoSoftIronEnabled && this._autoHardIronReady) {
+        corrected = {
+            x: corrected.x * this._autoSoftIronScale.x,
+            y: corrected.y * this._autoSoftIronScale.y,
+            z: corrected.z * this._autoSoftIronScale.z
+        };
+    }
+
+    return corrected;
+}
+```
+
+### Expected Results After Soft Iron Correction
+
+| Metric | Before Soft Iron | After Soft Iron |
+|--------|------------------|-----------------|
+| Iron-corrected magnitude | 65-80 µT | ~50 µT |
+| Magnitude error | 30-60% | < 10% |
+| Residual (no magnets) | 20-40 µT | < 10 µT |
+
+### Diagnostic Logging
+
+When calibration completes, the following diagnostics are logged:
+
+```
+[UnifiedMagCal] Auto hard iron ready (min-max method):
+  Offset: [29.4, -2.1, -6.8] µT (|offset|=30.3 µT)
+  Ranges: [84.2, 98.6, 158.2] µT
+  Sphericity: 0.53 (fair)
+  Soft iron scale: [1.197, 1.022, 0.637]
+  Target range: 100.8 µT (from geomag ref)
+  Axis deviation from avg: X=-26.0%, Y=-13.2%, Z=+39.2%
+  Min values: [-12.7, -51.4, -85.9] µT
+  Max values: [71.5, 47.2, 72.3] µT
+```
+
+### Why Z-Axis Has Larger Range
+
+The Z-axis (into PCB) likely has larger range because:
+1. **Sensor placement:** Z-axis may be closer to ferromagnetic components
+2. **PCB geometry:** Conductive traces create asymmetric soft iron distortion
+3. **Mounting:** The sensor's Z-axis may experience more field concentration
+
+The soft iron correction compensates for this by scaling Z-axis readings down (0.637x) to match the expected Earth field magnitude.
+
+---
+
+## Soft Iron Scale Formula Investigation (2025-12-19)
+
+### Analysis of Session Data
+
+Using session `2025-12-19T10_56_06.622Z.json` to validate hypotheses without re-recording:
+
+```
+=== Current Session Results ===
+Iron-corrected magnitude:
+  Mean: 48.4 µT (expected ~50 µT) ✓ Good!
+  Std: 12.5 µT ⚠️ High variance
+  Min: 22.5 µT
+  Max: 79.9 µT
+  Error from expected: -4.2% ✓ Acceptable
+
+Iron-corrected axis ranges (AFTER soft iron):
+  X: -49.6 to 50.9 (range: 100.5 µT)
+  Y: -57.0 to 57.0 (range: 114.0 µT)
+  Z: -66.3 to 72.4 (range: 138.7 µT)
+```
+
+### Key Finding: Soft Iron Doesn't Fully Normalize
+
+Even after soft iron correction, the axis ranges are NOT equal:
+- X range: 100.5 µT
+- Y range: 114.0 µT  
+- Z range: 138.7 µT (still 38% larger than X!)
+
+This explains the high magnitude variance (std=12.5 µT). The diagonal soft iron scaling doesn't fully correct the ellipsoid distortion.
+
+### Formula Comparison
+
+| Formula | Target Range | Scale Factors | Expected Magnitude |
+|---------|--------------|---------------|-------------------|
+| OLD (geomag) | 101.0 µT | [1.241, 1.131, 0.739] | 48.4 µT |
+| NEW (average) | 102.4 µT | [1.258, 1.147, 0.750] | 49.1 µT |
+
+**Key Insight:** Both formulas produce nearly identical results because:
+1. The scale RATIOS are the same (they both normalize to a sphere)
+2. Only the overall magnitude changes slightly (1.4% difference)
+3. **Variance is NOT reduced** - it comes from the ellipsoid shape, not the target
+
+### Root Cause of High Variance
+
+The high variance (std=12.5 µT, 25% of mean) is caused by:
+
+1. **Incomplete soft iron correction**: Diagonal scaling only corrects axis-aligned distortion
+2. **Off-diagonal soft iron terms**: The ellipsoid may be rotated/tilted, requiring a full 3x3 matrix
+3. **Non-ellipsoidal distortion**: Higher-order distortions can't be corrected with linear scaling
+
+### Correlation Analysis
+
+```
+Correlation between corrMag and residual: 0.129 (weak positive)
+```
+
+This weak positive correlation suggests:
+- When corrected magnitude is higher, residual is slightly higher
+- The Earth field estimate may be slightly too low
+- But the correlation is weak, so this isn't the main issue
+
+### Recommendations
+
+1. **Accept current variance** - 12.5 µT std is acceptable for finger magnet detection (magnets produce 50-200 µT signal)
+
+2. **Consider full soft iron matrix** - Would require ellipsoid fitting algorithm:
+   ```typescript
+   // Full 3x3 soft iron matrix (not just diagonal)
+   softIronMatrix = [
+       [s11, s12, s13],
+       [s21, s22, s23],
+       [s31, s32, s33]
+   ];
+   ```
+
+3. **Use magnitude-based detection** - Instead of residual, detect magnets by magnitude deviation:
+   ```typescript
+   const expectedMag = 50.5; // µT
+   const deviation = Math.abs(correctedMag - expectedMag);
+   const hasFingerMagnet = deviation > 20; // µT threshold
+   ```
+
+### Updated Soft Iron Formula
+
+Changed from geomagnetic target to average range:
+
+```typescript
+// OLD: Target = 2 × Earth field magnitude
+const targetRange = geomagMagnitude * 2;  // 101 µT
+
+// NEW: Target = average of all three ranges  
+const avgRange = (rangeX + rangeY + rangeZ) / 3;  // ~102 µT
+```
+
+This change:
+- ✅ Makes the formula independent of geomagnetic reference
+- ✅ Works correctly even without location data
+- ❌ Does NOT reduce variance (same relative scaling)
+
+### Validation Summary
+
+| Metric | Before Fix | After Fix | Target |
+|--------|------------|-----------|--------|
+| Mean magnitude | 48.4 µT | ~49.1 µT | 50.5 µT |
+| Magnitude error | -4.2% | -2.8% | < 10% ✓ |
+| Magnitude std | 12.5 µT | ~12.7 µT | < 5 µT ✗ |
+| Residual mean | 52.4 µT | ~52 µT | < 10 µT ✗ |
+
+**Conclusion:** The soft iron formula change is a minor improvement. The high variance and residual are fundamental limitations of diagonal soft iron correction.

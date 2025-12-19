@@ -128,7 +128,7 @@ export class MadgwickAHRS {
     this.beta = options.beta ?? 0.1;
     this.q = { w: 1, x: 0, y: 0, z: 0 };
     this.gyroBias = { x: 0, y: 0, z: 0 };
-    this.biasAlpha = 0.001;
+    this.biasAlpha = 0.1;  // Increased from 0.001 for faster convergence
     this.geomagneticRef = options.geomagneticRef ?? null;
     this.magRefNormalized = null;
     this.magTrust = 1.0;
@@ -482,6 +482,42 @@ export class MadgwickAHRS {
     if (!this._lastMagResidual) return 0;
     const r = this._lastMagResidual;
     return Math.sqrt(r.x * r.x + r.y * r.y + r.z * r.z);
+  }
+
+  /**
+   * Get current gyroscope bias estimate (in radians/sec)
+   */
+  getGyroBias(): Vector3 {
+    return { ...this.gyroBias };
+  }
+
+  /**
+   * Get current gyroscope bias estimate (in degrees/sec)
+   */
+  getGyroBiasDegrees(): Vector3 {
+    return {
+      x: this.gyroBias.x * 180 / Math.PI,
+      y: this.gyroBias.y * 180 / Math.PI,
+      z: this.gyroBias.z * 180 / Math.PI
+    };
+  }
+
+  /**
+   * Set gyroscope bias directly (in radians/sec)
+   */
+  setGyroBias(bias: Vector3): void {
+    this.gyroBias = { ...bias };
+  }
+
+  /**
+   * Set gyroscope bias directly (in degrees/sec)
+   */
+  setGyroBiasDegrees(bias: Vector3): void {
+    this.gyroBias = {
+      x: bias.x * Math.PI / 180,
+      y: bias.y * Math.PI / 180,
+      z: bias.z * Math.PI / 180
+    };
   }
 }
 
@@ -1133,4 +1169,3 @@ export function magneticLikelihood(
 
   return Math.exp(-(residual * residual) / (2 * sigma * sigma));
 }
-
