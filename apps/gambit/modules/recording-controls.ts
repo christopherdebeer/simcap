@@ -3,7 +3,7 @@
  * Manages data recording start/stop/clear operations
  */
 
-import { state, resetSession } from './state.js';
+import { state, resetSession, getSessionJSON } from './state.js';
 import { log } from './logger.js';
 
 // ===== Type Definitions =====
@@ -87,6 +87,15 @@ export async function stopRecording(): Promise<void> {
         } catch (e) {
             console.error('[GAMBIT] Failed to stop streaming:', e);
         }
+    }
+
+    // Log session data to console for easy access
+    if (state.sessionData.length > 0) {
+        const sessionJSON = getSessionJSON();
+        console.log('=== SESSION DATA ===');
+        console.log(sessionJSON);
+        console.log('=== END SESSION DATA ===');
+        log(`Session data logged to console (${state.sessionData.length} samples, ${state.labels.length} labels)`);
     }
 
     if (updateUI) updateUI();

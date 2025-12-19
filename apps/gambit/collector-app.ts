@@ -3,8 +3,8 @@
  * Main entry point that coordinates all modules
  */
 
-import { state, resetSession, GambitClient } from './modules/state.js';
-import { initLogger, log } from './modules/logger.js';
+import { state, resetSession, GambitClient, getSessionSegmentJSON, getSessionJSON } from './modules/state.js';
+import { initLogger, log, copyToClipboard, copyLogToClipboard } from './modules/logger.js';
 import { KalmanFilter3D } from '@filters';
 import { MadgwickAHRS } from '@filters';
 import {
@@ -108,6 +108,9 @@ declare global {
         toggleCustomLabel: typeof toggleCustomLabel;
         deleteCustomLabelDef: typeof deleteCustomLabelDef;
         deleteLabel: (index: number) => void;
+        copyLabelSegment: (index: number) => Promise<void>;
+        copyLog: () => Promise<boolean>;
+        copySession: () => Promise<void>;
         setHandPreviewMode: typeof setHandPreviewMode;
         togglePoseOption: typeof togglePoseOption;
         updateHandOrientationAlpha: typeof updateHandOrientationAlpha;
@@ -699,6 +702,7 @@ function updateUI(): void {
                     <div class="label-item">
                         <span class="time-range">${startSample}-${endSample} (${duration}s)</span>
                         <div class="label-tags">${tags.join('')}</div>
+                        <button class="btn-secondary btn-tiny" onclick="window.copyLabelSegment(${i})" title="Copy segment data">📋</button>
                         <button class="btn-danger btn-tiny" onclick="window.deleteLabel(${i})">×</button>
                     </div>
                 `;
@@ -886,6 +890,15 @@ function initLabelManagement(): void {
             state.labels.splice(index, 1);
             log(`Label segment ${index} deleted`);
             updateUI();
+        }
+    };
+
+    window.copyLabelSegment = async (index: number) => {
+        const segmentJSON = getSessionSegmentJSON(index);
+        if (segmentJSON) {
+            await copyToClipboard(segmentJSON, `Label segment ${index}`);
+        } else {
+            log(`Failed to get segment ${index}`);
         }
     };
 }
@@ -1723,3 +1736,10 @@ window.clearFingerStates = clearFingerStates;
 window.removeCustomLabel = removeCustomLabel;
 window.toggleCustomLabel = toggleCustomLabel;
 window.deleteCustomLabelDef = deleteCustomLabelDef;
+
+// Copy functions
+window.copyLog = copyLogToClipboard;
+window.copySession = async () => {
+    const sessionJSON = getSessionJSON();
+    await copyToClipboard(sessionJSON, 'Session data');
+};

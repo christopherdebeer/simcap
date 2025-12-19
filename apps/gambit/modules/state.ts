@@ -129,6 +129,49 @@ export function canTogglePause(): boolean {
   return state.recording;
 }
 
+/**
+ * Get session segment data for a specific label
+ * @param labelIndex - Index of the label in state.labels
+ * @returns Object with segment samples and label info, or null if invalid
+ */
+export function getSessionSegment(labelIndex: number): { samples: TelemetrySample[]; label: LabelSegment } | null {
+  if (labelIndex < 0 || labelIndex >= state.labels.length) {
+    return null;
+  }
+  const label = state.labels[labelIndex];
+  const samples = state.sessionData.slice(label.startIndex, label.endIndex + 1);
+  return { samples, label };
+}
+
+/**
+ * Get formatted session segment as JSON string
+ * @param labelIndex - Index of the label in state.labels
+ * @returns JSON string of the segment, or null if invalid
+ */
+export function getSessionSegmentJSON(labelIndex: number): string | null {
+  const segment = getSessionSegment(labelIndex);
+  if (!segment) return null;
+  return JSON.stringify({
+    label: segment.label,
+    samples: segment.samples,
+    sampleCount: segment.samples.length
+  }, null, 2);
+}
+
+/**
+ * Get full session data as JSON string
+ * @returns JSON string of the entire session
+ */
+export function getSessionJSON(): string {
+  return JSON.stringify({
+    samples: state.sessionData,
+    labels: state.labels,
+    sampleCount: state.sessionData.length,
+    labelCount: state.labels.length,
+    exportedAt: new Date().toISOString()
+  }, null, 2);
+}
+
 // ===== Default Export =====
 
 export default {
@@ -136,5 +179,8 @@ export default {
   resetSession,
   getStateSnapshot,
   canStartRecording,
-  canTogglePause
+  canTogglePause,
+  getSessionSegment,
+  getSessionSegmentJSON,
+  getSessionJSON
 };
