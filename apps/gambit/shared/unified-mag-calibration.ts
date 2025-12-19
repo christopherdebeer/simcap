@@ -433,14 +433,15 @@ export class UnifiedMagCalibration {
     setGeomagneticReference(ref: GeomagneticReference): void {
         this._geomagneticRef = ref;
 
-        // Compute Earth field in world frame (NED: North-East-Down)
-        // H = horizontal component, V = vertical (down) component
-        // Declination rotates the horizontal component from true north to magnetic north
-        const decRad = ref.declination * Math.PI / 180;
+        // Compute Earth field in world frame
+        // IMPORTANT: Use magnetic north frame (X = magnetic north, Y = east, Z = down)
+        // This matches the AHRS convention where the quaternion represents rotation
+        // from magnetic north frame to sensor frame. Declination is NOT applied here
+        // because the AHRS heading is relative to magnetic north, not true north.
         this._geomagEarthWorld = {
-            x: ref.horizontal * Math.cos(decRad),  // North component
-            y: ref.horizontal * Math.sin(decRad),  // East component
-            z: ref.vertical                         // Down component
+            x: ref.horizontal,  // Magnetic north component (all horizontal in X)
+            y: 0,               // East component = 0 (same as AHRS)
+            z: ref.vertical     // Down component
         };
 
         if (this.debug) {
@@ -449,7 +450,7 @@ export class UnifiedMagCalibration {
                 this._geomagEarthWorld.y ** 2 +
                 this._geomagEarthWorld.z ** 2
             );
-            console.log(`[UnifiedMagCal] Geomagnetic ref set: H=${ref.horizontal.toFixed(1)} V=${ref.vertical.toFixed(1)} Dec=${ref.declination.toFixed(1)}° (|E|=${mag.toFixed(1)} µT)`);
+            console.log(`[UnifiedMagCal] Geomagnetic ref set: H=${ref.horizontal.toFixed(1)} V=${ref.vertical.toFixed(1)} (|E|=${mag.toFixed(1)} µT, magnetic north frame)`);
         }
     }
 
