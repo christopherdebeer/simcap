@@ -912,12 +912,17 @@ export class UnifiedMagCalibration {
         };
 
         // Gradient descent with numerical gradients
-        const learningRate = 0.5;
-        const epsilon = 0.1;  // For numerical gradient
-        const maxIterations = 100;
-        const convergenceThreshold = 0.01;
+        // Use small learning rate and regularization to prevent divergence
+        const learningRateOffset = 0.1;  // Smaller for stability
+        const learningRateMatrix = 0.01;  // Even smaller for matrix (more sensitive)
+        const epsilon = 0.5;  // For numerical gradient
+        const maxIterations = 50;
+        const convergenceThreshold = 0.1;
 
         let prevResidual = computeResidual(offset, S);
+        let bestResidual = prevResidual;
+        let bestOffset = { ...offset };
+        let bestS = S.map(row => [...row]);
 
         for (let iter = 0; iter < maxIterations; iter++) {
             // Compute gradients for offset
@@ -940,24 +945,49 @@ export class UnifiedMagCalibration {
                 }
             }
 
-            // Update parameters
-            offset.x -= learningRate * gradOffset.x;
-            offset.y -= learningRate * gradOffset.y;
-            offset.z -= learningRate * gradOffset.z;
+            // Update parameters with gradient clipping
+            const maxGrad = 10;
+            offset.x -= learningRateOffset * Math.max(-maxGrad, Math.min(maxGrad, gradOffset.x));
+            offset.y -= learningRateOffset * Math.max(-maxGrad, Math.min(maxGrad, gradOffset.y));
+            offset.z -= learningRateOffset * Math.max(-maxGrad, Math.min(maxGrad, gradOffset.z));
 
             for (let i = 0; i < 3; i++) {
                 for (let j = 0; j < 3; j++) {
-                    S[i][j] -= learningRate * gradS[i][j];
+                    S[i][j] -= learningRateMatrix * Math.max(-maxGrad, Math.min(maxGrad, gradS[i][j]));
                 }
             }
 
-            // Check convergence
+            // Regularization: keep soft iron matrix close to identity-like
+            // Diagonal elements should be positive and near 1
+            // Off-diagonal elements should be small
+            for (let i = 0; i < 3; i++) {
+                // Clamp diagonal to reasonable range [0.5, 2.0]
+                S[i][i] = Math.max(0.5, Math.min(2.0, S[i][i]));
+                for (let j = 0; j < 3; j++) {
+                    if (i !== j) {
+                        // Clamp off-diagonal to [-0.5, 0.5]
+                        S[i][j] = Math.max(-0.5, Math.min(0.5, S[i][j]));
+                    }
+                }
+            }
+
+            // Check convergence and track best
             const newResidual = computeResidual(offset, S);
+            if (newResidual < bestResidual) {
+                bestResidual = newResidual;
+                bestOffset = { ...offset };
+                bestS = S.map(row => [...row]);
+            }
+
             if (Math.abs(prevResidual - newResidual) < convergenceThreshold) {
                 break;
             }
             prevResidual = newResidual;
         }
+
+        // Use best result found
+        offset = bestOffset;
+        S = bestS;
 
         // Store results
         this._autoHardIronEstimate = offset;
