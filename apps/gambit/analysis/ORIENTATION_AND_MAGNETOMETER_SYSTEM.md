@@ -493,15 +493,21 @@ The 9-DOF fusion was initially disabled (`useMagnetometer: false`) due to signif
 
 The AHRS expected all sensors in the same coordinate frame, but mag X and Y were swapped.
 
-**Fix:** Swap mag X and Y before feeding to iron correction and AHRS fusion:
+**Fix:** Swap mag X and Y, AND negate Y to match accelerometer sign convention:
 ```typescript
 // telemetry-processor.ts
-const mx_ut = my_ut_raw;  // Mag Y (aerial) -> aligned X (aerial)
-const my_ut = mx_ut_raw;  // Mag X (IR LEDs) -> aligned Y (IR LEDs)
-const mz_ut = mz_ut_raw;  // Z unchanged
+const mx_ut = my_ut_raw;   // Mag Y (aerial) -> aligned X (aerial)
+const my_ut = -mx_ut_raw;  // Mag X (IR LEDs) -> aligned Y (IR LEDs), NEGATED
+const mz_ut = mz_ut_raw;   // Z unchanged
 ```
 
-**Commit:** `aa16088` - Fix magnetometer axis alignment for Puck.js
+The Y-axis negation was added because correlation analysis showed `ay vs my` was
+negative (-0.919) when it should be positive. With the negation, accel-mag
+correlations are all positive as expected.
+
+**Commits:**
+- `aa16088` - Fix magnetometer axis alignment for Puck.js (swap X/Y)
+- `f6545cd` - Add Y-axis negation based on correlation analysis
 
 ### Root Cause 2: Hard Iron Calibration Required
 

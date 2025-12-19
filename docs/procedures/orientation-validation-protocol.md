@@ -37,9 +37,13 @@ The magnetometer has **swapped X and Y axes** relative to accelerometer/gyroscop
 | +Y   | Toward aerial/MQBT42Q | Toward WRIST (= Accel +X) |
 | +Z   | Into PCB (toward battery) | INTO PALM (= Accel +Z) |
 
-**⚠️ WARNING**: Current implementation does NOT align magnetometer axes to accelerometer frame.
-This affects Earth field subtraction when using orientation-dependent calibration.
-See TODO [SENSOR-001] in `GAMBIT/index.html` and [SENSOR-003] in `calibration.js`.
+**✅ FIXED**: Magnetometer axes are now aligned to accelerometer frame in `telemetry-processor.ts`:
+```typescript
+const mx_ut = my_ut_raw;   // Mag Y → aligned X (swap)
+const my_ut = -mx_ut_raw;  // Mag X → aligned Y (swap + negate)
+const mz_ut = mz_ut_raw;   // Z unchanged
+```
+The Y-axis negation ensures positive accel-mag correlation on all axes.
 
 ### Madgwick AHRS Euler Angles
 
