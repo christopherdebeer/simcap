@@ -452,12 +452,13 @@
                     <div style="display: flex; gap: var(--space-sm); align-items: center;">
                         <label style="font-size: 0.75rem; color: var(--fg-muted); min-width: 60px;">Method:</label>
                         <select id="uploadMethod" style="flex: 1; padding: var(--space-xs); font-size: 0.875rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--fg);">
-                            <option value="blob">Vercel Blob</option>
+                            <option value="proxy">API Proxy</option>
+                            <option value="github">Direct GitHub</option>
                         </select>
                     </div>
-                    <div id="blobSecretRow" style="display: flex; gap: var(--space-sm); align-items: center;">
+                    <div id="proxySecretRow" style="display: flex; gap: var(--space-sm); align-items: center;">
                         <label style="font-size: 0.75rem; color: var(--fg-muted); min-width: 60px;">Secret:</label>
-                        <input type="password" id="blobSecret" placeholder="Enter upload secret" style="flex: 1; padding: var(--space-xs); font-size: 0.875rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--fg);"/>
+                        <input type="password" id="proxySecret" placeholder="Enter upload secret" style="flex: 1; padding: var(--space-xs); font-size: 0.875rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--fg);"/>
                     </div>
                     <div id="ghTokenRow" style="display: none; gap: var(--space-sm); align-items: center;">
                         <label style="font-size: 0.75rem; color: var(--fg-muted); min-width: 60px;">Token:</label>
