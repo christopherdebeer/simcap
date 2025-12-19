@@ -256,7 +256,7 @@ export class UnifiedMagCalibration {
     // Min-max tracking for orientation-independent hard iron estimation
     private _autoHardIronMin: Vector3 = { x: Infinity, y: Infinity, z: Infinity };
     private _autoHardIronMax: Vector3 = { x: -Infinity, y: -Infinity, z: -Infinity };
-    private _autoHardIronMinRangeRequired: number = 30;  // Minimum range (µT) per axis to validate
+    private _autoHardIronMinRangeRequired: number = 80;  // Minimum range (µT) per axis - needs ~80% of full rotation
 
     // Geomagnetic reference (from tables, not estimated)
     private _geomagneticRef: GeomagneticReference | null = null;
@@ -731,10 +731,21 @@ export class UnifiedMagCalibration {
 
         // Check if ready: sufficient samples AND sufficient rotation coverage
         // We need at least minRangeRequired on each axis to ensure device was rotated
+        // If we have geomagnetic reference, use 1.6x expected magnitude as threshold
+        // (Earth field of 50 µT should give ~100 µT range, so 80 µT = 80% coverage)
+        let rangeThreshold = this._autoHardIronMinRangeRequired;
+        if (this._geomagneticRef) {
+            const expectedMag = Math.sqrt(
+                this._geomagneticRef.horizontal ** 2 +
+                this._geomagneticRef.vertical ** 2
+            );
+            rangeThreshold = Math.max(rangeThreshold, expectedMag * 1.6);  // 80% of full swing (2x magnitude)
+        }
+
         const hasEnoughSamples = this._autoHardIronSampleCount >= this._autoHardIronMinSamples;
-        const hasEnoughRotation = rangeX >= this._autoHardIronMinRangeRequired &&
-                                  rangeY >= this._autoHardIronMinRangeRequired &&
-                                  rangeZ >= this._autoHardIronMinRangeRequired;
+        const hasEnoughRotation = rangeX >= rangeThreshold &&
+                                  rangeY >= rangeThreshold &&
+                                  rangeZ >= rangeThreshold;
 
         // Only mark ready once we have both conditions
         if (!this._autoHardIronReady && hasEnoughSamples && hasEnoughRotation) {
@@ -758,7 +769,9 @@ export class UnifiedMagCalibration {
 
         // Log progress periodically
         if (this.debug && !this._autoHardIronReady && this._autoHardIronSampleCount % 50 === 0) {
-            console.log(`[UnifiedMagCal] Auto hard iron progress: samples=${this._autoHardIronSampleCount}, ranges=[${rangeX.toFixed(1)}, ${rangeY.toFixed(1)}, ${rangeZ.toFixed(1)}] µT (need ${this._autoHardIronMinRangeRequired})`);
+            const minRangeAchieved = Math.min(rangeX, rangeY, rangeZ);
+            const coverage = Math.min(100, (minRangeAchieved / rangeThreshold) * 100);
+            console.log(`[UnifiedMagCal] Auto hard iron progress: samples=${this._autoHardIronSampleCount}, ranges=[${rangeX.toFixed(0)}, ${rangeY.toFixed(0)}, ${rangeZ.toFixed(0)}] µT, coverage=${coverage.toFixed(0)}% (need ${rangeThreshold.toFixed(0)} µT per axis)`);
         }
     }
 
