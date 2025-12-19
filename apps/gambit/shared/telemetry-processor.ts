@@ -499,14 +499,26 @@ export class TelemetryProcessor {
 
         if (this.imuInitialized) {
             const magDataValid = mx_ut !== 0 || my_ut !== 0 || mz_ut !== 0;
-            const hasIronCal = this.magCalibration.hasIronCalibration();
 
-            // Only use magnetometer in fusion if iron calibration is available
-            // Without iron calibration, the hard iron bias causes massive residual error
-            if (this.useMagnetometer && magDataValid && this.geomagneticRef && hasIronCal) {
-                // 9-DOF fusion with magnetometer for absolute yaw reference
-                const ironCorrected = this.magCalibration.applyIronCorrection({ x: mx_ut, y: my_ut, z: mz_ut });
+            // Progressive 9-DOF fusion: use magnetometer from the start with scaled trust
+            // As calibration progresses, trust increases. This provides yaw stability even during warmup.
+            if (this.useMagnetometer && magDataValid && this.geomagneticRef) {
+                // Get calibration progress (0.0 to 1.0)
+                const calProgress = this.magCalibration.getAutoHardIronProgress();
+                const isWizardCal = this.magCalibration.hardIronCalibrated;
 
+                // Scale mag trust by calibration progress
+                // Wizard cal = full trust, Auto cal = progressive trust
+                const effectiveMagTrust = isWizardCal ? this.magTrust : this.magTrust * calProgress;
+
+                // Apply progressive iron correction (uses current estimate even if not "ready")
+                const ironCorrected = this.magCalibration.applyProgressiveIronCorrection({ x: mx_ut, y: my_ut, z: mz_ut });
+                const corrMag = Math.sqrt(ironCorrected.x**2 + ironCorrected.y**2 + ironCorrected.z**2);
+
+                // Set dynamic mag trust on AHRS
+                this.imuFusion.setMagTrust(effectiveMagTrust);
+
+                // 9-DOF fusion with magnetometer (always, with scaled trust)
                 this.imuFusion.updateWithMag(
                     ax_g, ay_g, az_g,
                     gx_dps, gy_dps, gz_dps,
@@ -514,35 +526,53 @@ export class TelemetryProcessor {
                     dt, true, false
                 );
 
-                // Log when transitioning to 9-DOF (or first time)
-                if (!this._loggedMagFusion || this._loggedMagFusionDisabled) {
-                    const calType = this.magCalibration.isUsingAutoHardIron() ? 'auto' : 'wizard';
-                    const autoEst = this.magCalibration.getAutoHardIronEstimate();
-                    if (this._loggedMagFusionDisabled) {
-                        this._logDiagnostic(`[MagDiag] ✅ Auto hard iron calibration complete! Enabling 9-DOF fusion...`);
-                    }
-                    this._logDiagnostic(`[MagDiag] Using 9-DOF fusion with axis-aligned, iron-corrected magnetometer (trust: ${this.magTrust})`);
-                    this._logDiagnostic(`[MagDiag] Iron calibration: ${calType.toUpperCase()}`);
-                    if (calType === 'auto' && autoEst) {
-                        const autoEstMag = Math.sqrt(autoEst.x**2 + autoEst.y**2 + autoEst.z**2);
-                        const calState = this.magCalibration.getState();
-                        const ranges = calState.autoHardIronRanges;
-                        this._logDiagnostic(`[MagDiag] Auto hard iron (min-max): [${autoEst.x.toFixed(1)}, ${autoEst.y.toFixed(1)}, ${autoEst.z.toFixed(1)}] µT (|offset|=${autoEstMag.toFixed(1)} µT)`);
-                        this._logDiagnostic(`[MagDiag] Min-max ranges: [${ranges.x.toFixed(1)}, ${ranges.y.toFixed(1)}, ${ranges.z.toFixed(1)}] µT`);
-                        // Log iron-corrected magnitude for validation (should be ~50 µT)
-                        const corrMag = Math.sqrt(ironCorrected.x**2 + ironCorrected.y**2 + ironCorrected.z**2);
-                        this._logDiagnostic(`[MagDiag] Iron-corrected mag: ${corrMag.toFixed(1)} µT (expected ~50 µT)`);
-                    }
+                // === COMPREHENSIVE DIAGNOSTIC LOGGING ===
+                const calState = this.magCalibration.getState();
+                const ranges = calState.autoHardIronRanges;
+                const autoEst = this.magCalibration.getCurrentAutoHardIronEstimate();
+                const rawMag = Math.sqrt(mx_ut**2 + my_ut**2 + mz_ut**2);
+
+                // Log state transition: first time or significant change
+                if (!this._loggedMagFusion) {
+                    this._logDiagnostic(`[MagDiag] 🚀 Progressive 9-DOF fusion ENABLED from start`);
+                    this._logDiagnostic(`[MagDiag] Strategy: scale magTrust by calibration progress`);
+                    this._logDiagnostic(`[MagDiag] Base magTrust: ${this.magTrust}, effective: ${effectiveMagTrust.toFixed(3)}`);
                     this._loggedMagFusion = true;
+                }
+
+                // Log progress periodically (every 50 samples during calibration)
+                if (!calState.autoHardIronReady && calState.autoHardIronSampleCount % 50 === 0 && calState.autoHardIronSampleCount > 0) {
+                    const coveragePct = (calProgress * 100).toFixed(0);
+                    const autoEstMag = Math.sqrt(autoEst.x**2 + autoEst.y**2 + autoEst.z**2);
+                    this._logDiagnostic(`[MagDiag] Cal progress: ${coveragePct}% | trust: ${effectiveMagTrust.toFixed(2)} | ranges: [${ranges.x.toFixed(0)}, ${ranges.y.toFixed(0)}, ${ranges.z.toFixed(0)}] µT`);
+                    this._logDiagnostic(`[MagDiag]   offset: [${autoEst.x.toFixed(1)}, ${autoEst.y.toFixed(1)}, ${autoEst.z.toFixed(1)}] µT (|${autoEstMag.toFixed(1)}|) | corrMag: ${corrMag.toFixed(1)} µT | rawMag: ${rawMag.toFixed(1)} µT`);
+                }
+
+                // Log when calibration reaches 100%
+                if (calState.autoHardIronReady && this._loggedMagFusionDisabled) {
+                    const autoEstMag = Math.sqrt(autoEst.x**2 + autoEst.y**2 + autoEst.z**2);
+                    this._logDiagnostic(`[MagDiag] ✅ Calibration COMPLETE - full trust now active`);
+                    this._logDiagnostic(`[MagDiag]   Final offset: [${autoEst.x.toFixed(1)}, ${autoEst.y.toFixed(1)}, ${autoEst.z.toFixed(1)}] µT (|${autoEstMag.toFixed(1)}|)`);
+                    this._logDiagnostic(`[MagDiag]   Final ranges: [${ranges.x.toFixed(1)}, ${ranges.y.toFixed(1)}, ${ranges.z.toFixed(1)}] µT`);
+                    this._logDiagnostic(`[MagDiag]   Iron-corrected mag: ${corrMag.toFixed(1)} µT (expected ~50 µT) ${Math.abs(corrMag - 50) < 5 ? '✓' : '⚠️'}`);
                     this._loggedMagFusionDisabled = false;
                 }
+
+                // Track that we're in calibration phase (for detecting completion)
+                if (!calState.autoHardIronReady && !this._loggedMagFusionDisabled) {
+                    this._loggedMagFusionDisabled = true;
+                }
             } else {
-                // 6-DOF fusion (gyro + accel only)
+                // 6-DOF fusion fallback (no mag data or no geomag ref)
                 this.imuFusion.update(ax_g, ay_g, az_g, gx_dps, gy_dps, gz_dps, dt, true);
 
                 // Log once why mag fusion is skipped
-                if (this.useMagnetometer && !this._loggedMagFusionDisabled && !hasIronCal) {
-                    this._logDiagnostic(`[MagDiag] ⚠️ Mag fusion DISABLED - no iron calibration yet (auto calibration building...)`);
+                if (this.useMagnetometer && !this._loggedMagFusionDisabled) {
+                    if (!magDataValid) {
+                        this._logDiagnostic(`[MagDiag] ⚠️ Mag fusion DISABLED - no mag data`);
+                    } else if (!this.geomagneticRef) {
+                        this._logDiagnostic(`[MagDiag] ⚠️ Mag fusion DISABLED - waiting for geomagnetic reference`);
+                    }
                     this._loggedMagFusionDisabled = true;
                 }
             }
@@ -611,11 +641,21 @@ export class TelemetryProcessor {
                     // Also log raw mag reading for comparison
                     const rawMagMag = Math.sqrt(mx_ut ** 2 + my_ut ** 2 + mz_ut ** 2);
 
+                    // Get calibration state for diagnostics
+                    const calProgress = this.magCalibration.getAutoHardIronProgress();
+                    const calState = this.magCalibration.getState();
+                    const effectiveTrust = this.magCalibration.hardIronCalibrated
+                        ? this.magTrust
+                        : this.magTrust * calProgress;
+                    const ironCorrected = this.magCalibration.applyProgressiveIronCorrection({ x: mx_ut, y: my_ut, z: mz_ut });
+                    const corrMag = Math.sqrt(ironCorrected.x**2 + ironCorrected.y**2 + ironCorrected.z**2);
+
                     this._logDiagnostic(
                         `[MagDiag] ` +
-                        `res=${residualMag.toFixed(1)}µT raw=${rawMagMag.toFixed(1)}µT | ` +
+                        `res=${residualMag.toFixed(1)}µT corrMag=${corrMag.toFixed(1)}µT | ` +
                         `yaw=${yaw.toFixed(1)}° | ` +
-                        `Δ(${(this._magResidualHistory.length/50).toFixed(0)}s): mag=${magDrift.toFixed(1)} yaw=${yawDrift.toFixed(1)}° | ` +
+                        `cal=${(calProgress*100).toFixed(0)}% trust=${effectiveTrust.toFixed(2)} | ` +
+                        `Δ: mag=${magDrift.toFixed(1)} yaw=${yawDrift.toFixed(1)}° | ` +
                         `${isStationary ? 'STILL' : 'moving'}`
                     );
                 }
