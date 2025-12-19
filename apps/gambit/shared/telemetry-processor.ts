@@ -449,9 +449,11 @@ export class TelemetryProcessor {
         //   Accel/Gyro: X→aerial, Y→IR LEDs, Z→into PCB
         //   Magnetometer: X→IR LEDs, Y→aerial, Z→into PCB
         // Swap X and Y to align magnetometer to accel/gyro frame
-        const mx_ut = my_ut_raw;  // Mag Y (aerial) -> aligned X (aerial)
-        const my_ut = mx_ut_raw;  // Mag X (IR LEDs) -> aligned Y (IR LEDs)
-        const mz_ut = mz_ut_raw;  // Z unchanged
+        // Additionally, negate Y to match accelerometer sign convention
+        // (verified by correlation analysis: ay vs my should be positive)
+        const mx_ut = my_ut_raw;   // Mag Y (aerial) -> aligned X (aerial)
+        const my_ut = -mx_ut_raw;  // Mag X (IR LEDs) -> aligned Y (IR LEDs), NEGATED
+        const mz_ut = mz_ut_raw;   // Z unchanged
 
         decorated.mx_ut = mx_ut;
         decorated.my_ut = my_ut;
