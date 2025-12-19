@@ -479,5 +479,103 @@ beta_mag   = beta * magTrust
 
 ---
 
+## Magnetometer Drift Investigation (2025-12-19)
+
+### Background
+
+The 9-DOF fusion was initially disabled (`useMagnetometer: false`) due to significant residual drift when the magnetometer was enabled. Investigation revealed multiple root causes.
+
+### Root Cause 1: Magnetometer Axis Alignment
+
+**Problem:** Puck.js magnetometer has different axis orientation compared to accel/gyro:
+- Accel/Gyro: X→aerial, Y→IR LEDs, Z→into PCB
+- Magnetometer: X→IR LEDs, Y→aerial, Z→into PCB
+
+The AHRS expected all sensors in the same coordinate frame, but mag X and Y were swapped.
+
+**Fix:** Swap mag X and Y before feeding to iron correction and AHRS fusion:
+```typescript
+// telemetry-processor.ts
+const mx_ut = my_ut_raw;  // Mag Y (aerial) -> aligned X (aerial)
+const my_ut = mx_ut_raw;  // Mag X (IR LEDs) -> aligned Y (IR LEDs)
+const mz_ut = mz_ut_raw;  // Z unchanged
+```
+
+**Commit:** `aa16088` - Fix magnetometer axis alignment for Puck.js
+
+### Root Cause 2: Hard Iron Calibration Required
+
+**Problem:** Without hard iron calibration, the raw magnetometer reading includes a constant offset from nearby ferromagnetic materials. This offset caused 40-120 µT residual.
+
+**Initial Fix:** Add guard to skip 9-DOF fusion if iron calibration isn't loaded:
+```typescript
+if (this.useMagnetometer && magDataValid && this.geomagneticRef && hasIronCal) {
+    // 9-DOF fusion
+} else {
+    // 6-DOF fallback
+}
+```
+
+### Root Cause 3: Auto Hard Iron Calibration
+
+**Problem:** Requiring manual wizard calibration creates poor UX. Needed automatic hard iron estimation.
+
+**Solution:** Estimate hard iron from residual feedback:
+- Use geomagnetic reference (known Earth field from location tables)
+- Compute expected Earth in sensor frame using 6-DOF orientation
+- Residual = raw - expected = hard_iron (when no finger magnets)
+- Exponential smoothing builds stable estimate
+
+**Key Insight:** Must use known geomagnetic reference (not estimated Earth field) to avoid circular dependency where estimated Earth includes hard iron bias.
+
+**Commits:**
+- `7358377` - Add auto hard iron calibration from residual feedback
+- `1501947` - Fix auto hard iron to use geomagnetic reference
+
+### Root Cause 4: Coordinate Frame Mismatch
+
+**Problem:** AHRS uses magnetic north frame (X = magnetic north, Y = 0, Z = down). The auto hard iron estimation incorrectly applied declination to convert to true north frame.
+
+**Fix:** Use same frame as AHRS (no declination applied):
+```typescript
+this._geomagEarthWorld = {
+    x: ref.horizontal,  // Magnetic north (all horizontal in X)
+    y: 0,               // East = 0 (same as AHRS)
+    z: ref.vertical     // Down
+};
+```
+
+**Commit:** `eb4d6ba` - Fix geomagnetic frame to match AHRS magnetic north convention
+
+### Current Status
+
+The auto hard iron calibration now:
+1. ✅ Builds estimate from residual using known geomagnetic reference
+2. ✅ Uses correct magnetic north coordinate frame (matching AHRS)
+3. ✅ Enables 9-DOF fusion automatically after ~100 samples (~2 seconds)
+4. ⚠️ Residual still ~30-60 µT (under investigation)
+
+### Remaining Hypotheses
+
+1. **Yaw drift during estimation:** 6-DOF orientation has yaw drift during the initial estimation period (before mag fusion enabled). This corrupts the expected Earth calculation and thus the hard iron estimate.
+
+2. **Rotation matrix direction:** Need to verify quaternion-to-rotation-matrix is transforming in the correct direction (world→sensor vs sensor→world).
+
+3. **Iron-corrected magnitude:** Adding diagnostic to validate - after iron correction, magnetometer magnitude should be ~50 µT regardless of orientation.
+
+### Diagnostic Output
+
+After fixes, expected log sequence:
+```
+[MagDiag] ⚠️ Mag fusion DISABLED - no iron calibration yet (auto calibration building...)
+[MagDiag] ✅ Auto hard iron calibration complete! Enabling 9-DOF fusion...
+[MagDiag] Iron calibration: AUTO
+[MagDiag] Auto hard iron: [X, Y, Z] µT (|offset|=N µT)
+[MagDiag] Iron-corrected mag: N µT (expected ~50 µT)
+```
+
+---
+
 *Document generated: 2025-12-14*
-*Last commit: Wire up 9-DOF magnetometer fusion in telemetry processor*
+*Last updated: 2025-12-19*
+*Last commit: Add iron-corrected magnitude diagnostic for auto hard iron validation*
