@@ -601,6 +601,32 @@ export class TelemetryProcessor {
                     const magError = Math.abs(fullyCorrectedMag - expectedMag);
                     const magErrorPct = (magError / expectedMag * 100).toFixed(1);
                     this._logDiagnostic(`[MagDiag]   Iron-corrected mag: ${fullyCorrectedMag.toFixed(1)} µT (expected ~${expectedMag.toFixed(1)} µT, error: ${magErrorPct}%) ${magError < 5 ? '✓' : '⚠️'}`);
+
+                    // H/V component analysis (critical for finger detection accuracy)
+                    // Uses accelerometer to compute roll/pitch, then tilt-compensates magnetometer
+                    const accelMag = Math.sqrt(ax_g**2 + ay_g**2 + az_g**2);
+                    if (accelMag > 0.5) {
+                        const roll = Math.atan2(ay_g, az_g);
+                        const pitch = Math.atan2(-ax_g, Math.sqrt(ay_g**2 + az_g**2));
+                        const cr = Math.cos(roll), sr = Math.sin(roll);
+                        const cp = Math.cos(pitch), sp = Math.sin(pitch);
+
+                        // Tilt-compensate to get H and V components
+                        const mx_h = fullyCorrected.x * cp + fullyCorrected.y * sr * sp + fullyCorrected.z * cr * sp;
+                        const my_h = fullyCorrected.y * cr - fullyCorrected.z * sr;
+                        const mz_h = -fullyCorrected.x * sp + fullyCorrected.y * cr * sp + fullyCorrected.z * cr * cp;
+                        const h_mag = Math.sqrt(mx_h**2 + my_h**2);
+                        const v_mag = mz_h;
+
+                        const expectedH = this.geomagneticRef?.horizontal ?? 16.0;
+                        const expectedV = this.geomagneticRef?.vertical ?? 47.8;
+                        const expectedHV = expectedH / expectedV;
+                        const actualHV = Math.abs(v_mag) > 1 ? h_mag / Math.abs(v_mag) : 0;
+
+                        this._logDiagnostic(`[MagDiag]   H/V components: H=${h_mag.toFixed(1)} µT (exp ${expectedH.toFixed(1)}), V=${v_mag.toFixed(1)} µT (exp ${expectedV.toFixed(1)})`);
+                        this._logDiagnostic(`[MagDiag]   H/V ratio: ${actualHV.toFixed(2)} (expected ${expectedHV.toFixed(2)}) ${Math.abs(actualHV - expectedHV) < 0.2 ? '✓' : '⚠️ DIRECTION ERROR'}`);
+                    }
+
                     this._loggedMagFusionDisabled = false;
                 }
 
