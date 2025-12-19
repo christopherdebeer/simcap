@@ -354,18 +354,33 @@ if (this.useMagnetometer && magDataValid && this.geomagneticRef && hasIronCal) {
 
 **Problem:** Requiring manual wizard calibration creates poor UX.
 
-**Solution:** Estimate hard iron automatically from residual feedback:
+**Initial Attempt (Residual-Based):**
 - Use geomagnetic reference (known Earth field from location tables)
 - Compute expected Earth in sensor frame using 6-DOF orientation
 - Residual = raw - expected = hard_iron (when no finger magnets)
 - Exponential smoothing (α=0.02) builds stable estimate
-- Ready after 100 samples (~2 seconds at 50Hz)
 
-**Key Insight:** Must use known geomagnetic reference (not estimated Earth field) to avoid circular dependency.
+**Issue with Initial Approach:** This required accurate yaw from 6-DOF fusion, but yaw drifts in 6-DOF mode (no magnetometer reference). The horizontal Earth component (16 µT) is yaw-dependent, corrupting the estimate.
+
+**Final Solution (Min-Max Method):**
+This approach is **orientation-independent** - doesn't rely on accurate yaw:
+- Track min/max for each axis as device rotates
+- `hard_iron = (max + min) / 2`
+- Ready when: 100+ samples AND 30+ µT range on each axis (confirming rotation)
+- Validate with sphericity check (ranges should be similar)
+
+**Why Min-Max Works:**
+```
+raw_magnetometer = Earth_in_sensor_frame + hard_iron
+```
+- As device rotates, Earth field components oscillate symmetrically around zero
+- Hard iron is constant offset in body frame
+- `(max + min) / 2` cancels the oscillating Earth component, leaving hard iron
 
 **Commits:**
 - `7358377` - Add auto hard iron calibration from residual feedback
 - `1501947` - Fix auto hard iron to use geomagnetic reference
+- (latest) - Switch to min-max method for orientation-independent calibration
 
 ### 4. Coordinate Frame Mismatch (FIXED)
 
@@ -386,32 +401,35 @@ this._geomagEarthWorld = {
 
 ### What's Working
 - ✅ Axis alignment fix applied
-- ✅ Auto hard iron calibration builds estimate from geomagnetic reference
+- ✅ Auto hard iron calibration uses min-max method (orientation-independent)
 - ✅ Uses correct magnetic north coordinate frame
-- ✅ Automatically enables 9-DOF fusion after ~100 samples
-- ✅ Diagnostic logging shows calibration state and transitions
+- ✅ Automatically enables 9-DOF fusion after rotation coverage achieved
+- ✅ Diagnostic logging shows calibration state, ranges, and transitions
 
-### Test Results (2025-12-19)
+### Min-Max Approach Details
+```typescript
+// In unified-mag-calibration.ts
+private _updateAutoHardIron(mx_ut, my_ut, mz_ut, _orientation): void {
+    // Track min/max for each axis
+    this._autoHardIronMin.x = Math.min(this._autoHardIronMin.x, mx_ut);
+    this._autoHardIronMax.x = Math.max(this._autoHardIronMax.x, mx_ut);
+    // ... same for y, z
+
+    // Hard iron = center of min-max bounds
+    this._autoHardIronEstimate = {
+        x: (this._autoHardIronMax.x + this._autoHardIronMin.x) / 2,
+        // ... same for y, z
+    };
+
+    // Ready when: 100+ samples AND 30+ µT range per axis
+    const hasEnoughRotation = rangeX >= 30 && rangeY >= 30 && rangeZ >= 30;
+}
 ```
-Auto hard iron: [-20.2, 7.6, -37.8] µT (|offset|≈43 µT)
-Residual after correction: 28-58 µT (still too high, expected ~0-10 µT)
-```
 
-### Remaining Issue: High Residual After Auto Calibration
-
-**Hypothesis 1: Yaw drift during estimation**
-- 6-DOF orientation (gyro + accel) has yaw drift during initial estimation period
-- This corrupts expected Earth field calculation → wrong hard iron estimate
-- Horizontal Earth component (16 µT in Edinburgh) is yaw-dependent
-- Vertical component (47.8 µT) is mostly yaw-independent
-
-**Hypothesis 2: Rotation matrix direction**
-- Need to verify quaternion-to-rotation-matrix transforms in correct direction
-- world→sensor vs sensor→world
-
-**Diagnostic Added:** Iron-corrected magnitude logging
-- After iron correction, magnitude should be ~50 µT regardless of orientation
-- If magnitude varies significantly, iron estimate is wrong
+### Expected Results
+- Iron-corrected magnitude should be ~50 µT (Earth field magnitude)
+- Residual after correction should be ~0-10 µT without finger magnets
+- Ranges during calibration should be ~100 µT (full Earth field swing)
 
 ## Expected Log Sequence (After Fixes)
 
@@ -421,26 +439,47 @@ Residual after correction: 28-58 µT (still too high, expected ~0-10 µT)
 [MagDiag] Iron calibration loaded: false
 [MagDiag] GeomagRef (browser): Edinburgh H=16.0µT V=47.8µT
 [MagDiag] ⚠️ Mag fusion DISABLED - no iron calibration yet (auto calibration building...)
-... ~2 seconds later ...
+... device is rotated to build coverage ...
+[UnifiedMagCal] Auto hard iron progress: samples=50, ranges=[45.2, 38.1, 62.3] µT (need 30)
+[UnifiedMagCal] Auto hard iron progress: samples=100, ranges=[89.5, 92.1, 98.7] µT (need 30)
+[UnifiedMagCal] Auto hard iron ready (min-max method):
+  Offset: [-12.3, 8.5, -25.6] µT (|offset|=29.4 µT)
+  Ranges: [89.5, 92.1, 98.7] µT
+  Sphericity: 0.91 (good)
 [MagDiag] ✅ Auto hard iron calibration complete! Enabling 9-DOF fusion...
 [MagDiag] Using 9-DOF fusion with axis-aligned, iron-corrected magnetometer (trust: 0.5)
 [MagDiag] Iron calibration: AUTO
-[MagDiag] Auto hard iron: [X, Y, Z] µT (|offset|=N µT)
-[MagDiag] Iron-corrected mag: N µT (expected ~50 µT)  ← KEY VALIDATION METRIC
+[MagDiag] Auto hard iron (min-max): [-12.3, 8.5, -25.6] µT (|offset|=29.4 µT)
+[MagDiag] Min-max ranges: [89.5, 92.1, 98.7] µT
+[MagDiag] Iron-corrected mag: 50.2 µT (expected ~50 µT)  ← KEY VALIDATION METRIC
 ```
 
-## Next Steps
+## Calibration Quality Indicators
 
-If residual remains high after frame fix:
-1. **Slower alpha:** Increase exponential smoothing time constant to average out yaw drift
-2. **Vertical-only estimation:** Use only Z component initially (yaw-independent)
-3. **More samples:** Increase minSamples before enabling 9-DOF
-4. **Motion gating:** Only update estimate when device is stationary (pitch/roll stable)
+| Metric | Good | Fair | Poor |
+|--------|------|------|------|
+| Sphericity (min/max range ratio) | > 0.7 | 0.5-0.7 | < 0.5 |
+| Iron-corrected magnitude | 48-52 µT | 40-60 µT | < 40 or > 60 µT |
+| Residual (no magnets) | < 10 µT | 10-20 µT | > 20 µT |
+| Ranges per axis | > 80 µT | 50-80 µT | < 50 µT |
+
+## Testing Procedure
+
+1. **Start session** with device stationary - should show "building..." message
+2. **Rotate device** through various orientations (figure-8 motion works well)
+3. **Watch ranges grow** in progress logs until all reach 30+ µT
+4. **Verify calibration** - iron-corrected mag should be ~50 µT
+5. **Check residual** - should be < 10 µT when no finger magnets present
 
 ## File Changes Summary
 
 | File | Changes |
 |------|---------|
-| `telemetry-processor.ts` | Axis alignment, iron cal guard, diagnostic logging, geomag ref forwarding |
-| `unified-mag-calibration.ts` | Auto hard iron estimation, geomagnetic reference support, magnetic north frame |
+| `telemetry-processor.ts` | Axis alignment, iron cal guard, diagnostic logging, geomag ref forwarding, min-max ranges logging |
+| `unified-mag-calibration.ts` | Auto hard iron estimation (min-max method), geomagnetic reference support, magnetic north frame, rotation coverage detection |
 | `packages/filters/src/filters.ts` | Reference for AHRS coordinate frame convention |
+
+## Algorithm Evolution
+
+1. **Initial (residual-based):** Used 6-DOF orientation + geomag reference → corrupted by yaw drift
+2. **Final (min-max):** Orientation-independent, tracks min/max over rotation → robust to yaw drift

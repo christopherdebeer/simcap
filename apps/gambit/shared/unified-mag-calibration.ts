@@ -115,6 +115,7 @@ export interface CalibrationState {
   autoHardIronReady: boolean;
   autoHardIronEstimate: Vector3;
   autoHardIronSampleCount: number;
+  autoHardIronRanges: Vector3;
 }
 
 export interface CalibrationQuality {
@@ -243,14 +244,19 @@ export class UnifiedMagCalibration {
     private _loggedFirstSample: boolean = false;
     private _loggedEarthComputed: boolean = false;
 
-    // Auto Hard Iron estimation (live calibration from residual feedback)
+    // Auto Hard Iron estimation (min-max method, orientation-independent)
     private _autoHardIronEnabled: boolean = false;
     private _autoHardIronMinSamples: number = 100;
-    private _autoHardIronAlpha: number = 0.02;  // Slow adaptation rate
+    private _autoHardIronAlpha: number = 0.02;  // Slow adaptation rate (legacy, unused in min-max)
     private _autoHardIronEstimate: Vector3 = { x: 0, y: 0, z: 0 };
     private _autoHardIronSampleCount: number = 0;
     private _autoHardIronReady: boolean = false;
     private _loggedAutoHardIron: boolean = false;
+
+    // Min-max tracking for orientation-independent hard iron estimation
+    private _autoHardIronMin: Vector3 = { x: Infinity, y: Infinity, z: Infinity };
+    private _autoHardIronMax: Vector3 = { x: -Infinity, y: -Infinity, z: -Infinity };
+    private _autoHardIronMinRangeRequired: number = 30;  // Minimum range (µT) per axis to validate
 
     // Geomagnetic reference (from tables, not estimated)
     private _geomagneticRef: GeomagneticReference | null = null;
@@ -643,9 +649,10 @@ export class UnifiedMagCalibration {
 
         this._computeEarthField();
 
-        // Auto Hard Iron estimation using GEOMAGNETIC REFERENCE (not estimated Earth)
+        // Auto Hard Iron estimation using MIN-MAX method (orientation-independent)
         // Called early so it can build estimate even before Earth field is estimated
-        if (this._autoHardIronEnabled && !this.hardIronCalibrated && this._geomagEarthWorld) {
+        // Min-max method doesn't require geomagnetic reference - it tracks min/max of raw readings
+        if (this._autoHardIronEnabled && !this.hardIronCalibrated) {
             this._updateAutoHardIron(mx_ut, my_ut, mz_ut, orientation);
         }
 
@@ -681,56 +688,77 @@ export class UnifiedMagCalibration {
     }
 
     /**
-     * Update auto hard iron estimate from raw residual
-     * Uses GEOMAGNETIC REFERENCE (known from location tables) instead of estimated Earth field
-     * to avoid circular dependency where estimated Earth includes hard iron bias.
+     * Update auto hard iron estimate using MIN-MAX method
+     *
+     * This approach is ORIENTATION-INDEPENDENT - it doesn't rely on accurate yaw
+     * from 6-DOF fusion. As the device rotates, we track min/max for each axis.
+     * The hard iron offset is (max + min) / 2.
+     *
+     * Why this works:
+     * - Raw magnetometer = Earth_field_in_sensor_frame + hard_iron
+     * - As device rotates, Earth field components oscillate around zero (in body frame)
+     * - Hard iron is constant offset in body frame
+     * - Min/max captures the range of Earth field + hard iron
+     * - (max + min) / 2 = hard_iron (since Earth field averages to 0 over rotation)
+     *
+     * Requirements:
+     * - Device must be rotated to get sufficient coverage
+     * - Minimum range per axis ensures rotation has occurred
      */
-    private _updateAutoHardIron(mx_ut: number, my_ut: number, mz_ut: number, orientation: Quaternion): void {
-        // Require geomagnetic reference (known Earth field from tables)
-        // This avoids circular dependency with estimated Earth field
-        if (!this._geomagEarthWorld) return;
+    private _updateAutoHardIron(mx_ut: number, my_ut: number, mz_ut: number, _orientation: Quaternion): void {
+        // Update min/max tracking
+        this._autoHardIronMin.x = Math.min(this._autoHardIronMin.x, mx_ut);
+        this._autoHardIronMin.y = Math.min(this._autoHardIronMin.y, my_ut);
+        this._autoHardIronMin.z = Math.min(this._autoHardIronMin.z, mz_ut);
 
-        // Compute expected Earth field in sensor frame using KNOWN geomagnetic reference
-        // Not the estimated _earthFieldWorld which includes hard iron bias when uncalibrated
-        const R = this._quaternionToRotationMatrix(orientation);
-        const earthSensor: Vector3 = {
-            x: R[0][0] * this._geomagEarthWorld.x + R[0][1] * this._geomagEarthWorld.y + R[0][2] * this._geomagEarthWorld.z,
-            y: R[1][0] * this._geomagEarthWorld.x + R[1][1] * this._geomagEarthWorld.y + R[1][2] * this._geomagEarthWorld.z,
-            z: R[2][0] * this._geomagEarthWorld.x + R[2][1] * this._geomagEarthWorld.y + R[2][2] * this._geomagEarthWorld.z
-        };
-
-        // Compute residual from RAW reading (not iron-corrected)
-        // residual_raw = raw - expected_earth_from_geomag = hard_iron + finger_magnets
-        // When no finger magnets present, residual converges to hard_iron
-        const residualRaw: Vector3 = {
-            x: mx_ut - earthSensor.x,
-            y: my_ut - earthSensor.y,
-            z: mz_ut - earthSensor.z
-        };
+        this._autoHardIronMax.x = Math.max(this._autoHardIronMax.x, mx_ut);
+        this._autoHardIronMax.y = Math.max(this._autoHardIronMax.y, my_ut);
+        this._autoHardIronMax.z = Math.max(this._autoHardIronMax.z, mz_ut);
 
         this._autoHardIronSampleCount++;
 
-        // Exponential smoothing to estimate hard iron
-        // First samples: initialize estimate directly
-        if (this._autoHardIronSampleCount === 1) {
-            this._autoHardIronEstimate = { ...residualRaw };
-        } else {
-            const alpha = this._autoHardIronAlpha;
-            this._autoHardIronEstimate = {
-                x: this._autoHardIronEstimate.x * (1 - alpha) + residualRaw.x * alpha,
-                y: this._autoHardIronEstimate.y * (1 - alpha) + residualRaw.y * alpha,
-                z: this._autoHardIronEstimate.z * (1 - alpha) + residualRaw.z * alpha
-            };
-        }
+        // Compute ranges
+        const rangeX = this._autoHardIronMax.x - this._autoHardIronMin.x;
+        const rangeY = this._autoHardIronMax.y - this._autoHardIronMin.y;
+        const rangeZ = this._autoHardIronMax.z - this._autoHardIronMin.z;
 
-        // Mark as ready once we have enough samples
-        if (!this._autoHardIronReady && this._autoHardIronSampleCount >= this._autoHardIronMinSamples) {
+        // Compute hard iron estimate as center of min-max bounds
+        this._autoHardIronEstimate = {
+            x: (this._autoHardIronMax.x + this._autoHardIronMin.x) / 2,
+            y: (this._autoHardIronMax.y + this._autoHardIronMin.y) / 2,
+            z: (this._autoHardIronMax.z + this._autoHardIronMin.z) / 2
+        };
+
+        // Check if ready: sufficient samples AND sufficient rotation coverage
+        // We need at least minRangeRequired on each axis to ensure device was rotated
+        const hasEnoughSamples = this._autoHardIronSampleCount >= this._autoHardIronMinSamples;
+        const hasEnoughRotation = rangeX >= this._autoHardIronMinRangeRequired &&
+                                  rangeY >= this._autoHardIronMinRangeRequired &&
+                                  rangeZ >= this._autoHardIronMinRangeRequired;
+
+        // Only mark ready once we have both conditions
+        if (!this._autoHardIronReady && hasEnoughSamples && hasEnoughRotation) {
             this._autoHardIronReady = true;
+
+            // Calculate sphericity for quality check
+            const minRange = Math.min(rangeX, rangeY, rangeZ);
+            const maxRange = Math.max(rangeX, rangeY, rangeZ);
+            const sphericity = minRange / maxRange;
+
             if (this.debug && !this._loggedAutoHardIron) {
                 const est = this._autoHardIronEstimate;
-                console.log(`[UnifiedMagCal] Auto hard iron ready: [${est.x.toFixed(1)}, ${est.y.toFixed(1)}, ${est.z.toFixed(1)}] µT`);
+                const estMag = Math.sqrt(est.x**2 + est.y**2 + est.z**2);
+                console.log(`[UnifiedMagCal] Auto hard iron ready (min-max method):`);
+                console.log(`  Offset: [${est.x.toFixed(1)}, ${est.y.toFixed(1)}, ${est.z.toFixed(1)}] µT (|offset|=${estMag.toFixed(1)} µT)`);
+                console.log(`  Ranges: [${rangeX.toFixed(1)}, ${rangeY.toFixed(1)}, ${rangeZ.toFixed(1)}] µT`);
+                console.log(`  Sphericity: ${sphericity.toFixed(2)} (${sphericity > 0.7 ? 'good' : 'fair'})`);
                 this._loggedAutoHardIron = true;
             }
+        }
+
+        // Log progress periodically
+        if (this.debug && !this._autoHardIronReady && this._autoHardIronSampleCount % 50 === 0) {
+            console.log(`[UnifiedMagCal] Auto hard iron progress: samples=${this._autoHardIronSampleCount}, ranges=[${rangeX.toFixed(1)}, ${rangeY.toFixed(1)}, ${rangeZ.toFixed(1)}] µT (need ${this._autoHardIronMinRangeRequired})`);
         }
     }
 
@@ -945,7 +973,12 @@ export class UnifiedMagCalibration {
             autoHardIronEnabled: this._autoHardIronEnabled,
             autoHardIronReady: this._autoHardIronReady,
             autoHardIronEstimate: { ...this._autoHardIronEstimate },
-            autoHardIronSampleCount: this._autoHardIronSampleCount
+            autoHardIronSampleCount: this._autoHardIronSampleCount,
+            autoHardIronRanges: {
+                x: this._autoHardIronMax.x - this._autoHardIronMin.x,
+                y: this._autoHardIronMax.y - this._autoHardIronMin.y,
+                z: this._autoHardIronMax.z - this._autoHardIronMin.z
+            }
         };
     }
 
@@ -974,6 +1007,8 @@ export class UnifiedMagCalibration {
         this._autoHardIronSampleCount = 0;
         this._autoHardIronReady = false;
         this._loggedAutoHardIron = false;
+        this._autoHardIronMin = { x: Infinity, y: Infinity, z: Infinity };
+        this._autoHardIronMax = { x: -Infinity, y: -Infinity, z: -Infinity };
 
         if (this.debug) console.log('[UnifiedMagCal] Full reset');
     }
