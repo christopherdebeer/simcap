@@ -200,6 +200,7 @@ export class TelemetryProcessor {
     private onLog: ((message: string) => void) | null;
     private _loggedCalibrationMissing: boolean = false;
     private _loggedMagFusion: boolean = false;
+    private _loggedMagFusionDisabled: boolean = false;  // Track 6-DOF disabled message
     private _loggedMagnetDetection: boolean = false;
 
     // Diagnostic tracking for magnetometer residual drift
@@ -368,7 +369,7 @@ export class TelemetryProcessor {
     }
 
     /**
-     * Set geomagnetic reference on AHRS
+     * Set geomagnetic reference on AHRS and calibration module
      */
     private _setGeomagneticRef(location: GeomagneticLocation | null): void {
         if (location) {
@@ -378,6 +379,8 @@ export class TelemetryProcessor {
                 declination: location.declination
             };
             this.imuFusion.setGeomagneticReference(this.geomagneticRef);
+            // Also set on calibration module for auto hard iron estimation
+            this.magCalibration.setGeomagneticReference(this.geomagneticRef);
         }
     }
 
@@ -511,24 +514,29 @@ export class TelemetryProcessor {
                     dt, true, false
                 );
 
-                if (!this._loggedMagFusion) {
+                // Log when transitioning to 9-DOF (or first time)
+                if (!this._loggedMagFusion || this._loggedMagFusionDisabled) {
                     const calType = this.magCalibration.isUsingAutoHardIron() ? 'auto' : 'wizard';
                     const autoEst = this.magCalibration.getAutoHardIronEstimate();
+                    if (this._loggedMagFusionDisabled) {
+                        this._logDiagnostic(`[MagDiag] ✅ Auto hard iron calibration complete! Enabling 9-DOF fusion...`);
+                    }
                     this._logDiagnostic(`[MagDiag] Using 9-DOF fusion with axis-aligned, iron-corrected magnetometer (trust: ${this.magTrust})`);
                     this._logDiagnostic(`[MagDiag] Iron calibration: ${calType.toUpperCase()}`);
                     if (calType === 'auto' && autoEst) {
                         this._logDiagnostic(`[MagDiag] Auto hard iron: [${autoEst.x.toFixed(1)}, ${autoEst.y.toFixed(1)}, ${autoEst.z.toFixed(1)}] µT`);
                     }
                     this._loggedMagFusion = true;
+                    this._loggedMagFusionDisabled = false;
                 }
             } else {
                 // 6-DOF fusion (gyro + accel only)
                 this.imuFusion.update(ax_g, ay_g, az_g, gx_dps, gy_dps, gz_dps, dt, true);
 
                 // Log once why mag fusion is skipped
-                if (this.useMagnetometer && !this._loggedMagFusion && !hasIronCal) {
+                if (this.useMagnetometer && !this._loggedMagFusionDisabled && !hasIronCal) {
                     this._logDiagnostic(`[MagDiag] ⚠️ Mag fusion DISABLED - no iron calibration yet (auto calibration building...)`);
-                    this._loggedMagFusion = true; // Only log once
+                    this._loggedMagFusionDisabled = true;
                 }
             }
         }

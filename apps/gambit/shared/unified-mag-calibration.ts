@@ -39,6 +39,12 @@ export interface CalibrationOptions {
   autoHardIronAlpha?: number;       // Exponential smoothing factor for auto hard iron (0-1)
 }
 
+export interface GeomagneticReference {
+  horizontal: number;  // Horizontal component (µT)
+  vertical: number;    // Vertical/down component (µT)
+  declination: number; // Magnetic declination (degrees)
+}
+
 export interface HardIronResult {
   offset: Vector3;
   ranges: Vector3;
@@ -246,6 +252,10 @@ export class UnifiedMagCalibration {
     private _autoHardIronReady: boolean = false;
     private _loggedAutoHardIron: boolean = false;
 
+    // Geomagnetic reference (from tables, not estimated)
+    private _geomagneticRef: GeomagneticReference | null = null;
+    private _geomagEarthWorld: Vector3 | null = null;  // Earth field in world frame from geomag
+
     /**
      * Create instance
      */
@@ -414,6 +424,40 @@ export class UnifiedMagCalibration {
      */
     getAutoHardIronEstimate(): Vector3 | null {
         return this._autoHardIronReady ? { ...this._autoHardIronEstimate } : null;
+    }
+
+    /**
+     * Set geomagnetic reference (from location tables)
+     * Used for auto hard iron estimation with known Earth field
+     */
+    setGeomagneticReference(ref: GeomagneticReference): void {
+        this._geomagneticRef = ref;
+
+        // Compute Earth field in world frame (NED: North-East-Down)
+        // H = horizontal component, V = vertical (down) component
+        // Declination rotates the horizontal component from true north to magnetic north
+        const decRad = ref.declination * Math.PI / 180;
+        this._geomagEarthWorld = {
+            x: ref.horizontal * Math.cos(decRad),  // North component
+            y: ref.horizontal * Math.sin(decRad),  // East component
+            z: ref.vertical                         // Down component
+        };
+
+        if (this.debug) {
+            const mag = Math.sqrt(
+                this._geomagEarthWorld.x ** 2 +
+                this._geomagEarthWorld.y ** 2 +
+                this._geomagEarthWorld.z ** 2
+            );
+            console.log(`[UnifiedMagCal] Geomagnetic ref set: H=${ref.horizontal.toFixed(1)} V=${ref.vertical.toFixed(1)} Dec=${ref.declination.toFixed(1)}° (|E|=${mag.toFixed(1)} µT)`);
+        }
+    }
+
+    /**
+     * Check if geomagnetic reference is available
+     */
+    hasGeomagneticReference(): boolean {
+        return this._geomagEarthWorld !== null;
     }
 
     // =========================================================================
@@ -598,6 +642,12 @@ export class UnifiedMagCalibration {
 
         this._computeEarthField();
 
+        // Auto Hard Iron estimation using GEOMAGNETIC REFERENCE (not estimated Earth)
+        // Called early so it can build estimate even before Earth field is estimated
+        if (this._autoHardIronEnabled && !this.hardIronCalibrated && this._geomagEarthWorld) {
+            this._updateAutoHardIron(mx_ut, my_ut, mz_ut, orientation);
+        }
+
         let autoBaselineResult: BaselineCaptureResult | null = null;
         if (this._earthFieldMagnitude > 0) {
             const residual = this._getEarthResidual(mx_ut, my_ut, mz_ut, orientation);
@@ -615,11 +665,6 @@ export class UnifiedMagCalibration {
                     }
                 }
             }
-
-            // Auto Hard Iron estimation from residual (only if no wizard calibration)
-            if (this._autoHardIronEnabled && !this.hardIronCalibrated) {
-                this._updateAutoHardIron(mx_ut, my_ut, mz_ut, orientation);
-            }
         }
 
         return {
@@ -636,21 +681,25 @@ export class UnifiedMagCalibration {
 
     /**
      * Update auto hard iron estimate from raw residual
-     * Computes residual using raw mag (not iron-corrected) and updates estimate
+     * Uses GEOMAGNETIC REFERENCE (known from location tables) instead of estimated Earth field
+     * to avoid circular dependency where estimated Earth includes hard iron bias.
      */
     private _updateAutoHardIron(mx_ut: number, my_ut: number, mz_ut: number, orientation: Quaternion): void {
-        if (!this._earthFieldMagnitude) return;
+        // Require geomagnetic reference (known Earth field from tables)
+        // This avoids circular dependency with estimated Earth field
+        if (!this._geomagEarthWorld) return;
 
-        // Compute expected Earth field in sensor frame
+        // Compute expected Earth field in sensor frame using KNOWN geomagnetic reference
+        // Not the estimated _earthFieldWorld which includes hard iron bias when uncalibrated
         const R = this._quaternionToRotationMatrix(orientation);
         const earthSensor: Vector3 = {
-            x: R[0][0] * this._earthFieldWorld.x + R[0][1] * this._earthFieldWorld.y + R[0][2] * this._earthFieldWorld.z,
-            y: R[1][0] * this._earthFieldWorld.x + R[1][1] * this._earthFieldWorld.y + R[1][2] * this._earthFieldWorld.z,
-            z: R[2][0] * this._earthFieldWorld.x + R[2][1] * this._earthFieldWorld.y + R[2][2] * this._earthFieldWorld.z
+            x: R[0][0] * this._geomagEarthWorld.x + R[0][1] * this._geomagEarthWorld.y + R[0][2] * this._geomagEarthWorld.z,
+            y: R[1][0] * this._geomagEarthWorld.x + R[1][1] * this._geomagEarthWorld.y + R[1][2] * this._geomagEarthWorld.z,
+            z: R[2][0] * this._geomagEarthWorld.x + R[2][1] * this._geomagEarthWorld.y + R[2][2] * this._geomagEarthWorld.z
         };
 
         // Compute residual from RAW reading (not iron-corrected)
-        // residual_raw = raw - expected_earth = hard_iron + finger_magnets
+        // residual_raw = raw - expected_earth_from_geomag = hard_iron + finger_magnets
         // When no finger magnets present, residual converges to hard_iron
         const residualRaw: Vector3 = {
             x: mx_ut - earthSensor.x,
