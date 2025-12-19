@@ -95,3 +95,23 @@ After this fix, the calibration diagnostics should show:
 ## Files Modified
 
 - `apps/gambit/shared/telemetry-processor.ts` - Added Y-axis negation in magnetometer axis alignment
+
+---
+
+## Final Verification (17:15 session)
+
+After combining the Y-axis fix with orientation-aware calibration, the final results show:
+
+| Metric | Before Y-Axis Fix | After Y-Axis Fix + Orientation-Aware Cal |
+|--------|-------------------|------------------------------------------|
+| H/V ratio | 0.95 (inverted) | **0.36** ✓ |
+| Expected H/V | 0.33 | 0.33 |
+| Earth residual | 70-105 µT | **12-25 µT** |
+
+The Y-axis fix was essential for enabling correct orientation-aware calibration. Without it, the calibration optimization would converge to incorrect parameters.
+
+## Related Documentation
+
+- [GAMBIT Telemetry Data Flow](./gambit-telemetry-data-flow.md) - Main documentation with full calibration details
+- [Earth Residual Analysis](./earth-residual-analysis-2025-12-19.md) - Investigation leading to orientation-aware calibration
+- [Gyro Bias Calibration Fix](./gyro-bias-calibration-fix-2025-12-19.md) - Related fix for yaw drift

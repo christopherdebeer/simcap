@@ -218,7 +218,8 @@ export class TelemetryProcessor {
         this.magCalibration = new UnifiedMagCalibration({
             windowSize: 200,  // Optimal based on investigation
             minSamples: 50,   // ~1 second at 50Hz
-            debug: options.magCalibrationDebug || false
+            debug: options.magCalibrationDebug || false,
+            onLog: options.onLog || undefined  // Pass through diagnostic logging callback
         });
 
         // Load stored iron calibration from localStorage

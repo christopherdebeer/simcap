@@ -259,3 +259,23 @@ this._logDiagnostic(`[MagDiag] Gyro bias calibrated: [${bx}, ${by}, ${bz}] °/s`
 ```
 
 This will help verify the bias is being computed and applied correctly.
+
+---
+
+## Final Status
+
+The gyro bias fix was one of several fixes applied during the 2025-12-19 calibration investigation. While it improved yaw stability by 2.5x, the primary source of yaw drift was ultimately traced to magnetometer calibration issues (soft iron distortion and Y-axis sign inversion).
+
+### Combined Results (All Fixes Applied)
+
+| Metric | Before All Fixes | After All Fixes | Target |
+|--------|------------------|-----------------|--------|
+| Earth Residual | 70-105 µT | **12-25 µT** | <30 µT ✓ |
+| H/V Ratio | 0.95 (inverted) | **0.36** | 0.33 ✓ |
+| Gyro Bias Convergence | 2% after 20 samples | **88%** after 20 samples | >80% ✓ |
+
+## Related Documentation
+
+- [GAMBIT Telemetry Data Flow](./gambit-telemetry-data-flow.md) - Main documentation with full calibration details
+- [Magnetometer Y-Axis Fix](./magnetometer-y-axis-fix-2025-12-19.md) - Fix for inverted H/V ratio
+- [Earth Residual Analysis](./earth-residual-analysis-2025-12-19.md) - Investigation leading to orientation-aware calibration

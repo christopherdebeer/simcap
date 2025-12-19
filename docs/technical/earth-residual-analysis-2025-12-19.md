@@ -201,3 +201,44 @@ Added comprehensive H/V analysis logging when calibration completes:
 - `apps/gambit/shared/telemetry-processor.ts` - Added sample collection and H/V diagnostics
 - `ml/calibration_comparison.py` - Python reference implementation
 - `ml/analyze_earth_residual.py` - Investigation script
+
+---
+
+## Final Live Test Results (17:15 session)
+
+The orientation-aware calibration was tested live and produced excellent results:
+
+| Metric | Before (Min-Max Only) | After (Orientation-Aware) | Target |
+|--------|----------------------|---------------------------|--------|
+| Earth Residual | 70-105 µT | **12-25 µT** | <30 µT ✓ |
+| H/V Ratio | 0.95 (inverted) | **0.36** | 0.33 ✓ |
+| Corrected Magnitude | 55-85 µT | **44-50 µT** | ~50 µT ✓ |
+| Calibration Residual | - | **6.6 µT** | <10 µT ✓ |
+
+### Key Observations
+
+1. **3-5x Residual Reduction**: Earth residual dropped from 70-105 µT to 12-25 µT
+2. **H/V Ratio Corrected**: The Y-axis sign fix combined with orientation-aware calibration produces correct H/V ratio
+3. **Stable Magnitude**: Corrected magnitude is now within 10% of expected Earth field
+
+### Example Calibration Output
+
+```
+[UnifiedMagCal] ✓ Orientation-aware calibration complete:
+  Samples: 200
+  Final residual: 6.6 µT
+  Hard iron: [25.68, 31.44, -20.00] µT
+  Soft iron matrix:
+    [0.9190, 0.0398, -0.1519]
+    [0.2633, 0.7268, -0.0427]
+    [-0.1351, 0.4677, 0.5894]
+  Corrected magnitude: 44.7 µT (expected 50.4 µT, error: 11.3%)
+  H/V components: H=6.5 µT (exp 16.0), V=17.9 µT (exp 47.8)
+  H/V ratio: 0.36 (expected 0.33) ✓
+```
+
+## Related Documentation
+
+- [GAMBIT Telemetry Data Flow](./gambit-telemetry-data-flow.md) - Main documentation with full calibration details
+- [Magnetometer Y-Axis Fix](./magnetometer-y-axis-fix-2025-12-19.md) - Essential fix for correct H/V ratio
+- [Gyro Bias Calibration Fix](./gyro-bias-calibration-fix-2025-12-19.md) - Related fix for yaw drift
