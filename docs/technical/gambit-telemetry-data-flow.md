@@ -307,3 +307,140 @@ To verify the issue, you can temporarily disable magnetometer fusion:
 2. Test if drift behavior changes (it should drift more slowly but consistently)
 
 > gyro drift is negligible. added `useMagnetometer: false,` to `new TelemetryProcessor()` in collector and gambit apps.
+
+---
+
+# Magnetometer Drift Root Cause Investigation (2025-12-19)
+
+## Investigation Goal
+
+Re-enable magnetometer for 9-DOF fusion and root cause the drift it introduces. Hypothesis: without finger magnets, residual should be near zero if orientation is properly corrected.
+
+## Root Causes Identified & Fixed
+
+### 1. Magnetometer Axis Alignment (FIXED)
+
+**Problem:** Puck.js magnetometer has different axis orientation compared to accel/gyro:
+- Accel/Gyro: X→aerial, Y→IR LEDs, Z→into PCB
+- Magnetometer: X→IR LEDs, Y→aerial, Z→into PCB
+
+The AHRS expected all sensors in the same coordinate frame, but mag X and Y were swapped.
+
+**Fix:** Swap mag X and Y before feeding to AHRS:
+```typescript
+// telemetry-processor.ts - after unit conversion
+const mx_ut = my_ut_raw;  // Mag Y (aerial) -> aligned X (aerial)
+const my_ut = mx_ut_raw;  // Mag X (IR LEDs) -> aligned Y (IR LEDs)
+const mz_ut = mz_ut_raw;  // Z unchanged
+```
+
+**Commit:** `aa16088` - Fix magnetometer axis alignment for Puck.js
+
+### 2. Hard Iron Calibration Required (FIXED)
+
+**Problem:** Without hard iron calibration, raw magnetometer includes constant offset from nearby ferromagnetic materials. This caused 40-120 µT residual.
+
+**Fix:** Add guard to skip 9-DOF fusion without iron calibration:
+```typescript
+const hasIronCal = this.magCalibration.hasIronCalibration();
+if (this.useMagnetometer && magDataValid && this.geomagneticRef && hasIronCal) {
+    // 9-DOF fusion with magnetometer
+} else {
+    // 6-DOF fallback
+}
+```
+
+### 3. Auto Hard Iron Calibration (NEW FEATURE)
+
+**Problem:** Requiring manual wizard calibration creates poor UX.
+
+**Solution:** Estimate hard iron automatically from residual feedback:
+- Use geomagnetic reference (known Earth field from location tables)
+- Compute expected Earth in sensor frame using 6-DOF orientation
+- Residual = raw - expected = hard_iron (when no finger magnets)
+- Exponential smoothing (α=0.02) builds stable estimate
+- Ready after 100 samples (~2 seconds at 50Hz)
+
+**Key Insight:** Must use known geomagnetic reference (not estimated Earth field) to avoid circular dependency.
+
+**Commits:**
+- `7358377` - Add auto hard iron calibration from residual feedback
+- `1501947` - Fix auto hard iron to use geomagnetic reference
+
+### 4. Coordinate Frame Mismatch (FIXED)
+
+**Problem:** AHRS uses magnetic north frame (X = magnetic north, Y = 0, Z = down). Auto hard iron estimation incorrectly applied declination to convert to true north frame.
+
+**Fix:** Use same frame as AHRS (no declination):
+```typescript
+this._geomagEarthWorld = {
+    x: ref.horizontal,  // Magnetic north (all horizontal in X)
+    y: 0,               // East = 0 (same as AHRS)
+    z: ref.vertical     // Down
+};
+```
+
+**Commit:** `eb4d6ba` - Fix geomagnetic frame to match AHRS magnetic north convention
+
+## Current Status
+
+### What's Working
+- ✅ Axis alignment fix applied
+- ✅ Auto hard iron calibration builds estimate from geomagnetic reference
+- ✅ Uses correct magnetic north coordinate frame
+- ✅ Automatically enables 9-DOF fusion after ~100 samples
+- ✅ Diagnostic logging shows calibration state and transitions
+
+### Test Results (2025-12-19)
+```
+Auto hard iron: [-20.2, 7.6, -37.8] µT (|offset|≈43 µT)
+Residual after correction: 28-58 µT (still too high, expected ~0-10 µT)
+```
+
+### Remaining Issue: High Residual After Auto Calibration
+
+**Hypothesis 1: Yaw drift during estimation**
+- 6-DOF orientation (gyro + accel) has yaw drift during initial estimation period
+- This corrupts expected Earth field calculation → wrong hard iron estimate
+- Horizontal Earth component (16 µT in Edinburgh) is yaw-dependent
+- Vertical component (47.8 µT) is mostly yaw-independent
+
+**Hypothesis 2: Rotation matrix direction**
+- Need to verify quaternion-to-rotation-matrix transforms in correct direction
+- world→sensor vs sensor→world
+
+**Diagnostic Added:** Iron-corrected magnitude logging
+- After iron correction, magnitude should be ~50 µT regardless of orientation
+- If magnitude varies significantly, iron estimate is wrong
+
+## Expected Log Sequence (After Fixes)
+
+```
+[MagDiag] === STARTUP STATE ===
+[MagDiag] useMagnetometer: true, magTrust: 0.5
+[MagDiag] Iron calibration loaded: false
+[MagDiag] GeomagRef (browser): Edinburgh H=16.0µT V=47.8µT
+[MagDiag] ⚠️ Mag fusion DISABLED - no iron calibration yet (auto calibration building...)
+... ~2 seconds later ...
+[MagDiag] ✅ Auto hard iron calibration complete! Enabling 9-DOF fusion...
+[MagDiag] Using 9-DOF fusion with axis-aligned, iron-corrected magnetometer (trust: 0.5)
+[MagDiag] Iron calibration: AUTO
+[MagDiag] Auto hard iron: [X, Y, Z] µT (|offset|=N µT)
+[MagDiag] Iron-corrected mag: N µT (expected ~50 µT)  ← KEY VALIDATION METRIC
+```
+
+## Next Steps
+
+If residual remains high after frame fix:
+1. **Slower alpha:** Increase exponential smoothing time constant to average out yaw drift
+2. **Vertical-only estimation:** Use only Z component initially (yaw-independent)
+3. **More samples:** Increase minSamples before enabling 9-DOF
+4. **Motion gating:** Only update estimate when device is stationary (pitch/roll stable)
+
+## File Changes Summary
+
+| File | Changes |
+|------|---------|
+| `telemetry-processor.ts` | Axis alignment, iron cal guard, diagnostic logging, geomag ref forwarding |
+| `unified-mag-calibration.ts` | Auto hard iron estimation, geomagnetic reference support, magnetic north frame |
+| `packages/filters/src/filters.ts` | Reference for AHRS coordinate frame convention |
