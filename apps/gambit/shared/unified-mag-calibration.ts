@@ -264,6 +264,18 @@ export class UnifiedMagCalibration {
     private _autoSoftIronScale: Vector3 = { x: 1, y: 1, z: 1 };
     private _autoSoftIronEnabled: boolean = true;  // Apply soft iron correction when auto hard iron is ready
 
+    // Full 3x3 soft iron matrix for orientation-aware calibration
+    private _autoSoftIronMatrix: Matrix3 = Matrix3.identity();
+    private _useFullSoftIronMatrix: boolean = false;  // Use full matrix when orientation-aware cal is ready
+
+    // Orientation-aware calibration state
+    private _orientationAwareCalEnabled: boolean = true;
+    private _orientationAwareCalReady: boolean = false;
+    private _orientationAwareCalSamples: { mx: number; my: number; mz: number; ax: number; ay: number; az: number }[] = [];
+    private _orientationAwareCalMinSamples: number = 200;  // Need diverse orientations
+    private _orientationAwareCalMaxSamples: number = 500;  // Cap to limit memory
+    private _loggedOrientationAwareCal: boolean = false;
+
     // Geomagnetic reference (from tables, not estimated)
     private _geomagneticRef: GeomagneticReference | null = null;
     private _geomagEarthWorld: Vector3 | null = null;  // Earth field in world frame from geomag
@@ -772,6 +784,204 @@ export class UnifiedMagCalibration {
             autoHardIronReady: this._autoHardIronReady,
             autoHardIronEstimate: this._autoHardIronReady ? { ...this._autoHardIronEstimate } : null
         };
+    }
+
+    /**
+     * Collect sample for orientation-aware calibration
+     * Called from update() when accelerometer data is available
+     */
+    collectOrientationAwareSample(mx: number, my: number, mz: number, ax: number, ay: number, az: number): void {
+        if (!this._orientationAwareCalEnabled || this._orientationAwareCalReady) return;
+        if (this.hardIronCalibrated) return;  // Wizard cal takes priority
+
+        // Only collect if we have valid accelerometer data
+        const accelMag = Math.sqrt(ax**2 + ay**2 + az**2);
+        if (accelMag < 0.5 || accelMag > 2.0) return;  // Invalid accel (should be ~1g)
+
+        this._orientationAwareCalSamples.push({ mx, my, mz, ax, ay, az });
+
+        // Cap samples to limit memory
+        if (this._orientationAwareCalSamples.length > this._orientationAwareCalMaxSamples) {
+            // Remove oldest samples
+            this._orientationAwareCalSamples = this._orientationAwareCalSamples.slice(-this._orientationAwareCalMaxSamples);
+        }
+
+        // Check if we have enough samples and enough rotation coverage
+        if (this._orientationAwareCalSamples.length >= this._orientationAwareCalMinSamples && this._autoHardIronReady) {
+            this._runOrientationAwareCalibration();
+        }
+    }
+
+    /**
+     * Run orientation-aware calibration optimization
+     * Uses accelerometer to determine expected Earth field direction
+     */
+    private _runOrientationAwareCalibration(): void {
+        if (this._orientationAwareCalReady) return;
+        if (!this._geomagneticRef) return;  // Need geomagnetic reference
+
+        const samples = this._orientationAwareCalSamples;
+        const n = samples.length;
+
+        // Earth field in world frame (magnetic north)
+        const earthWorld = {
+            x: this._geomagneticRef.horizontal,
+            y: 0,
+            z: this._geomagneticRef.vertical
+        };
+
+        // Helper: get roll/pitch from accelerometer
+        const accelToRollPitch = (ax: number, ay: number, az: number): { roll: number; pitch: number } => {
+            const aMag = Math.sqrt(ax**2 + ay**2 + az**2);
+            if (aMag < 0.1) return { roll: 0, pitch: 0 };
+            const axn = ax / aMag, ayn = ay / aMag, azn = az / aMag;
+            return {
+                roll: Math.atan2(ayn, azn),
+                pitch: Math.atan2(-axn, Math.sqrt(ayn**2 + azn**2))
+            };
+        };
+
+        // Helper: tilt-compensate magnetometer
+        const tiltCompensate = (mx: number, my: number, mz: number, roll: number, pitch: number) => {
+            const cr = Math.cos(roll), sr = Math.sin(roll);
+            const cp = Math.cos(pitch), sp = Math.sin(pitch);
+            const mx_h = mx * cp + my * sr * sp + mz * cr * sp;
+            const my_h = my * cr - mz * sr;
+            return { mx_h, my_h };
+        };
+
+        // Helper: ZYX rotation matrix
+        const eulerToRotationMatrix = (roll: number, pitch: number, yaw: number): number[][] => {
+            const cy = Math.cos(yaw), sy = Math.sin(yaw);
+            const cp = Math.cos(pitch), sp = Math.sin(pitch);
+            const cr = Math.cos(roll), sr = Math.sin(roll);
+            return [
+                [cy*cp, cy*sp*sr - sy*cr, cy*sp*cr + sy*sr],
+                [sy*cp, sy*sp*sr + cy*cr, sy*sp*cr - cy*sr],
+                [-sp, cp*sr, cp*cr]
+            ];
+        };
+
+        // Simple gradient descent optimization
+        // Parameters: offset (3) + soft iron matrix (9) = 12 parameters
+        // Start from min-max estimate
+        let offset = { ...this._autoHardIronEstimate };
+        let S = [
+            [this._autoSoftIronScale.x, 0, 0],
+            [0, this._autoSoftIronScale.y, 0],
+            [0, 0, this._autoSoftIronScale.z]
+        ];
+
+        // Compute residual for current parameters
+        const computeResidual = (off: Vector3, softIron: number[][]): number => {
+            let totalResidual = 0;
+            for (const sample of samples) {
+                // Apply calibration
+                const centered = {
+                    x: sample.mx - off.x,
+                    y: sample.my - off.y,
+                    z: sample.mz - off.z
+                };
+                const corrected = {
+                    x: softIron[0][0] * centered.x + softIron[0][1] * centered.y + softIron[0][2] * centered.z,
+                    y: softIron[1][0] * centered.x + softIron[1][1] * centered.y + softIron[1][2] * centered.z,
+                    z: softIron[2][0] * centered.x + softIron[2][1] * centered.y + softIron[2][2] * centered.z
+                };
+
+                // Get orientation from accelerometer
+                const { roll, pitch } = accelToRollPitch(sample.ax, sample.ay, sample.az);
+                const { mx_h, my_h } = tiltCompensate(corrected.x, corrected.y, corrected.z, roll, pitch);
+                const yaw = Math.atan2(-my_h, mx_h);
+
+                // Compute expected Earth field in device frame
+                const R = eulerToRotationMatrix(roll, pitch, yaw);
+                // R^T * earthWorld (transpose to go from world to device)
+                const earthDevice = {
+                    x: R[0][0] * earthWorld.x + R[1][0] * earthWorld.y + R[2][0] * earthWorld.z,
+                    y: R[0][1] * earthWorld.x + R[1][1] * earthWorld.y + R[2][1] * earthWorld.z,
+                    z: R[0][2] * earthWorld.x + R[1][2] * earthWorld.y + R[2][2] * earthWorld.z
+                };
+
+                // Residual = difference between corrected mag and expected Earth
+                const dx = corrected.x - earthDevice.x;
+                const dy = corrected.y - earthDevice.y;
+                const dz = corrected.z - earthDevice.z;
+                totalResidual += dx*dx + dy*dy + dz*dz;
+            }
+            return Math.sqrt(totalResidual / n);
+        };
+
+        // Gradient descent with numerical gradients
+        const learningRate = 0.5;
+        const epsilon = 0.1;  // For numerical gradient
+        const maxIterations = 100;
+        const convergenceThreshold = 0.01;
+
+        let prevResidual = computeResidual(offset, S);
+
+        for (let iter = 0; iter < maxIterations; iter++) {
+            // Compute gradients for offset
+            const gradOffset = { x: 0, y: 0, z: 0 };
+            for (const axis of ['x', 'y', 'z'] as const) {
+                const offsetPlus = { ...offset, [axis]: offset[axis] + epsilon };
+                const offsetMinus = { ...offset, [axis]: offset[axis] - epsilon };
+                gradOffset[axis] = (computeResidual(offsetPlus, S) - computeResidual(offsetMinus, S)) / (2 * epsilon);
+            }
+
+            // Compute gradients for soft iron matrix
+            const gradS = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+            for (let i = 0; i < 3; i++) {
+                for (let j = 0; j < 3; j++) {
+                    const Splus = S.map(row => [...row]);
+                    const Sminus = S.map(row => [...row]);
+                    Splus[i][j] += epsilon;
+                    Sminus[i][j] -= epsilon;
+                    gradS[i][j] = (computeResidual(offset, Splus) - computeResidual(offset, Sminus)) / (2 * epsilon);
+                }
+            }
+
+            // Update parameters
+            offset.x -= learningRate * gradOffset.x;
+            offset.y -= learningRate * gradOffset.y;
+            offset.z -= learningRate * gradOffset.z;
+
+            for (let i = 0; i < 3; i++) {
+                for (let j = 0; j < 3; j++) {
+                    S[i][j] -= learningRate * gradS[i][j];
+                }
+            }
+
+            // Check convergence
+            const newResidual = computeResidual(offset, S);
+            if (Math.abs(prevResidual - newResidual) < convergenceThreshold) {
+                break;
+            }
+            prevResidual = newResidual;
+        }
+
+        // Store results
+        this._autoHardIronEstimate = offset;
+        this._autoSoftIronMatrix = new Matrix3([
+            [S[0][0], S[0][1], S[0][2]],
+            [S[1][0], S[1][1], S[1][2]],
+            [S[2][0], S[2][1], S[2][2]]
+        ]);
+        this._useFullSoftIronMatrix = true;
+        this._orientationAwareCalReady = true;
+
+        // Log results
+        if (this.debug && !this._loggedOrientationAwareCal) {
+            const finalResidual = computeResidual(offset, S);
+            console.log(`[UnifiedMagCal] Orientation-aware calibration complete:`);
+            console.log(`  Samples: ${n}`);
+            console.log(`  Final residual: ${finalResidual.toFixed(1)} µT`);
+            console.log(`  Hard iron: [${offset.x.toFixed(2)}, ${offset.y.toFixed(2)}, ${offset.z.toFixed(2)}] µT`);
+            console.log(`  Soft iron matrix:`);
+            console.log(`    [${S[0][0].toFixed(4)}, ${S[0][1].toFixed(4)}, ${S[0][2].toFixed(4)}]`);
+            console.log(`    [${S[1][0].toFixed(4)}, ${S[1][1].toFixed(4)}, ${S[1][2].toFixed(4)}]`);
+            console.log(`    [${S[2][0].toFixed(4)}, ${S[2][1].toFixed(4)}, ${S[2][2].toFixed(4)}]`);
+            this._loggedOrientationAwareCal = true;
+        }
     }
 
     /**
