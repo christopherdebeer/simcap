@@ -384,7 +384,7 @@ export class UnifiedMagCalibration {
 
     /**
      * Apply iron correction (hard + soft) to raw reading
-     * Uses wizard calibration if available, otherwise falls back to auto estimate
+     * Uses wizard calibration if available, otherwise falls back to auto estimate (when ready)
      */
     applyIronCorrection(raw: Vector3): Vector3 {
         // Determine which offset to use: wizard calibration takes priority
@@ -412,6 +412,35 @@ export class UnifiedMagCalibration {
     }
 
     /**
+     * Apply progressive iron correction using current best estimate
+     * Unlike applyIronCorrection, this ALWAYS applies current estimate even if not "ready"
+     * For use with progressive 9-DOF fusion during calibration warmup
+     */
+    applyProgressiveIronCorrection(raw: Vector3): Vector3 {
+        // Wizard calibration always takes priority
+        if (this.hardIronCalibrated) {
+            let corrected: Vector3 = {
+                x: raw.x - this.hardIronOffset.x,
+                y: raw.y - this.hardIronOffset.y,
+                z: raw.z - this.hardIronOffset.z
+            };
+            if (this.softIronCalibrated) {
+                corrected = this.softIronMatrix.multiply(corrected);
+            }
+            return corrected;
+        }
+
+        // Use current auto estimate even if not "ready"
+        // This enables progressive calibration - estimate improves as rotation occurs
+        const offset = this._autoHardIronEstimate;
+        return {
+            x: raw.x - offset.x,
+            y: raw.y - offset.y,
+            z: raw.z - offset.z
+        };
+    }
+
+    /**
      * Check if any iron calibration available (wizard or auto)
      */
     hasIronCalibration(): boolean {
@@ -430,6 +459,41 @@ export class UnifiedMagCalibration {
      */
     getAutoHardIronEstimate(): Vector3 | null {
         return this._autoHardIronReady ? { ...this._autoHardIronEstimate } : null;
+    }
+
+    /**
+     * Get current auto hard iron estimate (even if not ready)
+     * For progressive calibration - use the best estimate we have so far
+     */
+    getCurrentAutoHardIronEstimate(): Vector3 {
+        return { ...this._autoHardIronEstimate };
+    }
+
+    /**
+     * Get auto hard iron calibration progress (0.0 to 1.0)
+     * Based on min-max range coverage across all axes
+     */
+    getAutoHardIronProgress(): number {
+        if (this.hardIronCalibrated) return 1.0;  // Wizard calibration = 100%
+        if (this._autoHardIronSampleCount < 10) return 0.0;  // Not enough samples yet
+
+        const rangeX = this._autoHardIronMax.x - this._autoHardIronMin.x;
+        const rangeY = this._autoHardIronMax.y - this._autoHardIronMin.y;
+        const rangeZ = this._autoHardIronMax.z - this._autoHardIronMin.z;
+
+        // Use geomagnetic reference to set target, or fallback to 80 µT
+        let rangeThreshold = this._autoHardIronMinRangeRequired;
+        if (this._geomagneticRef) {
+            const expectedMag = Math.sqrt(
+                this._geomagneticRef.horizontal ** 2 +
+                this._geomagneticRef.vertical ** 2
+            );
+            rangeThreshold = Math.max(rangeThreshold, expectedMag * 1.6);
+        }
+
+        // Progress is based on the MINIMUM range (limiting axis)
+        const minRange = Math.min(rangeX, rangeY, rangeZ);
+        return Math.min(1.0, minRange / rangeThreshold);
     }
 
     /**
