@@ -80,6 +80,41 @@ export function exportLog(filename?: string): void {
     log('Log exported');
 }
 
+/**
+ * Copy log buffer to clipboard
+ * @returns Promise that resolves when copy is complete
+ */
+export async function copyLogToClipboard(): Promise<boolean> {
+    const content = logBuffer.join('\n');
+    try {
+        await navigator.clipboard.writeText(content);
+        log('Log copied to clipboard');
+        return true;
+    } catch (err) {
+        console.error('Failed to copy log:', err);
+        log('Failed to copy log to clipboard');
+        return false;
+    }
+}
+
+/**
+ * Copy arbitrary text to clipboard with feedback
+ * @param text - Text to copy
+ * @param description - Description for log message
+ * @returns Promise that resolves when copy is complete
+ */
+export async function copyToClipboard(text: string, description: string = 'Data'): Promise<boolean> {
+    try {
+        await navigator.clipboard.writeText(text);
+        log(`${description} copied to clipboard`);
+        return true;
+    } catch (err) {
+        console.error('Failed to copy:', err);
+        log(`Failed to copy ${description} to clipboard`);
+        return false;
+    }
+}
+
 // ===== Default Export =====
 
 export default {
@@ -87,5 +122,7 @@ export default {
     log,
     getLogBuffer,
     clearLog,
-    exportLog
+    exportLog,
+    copyLogToClipboard,
+    copyToClipboard
 };
