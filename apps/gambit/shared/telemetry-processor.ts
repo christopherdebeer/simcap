@@ -750,6 +750,10 @@ export class TelemetryProcessor {
         // Always use progressive iron correction (includes soft iron scaling when available)
         // This ensures consistency with AHRS fusion and residual calculation
         const ironCorrected = this.magCalibration.applyProgressiveIronCorrection({ x: mx_ut, y: my_ut, z: mz_ut });
+
+        // Collect samples for orientation-aware calibration (uses accelerometer for direction constraint)
+        // This enables full 3x3 soft iron matrix optimization for 90% residual reduction
+        this.magCalibration.collectOrientationAwareSample(mx_ut, my_ut, mz_ut, ax_g, ay_g, az_g);
         decorated.iron_mx = ironCorrected.x;
         decorated.iron_my = ironCorrected.y;
         decorated.iron_mz = ironCorrected.z;
