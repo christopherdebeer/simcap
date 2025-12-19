@@ -50,16 +50,31 @@ const mz_ut = mz_ut_raw;   // Z unchanged
 
 ## Results
 
-With the Y-axis negation applied:
+### Live Diagnostics (2025-12-19T15:38)
 
-| Metric | Before | After | Expected |
-|--------|--------|-------|----------|
-| H/V ratio | 1.17 | 0.54 | 0.335 |
-| V component | 6.5 µT | 43.4 µT | 47.8 µT |
-| H component | 51.9 µT | 23.4 µT | 16.0 µT |
-| ay vs my correlation | -0.919 | +0.919 | Positive |
+```
+[MagDiag] H/V components: H=15.1 µT (exp 16.0), V=39.6 µT (exp 47.8)
+[MagDiag] H/V ratio: 0.38 (expected 0.33) ✓
+```
 
-The H/V ratio improved from **1.17 to 0.54** (expected 0.335), a significant improvement. The remaining error is due to soft iron distortion which the min-max calibration addresses.
+### Offline Analysis Comparison
+
+| Metric | Pre-fix Session | Post-fix Session | Expected |
+|--------|-----------------|------------------|----------|
+| ay vs my correlation | **-0.850** ✗ | **+0.744** ✓ | Positive |
+| ax vs mx correlation | +0.471 | +0.823 | Positive |
+| az vs mz correlation | +0.697 | +0.801 | Positive |
+
+### Calibration Quality (Post-fix)
+
+| Metric | Value | Target |
+|--------|-------|--------|
+| Earth residual (still) | 22.3 µT | <30 µT ✓ |
+| Earth residual (moving) | 30.5 µT | - |
+| Sphericity | 0.59 | >0.7 |
+| H/V ratio (live) | 0.38 | 0.335 ✓ |
+
+The Y-axis fix corrected the fundamental axis alignment issue. The remaining H/V error in offline analysis (0.63 vs 0.335) is due to soft iron distortion which the min-max calibration partially addresses.
 
 ## Impact
 

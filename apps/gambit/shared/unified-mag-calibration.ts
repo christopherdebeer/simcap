@@ -434,9 +434,9 @@ export class UnifiedMagCalibration {
      * Unlike applyIronCorrection, this ALWAYS applies current estimate even if not "ready"
      * For use with progressive 9-DOF fusion during calibration warmup
      *
-     * Applies both hard iron (offset) and soft iron (scale) correction:
+     * Applies both hard iron (offset) and soft iron (scale/matrix) correction:
      * 1. Hard iron: subtract offset to center the ellipsoid at origin
-     * 2. Soft iron: scale each axis to normalize ellipsoid to sphere
+     * 2. Soft iron: apply full 3x3 matrix (if orientation-aware cal ready) or diagonal scale
      */
     applyProgressiveIronCorrection(raw: Vector3): Vector3 {
         // Wizard calibration always takes priority
@@ -461,8 +461,13 @@ export class UnifiedMagCalibration {
             z: raw.z - offset.z
         };
 
-        // Apply auto soft iron scale factors (normalizes ellipsoid to sphere)
-        if (this._autoSoftIronEnabled && this._autoHardIronReady) {
+        // Apply soft iron correction
+        // Priority: full 3x3 matrix (orientation-aware) > diagonal scale (min-max)
+        if (this._useFullSoftIronMatrix && this._orientationAwareCalReady) {
+            // Full 3x3 soft iron matrix from orientation-aware calibration
+            corrected = this._autoSoftIronMatrix.multiply(corrected);
+        } else if (this._autoSoftIronEnabled && this._autoHardIronReady) {
+            // Diagonal scale factors from min-max calibration
             corrected = {
                 x: corrected.x * this._autoSoftIronScale.x,
                 y: corrected.y * this._autoSoftIronScale.y,
@@ -806,8 +811,21 @@ export class UnifiedMagCalibration {
             this._orientationAwareCalSamples = this._orientationAwareCalSamples.slice(-this._orientationAwareCalMaxSamples);
         }
 
+        // Log progress periodically
+        if (this.debug && this._orientationAwareCalSamples.length % 100 === 0) {
+            const hasGeoRef = this._geomagneticRef !== null;
+            const hasAutoHardIron = this._autoHardIronReady;
+            console.log(`[UnifiedMagCal] Orientation-aware cal: ${this._orientationAwareCalSamples.length}/${this._orientationAwareCalMinSamples} samples | geoRef=${hasGeoRef} | autoHardIron=${hasAutoHardIron}`);
+        }
+
         // Check if we have enough samples and enough rotation coverage
         if (this._orientationAwareCalSamples.length >= this._orientationAwareCalMinSamples && this._autoHardIronReady) {
+            if (!this._geomagneticRef) {
+                if (this.debug && this._orientationAwareCalSamples.length === this._orientationAwareCalMinSamples) {
+                    console.log(`[UnifiedMagCal] Orientation-aware cal: waiting for geomagnetic reference`);
+                }
+                return;
+            }
             this._runOrientationAwareCalibration();
         }
     }
