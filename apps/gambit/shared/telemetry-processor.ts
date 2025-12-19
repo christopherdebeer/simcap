@@ -525,7 +525,10 @@ export class TelemetryProcessor {
                     this._logDiagnostic(`[MagDiag] Iron calibration: ${calType.toUpperCase()}`);
                     if (calType === 'auto' && autoEst) {
                         const autoEstMag = Math.sqrt(autoEst.x**2 + autoEst.y**2 + autoEst.z**2);
-                        this._logDiagnostic(`[MagDiag] Auto hard iron: [${autoEst.x.toFixed(1)}, ${autoEst.y.toFixed(1)}, ${autoEst.z.toFixed(1)}] µT (|offset|=${autoEstMag.toFixed(1)} µT)`);
+                        const calState = this.magCalibration.getState();
+                        const ranges = calState.autoHardIronRanges;
+                        this._logDiagnostic(`[MagDiag] Auto hard iron (min-max): [${autoEst.x.toFixed(1)}, ${autoEst.y.toFixed(1)}, ${autoEst.z.toFixed(1)}] µT (|offset|=${autoEstMag.toFixed(1)} µT)`);
+                        this._logDiagnostic(`[MagDiag] Min-max ranges: [${ranges.x.toFixed(1)}, ${ranges.y.toFixed(1)}, ${ranges.z.toFixed(1)}] µT`);
                         // Log iron-corrected magnitude for validation (should be ~50 µT)
                         const corrMag = Math.sqrt(ironCorrected.x**2 + ironCorrected.y**2 + ironCorrected.z**2);
                         this._logDiagnostic(`[MagDiag] Iron-corrected mag: ${corrMag.toFixed(1)} µT (expected ~50 µT)`);
