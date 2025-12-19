@@ -19,6 +19,13 @@ const MAIN_BRANCH = 'main';
 const MANIFEST_PATH = 'data/GAMBIT/manifest.json';
 const DATA_PATH = 'GAMBIT';
 
+// CORS headers for all responses
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
 // Types
 interface SessionInfo {
   filename: string;
@@ -166,11 +173,19 @@ function manifestToSessionInfo(manifest: SessionManifest): SessionInfo[] {
 }
 
 export default async function handler(request: Request): Promise<Response> {
+  // Handle CORS preflight
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: CORS_HEADERS,
+    });
+  }
+
   // Only allow GET requests
   if (request.method !== 'GET') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
     });
   }
 
@@ -204,6 +219,7 @@ export default async function handler(request: Request): Promise<Response> {
       headers: {
         'Content-Type': 'application/json',
         'Cache-Control': 's-maxage=60, stale-while-revalidate=300',
+        ...CORS_HEADERS,
       },
     });
   } catch (error) {
@@ -217,7 +233,7 @@ export default async function handler(request: Request): Promise<Response> {
 
     return new Response(JSON.stringify(errorResponse), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
     });
   }
 }

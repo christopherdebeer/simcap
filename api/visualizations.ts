@@ -22,6 +22,13 @@ const IMAGES_BRANCH = 'images';
 const MANIFESTS_PATH = 'visualizations/manifests';
 const INDEX_PATH = 'visualizations/manifests/index.json';
 
+// CORS headers for all responses
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
 // Types
 interface WindowEntry {
   window_num: number;
@@ -306,10 +313,18 @@ function createSessionSummary(group: ManifestGroup): VisualizationSessionSummary
 }
 
 export default async function handler(request: Request): Promise<Response> {
+  // Handle CORS preflight
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: CORS_HEADERS,
+    });
+  }
+
   if (request.method !== 'GET') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
     });
   }
 
@@ -365,6 +380,7 @@ export default async function handler(request: Request): Promise<Response> {
             headers: {
               'Content-Type': 'application/json',
               'Cache-Control': 's-maxage=60, stale-while-revalidate=300',
+              ...CORS_HEADERS,
             },
           }
         );
@@ -390,6 +406,7 @@ export default async function handler(request: Request): Promise<Response> {
             headers: {
               'Content-Type': 'application/json',
               'Cache-Control': 's-maxage=60, stale-while-revalidate=300',
+              ...CORS_HEADERS,
             },
           }
         );
@@ -408,7 +425,7 @@ export default async function handler(request: Request): Promise<Response> {
           }),
           {
             status: 200,
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
           }
         );
       }
@@ -428,6 +445,7 @@ export default async function handler(request: Request): Promise<Response> {
           headers: {
             'Content-Type': 'application/json',
             'Cache-Control': 's-maxage=60, stale-while-revalidate=300',
+            ...CORS_HEADERS,
           },
         }
       );
@@ -453,6 +471,7 @@ export default async function handler(request: Request): Promise<Response> {
         headers: {
           'Content-Type': 'application/json',
           'Cache-Control': 's-maxage=300, stale-while-revalidate=600',
+          ...CORS_HEADERS,
         },
       }
     );
@@ -467,7 +486,7 @@ export default async function handler(request: Request): Promise<Response> {
       }),
       {
         status: 500,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
       }
     );
   }
