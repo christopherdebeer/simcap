@@ -366,7 +366,8 @@ if (this.useMagnetometer && magDataValid && this.geomagneticRef && hasIronCal) {
 This approach is **orientation-independent** - doesn't rely on accurate yaw:
 - Track min/max for each axis as device rotates
 - `hard_iron = (max + min) / 2`
-- Ready when: 100+ samples AND 30+ µT range on each axis (confirming rotation)
+- Ready when: 100+ samples AND 80+ µT range on each axis (or 1.6x expected Earth magnitude)
+- Requires ~80% rotation coverage to ensure symmetric min/max boundaries
 - Validate with sphericity check (ranges should be similar)
 
 **Why Min-Max Works:**
@@ -421,8 +422,9 @@ private _updateAutoHardIron(mx_ut, my_ut, mz_ut, _orientation): void {
         // ... same for y, z
     };
 
-    // Ready when: 100+ samples AND 30+ µT range per axis
-    const hasEnoughRotation = rangeX >= 30 && rangeY >= 30 && rangeZ >= 30;
+    // Ready when: 100+ samples AND 80+ µT range per axis (or 1.6x geomag magnitude)
+    const rangeThreshold = geomagRef ? geomagMagnitude * 1.6 : 80;
+    const hasEnoughRotation = rangeX >= rangeThreshold && ...;
 }
 ```
 
@@ -439,9 +441,10 @@ private _updateAutoHardIron(mx_ut, my_ut, mz_ut, _orientation): void {
 [MagDiag] Iron calibration loaded: false
 [MagDiag] GeomagRef (browser): Edinburgh H=16.0µT V=47.8µT
 [MagDiag] ⚠️ Mag fusion DISABLED - no iron calibration yet (auto calibration building...)
-... device is rotated to build coverage ...
-[UnifiedMagCal] Auto hard iron progress: samples=50, ranges=[45.2, 38.1, 62.3] µT (need 30)
-[UnifiedMagCal] Auto hard iron progress: samples=100, ranges=[89.5, 92.1, 98.7] µT (need 30)
+... device is rotated through figure-8 motion to build coverage ...
+[UnifiedMagCal] Auto hard iron progress: samples=50, ranges=[45, 38, 62] µT, coverage=47% (need 81 µT per axis)
+[UnifiedMagCal] Auto hard iron progress: samples=100, ranges=[72, 68, 79] µT, coverage=84% (need 81 µT per axis)
+[UnifiedMagCal] Auto hard iron progress: samples=150, ranges=[89, 92, 98] µT, coverage=100% (need 81 µT per axis)
 [UnifiedMagCal] Auto hard iron ready (min-max method):
   Offset: [-12.3, 8.5, -25.6] µT (|offset|=29.4 µT)
   Ranges: [89.5, 92.1, 98.7] µT
@@ -461,15 +464,21 @@ private _updateAutoHardIron(mx_ut, my_ut, mz_ut, _orientation): void {
 | Sphericity (min/max range ratio) | > 0.7 | 0.5-0.7 | < 0.5 |
 | Iron-corrected magnitude | 48-52 µT | 40-60 µT | < 40 or > 60 µT |
 | Residual (no magnets) | < 10 µT | 10-20 µT | > 20 µT |
-| Ranges per axis | > 80 µT | 50-80 µT | < 50 µT |
+| Ranges per axis | > 90 µT | 80-90 µT | < 80 µT |
+| Coverage % | 100% | 80-99% | < 80% (won't complete) |
 
 ## Testing Procedure
 
 1. **Start session** with device stationary - should show "building..." message
-2. **Rotate device** through various orientations (figure-8 motion works well)
-3. **Watch ranges grow** in progress logs until all reach 30+ µT
-4. **Verify calibration** - iron-corrected mag should be ~50 µT
-5. **Check residual** - should be < 10 µT when no finger magnets present
+2. **Rotate device thoroughly** through all orientations:
+   - Figure-8 motion in air
+   - Tilt forward/backward, left/right
+   - Rotate around each axis
+   - **Important:** The device must point in all directions to reach 100% coverage
+3. **Watch progress logs** - coverage % should climb toward 100%
+4. **Wait for completion** - calibration triggers when coverage reaches 100% (~80 µT range per axis)
+5. **Verify calibration** - iron-corrected mag should be ~50 µT
+6. **Check residual** - should be < 10 µT when no finger magnets present
 
 ## File Changes Summary
 
