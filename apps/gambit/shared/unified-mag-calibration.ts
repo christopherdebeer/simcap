@@ -37,6 +37,7 @@ export interface CalibrationOptions {
   autoHardIron?: boolean;           // Enable auto hard iron estimation from residual feedback
   autoHardIronMinSamples?: number;  // Min samples before applying auto hard iron
   autoHardIronAlpha?: number;       // Exponential smoothing factor for auto hard iron (0-1)
+  onLog?: (message: string) => void; // Diagnostic log callback
 }
 
 export interface GeomagneticReference {
@@ -280,6 +281,9 @@ export class UnifiedMagCalibration {
     private _geomagneticRef: GeomagneticReference | null = null;
     private _geomagEarthWorld: Vector3 | null = null;  // Earth field in world frame from geomag
 
+    // Diagnostic logging callback
+    private _onLog: ((message: string) => void) | null = null;
+
     /**
      * Create instance
      */
@@ -301,10 +305,31 @@ export class UnifiedMagCalibration {
         this._autoHardIronMinSamples = options.autoHardIronMinSamples || 100;
         this._autoHardIronAlpha = options.autoHardIronAlpha || 0.02;
 
+        // Diagnostic logging callback
+        this._onLog = options.onLog || null;
+
         // Apply pre-computed baseline if provided
         if (options.extendedBaseline) {
             this.setExtendedBaseline(options.extendedBaseline);
             this._autoBaselineAttempted = true;
+        }
+    }
+
+    /**
+     * Set diagnostic log callback
+     */
+    setLogCallback(callback: (message: string) => void): void {
+        this._onLog = callback;
+    }
+
+    /**
+     * Internal logging method - uses callback if available, otherwise console.log
+     */
+    private _log(message: string): void {
+        if (this._onLog) {
+            this._onLog(message);
+        } else {
+            console.log(message);
         }
     }
 
@@ -558,7 +583,7 @@ export class UnifiedMagCalibration {
                 this._geomagEarthWorld.y ** 2 +
                 this._geomagEarthWorld.z ** 2
             );
-            console.log(`[UnifiedMagCal] Geomagnetic ref set: H=${ref.horizontal.toFixed(1)} V=${ref.vertical.toFixed(1)} (|E|=${mag.toFixed(1)} µT, magnetic north frame)`);
+            this._log(`[UnifiedMagCal] Geomagnetic ref set: H=${ref.horizontal.toFixed(1)} V=${ref.vertical.toFixed(1)} (|E|=${mag.toFixed(1)} µT, magnetic north frame)`);
         }
     }
 
@@ -578,12 +603,12 @@ export class UnifiedMagCalibration {
      */
     startBaselineCapture(): void {
         if (!this.extendedBaselineEnabled) {
-            if (this.debug) console.log('[UnifiedMagCal] Extended Baseline disabled, skipping capture');
+            if (this.debug) this._log('[UnifiedMagCal] Extended Baseline disabled, skipping capture');
             return;
         }
         this._baselineCapturing = true;
         this._baselineCaptureSamples = [];
-        if (this.debug) console.log('[UnifiedMagCal] Baseline capture started');
+        if (this.debug) this._log('[UnifiedMagCal] Baseline capture started');
     }
 
     /**
@@ -598,7 +623,7 @@ export class UnifiedMagCalibration {
         const samples = this._baselineCaptureSamples;
 
         if (samples.length < this.baselineMinSamples) {
-            if (this.debug) console.log(`[UnifiedMagCal] Baseline capture failed: only ${samples.length}/${this.baselineMinSamples} samples`);
+            if (this.debug) this._log(`[UnifiedMagCal] Baseline capture failed: only ${samples.length}/${this.baselineMinSamples} samples`);
             return {
                 success: false,
                 reason: 'insufficient_samples',
@@ -615,7 +640,7 @@ export class UnifiedMagCalibration {
         const magnitude = Math.sqrt(baseline.x ** 2 + baseline.y ** 2 + baseline.z ** 2);
 
         if (magnitude > this.baselineMagnitudeThreshold) {
-            if (this.debug) console.log(`[UnifiedMagCal] Baseline rejected: magnitude ${magnitude.toFixed(1)} µT > ${this.baselineMagnitudeThreshold} µT threshold`);
+            if (this.debug) this._log(`[UnifiedMagCal] Baseline rejected: magnitude ${magnitude.toFixed(1)} µT > ${this.baselineMagnitudeThreshold} µT threshold`);
             return {
                 success: false,
                 reason: 'magnitude_too_high',
@@ -629,7 +654,7 @@ export class UnifiedMagCalibration {
         this._extendedBaseline = baseline;
         this._extendedBaselineActive = true;
 
-        if (this.debug) console.log(`[UnifiedMagCal] Baseline captured: [${baseline.x.toFixed(1)}, ${baseline.y.toFixed(1)}, ${baseline.z.toFixed(1)}] |${magnitude.toFixed(1)}| µT`);
+        if (this.debug) this._log(`[UnifiedMagCal] Baseline captured: [${baseline.x.toFixed(1)}, ${baseline.y.toFixed(1)}, ${baseline.z.toFixed(1)}] |${magnitude.toFixed(1)}| µT`);
 
         return {
             success: true,
@@ -651,13 +676,13 @@ export class UnifiedMagCalibration {
         const magnitude = Math.sqrt(baseline.x ** 2 + baseline.y ** 2 + baseline.z ** 2);
 
         if (magnitude > this.baselineMagnitudeThreshold * 2) {
-            if (this.debug) console.log(`[UnifiedMagCal] Warning: provided baseline magnitude ${magnitude.toFixed(1)} µT is very high`);
+            if (this.debug) this._log(`[UnifiedMagCal] Warning: provided baseline magnitude ${magnitude.toFixed(1)} µT is very high`);
         }
 
         this._extendedBaseline = { x: baseline.x, y: baseline.y, z: baseline.z };
         this._extendedBaselineActive = true;
 
-        if (this.debug) console.log(`[UnifiedMagCal] Extended Baseline set: [${baseline.x.toFixed(1)}, ${baseline.y.toFixed(1)}, ${baseline.z.toFixed(1)}] |${magnitude.toFixed(1)}| µT`);
+        if (this.debug) this._log(`[UnifiedMagCal] Extended Baseline set: [${baseline.x.toFixed(1)}, ${baseline.y.toFixed(1)}, ${baseline.z.toFixed(1)}] |${magnitude.toFixed(1)}| µT`);
 
         return { success: true, magnitude };
     }
@@ -672,7 +697,7 @@ export class UnifiedMagCalibration {
         this._baselineCaptureSamples = [];
         this._autoBaselineAttempted = false;
         this._autoBaselineRetryCount = 0;
-        if (this.debug) console.log('[UnifiedMagCal] Extended Baseline cleared (auto-baseline can retry)');
+        if (this.debug) this._log('[UnifiedMagCal] Extended Baseline cleared (auto-baseline can retry)');
     }
 
     /**
@@ -726,7 +751,7 @@ export class UnifiedMagCalibration {
             this._autoBaselineRetryCount < this._autoBaselineMaxRetries) {
             this._baselineCapturing = true;
             this._baselineCaptureSamples = [];
-            if (this.debug) console.log('[UnifiedMagCal] Auto-baseline capture started');
+            if (this.debug) this._log('[UnifiedMagCal] Auto-baseline capture started');
         }
 
         // Use progressive iron correction for Earth field estimation
@@ -735,7 +760,7 @@ export class UnifiedMagCalibration {
 
         if (this.debug && !this._loggedFirstSample) {
             const mag = Math.sqrt(ironCorrected.x**2 + ironCorrected.y**2 + ironCorrected.z**2);
-            console.log(`[UnifiedMagCal] First sample: [${ironCorrected.x.toFixed(1)}, ${ironCorrected.y.toFixed(1)}, ${ironCorrected.z.toFixed(1)}] |${mag.toFixed(1)}| µT`);
+            this._log(`[UnifiedMagCal] First sample: [${ironCorrected.x.toFixed(1)}, ${ironCorrected.y.toFixed(1)}, ${ironCorrected.z.toFixed(1)}] |${mag.toFixed(1)}| µT`);
             this._loggedFirstSample = true;
         }
 
@@ -815,16 +840,20 @@ export class UnifiedMagCalibration {
         if (this.debug && this._orientationAwareCalSamples.length % 100 === 0) {
             const hasGeoRef = this._geomagneticRef !== null;
             const hasAutoHardIron = this._autoHardIronReady;
-            console.log(`[UnifiedMagCal] Orientation-aware cal: ${this._orientationAwareCalSamples.length}/${this._orientationAwareCalMinSamples} samples | geoRef=${hasGeoRef} | autoHardIron=${hasAutoHardIron}`);
+            this._log(`[UnifiedMagCal] Orientation-aware cal: ${this._orientationAwareCalSamples.length}/${this._orientationAwareCalMinSamples} samples | geoRef=${hasGeoRef} | autoHardIron=${hasAutoHardIron}`);
         }
 
         // Check if we have enough samples and enough rotation coverage
         if (this._orientationAwareCalSamples.length >= this._orientationAwareCalMinSamples && this._autoHardIronReady) {
             if (!this._geomagneticRef) {
-                if (this.debug && this._orientationAwareCalSamples.length === this._orientationAwareCalMinSamples) {
-                    console.log(`[UnifiedMagCal] Orientation-aware cal: waiting for geomagnetic reference`);
+                if (this._orientationAwareCalSamples.length === this._orientationAwareCalMinSamples) {
+                    this._log(`[UnifiedMagCal] Orientation-aware cal: waiting for geomagnetic reference`);
                 }
                 return;
+            }
+            // Log that we're about to run (always, not just debug)
+            if (!this._orientationAwareCalReady && this._orientationAwareCalSamples.length === this._orientationAwareCalMinSamples) {
+                this._log(`[UnifiedMagCal] Orientation-aware cal: triggering with ${this._orientationAwareCalSamples.length} samples`);
             }
             this._runOrientationAwareCalibration();
         }
@@ -1017,17 +1046,65 @@ export class UnifiedMagCalibration {
         this._useFullSoftIronMatrix = true;
         this._orientationAwareCalReady = true;
 
-        // Log results
-        if (this.debug && !this._loggedOrientationAwareCal) {
+        // Reset Earth field estimation to use new calibration
+        // This ensures the Earth field is re-estimated with the improved soft iron correction
+        this._resetEarthEstimation();
+
+        // Log results (always log completion, not just in debug mode)
+        if (!this._loggedOrientationAwareCal) {
             const finalResidual = computeResidual(offset, S);
-            console.log(`[UnifiedMagCal] Orientation-aware calibration complete:`);
-            console.log(`  Samples: ${n}`);
-            console.log(`  Final residual: ${finalResidual.toFixed(1)} µT`);
-            console.log(`  Hard iron: [${offset.x.toFixed(2)}, ${offset.y.toFixed(2)}, ${offset.z.toFixed(2)}] µT`);
-            console.log(`  Soft iron matrix:`);
-            console.log(`    [${S[0][0].toFixed(4)}, ${S[0][1].toFixed(4)}, ${S[0][2].toFixed(4)}]`);
-            console.log(`    [${S[1][0].toFixed(4)}, ${S[1][1].toFixed(4)}, ${S[1][2].toFixed(4)}]`);
-            console.log(`    [${S[2][0].toFixed(4)}, ${S[2][1].toFixed(4)}, ${S[2][2].toFixed(4)}]`);
+            this._log(`[UnifiedMagCal] ✓ Orientation-aware calibration complete:`);
+            this._log(`  Samples: ${n}`);
+            this._log(`  Final residual: ${finalResidual.toFixed(1)} µT`);
+            this._log(`  Hard iron: [${offset.x.toFixed(2)}, ${offset.y.toFixed(2)}, ${offset.z.toFixed(2)}] µT`);
+            this._log(`  Soft iron matrix:`);
+            this._log(`    [${S[0][0].toFixed(4)}, ${S[0][1].toFixed(4)}, ${S[0][2].toFixed(4)}]`);
+            this._log(`    [${S[1][0].toFixed(4)}, ${S[1][1].toFixed(4)}, ${S[1][2].toFixed(4)}]`);
+            this._log(`    [${S[2][0].toFixed(4)}, ${S[2][1].toFixed(4)}, ${S[2][2].toFixed(4)}]`);
+
+            // H/V component analysis using the last sample
+            // This validates the calibration quality
+            if (samples.length > 0 && this._geomagneticRef) {
+                const lastSample = samples[samples.length - 1];
+                const { roll, pitch } = accelToRollPitch(lastSample.ax, lastSample.ay, lastSample.az);
+
+                // Apply new calibration to last sample
+                const centered = {
+                    x: lastSample.mx - offset.x,
+                    y: lastSample.my - offset.y,
+                    z: lastSample.mz - offset.z
+                };
+                const corrected = {
+                    x: S[0][0] * centered.x + S[0][1] * centered.y + S[0][2] * centered.z,
+                    y: S[1][0] * centered.x + S[1][1] * centered.y + S[1][2] * centered.z,
+                    z: S[2][0] * centered.x + S[2][1] * centered.y + S[2][2] * centered.z
+                };
+                const corrMag = Math.sqrt(corrected.x**2 + corrected.y**2 + corrected.z**2);
+
+                // Tilt-compensate to get H and V components
+                const cr = Math.cos(roll), sr = Math.sin(roll);
+                const cp = Math.cos(pitch), sp = Math.sin(pitch);
+                const mx_h = corrected.x * cp + corrected.y * sr * sp + corrected.z * cr * sp;
+                const my_h = corrected.y * cr - corrected.z * sr;
+                const mz_h = -corrected.x * sp + corrected.y * cr * sp + corrected.z * cr * cp;
+                const h_mag = Math.sqrt(mx_h**2 + my_h**2);
+                const v_mag = mz_h;
+
+                const expectedH = this._geomagneticRef.horizontal;
+                const expectedV = this._geomagneticRef.vertical;
+                const expectedMag = Math.sqrt(expectedH**2 + expectedV**2);
+                const expectedHV = expectedH / expectedV;
+                const actualHV = Math.abs(v_mag) > 1 ? h_mag / Math.abs(v_mag) : 0;
+
+                const magError = Math.abs(corrMag - expectedMag);
+                const magErrorPct = (magError / expectedMag * 100).toFixed(1);
+                const hvError = Math.abs(actualHV - expectedHV);
+
+                this._log(`  Corrected magnitude: ${corrMag.toFixed(1)} µT (expected ${expectedMag.toFixed(1)} µT, error: ${magErrorPct}%) ${magError < 5 ? '✓' : '⚠️'}`);
+                this._log(`  H/V components: H=${h_mag.toFixed(1)} µT (exp ${expectedH.toFixed(1)}), V=${v_mag.toFixed(1)} µT (exp ${expectedV.toFixed(1)})`);
+                this._log(`  H/V ratio: ${actualHV.toFixed(2)} (expected ${expectedHV.toFixed(2)}) ${hvError < 0.15 ? '✓' : '⚠️'}`);
+            }
+
             this._loggedOrientationAwareCal = true;
         }
     }
@@ -1134,24 +1211,24 @@ export class UnifiedMagCalibration {
             if (this.debug && !this._loggedAutoHardIron) {
                 const est = this._autoHardIronEstimate;
                 const estMag = Math.sqrt(est.x**2 + est.y**2 + est.z**2);
-                console.log(`[UnifiedMagCal] Auto hard iron ready (min-max method):`);
-                console.log(`  Offset: [${est.x.toFixed(1)}, ${est.y.toFixed(1)}, ${est.z.toFixed(1)}] µT (|offset|=${estMag.toFixed(1)} µT)`);
-                console.log(`  Ranges: [${rangeX.toFixed(1)}, ${rangeY.toFixed(1)}, ${rangeZ.toFixed(1)}] µT`);
-                console.log(`  Sphericity: ${sphericity.toFixed(2)} (${sphericity > 0.7 ? 'good' : 'fair'})`);
+                this._log(`[UnifiedMagCal] Auto hard iron ready (min-max method):`);
+                this._log(`  Offset: [${est.x.toFixed(1)}, ${est.y.toFixed(1)}, ${est.z.toFixed(1)}] µT (|offset|=${estMag.toFixed(1)} µT)`);
+                this._log(`  Ranges: [${rangeX.toFixed(1)}, ${rangeY.toFixed(1)}, ${rangeZ.toFixed(1)}] µT`);
+                this._log(`  Sphericity: ${sphericity.toFixed(2)} (${sphericity > 0.7 ? 'good' : 'fair'})`);
 
                 // Soft iron diagnostics
-                console.log(`  Soft iron scale: [${this._autoSoftIronScale.x.toFixed(3)}, ${this._autoSoftIronScale.y.toFixed(3)}, ${this._autoSoftIronScale.z.toFixed(3)}]`);
-                console.log(`  Target range: ${expectedRange.toFixed(1)} µT (2x expected Earth field)`);
+                this._log(`  Soft iron scale: [${this._autoSoftIronScale.x.toFixed(3)}, ${this._autoSoftIronScale.y.toFixed(3)}, ${this._autoSoftIronScale.z.toFixed(3)}]`);
+                this._log(`  Target range: ${expectedRange.toFixed(1)} µT (2x expected Earth field)`);
 
                 // Axis asymmetry investigation
                 const xDeviation = ((rangeX - expectedRange) / expectedRange * 100).toFixed(1);
                 const yDeviation = ((rangeY - expectedRange) / expectedRange * 100).toFixed(1);
                 const zDeviation = ((rangeZ - expectedRange) / expectedRange * 100).toFixed(1);
-                console.log(`  Axis deviation from target: X=${xDeviation}%, Y=${yDeviation}%, Z=${zDeviation}%`);
+                this._log(`  Axis deviation from target: X=${xDeviation}%, Y=${yDeviation}%, Z=${zDeviation}%`);
 
                 // Min/max values for investigation
-                console.log(`  Min values: [${this._autoHardIronMin.x.toFixed(1)}, ${this._autoHardIronMin.y.toFixed(1)}, ${this._autoHardIronMin.z.toFixed(1)}] µT`);
-                console.log(`  Max values: [${this._autoHardIronMax.x.toFixed(1)}, ${this._autoHardIronMax.y.toFixed(1)}, ${this._autoHardIronMax.z.toFixed(1)}] µT`);
+                this._log(`  Min values: [${this._autoHardIronMin.x.toFixed(1)}, ${this._autoHardIronMin.y.toFixed(1)}, ${this._autoHardIronMin.z.toFixed(1)}] µT`);
+                this._log(`  Max values: [${this._autoHardIronMax.x.toFixed(1)}, ${this._autoHardIronMax.y.toFixed(1)}, ${this._autoHardIronMax.z.toFixed(1)}] µT`);
 
                 this._loggedAutoHardIron = true;
             }
@@ -1161,7 +1238,7 @@ export class UnifiedMagCalibration {
         if (this.debug && !this._autoHardIronReady && this._autoHardIronSampleCount % 50 === 0) {
             const minRangeAchieved = Math.min(rangeX, rangeY, rangeZ);
             const coverage = Math.min(100, (minRangeAchieved / rangeThreshold) * 100);
-            console.log(`[UnifiedMagCal] Auto hard iron progress: samples=${this._autoHardIronSampleCount}, ranges=[${rangeX.toFixed(0)}, ${rangeY.toFixed(0)}, ${rangeZ.toFixed(0)}] µT, coverage=${coverage.toFixed(0)}% (need ${rangeThreshold.toFixed(0)} µT per axis)`);
+            this._log(`[UnifiedMagCal] Auto hard iron progress: samples=${this._autoHardIronSampleCount}, ranges=[${rangeX.toFixed(0)}, ${rangeY.toFixed(0)}, ${rangeZ.toFixed(0)}] µT, coverage=${coverage.toFixed(0)}% (need ${rangeThreshold.toFixed(0)} µT per axis)`);
         }
     }
 
@@ -1181,14 +1258,14 @@ export class UnifiedMagCalibration {
         if (magnitude > this.baselineMagnitudeThreshold) {
             this._autoBaselineRetryCount++;
             if (this.debug) {
-                console.log(`[UnifiedMagCal] Auto-baseline rejected (attempt ${this._autoBaselineRetryCount}/${this._autoBaselineMaxRetries}): magnitude ${magnitude.toFixed(1)} µT > ${this.baselineMagnitudeThreshold} µT`);
+                this._log(`[UnifiedMagCal] Auto-baseline rejected (attempt ${this._autoBaselineRetryCount}/${this._autoBaselineMaxRetries}): magnitude ${magnitude.toFixed(1)} µT > ${this.baselineMagnitudeThreshold} µT`);
             }
 
             if (this._autoBaselineRetryCount < this._autoBaselineMaxRetries) {
                 this._baselineCaptureSamples = [];
             } else {
                 this._baselineCapturing = false;
-                if (this.debug) console.log('[UnifiedMagCal] Auto-baseline gave up after max retries');
+                if (this.debug) this._log('[UnifiedMagCal] Auto-baseline gave up after max retries');
             }
 
             return {
@@ -1207,7 +1284,7 @@ export class UnifiedMagCalibration {
 
         if (this.debug) {
             const quality = magnitude < 60 ? 'excellent' : magnitude < 80 ? 'good' : 'acceptable';
-            console.log(`[UnifiedMagCal] Auto-baseline captured: [${baseline.x.toFixed(1)}, ${baseline.y.toFixed(1)}, ${baseline.z.toFixed(1)}] |${magnitude.toFixed(1)}| µT (${quality})`);
+            this._log(`[UnifiedMagCal] Auto-baseline captured: [${baseline.x.toFixed(1)}, ${baseline.y.toFixed(1)}, ${baseline.z.toFixed(1)}] |${magnitude.toFixed(1)}| µT (${quality})`);
         }
 
         return {
@@ -1420,7 +1497,7 @@ export class UnifiedMagCalibration {
         // Reset auto soft iron
         this._autoSoftIronScale = { x: 1, y: 1, z: 1 };
 
-        if (this.debug) console.log('[UnifiedMagCal] Full reset');
+        if (this.debug) this._log('[UnifiedMagCal] Full reset');
     }
 
     /**
@@ -1528,7 +1605,7 @@ export class UnifiedMagCalibration {
         this._earthFieldMagnitude = avgMagnitude;
 
         if (this.debug && prevMagnitude === 0 && this._earthFieldMagnitude > 0 && !this._loggedEarthComputed) {
-            console.log(`[UnifiedMagCal] Earth field: [${this._earthFieldWorld.x.toFixed(1)}, ${this._earthFieldWorld.y.toFixed(1)}, ${this._earthFieldWorld.z.toFixed(1)}] |${this._earthFieldMagnitude.toFixed(1)}| µT`);
+            this._log(`[UnifiedMagCal] Earth field: [${this._earthFieldWorld.x.toFixed(1)}, ${this._earthFieldWorld.y.toFixed(1)}, ${this._earthFieldWorld.z.toFixed(1)}] |${this._earthFieldMagnitude.toFixed(1)}| µT`);
             this._loggedEarthComputed = true;
         }
     }
