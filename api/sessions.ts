@@ -11,6 +11,11 @@
  * No authentication required - sessions list is public.
  */
 
+// Use Edge Runtime for Web API Response support
+export const config = {
+  runtime: 'edge',
+};
+
 // GitHub configuration
 const GITHUB_OWNER = 'christopherdebeer';
 const GITHUB_REPO = 'simcap';
@@ -105,7 +110,15 @@ async function fetchManifest(): Promise<SessionManifest | null> {
       return null;
     }
 
-    return await response.json();
+    const text = await response.text();
+
+    // Check for Git LFS pointer content
+    if (text.startsWith('version https://git-lfs.github.com')) {
+      console.log('[sessions] Manifest contains Git LFS pointer, skipping');
+      return null;
+    }
+
+    return JSON.parse(text);
   } catch (error) {
     console.error('[sessions] Error fetching manifest:', error);
     return null;

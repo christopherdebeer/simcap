@@ -22,6 +22,11 @@
  *   }
  */
 
+// Use Edge Runtime for Web API Response support
+export const config = {
+  runtime: 'edge',
+};
+
 const GITHUB_API_URL = 'https://api.github.com';
 const DEFAULT_OWNER = 'christopherdebeer';
 const DEFAULT_REPO = 'simcap';
@@ -166,24 +171,6 @@ function validateRequest(
   return { valid: true };
 }
 
-/**
- * Parse request body - handles both VercelRequest and standard Request
- */
-async function parseBody(request: Request | { body?: unknown; method?: string }): Promise<UploadRequest> {
-  // Check if it's a standard Request with .json() method
-  if ('json' in request && typeof (request as Request).json === 'function') {
-    return (await (request as Request).json()) as UploadRequest;
-  }
-
-  // It's a VercelRequest - body is already parsed
-  const vercelReq = request as { body?: unknown };
-  if (vercelReq.body && typeof vercelReq.body === 'object') {
-    return vercelReq.body as UploadRequest;
-  }
-
-  throw new Error('Unable to parse request body');
-}
-
 export default async function handler(request: Request): Promise<Response> {
   // Handle CORS preflight
   if (request.method === 'OPTIONS') {
@@ -222,7 +209,7 @@ export default async function handler(request: Request): Promise<Response> {
   }
 
   try {
-    const body: UploadRequest = await parseBody(request);
+    const body: UploadRequest = await request.json();
 
     // Validate request
     const validation = validateRequest(body, serverSecret);

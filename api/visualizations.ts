@@ -14,6 +14,11 @@
  * No authentication required - visualizations are public.
  */
 
+// Use Edge Runtime for Web API Response support
+export const config = {
+  runtime: 'edge',
+};
+
 // GitHub configuration
 const GITHUB_OWNER = 'christopherdebeer';
 const GITHUB_REPO = 'simcap';
@@ -177,7 +182,16 @@ async function fetchManifestIndex(): Promise<ManifestIndex | null> {
       console.log(`[visualizations] Index not found at ${url}: ${response.status}`);
       return null;
     }
-    return await response.json();
+
+    const text = await response.text();
+
+    // Check for Git LFS pointer content
+    if (text.startsWith('version https://git-lfs.github.com')) {
+      console.log('[visualizations] Index contains Git LFS pointer, skipping');
+      return null;
+    }
+
+    return JSON.parse(text);
   } catch (error) {
     console.error('[visualizations] Error fetching index:', error);
     return null;
