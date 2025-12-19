@@ -99,7 +99,6 @@ interface ExportData {
 declare global {
     interface Window {
         appState: typeof state;
-        log: typeof log;
         updateUI: typeof updateUI;
         addCustomLabel: typeof addCustomLabel;
         addPresetLabels: typeof addPresetLabels;
@@ -118,7 +117,6 @@ declare global {
 
 // Export state for global access (used by inline functions in HTML)
 window.appState = state;
-window.log = log;
 
 // Export function to get current orientation (for calibration)
 window.getCurrentOrientation = () => {
@@ -1653,7 +1651,6 @@ if (document.readyState === 'loading') {
 
 // Export for debugging and onclick handlers
 window.appState = state;
-window.log = log;
 window.updateUI = updateUI;
 window.addCustomLabel = addCustomLabel;
 window.addPresetLabels = addPresetLabels;
