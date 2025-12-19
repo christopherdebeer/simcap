@@ -1100,24 +1100,25 @@
                     <div style="flex: 1">
                         <label>Upload Method</label>
                         <select id="uploadMethod">
-                            <option value="blob">Vercel Blob</option>
+                            <option value="proxy">API Proxy</option>
+                            <option value="github">Direct GitHub</option>
                         </select>
                     </div>
                 </div>
-                <div class="row" style="margin-top: 10px;">
+                <div class="row" id="proxySecretRow" style="margin-top: 10px;">
                     <div style="flex: 2">
-                        <label>Blob Upload Secret</label>
-                        <input type="password" id="blobSecret" placeholder="Enter upload secret" />
+                        <label>Upload Secret</label>
+                        <input type="password" id="proxySecret" placeholder="Enter upload secret" />
                     </div>
                 </div>
-                <div class="row" style="margin-top: 10px;">
+                <div class="row" id="ghTokenRow" style="margin-top: 10px; display: none;">
                     <div style="flex: 2">
                         <label>GitHub Token (PAT with repo scope)</label>
                         <input type="password" id="ghToken" placeholder="ghp_xxxxxxxxxxxx" />
                     </div>
                 </div>
                 <div style="font-size: 11px; color: var(--fg-muted); margin-top: 5px;">
-                    Credentials stored locally. Blob uploads to Vercel, GitHub to data/GAMBIT/
+                    Credentials stored locally. Uploads to GitHub data branch via API proxy or direct PAT.
                 </div>
             </div>
         </section>

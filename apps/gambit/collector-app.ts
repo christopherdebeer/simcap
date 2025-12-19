@@ -181,8 +181,8 @@ let mlModelLoaded = false;
 // GitHub token (for upload functionality)
 let ghToken: string | null = null;
 
-// Upload method: 'blob' (via API proxy) or 'github' (direct with PAT)
-let uploadMethod: 'blob' | 'github' = 'blob';
+// Upload method: 'proxy' (via API proxy) or 'github' (direct with PAT)
+let uploadMethod: 'proxy' | 'github' = 'proxy';
 
 // Live calibration UI update interval
 let calibrationUIInterval: ReturnType<typeof setInterval> | null = null;
@@ -513,25 +513,25 @@ async function init(): Promise<void> {
         console.warn('Failed to load GitHub token:', e);
     }
 
-    // Initialize blob upload secret
+    // Initialize proxy upload secret
     try {
-        const blobSecretInput = $('blobSecret') as HTMLInputElement | null;
+        const proxySecretInput = $('proxySecret') as HTMLInputElement | null;
         if (hasUploadSecret()) {
-            log('Blob upload secret loaded');
-            if (blobSecretInput) {
-                blobSecretInput.value = '••••••••';
+            log('Upload secret loaded');
+            if (proxySecretInput) {
+                proxySecretInput.value = '••••••••';
             }
         }
-        if (blobSecretInput) {
-            blobSecretInput.addEventListener('change', (e) => {
+        if (proxySecretInput) {
+            proxySecretInput.addEventListener('change', (e) => {
                 const secret = (e.target as HTMLInputElement).value;
                 if (secret && secret !== '••••••••') {
                     setUploadSecret(secret);
                     (e.target as HTMLInputElement).value = '••••••••';
-                    log('Blob upload secret saved');
+                    log('Upload secret saved');
                 } else if (!secret) {
                     setUploadSecret(null);
-                    log('Blob upload secret cleared');
+                    log('Upload secret cleared');
                 }
                 updateUI();
             });
@@ -541,13 +541,13 @@ async function init(): Promise<void> {
         if (uploadMethodSelect) {
             uploadMethodSelect.value = uploadMethod;
             uploadMethodSelect.addEventListener('change', (e) => {
-                uploadMethod = (e.target as HTMLSelectElement).value as 'blob' | 'github';
-                log(`Upload method: ${uploadMethod === 'blob' ? 'API Proxy' : 'Direct GitHub'}`);
+                uploadMethod = (e.target as HTMLSelectElement).value as 'proxy' | 'github';
+                log(`Upload method: ${uploadMethod === 'proxy' ? 'API Proxy' : 'Direct GitHub'}`);
                 updateUI();
             });
         }
     } catch (e) {
-        console.warn('Failed to initialize blob upload:', e);
+        console.warn('Failed to initialize upload:', e);
     }
 
     await initGeomagneticLocation();
@@ -636,9 +636,9 @@ function updateUI(): void {
 
     const uploadBtn = $('uploadBtn') as HTMLButtonElement | null;
     if (uploadBtn) {
-        const hasAuth = uploadMethod === 'blob' ? hasUploadSecret() : !!ghToken;
+        const hasAuth = uploadMethod === 'proxy' ? hasUploadSecret() : !!ghToken;
         uploadBtn.disabled = state.sessionData.length === 0 || state.recording || !hasAuth;
-        uploadBtn.title = hasAuth ? 'Upload session data' : `Configure ${uploadMethod === 'blob' ? 'upload secret' : 'GitHub token'} first`;
+        uploadBtn.title = hasAuth ? 'Upload session data' : `Configure ${uploadMethod === 'proxy' ? 'upload secret' : 'GitHub token'} first`;
     }
 
     const wizardBtn = $('wizardBtn') as HTMLButtonElement | null;
@@ -1472,8 +1472,8 @@ function initExport(): void {
  * Upload session
  */
 async function uploadSession(): Promise<void> {
-    if (uploadMethod === 'blob') {
-        await uploadToBlob();
+    if (uploadMethod === 'proxy') {
+        await uploadToProxy();
     } else {
         await uploadToGitHub();
     }
@@ -1482,7 +1482,7 @@ async function uploadSession(): Promise<void> {
 /**
  * Upload to GitHub via API proxy (recommended - keeps token server-side)
  */
-async function uploadToBlob(): Promise<void> {
+async function uploadToProxy(): Promise<void> {
     if (state.sessionData.length === 0) {
         log('No data to upload');
         return;
@@ -1619,7 +1619,7 @@ async function uploadToGitHub(): Promise<void> {
         console.error('[GAMBIT] Upload failed:', e);
         log(`Upload failed: ${(e as Error).message}`);
     } finally {
-        const hasAuth = uploadMethod === 'blob' ? hasUploadSecret() : !!ghToken;
+        const hasAuth = uploadMethod === 'proxy' ? hasUploadSecret() : !!ghToken;
         uploadBtn.disabled = state.sessionData.length === 0 || state.recording || !hasAuth;
         uploadBtn.textContent = originalText || 'Upload';
     }
