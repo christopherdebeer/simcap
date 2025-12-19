@@ -1,0 +1,285 @@
+/**
+ * GitHub Upload API Proxy
+ *
+ * Proxies file uploads to GitHub using the Contents API.
+ * Keeps the GitHub PAT server-side for security.
+ *
+ * Environment Variables:
+ *   GITHUB_TOKEN - GitHub PAT with repo write access
+ *   SIMCAP_UPLOAD_SECRET - Client authentication secret
+ *
+ * Endpoints:
+ *   POST /api/github-upload - Upload a file to GitHub
+ *
+ * Request Body:
+ *   {
+ *     secret: string,       // Client auth secret
+ *     branch: string,       // Target branch (e.g., 'data')
+ *     path: string,         // File path in repo
+ *     content: string,      // File content
+ *     message: string,      // Commit message
+ *     validate?: boolean    // If true, only validate secret (don't upload)
+ *   }
+ */
+
+const GITHUB_API_URL = 'https://api.github.com';
+const DEFAULT_OWNER = 'christopherdebeer';
+const DEFAULT_REPO = 'simcap';
+
+// Allowed branches for upload
+const ALLOWED_BRANCHES = ['data', 'images'];
+
+// Allowed path prefixes per branch
+const ALLOWED_PATHS: Record<string, string[]> = {
+  data: ['GAMBIT/'],
+  images: [''], // Allow any path in images branch
+};
+
+interface UploadRequest {
+  secret: string;
+  branch: string;
+  path: string;
+  content: string;
+  message: string;
+  validate?: boolean;
+}
+
+interface GitHubContentResponse {
+  content?: {
+    name: string;
+    path: string;
+    sha: string;
+    html_url: string;
+    download_url: string;
+  };
+  commit: {
+    sha: string;
+    html_url: string;
+  };
+}
+
+/**
+ * Base64 encode a string (handles Unicode)
+ */
+function base64Encode(str: string): string {
+  const bytes = new TextEncoder().encode(str);
+  const binString = Array.from(bytes, (byte) => String.fromCodePoint(byte)).join('');
+  return btoa(binString);
+}
+
+/**
+ * Get the SHA of an existing file
+ */
+async function getFileSha(
+  owner: string,
+  repo: string,
+  path: string,
+  branch: string,
+  token: string
+): Promise<string | null> {
+  const url = `${GITHUB_API_URL}/repos/${owner}/${repo}/contents/${path}?ref=${branch}`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `token ${token}`,
+        Accept: 'application/vnd.github.v3+json',
+      },
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      return data.sha;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Construct raw.githubusercontent.com URL
+ */
+function getRawUrl(owner: string, repo: string, branch: string, path: string): string {
+  return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}`;
+}
+
+/**
+ * Validate upload request
+ */
+function validateRequest(
+  body: UploadRequest,
+  serverSecret: string
+): { valid: boolean; error?: string } {
+  // Validate secret
+  if (!body.secret || body.secret !== serverSecret) {
+    return { valid: false, error: 'Unauthorized: Invalid upload secret' };
+  }
+
+  // If validation-only request, we're done
+  if (body.validate) {
+    return { valid: true };
+  }
+
+  // Validate branch
+  if (!body.branch || !ALLOWED_BRANCHES.includes(body.branch)) {
+    return {
+      valid: false,
+      error: `Invalid branch: must be one of ${ALLOWED_BRANCHES.join(', ')}`,
+    };
+  }
+
+  // Validate path
+  if (!body.path) {
+    return { valid: false, error: 'Missing path' };
+  }
+
+  const allowedPrefixes = ALLOWED_PATHS[body.branch];
+  if (allowedPrefixes.length > 0) {
+    const hasValidPrefix = allowedPrefixes.some((prefix) => body.path.startsWith(prefix));
+    if (!hasValidPrefix) {
+      return {
+        valid: false,
+        error: `Invalid path for branch ${body.branch}: must start with ${allowedPrefixes.join(' or ')}`,
+      };
+    }
+  }
+
+  // Validate content
+  if (!body.content) {
+    return { valid: false, error: 'Missing content' };
+  }
+
+  // Validate message
+  if (!body.message) {
+    return { valid: false, error: 'Missing commit message' };
+  }
+
+  return { valid: true };
+}
+
+export default async function handler(request: Request): Promise<Response> {
+  // Only allow POST
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Check environment variables
+  const serverSecret = process.env.SIMCAP_UPLOAD_SECRET;
+  const githubToken = process.env.GITHUB_TOKEN;
+
+  if (!serverSecret) {
+    console.error('SIMCAP_UPLOAD_SECRET environment variable not configured');
+    return new Response(JSON.stringify({ error: 'Server configuration error' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  if (!githubToken) {
+    console.error('GITHUB_TOKEN environment variable not configured');
+    return new Response(JSON.stringify({ error: 'Server configuration error' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  try {
+    const body: UploadRequest = await request.json();
+
+    // Validate request
+    const validation = validateRequest(body, serverSecret);
+    if (!validation.valid) {
+      const status = validation.error?.includes('Unauthorized') ? 401 : 400;
+      return new Response(JSON.stringify({ error: validation.error }), {
+        status,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Validation-only request
+    if (body.validate) {
+      return new Response(JSON.stringify({ valid: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    const owner = DEFAULT_OWNER;
+    const repo = DEFAULT_REPO;
+
+    // Check if file exists (for update)
+    const existingSha = await getFileSha(owner, repo, body.path, body.branch, githubToken);
+
+    // Encode content
+    const encodedContent = base64Encode(body.content);
+
+    // Prepare request
+    const requestBody: Record<string, string> = {
+      message: body.message,
+      content: encodedContent,
+      branch: body.branch,
+    };
+
+    if (existingSha) {
+      requestBody.sha = existingSha;
+    }
+
+    // Upload to GitHub
+    const url = `${GITHUB_API_URL}/repos/${owner}/${repo}/contents/${body.path}`;
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        Authorization: `token ${githubToken}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/vnd.github.v3+json',
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      console.error('GitHub API error:', error);
+      return new Response(
+        JSON.stringify({
+          error: error.message || `GitHub API error: ${response.status}`,
+        }),
+        {
+          status: response.status >= 500 ? 502 : response.status,
+          headers: { 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
+    const result: GitHubContentResponse = await response.json();
+    const rawUrl = getRawUrl(owner, repo, body.branch, body.path);
+
+    console.log(`File uploaded: ${body.path} to branch ${body.branch}`);
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        url: rawUrl,
+        pathname: body.path,
+        branch: body.branch,
+        commitSha: result.commit?.sha,
+        htmlUrl: result.content?.html_url,
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  } catch (error) {
+    console.error('Upload error:', error);
+    const message = error instanceof Error ? error.message : 'Upload failed';
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+}
