@@ -407,6 +407,17 @@
                 gap: var(--space-sm);
                 flex: 1;
             }
+
+            #log {
+                font-family: var(--font-mono);
+                font-size: 10px;
+                max-height: 150px;
+                overflow-y: auto;
+                background: var(--bg);
+                padding: 8px;
+                border-radius: 4px;
+                color: var(--fg-muted);
+            }
         </style>
     </head>
     <body>
@@ -857,6 +868,11 @@
                         </select>
                     </div>
                 </div>
+            </details>
+
+            <details class="card" id="logCard">
+                <summary class="card-header">Log</summary>
+                <div id="log"></div>
             </details>
         </main>
         <footer class="page-footer">

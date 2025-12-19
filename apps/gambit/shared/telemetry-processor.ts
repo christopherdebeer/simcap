@@ -118,6 +118,7 @@ export interface TelemetryProcessorOptions {
   onOrientationUpdate?: ((euler: EulerAngles, quaternion: Quaternion) => void) | null;
   onGyroBiasCalibrated?: (() => void) | null;
   onMagnetStatusChange?: ((state: MagnetDetectorState) => void) | null;
+  onLog?: ((message: string) => void) | null;  // Callback for diagnostic logging
   useMagnetometer?: boolean;
   magTrust?: number;
   magCalibrationDebug?: boolean;
@@ -196,6 +197,7 @@ export class TelemetryProcessor {
     private onProcessed: ((telemetry: DecoratedTelemetry) => void) | null;
     private onOrientationUpdate: ((euler: EulerAngles, quaternion: Quaternion) => void) | null;
     private onGyroBiasCalibrated: (() => void) | null;
+    private onLog: ((message: string) => void) | null;
     private _loggedCalibrationMissing: boolean = false;
     private _loggedMagFusion: boolean = false;
     private _loggedMagnetDetection: boolean = false;
@@ -204,10 +206,6 @@ export class TelemetryProcessor {
     private _sampleCount: number = 0;
     private _magResidualHistory: { x: number; y: number; z: number; mag: number; yaw: number }[] = [];
     private _lastDiagnosticLog: number = 0;
-
-    // Persistent diagnostic log buffer (survives console clear)
-    private _diagnosticLog: string[] = [];
-    private static readonly MAX_LOG_ENTRIES = 200;
 
     /**
      * Create a TelemetryProcessor instance
@@ -256,22 +254,19 @@ export class TelemetryProcessor {
         this.onProcessed = options.onProcessed || null;
         this.onOrientationUpdate = options.onOrientationUpdate || null;
         this.onGyroBiasCalibrated = options.onGyroBiasCalibrated || null;
+        this.onLog = options.onLog || null;
 
         // Log startup calibration state
         this._logStartupState();
     }
 
     /**
-     * Log to persistent diagnostic buffer (and console)
+     * Log diagnostic message via callback (or console as fallback)
      */
-    private _logDiagnostic(message: string, alsoConsole: boolean = true): void {
-        const timestamp = new Date().toISOString().substr(11, 12); // HH:MM:SS.mmm
-        const entry = `[${timestamp}] ${message}`;
-        this._diagnosticLog.push(entry);
-        if (this._diagnosticLog.length > TelemetryProcessor.MAX_LOG_ENTRIES) {
-            this._diagnosticLog.shift();
-        }
-        if (alsoConsole) {
+    private _logDiagnostic(message: string): void {
+        if (this.onLog) {
+            this.onLog(message);
+        } else {
             console.log(message);
         }
     }
@@ -295,13 +290,6 @@ export class TelemetryProcessor {
 
         this._logDiagnostic(`[MagDiag] Earth field estimate: ${calState.earthMagnitude.toFixed(1)} µT`);
         this._logDiagnostic(`[MagDiag] Cal ready: ${calState.ready}, confidence: ${(calState.confidence * 100).toFixed(0)}%`);
-    }
-
-    /**
-     * Get the diagnostic log buffer (for export/display)
-     */
-    getDiagnosticLog(): string[] {
-        return [...this._diagnosticLog];
     }
 
     /**
@@ -374,8 +362,8 @@ export class TelemetryProcessor {
             this._setGeomagneticRef(browserLoc.selected);
             this._logDiagnostic(`[MagDiag] GeomagRef (browser): ${browserLoc.selected.city} H=${browserLoc.selected.horizontal.toFixed(1)}µT V=${browserLoc.selected.vertical.toFixed(1)}µT`);
         } catch (e) {
-            const error = e as Error;
-            this._logDiagnostic(`[MagDiag] Browser location unavailable: ${error.message}`, false);
+            // Browser location not available - this is expected in many contexts
+            console.debug('[MagDiag] Browser location unavailable:', (e as Error).message);
         }
     }
 
@@ -498,8 +486,11 @@ export class TelemetryProcessor {
 
         if (this.imuInitialized) {
             const magDataValid = mx_ut !== 0 || my_ut !== 0 || mz_ut !== 0;
+            const hasIronCal = this.magCalibration.hasIronCalibration();
 
-            if (this.useMagnetometer && magDataValid && this.geomagneticRef) {
+            // Only use magnetometer in fusion if iron calibration is available
+            // Without iron calibration, the hard iron bias causes massive residual error
+            if (this.useMagnetometer && magDataValid && this.geomagneticRef && hasIronCal) {
                 // 9-DOF fusion with magnetometer for absolute yaw reference
                 const ironCorrected = this.magCalibration.applyIronCorrection({ x: mx_ut, y: my_ut, z: mz_ut });
 
@@ -511,12 +502,18 @@ export class TelemetryProcessor {
                 );
 
                 if (!this._loggedMagFusion) {
-                    console.log('[TelemetryProcessor] Using 9-DOF fusion with magnetometer (trust:', this.magTrust, ')');
+                    this._logDiagnostic(`[MagDiag] Using 9-DOF fusion with iron-corrected magnetometer (trust: ${this.magTrust})`);
                     this._loggedMagFusion = true;
                 }
             } else {
                 // 6-DOF fusion (gyro + accel only)
                 this.imuFusion.update(ax_g, ay_g, az_g, gx_dps, gy_dps, gz_dps, dt, true);
+
+                // Log once why mag fusion is skipped
+                if (this.useMagnetometer && !this._loggedMagFusion && !hasIronCal) {
+                    this._logDiagnostic(`[MagDiag] ⚠️ Mag fusion DISABLED - no iron calibration. Run calibration wizard!`);
+                    this._loggedMagFusion = true; // Only log once
+                }
             }
         }
 

@@ -223,6 +223,7 @@ import {
     setUploadSecret,
     hasUploadSecret
 } from './shared/blob-upload.js';
+import { initLogger, log, getLogBuffer, exportLog } from './modules/logger.js';
 
 // ===== GambitClient for Frame-Based Protocol =====
 const gambitClient = new GambitClient({ debug: true });
@@ -303,13 +304,18 @@ document.addEventListener('DOMContentLoaded', () => {
 let lastConfidenceUpdate = 0;
 const CONFIDENCE_UPDATE_INTERVAL = 500;  // Update UI every 500ms
 
+// ===== Initialize Logger =====
+// Initialize with UI element for log display
+initLogger(document.getElementById('log'));
+
 // ===== Telemetry Processor (shared module) =====
 // Handles: unit conversion, IMU fusion, gyro bias calibration, mag calibration, filtering
 // Calibration (iron + Earth) is loaded from localStorage by TelemetryProcessor
 const telemetryProcessor = new TelemetryProcessor({
     useMagnetometer: true, // Re-enabled for drift investigation
+    onLog: log,  // Route diagnostic logs through shared logger
     onGyroBiasCalibrated: () => {
-        console.log('[AHRS] Gyroscope bias calibration complete');
+        log('[AHRS] Gyroscope bias calibration complete');
         // Update visual indicator
         const gyroStatus = document.getElementById('gyroStatus');
         if (gyroStatus) {
@@ -2273,18 +2279,18 @@ try {
 // Expose diagnostic functions for mobile debugging (call from console)
 
 /**
- * Get magnetometer diagnostic log
- * Usage: getMagDiagLog() - returns array of log entries
- *        getMagDiagLog(true) - also prints to console
+ * Get log buffer
+ * Usage: getLog() - returns array of log entries
+ *        getLog(true) - also prints to console
  */
-(window as any).getMagDiagLog = function(print: boolean = false): string[] {
-    const log = telemetryProcessor.getDiagnosticLog();
+(window as any).getLog = function(print: boolean = false): string[] {
+    const buffer = getLogBuffer();
     if (print) {
-        console.log('=== MAG DIAGNOSTIC LOG ===');
-        log.forEach(entry => console.log(entry));
+        console.log('=== LOG BUFFER ===');
+        buffer.forEach(entry => console.log(entry));
         console.log('=== END LOG ===');
     }
-    return log;
+    return buffer;
 };
 
 /**
@@ -2309,30 +2315,6 @@ try {
 
 /**
  * Export diagnostic log as downloadable file
- * Usage: exportMagDiagLog()
+ * Usage: exportLog()
  */
-(window as any).exportMagDiagLog = function(): void {
-    const log = telemetryProcessor.getDiagnosticLog();
-    const summary = telemetryProcessor.getDiagnosticSummary();
-    const content = [
-        `=== MAG DIAGNOSTIC EXPORT ===`,
-        `Time: ${new Date().toISOString()}`,
-        `useMag: ${summary.useMagnetometer}, trust: ${summary.magTrust}`,
-        `hasIronCal: ${summary.hasIronCal}`,
-        `geomagRef: ${summary.geomagRef ? `H=${summary.geomagRef.horizontal.toFixed(1)} V=${summary.geomagRef.vertical.toFixed(1)}` : 'none'}`,
-        `samples: ${summary.sampleCount}`,
-        ``,
-        `=== LOG ENTRIES ===`,
-        ...log,
-        `=== END ===`
-    ].join('\n');
-
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `mag-diag-${Date.now()}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-    console.log('Diagnostic log exported');
-};
+(window as any).exportLog = exportLog;

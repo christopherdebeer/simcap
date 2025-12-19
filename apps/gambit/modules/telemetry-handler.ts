@@ -10,6 +10,7 @@
  */
 
 import { state } from './state.js';
+import { log } from './logger.js';
 import { TelemetryProcessor } from '../shared/telemetry-processor.js';
 import type { EulerAngles, Quaternion } from '@core/types';
 import type { UnifiedMagCalibration } from '../shared/unified-mag-calibration';
@@ -144,6 +145,7 @@ export function initProcessor(): void {
         useMagnetometer: true, // Re-enabled for drift investigation
         calibration: deps.calibrationInstance,
         magCalibrationDebug: true, // Enable debug logging for mag calibration
+        onLog: log, // Route diagnostic logs through shared logger
         onOrientationUpdate: (euler: EulerAngles, quaternion: Quaternion) => {
             // Update Three.js hand skeleton if available
             if (euler) {
@@ -156,7 +158,7 @@ export function initProcessor(): void {
             }
         },
         onGyroBiasCalibrated: () => {
-            console.log('[TelemetryHandler] Gyroscope bias calibration complete');
+            log('[TelemetryHandler] Gyroscope bias calibration complete');
         }
     });
 }
