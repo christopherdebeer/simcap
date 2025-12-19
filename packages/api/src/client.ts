@@ -230,10 +230,10 @@ export class ApiClient {
   }
 }
 
-// ===== Upload Functions =====
+// ===== Upload Secret Storage =====
+// Note: Upload functionality is now in apps/gambit/shared/github-upload.ts
 
 const STORAGE_KEY = 'simcap_upload_secret';
-const UPLOAD_API_ENDPOINT = '/api/upload';
 
 /**
  * Get the stored upload secret
@@ -267,101 +267,6 @@ export function setUploadSecret(secret: string | null): void {
 export function hasUploadSecret(): boolean {
   const secret = getUploadSecret();
   return secret !== null && secret.length > 0;
-}
-
-/**
- * Upload file to Vercel Blob using two-phase client upload
- *
- * Note: This requires @vercel/blob/client to be imported in the calling module
- * because it needs browser-specific functionality.
- */
-export async function uploadToBlob(
-  options: UploadOptions,
-  uploadFn: (pathname: string, blob: Blob, config: { access: string; handleUploadUrl: string; clientPayload: string }) => Promise<{ url: string; pathname: string }>
-): Promise<UploadResult> {
-  const { filename, content, onProgress } = options;
-
-  const secret = getUploadSecret();
-  if (!secret) {
-    throw new Error('Upload secret not configured. Call setUploadSecret() first.');
-  }
-
-  onProgress?.({ stage: 'preparing', message: 'Preparing upload...' });
-
-  const blob = new Blob([content], { type: 'application/json' });
-  const pathname = `sessions/${filename}`;
-
-  onProgress?.({ stage: 'uploading', message: 'Uploading to Vercel Blob...' });
-
-  try {
-    const clientPayload: UploadClientPayload = { secret };
-    const result = await uploadFn(pathname, blob, {
-      access: 'public',
-      handleUploadUrl: UPLOAD_API_ENDPOINT,
-      clientPayload: JSON.stringify(clientPayload),
-    });
-
-    onProgress?.({
-      stage: 'complete',
-      message: 'Upload complete!',
-      url: result.url,
-    });
-
-    return {
-      success: true,
-      url: result.url,
-      pathname: result.pathname,
-      size: blob.size,
-      filename,
-    };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    onProgress?.({
-      stage: 'error',
-      message: `Upload failed: ${errorMessage}`,
-    });
-    throw error;
-  }
-}
-
-/**
- * Upload with retry logic
- */
-export async function uploadWithRetry(
-  options: UploadWithRetryOptions,
-  uploadFn: (pathname: string, blob: Blob, config: { access: string; handleUploadUrl: string; clientPayload: string }) => Promise<{ url: string; pathname: string }>
-): Promise<UploadResult> {
-  const { filename, content, maxRetries = 3, onProgress } = options;
-
-  let lastError: Error | undefined;
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      onProgress?.({
-        stage: 'attempt',
-        message: `Upload attempt ${attempt}/${maxRetries}...`,
-      });
-
-      return await uploadToBlob({ filename, content, onProgress }, uploadFn);
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-
-      // Don't retry auth errors
-      if (lastError.message.includes('Unauthorized') || lastError.message.includes('secret')) {
-        throw lastError;
-      }
-
-      if (attempt < maxRetries) {
-        const delay = Math.pow(2, attempt) * 1000;
-        onProgress?.({
-          stage: 'retry',
-          message: `Retrying in ${delay / 1000}s...`,
-        });
-        await new Promise(r => setTimeout(r, delay));
-      }
-    }
-  }
-
-  throw lastError;
 }
 
 // ===== Default Export =====
