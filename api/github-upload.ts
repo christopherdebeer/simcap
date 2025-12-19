@@ -35,6 +35,13 @@ const ALLOWED_PATHS: Record<string, string[]> = {
   images: [''], // Allow any path in images branch
 };
 
+// CORS headers for all responses
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
 interface UploadRequest {
   secret: string;
   branch: string;
@@ -160,11 +167,19 @@ function validateRequest(
 }
 
 export default async function handler(request: Request): Promise<Response> {
+  // Handle CORS preflight
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: CORS_HEADERS,
+    });
+  }
+
   // Only allow POST
   if (request.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
       status: 405,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
     });
   }
 
@@ -176,7 +191,7 @@ export default async function handler(request: Request): Promise<Response> {
     console.error('SIMCAP_UPLOAD_SECRET environment variable not configured');
     return new Response(JSON.stringify({ error: 'Server configuration error' }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
     });
   }
 
@@ -184,7 +199,7 @@ export default async function handler(request: Request): Promise<Response> {
     console.error('GITHUB_TOKEN environment variable not configured');
     return new Response(JSON.stringify({ error: 'Server configuration error' }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
     });
   }
 
@@ -197,7 +212,7 @@ export default async function handler(request: Request): Promise<Response> {
       const status = validation.error?.includes('Unauthorized') ? 401 : 400;
       return new Response(JSON.stringify({ error: validation.error }), {
         status,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
       });
     }
 
@@ -205,7 +220,7 @@ export default async function handler(request: Request): Promise<Response> {
     if (body.validate) {
       return new Response(JSON.stringify({ valid: true }), {
         status: 200,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
       });
     }
 
@@ -250,7 +265,7 @@ export default async function handler(request: Request): Promise<Response> {
         }),
         {
           status: response.status >= 500 ? 502 : response.status,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
         }
       );
     }
@@ -271,7 +286,7 @@ export default async function handler(request: Request): Promise<Response> {
       }),
       {
         status: 200,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
       }
     );
   } catch (error) {
@@ -279,7 +294,7 @@ export default async function handler(request: Request): Promise<Response> {
     const message = error instanceof Error ? error.message : 'Upload failed';
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
     });
   }
 }
