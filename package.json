@@ -22,7 +22,7 @@
     "fetch:sessions": "node scripts/fetch-sessions.js",
     "fetch:visualizations": "node scripts/fetch-visualizations.js",
     "fetch:all": "npm run fetch:sessions && npm run fetch:visualizations",
-    "upload:visualizations": "python -m ml.github_upload --input-dir visualizations --manifest",
+    "upload:visualizations": "python -m ml.github_upload --input-dir images --manifest",
     "generate:manifests": "python scripts/generate-manifests.py --all"
   },
   "repository": {

@@ -1994,8 +1994,8 @@ def main():
     parser = argparse.ArgumentParser(description='SIMCAP Data Visualization Pipeline')
     parser.add_argument('--data-dir', type=str, default='../data/GAMBIT',
                        help='Directory containing JSON data files')
-    parser.add_argument('--output-dir', type=str, default='../visualizations',
-                       help='Output directory for generated visualizations')
+    parser.add_argument('--output-dir', type=str, default='../images',
+                       help='Output directory for generated visualizations (images branch worktree)')
     parser.add_argument('--limit', type=int, default=None,
                        help='Limit number of sessions to process (for testing)')
 

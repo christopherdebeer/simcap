@@ -18,7 +18,6 @@ data/GAMBIT/visualizations/
 dist/
 
 .env.local
-visualizations/*
 
 # Git worktrees for data and images branches
 .worktrees/

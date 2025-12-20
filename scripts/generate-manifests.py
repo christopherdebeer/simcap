@@ -3,7 +3,7 @@
 Generate Manifests for GitHub Branching Storage
 
 Generates manifest files for session data and visualizations:
-- data/GAMBIT/manifest.json - Index of all session files (to be committed to main)
+- visualizations/manifests/sessions.json - Index of all session files
 - visualizations/manifests/index.json - Index of all visualization manifests
 
 These manifests enable efficient listing without API calls to GitHub.
@@ -215,7 +215,8 @@ def generate_visualization_index(
     sessions: Dict[str, Dict[str, Any]] = {}
 
     for filepath in sorted(manifest_dir.glob('*.json')):
-        if filepath.name == 'index.json':
+        # Skip index and sessions manifests
+        if filepath.name in ('index.json', 'sessions.json'):
             continue
 
         manifest = parse_visualization_manifest(filepath)
@@ -315,7 +316,7 @@ def main():
     parser.add_argument(
         "--sessions",
         action="store_true",
-        help="Generate session manifest (data/GAMBIT/manifest.json)",
+        help="Generate session manifest (visualizations/manifests/sessions.json)",
     )
     parser.add_argument(
         "--visualizations",
@@ -368,12 +369,13 @@ def main():
             if verbose:
                 print(f"Generating session manifest from {args.data_dir}")
 
-            output_path = args.output_dir / "data" / "GAMBIT" / "manifest.json" if args.output_dir else None
+            # Output sessions.json to visualizations/manifests/
+            default_output = PROJECT_ROOT / "visualizations" / "manifests" / "sessions.json"
+            output_path = args.output_dir / "visualizations" / "manifests" / "sessions.json" if args.output_dir else default_output
             manifest = generate_sessions_manifest(args.data_dir, output_path, verbose)
 
             if args.upload:
-                manifest_path = output_path or args.data_dir / "manifest.json"
-                upload_manifest(manifest_path, "data/GAMBIT/manifest.json", MAIN_BRANCH, verbose)
+                upload_manifest(output_path, "visualizations/manifests/sessions.json", MAIN_BRANCH, verbose)
         else:
             print(f"Warning: Data directory not found: {args.data_dir}")
 
