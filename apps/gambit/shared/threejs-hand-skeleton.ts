@@ -424,8 +424,10 @@ export class ThreeJSHandSkeleton {
 
     // Position puck on palm
     // Palm bone is at (0, 0.3, 0) relative to wrist
-    // Puck should be centered on palm, offset in +Z (toward viewer/up)
-    this.puckGroup.position.set(0, 0.3, PUCK_Z_OFFSET);
+    // Device should be one diameter toward fingers from palm base
+    // Finger bases are at Y ≈ 0.4-0.55, so center of palm is ~0.3 + PUCK_RADIUS*2
+    const PUCK_Y_POSITION = 0.3 + PUCK_RADIUS * 2; // One diameter toward fingers
+    this.puckGroup.position.set(0, PUCK_Y_POSITION, PUCK_Z_OFFSET);
 
     // Add sensor axes helper (optional, shows sensor coordinate frame)
     this.puckAxesHelper = new THREE.AxesHelper(0.15);
