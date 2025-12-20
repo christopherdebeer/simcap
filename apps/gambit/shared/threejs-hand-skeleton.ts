@@ -158,6 +158,8 @@ export class ThreeJSHandSkeleton {
   private skeletonHelper: any;
   private puckGroup: any;
   private puckAxesHelper: any;
+  private controls: any;
+  private northIndicator: any;
   private animationId: number | null;
 
   constructor(container: HTMLElement, options: HandSkeletonOptions = {}) {
@@ -220,7 +222,8 @@ export class ThreeJSHandSkeleton {
       0.1,
       100
     );
-    // Camera looks at device center (origin) - the rotation pivot point
+    // Camera starts directly above, looking down at device (top-down view)
+    // North (+Y) is at top of screen, palm facing viewer
     this.camera.position.set(0, 0, 3);
     this.camera.lookAt(0, 0, 0);
 
@@ -229,15 +232,79 @@ export class ThreeJSHandSkeleton {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.container.appendChild(this.renderer.domElement);
 
+    // Orbit controls for touch/drag camera manipulation
+    // @ts-ignore - OrbitControls loaded via CDN
+    if (typeof THREE.OrbitControls !== 'undefined') {
+      // @ts-ignore
+      this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+      this.controls.enableDamping = true;
+      this.controls.dampingFactor = 0.1;
+      this.controls.target.set(0, 0, 0); // Always look at device center
+      this.controls.minDistance = 1;
+      this.controls.maxDistance = 6;
+      this.controls.update();
+    }
+
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight.position.set(2, 3, 4);
     this.scene.add(directionalLight);
 
+    // World axes helper (fixed, not rotating with hand)
     this.axesHelper = new THREE.AxesHelper(0.3);
     this.axesHelper.position.set(-1, -0.5, 0);
     this.axesHelper.visible = !!this.options.showAxesHelper;
     this.scene.add(this.axesHelper);
+
+    // North indicator - fixed in world space
+    // When yaw=0, fingers point toward +Y (North)
+    this._createNorthIndicator();
+  }
+
+  /**
+   * Creates a North indicator fixed in world space.
+   * Shows magnetic North direction - when yaw=0, fingers point this way.
+   */
+  private _createNorthIndicator(): void {
+    this.northIndicator = new THREE.Group();
+    this.northIndicator.name = "northIndicator";
+
+    // Arrow pointing North (+Y direction in our coordinate system)
+    const arrowLength = 0.8;
+    const arrowHeadLength = 0.15;
+    const arrowHeadWidth = 0.08;
+
+    // Arrow shaft
+    const shaftGeometry = new THREE.CylinderGeometry(0.015, 0.015, arrowLength - arrowHeadLength, 8);
+    const shaftMaterial = new THREE.MeshPhongMaterial({ color: 0xff0000 }); // Red for North
+    const shaft = new THREE.Mesh(shaftGeometry, shaftMaterial);
+    shaft.position.y = (arrowLength - arrowHeadLength) / 2;
+    this.northIndicator.add(shaft);
+
+    // Arrow head (cone)
+    const headGeometry = new THREE.ConeGeometry(arrowHeadWidth, arrowHeadLength, 8);
+    const headMaterial = new THREE.MeshPhongMaterial({ color: 0xff0000 });
+    const head = new THREE.Mesh(headGeometry, headMaterial);
+    head.position.y = arrowLength - arrowHeadLength / 2;
+    this.northIndicator.add(head);
+
+    // "N" label
+    // Using a simple ring as label placeholder (text would require font loading)
+    const ringGeometry = new THREE.RingGeometry(0.06, 0.08, 16);
+    const ringMaterial = new THREE.MeshBasicMaterial({
+      color: 0xff0000,
+      side: THREE.DoubleSide
+    });
+    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+    ring.position.y = arrowLength + 0.1;
+    ring.rotation.x = -Math.PI / 2; // Face upward
+    this.northIndicator.add(ring);
+
+    // Position North indicator at top of view (+Y direction)
+    // When camera looks down from +Z, +Y is "up" on screen
+    this.northIndicator.position.set(0, 1.0, 0); // North of hand (top of screen)
+
+    this.scene.add(this.northIndicator);
   }
 
   private _createHandSkeleton(): void {
@@ -566,6 +633,11 @@ export class ThreeJSHandSkeleton {
 
     if (this.wristBone) this.wristBone.updateWorldMatrix(true, true);
 
+    // Update orbit controls if available
+    if (this.controls) {
+      this.controls.update();
+    }
+
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -669,6 +741,16 @@ export class ThreeJSHandSkeleton {
     if (this.puckGroup) {
       if (this.puckGroup.parent) this.puckGroup.parent.remove(this.puckGroup);
       this.puckGroup = null;
+    }
+
+    if (this.northIndicator) {
+      if (this.northIndicator.parent) this.northIndicator.parent.remove(this.northIndicator);
+      this.northIndicator = null;
+    }
+
+    if (this.controls) {
+      this.controls.dispose();
+      this.controls = null;
     }
 
     if (this.renderer) {
