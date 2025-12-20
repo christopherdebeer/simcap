@@ -242,7 +242,17 @@ export class ThreeJSHandSkeleton {
       this.controls.target.set(0, 0, 0); // Always look at device center
       this.controls.minDistance = 1;
       this.controls.maxDistance = 6;
+      // Touch settings for iOS/mobile
+      this.controls.enablePan = true;
+      this.controls.enableZoom = true;
+      this.controls.enableRotate = true;
+      this.controls.touches = {
+        ONE: THREE.TOUCH.ROTATE,
+        TWO: THREE.TOUCH.DOLLY_PAN
+      };
       this.controls.update();
+    } else {
+      console.warn('[ThreeHand] OrbitControls not available - touch/drag disabled');
     }
 
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
