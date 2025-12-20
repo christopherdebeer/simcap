@@ -58,7 +58,7 @@ When hand is palm-UP (palm facing ceiling):
 +X <--+---- (toward wrist)
       |
       v
-     +Z (INTO palm, toward ceiling when palm-up)
+     +Z (away from palm surface, toward ceiling when palm-up)
 ```
 
 **Accelerometer Reading (Palm-Up):** `ax≈0, ay≈0, az≈+1g`
@@ -86,7 +86,7 @@ The sensor frame and hand model frame differ by a 180° rotation about the Y-axi
 |-------------|-----------------|--------------|
 | +X (wrist)  | -X (thumb)      | Opposite     |
 | +Y (fingers)| +Y (fingers)    | Same         |
-| +Z (into palm)| -Z (back of hand)| Opposite     |
+| +Z (up from palm)| -Z (toward palm) | Opposite     |
 
 ---
 

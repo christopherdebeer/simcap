@@ -22,6 +22,8 @@ export interface HandSkeletonOptions {
   showSkeletonHelper?: boolean;
   showJointSpheres?: boolean;
   showBoneCylinders?: boolean;
+  showPuckDevice?: boolean;
+  showPuckAxes?: boolean;
   lerpFactor?: number;
   negateRoll?: boolean;
   negatePitch?: boolean;
@@ -54,6 +56,8 @@ export interface VisualizationOptions {
   showSkeletonHelper?: boolean;
   showJointSpheres?: boolean;
   showBoneCylinders?: boolean;
+  showPuckDevice?: boolean;
+  showPuckAxes?: boolean;
 }
 
 interface BoneConfig {
@@ -152,6 +156,8 @@ export class ThreeJSHandSkeleton {
   private wristBone: any;
   private skeleton: any;
   private skeletonHelper: any;
+  private puckGroup: any;
+  private puckAxesHelper: any;
   private animationId: number | null;
 
   constructor(container: HTMLElement, options: HandSkeletonOptions = {}) {
@@ -170,6 +176,8 @@ export class ThreeJSHandSkeleton {
       showSkeletonHelper: options.showSkeletonHelper ?? true,
       showJointSpheres: options.showJointSpheres ?? true,
       showBoneCylinders: options.showBoneCylinders ?? true,
+      showPuckDevice: options.showPuckDevice ?? true,
+      showPuckAxes: options.showPuckAxes ?? false,
       lerpFactor: options.lerpFactor ?? 0.15,
       negateRoll: options.negateRoll ?? false,
       negatePitch: options.negatePitch ?? true,
@@ -255,6 +263,7 @@ export class ThreeJSHandSkeleton {
     this.skeleton = new THREE.Skeleton(allBones);
 
     this._createBoneVisualization(wristBone);
+    this._createPuckDevice();
     this.handGroup.add(wristBone);
 
     this.skeletonHelper = new THREE.SkeletonHelper(wristBone);
@@ -339,6 +348,101 @@ export class ThreeJSHandSkeleton {
         }
       });
     });
+  }
+
+  /**
+   * Creates a Puck.js device visualization on the palm.
+   * The Puck.js is the origin of motion detection, positioned on the palm
+   * with LEDs facing toward fingers (+Y) and up when palm-up (+Z).
+   */
+  private _createPuckDevice(): void {
+    // Puck.js dimensions (scaled to hand model)
+    // Real Puck.js: ~33mm diameter, ~10mm thick
+    // Model scale: palm Y-offset is 0.3 units
+    const PUCK_RADIUS = 0.12;
+    const PUCK_THICKNESS = 0.04;
+    const PUCK_Z_OFFSET = 0.02; // Slightly above palm surface
+
+    // Create puck group to hold all puck-related meshes
+    this.puckGroup = new THREE.Group();
+    this.puckGroup.name = "puckDevice";
+
+    // Main body - dark disc (like the actual Puck.js)
+    const bodyGeometry = new THREE.CylinderGeometry(
+      PUCK_RADIUS,      // radiusTop
+      PUCK_RADIUS,      // radiusBottom
+      PUCK_THICKNESS,   // height
+      24                // radialSegments
+    );
+    const bodyMaterial = new THREE.MeshPhongMaterial({
+      color: 0x2a2a2a,  // Dark gray/black like real Puck.js
+      shininess: 30
+    });
+    const bodyMesh = new THREE.Mesh(bodyGeometry, bodyMaterial);
+    // Rotate cylinder so it lies flat (cylinder Y-axis becomes Z-axis)
+    bodyMesh.rotation.x = Math.PI / 2;
+    this.puckGroup.add(bodyMesh);
+
+    // Green edge ring (characteristic Puck.js feature)
+    const ringGeometry = new THREE.TorusGeometry(
+      PUCK_RADIUS - 0.005, // radius
+      0.008,               // tube radius
+      8,                   // radialSegments
+      24                   // tubularSegments
+    );
+    const ringMaterial = new THREE.MeshPhongMaterial({
+      color: 0x00cc66,  // Puck.js green
+      shininess: 60
+    });
+    const ringMesh = new THREE.Mesh(ringGeometry, ringMaterial);
+    // Position ring at top edge of puck
+    ringMesh.position.z = PUCK_THICKNESS / 2;
+    this.puckGroup.add(ringMesh);
+
+    // LED indicator dot (shows finger direction / +Y axis)
+    const ledGeometry = new THREE.SphereGeometry(0.015, 8, 8);
+    const ledMaterial = new THREE.MeshPhongMaterial({
+      color: 0xff3300,  // Red LED
+      emissive: 0xff1100,
+      emissiveIntensity: 0.5
+    });
+    const ledMesh = new THREE.Mesh(ledGeometry, ledMaterial);
+    // Position LED toward fingers (+Y), on top surface (+Z)
+    ledMesh.position.set(0, PUCK_RADIUS * 0.7, PUCK_THICKNESS / 2 + 0.01);
+    this.puckGroup.add(ledMesh);
+
+    // Aerial/antenna indicator (toward wrist / +X sensor axis)
+    const aerialGeometry = new THREE.BoxGeometry(0.03, 0.015, 0.01);
+    const aerialMaterial = new THREE.MeshPhongMaterial({
+      color: 0x666666
+    });
+    const aerialMesh = new THREE.Mesh(aerialGeometry, aerialMaterial);
+    // In the hand model, wrist direction from palm is -Y
+    // Sensor +X (toward wrist) maps to hand -Y
+    aerialMesh.position.set(0, -PUCK_RADIUS * 0.85, PUCK_THICKNESS / 2);
+    this.puckGroup.add(aerialMesh);
+
+    // Position puck on palm
+    // Palm bone is at (0, 0.3, 0) relative to wrist
+    // Puck should be centered on palm, offset in +Z (toward viewer/up)
+    this.puckGroup.position.set(0, 0.3, PUCK_Z_OFFSET);
+
+    // Add sensor axes helper (optional, shows sensor coordinate frame)
+    this.puckAxesHelper = new THREE.AxesHelper(0.15);
+    // Rotate axes to match sensor orientation on palm:
+    // Sensor +X (wrist) = Hand -Y, Sensor +Y (fingers) = Hand +Y, Sensor +Z (up) = Hand +Z
+    // This is a 180° rotation around Y to flip X
+    this.puckAxesHelper.rotation.z = Math.PI; // Flip X axis
+    this.puckAxesHelper.position.z = PUCK_THICKNESS / 2 + 0.01;
+    this.puckAxesHelper.visible = !!this.options.showPuckAxes;
+    this.puckGroup.add(this.puckAxesHelper);
+
+    // Add puck to hand group (not to bone, so it stays fixed relative to palm)
+    this.puckGroup.visible = !!this.options.showPuckDevice;
+    this.handGroup.add(this.puckGroup);
+
+    // Track meshes for cleanup
+    this.visualMeshes.push(bodyMesh, ringMesh, ledMesh, aerialMesh);
   }
 
   updateOrientation(euler: EulerAngles | null): void {
@@ -490,6 +594,8 @@ export class ThreeJSHandSkeleton {
   private _applyVisualizationVisibility(): void {
     if (this.axesHelper) this.axesHelper.visible = !!this.options.showAxesHelper;
     if (this.skeletonHelper) this.skeletonHelper.visible = !!this.options.showSkeletonHelper;
+    if (this.puckGroup) this.puckGroup.visible = !!this.options.showPuckDevice;
+    if (this.puckAxesHelper) this.puckAxesHelper.visible = !!this.options.showPuckAxes;
 
     this.visualMeshes.forEach((m) => {
       const type = m.userData?.vizType;
@@ -504,6 +610,8 @@ export class ThreeJSHandSkeleton {
     if (typeof options.showSkeletonHelper === "boolean") this.options.showSkeletonHelper = options.showSkeletonHelper;
     if (typeof options.showJointSpheres === "boolean") this.options.showJointSpheres = options.showJointSpheres;
     if (typeof options.showBoneCylinders === "boolean") this.options.showBoneCylinders = options.showBoneCylinders;
+    if (typeof options.showPuckDevice === "boolean") this.options.showPuckDevice = options.showPuckDevice;
+    if (typeof options.showPuckAxes === "boolean") this.options.showPuckAxes = options.showPuckAxes;
     this._applyVisualizationVisibility();
   }
 
@@ -545,6 +653,16 @@ export class ThreeJSHandSkeleton {
     if (this.axesHelper) {
       if (this.axesHelper.parent) this.axesHelper.parent.remove(this.axesHelper);
       this.axesHelper = null;
+    }
+
+    if (this.puckAxesHelper) {
+      if (this.puckAxesHelper.parent) this.puckAxesHelper.parent.remove(this.puckAxesHelper);
+      this.puckAxesHelper = null;
+    }
+
+    if (this.puckGroup) {
+      if (this.puckGroup.parent) this.puckGroup.parent.remove(this.puckGroup);
+      this.puckGroup = null;
     }
 
     if (this.renderer) {

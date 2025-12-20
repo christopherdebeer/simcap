@@ -8,9 +8,9 @@ This document describes the procedure for validating that the GAMBIT sensor orie
 
 ### Sensor Placement on Hand
 
-The Puck.js is positioned on the **back of the hand** with:
-- **Battery (bottom)**: Facing the palm (skin side)
-- **LEDs (top)**: Facing away from palm, toward fingers
+The Puck.js is positioned on the **palm of the hand** with:
+- **Battery (bottom)**: Resting against palm skin
+- **LEDs (top)**: Facing up (toward ceiling when palm-up), toward fingers
 - **MQBT42Q module/aerial**: Facing toward the wrist
 - **Opposite the MQBT42Q**: Facing toward fingers
 
@@ -20,7 +20,7 @@ The Puck.js is positioned on the **back of the hand** with:
 |------|-------------------|-----------------------------------|
 | +X   | Toward aerial/MQBT42Q | Toward WRIST |
 | +Y   | Toward IR LEDs | Toward FINGERS |
-| +Z   | Into PCB (toward battery) | INTO PALM |
+| +Z   | Out of PCB (away from battery) | AWAY FROM PALM (up when palm-up) |
 
 When the sensor is placed **face-up on a flat surface**:
 - **Z axis**: Points UP (toward ceiling), gravity = +1g on Z
