@@ -18,6 +18,7 @@
     "test:e2e": "npx playwright test",
     "test:debug": "npx playwright test --debug",
     "test:ui": "npx playwright test --ui",
+    "setup:worktrees": "bash scripts/setup-worktrees.sh",
     "fetch:sessions": "node scripts/fetch-sessions.js",
     "fetch:visualizations": "node scripts/fetch-visualizations.js",
     "fetch:all": "npm run fetch:sessions && npm run fetch:visualizations",

@@ -5,6 +5,69 @@ Session data and visualization assets are stored in GitHub branches:
 - **`images` branch**: Visualization images (PNG)
 - **`main` branch**: Manifests and source code
 
+## Local Development Setup (Worktrees)
+
+Git worktrees provide local access to the `data` and `images` branches without switching branches.
+A **Claude Code session start hook** automatically runs setup when starting a new session.
+
+### Automatic Setup (Session Start Hook)
+
+The `.claude/settings.json` configures a SessionStart hook that runs `scripts/setup-worktrees.sh`.
+When you start a Claude Code session, the worktrees are automatically created if they don't exist.
+
+### Manual Setup
+
+```bash
+# Run the setup script manually
+npm run setup:worktrees
+
+# Or directly
+bash scripts/setup-worktrees.sh
+```
+
+### Directory Layout
+
+```
+repo/                          # main branch (source code)
+├── .worktrees/
+│   ├── data/                  # worktree → data branch
+│   │   └── GAMBIT/
+│   │       └── *.json
+│   └── images/                # worktree → images branch
+│       └── *.png
+├── data -> .worktrees/data    # symlink (Unix only)
+└── images -> .worktrees/images # symlink (Unix only)
+```
+
+### Working with Worktrees
+
+```bash
+# Access data branch content
+ls data/GAMBIT/
+
+# Commit changes to data branch
+cd .worktrees/data
+git add .
+git commit -m "Add new session data"
+git push origin data
+
+# Access images branch content
+ls images/
+
+# Commit changes to images branch
+cd .worktrees/images
+git add .
+git commit -m "Add new visualizations"
+git push origin images
+```
+
+### Important Notes
+
+- **Never switch branches** in a worktree directory - each worktree is tied to its branch
+- **Worktrees are ignored** by git (via `.gitignore`) - they won't be committed
+- **Symlinks are local** - they provide convenient `./data` and `./images` paths
+- **One branch per worktree** - Git only allows a branch to be checked out in one place
+
 ## Environment Variables
 
 ```bash
