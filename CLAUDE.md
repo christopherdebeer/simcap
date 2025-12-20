@@ -122,14 +122,14 @@ npm run fetch:visualizations -- --session 2025-12-15T22_35_15.567Z
 ## Generating New Visualizations
 
 ```bash
-# Generate visualizations to images worktree (default output)
-python -m ml.visualize --data-dir data/GAMBIT
+# Generate visualizations to images worktree (uses default paths)
+python -m ml.visualize
 
-# Generate for specific session
-python -m ml.visualize --data-dir data/GAMBIT --session 2025-12-15T22_35_15.567Z
+# Limit to first N sessions (for testing)
+python -m ml.visualize --limit 3
 
-# Custom output directory (not recommended)
-python -m ml.visualize --data-dir data/GAMBIT --output-dir /path/to/output
+# Custom paths (if needed)
+python -m ml.visualize --data-dir data/GAMBIT --output-dir images
 ```
 
 ## Uploading to GitHub
@@ -140,7 +140,7 @@ Uses API proxy at `/api/github-upload` which commits to the `data` branch.
 
 ### Visualizations (via Python or Git)
 ```bash
-# Option 1: Commit directly via worktree (recommended)
+# Option 1: Commit directly via worktree (for local development)
 cd .worktrees/images
 git add .
 git commit -m "Add visualizations for session X"
@@ -152,6 +152,21 @@ python -m ml.github_upload --input-dir images --manifest
 # Dry run (preview without uploading)
 python -m ml.github_upload --input-dir images --dry-run
 ```
+
+### Claude Code Web Sessions (Important!)
+
+Claude Code web sessions can only push to branches prefixed with `claude/`. To update images:
+
+```bash
+# In images worktree, create a claude/ branch
+cd .worktrees/images
+git checkout -b claude/images-update-{sessionId}
+git add .
+git commit -m "Add visualizations"
+git push -u origin claude/images-update-{sessionId}
+```
+
+Then create a PR to merge into the `images` branch.
 
 ## Generating Manifests
 
