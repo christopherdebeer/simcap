@@ -95,9 +95,9 @@ declare global {
  * visualization. Understanding the coordinate systems is CRITICAL.
  *
  * SENSOR PLACEMENT:
- * - Puck.js positioned on BACK of hand (battery side toward palm)
+ * - Puck.js positioned on PALM of hand (battery side against palm skin)
  * - MQBT42Q module/aerial facing toward WRIST
- * - LEDs facing toward FINGERS
+ * - LEDs facing toward FINGERS (and toward ceiling when palm-up)
  *
  * =====================================================================
  * COORDINATE FRAME DEFINITIONS

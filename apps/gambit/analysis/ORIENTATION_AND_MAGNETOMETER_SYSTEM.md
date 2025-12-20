@@ -23,7 +23,7 @@
 
 ## Executive Summary
 
-The GAMBIT system uses a 9-axis IMU (accelerometer, gyroscope, magnetometer) mounted on the back of the hand to track orientation. This document describes the complete signal processing pipeline from raw sensor data to 3D hand visualization, including recent fixes for axis mapping issues and the integration of magnetometer data for stable yaw estimation.
+The GAMBIT system uses a 9-axis IMU (accelerometer, gyroscope, magnetometer) mounted on the palm of the hand to track orientation. This document describes the complete signal processing pipeline from raw sensor data to 3D hand visualization, including recent fixes for axis mapping issues and the integration of magnetometer data for stable yaw estimation.
 
 ### Key Achievements
 
