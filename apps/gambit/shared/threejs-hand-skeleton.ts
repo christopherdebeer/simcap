@@ -220,8 +220,9 @@ export class ThreeJSHandSkeleton {
       0.1,
       100
     );
-    this.camera.position.set(0, 0.5, 3);
-    this.camera.lookAt(0, 0.5, 0);
+    // Camera looks at device center (origin) - the rotation pivot point
+    this.camera.position.set(0, 0, 3);
+    this.camera.lookAt(0, 0, 0);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(this.options.width, this.options.height);
@@ -243,9 +244,15 @@ export class ThreeJSHandSkeleton {
     this.handGroup = new THREE.Group();
     this.scene.add(this.handGroup);
 
+    // Device-centered pivot: wrist is offset so device center is at origin
+    // This makes rotation pivot around the sensor, not the wrist
+    // Device position: Y = 0.3 (palm) + 0.24 (one diameter) = 0.54, Z = 0.02
+    const DEVICE_CENTER_Y = 0.54;
+    const DEVICE_CENTER_Z = 0.02;
+
     const wristBone = new THREE.Bone();
     wristBone.name = "wrist";
-    wristBone.position.set(0, 0, 0);
+    wristBone.position.set(0, -DEVICE_CENTER_Y, -DEVICE_CENTER_Z);
     this.bones.wrist = wristBone;
     this.wristBone = wristBone;
 
@@ -422,12 +429,9 @@ export class ThreeJSHandSkeleton {
     aerialMesh.position.set(0, -PUCK_RADIUS * 0.85, PUCK_THICKNESS / 2);
     this.puckGroup.add(aerialMesh);
 
-    // Position puck on palm
-    // Palm bone is at (0, 0.3, 0) relative to wrist
-    // Device should be one diameter toward fingers from palm base
-    // Finger bases are at Y ≈ 0.4-0.55, so center of palm is ~0.3 + PUCK_RADIUS*2
-    const PUCK_Y_POSITION = 0.3 + PUCK_RADIUS * 2; // One diameter toward fingers
-    this.puckGroup.position.set(0, PUCK_Y_POSITION, PUCK_Z_OFFSET);
+    // Position puck at origin - this is now the rotation pivot point
+    // The wrist/hand skeleton is offset so device center is at (0,0,0)
+    this.puckGroup.position.set(0, 0, 0);
 
     // Add sensor axes helper (optional, shows sensor coordinate frame)
     this.puckAxesHelper = new THREE.AxesHelper(0.15);
