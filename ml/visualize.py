@@ -1991,10 +1991,14 @@ class HTMLDataGenerator:
 
 
 def main():
+    # Calculate project root from script location
+    script_dir = Path(__file__).parent
+    project_root = script_dir.parent
+
     parser = argparse.ArgumentParser(description='SIMCAP Data Visualization Pipeline')
-    parser.add_argument('--data-dir', type=str, default='../data/GAMBIT',
+    parser.add_argument('--data-dir', type=str, default=str(project_root / 'data' / 'GAMBIT'),
                        help='Directory containing JSON data files')
-    parser.add_argument('--output-dir', type=str, default='../images',
+    parser.add_argument('--output-dir', type=str, default=str(project_root / 'images'),
                        help='Output directory for generated visualizations (images branch worktree)')
     parser.add_argument('--limit', type=int, default=None,
                        help='Limit number of sessions to process (for testing)')
