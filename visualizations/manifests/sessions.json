@@ -1,0 +1,174 @@
+{
+  "generated": "2025-12-20T10:49:26.245882+00:00",
+  "directory": "GAMBIT",
+  "branch": "data",
+  "baseUrl": "https://raw.githubusercontent.com/christopherdebeer/simcap/data/GAMBIT",
+  "sessionCount": 19,
+  "sessions": [
+    {
+      "filename": "2025-12-19T23_42_32.118Z.json",
+      "size": 2605924,
+      "url": "https://raw.githubusercontent.com/christopherdebeer/simcap/data/GAMBIT/2025-12-19T23_42_32.118Z.json",
+      "timestamp": "2025-12-19T23:42:32.118Z",
+      "version": "2.1",
+      "sampleCount": 1271,
+      "durationSec": 48.9
+    },
+    {
+      "filename": "2025-12-19T23_09_20.852Z.json",
+      "size": 24528,
+      "url": "https://raw.githubusercontent.com/christopherdebeer/simcap/data/GAMBIT/2025-12-19T23_09_20.852Z.json",
+      "timestamp": "2025-12-19T23:09:20.852Z",
+      "version": "2.1",
+      "sampleCount": 14,
+      "durationSec": 0.5
+    },
+    {
+      "filename": "2025-12-19T17_16_45.968Z.json",
+      "size": 1046358,
+      "url": "https://raw.githubusercontent.com/christopherdebeer/simcap/data/GAMBIT/2025-12-19T17_16_45.968Z.json",
+      "timestamp": "2025-12-19T17:16:45.957Z",
+      "version": "2.1",
+      "sampleCount": 521,
+      "durationSec": 20.0
+    },
+    {
+      "filename": "2025-12-19T17_12_49.637Z.json",
+      "size": 922681,
+      "url": "https://raw.githubusercontent.com/christopherdebeer/simcap/data/GAMBIT/2025-12-19T17_12_49.637Z.json",
+      "timestamp": "2025-12-19T17:12:49.627Z",
+      "version": "2.1",
+      "sampleCount": 453,
+      "durationSec": 17.4
+    },
+    {
+      "filename": "2025-12-19T15_49_49.108Z.json",
+      "size": 850817,
+      "url": "https://raw.githubusercontent.com/christopherdebeer/simcap/data/GAMBIT/2025-12-19T15_49_49.108Z.json",
+      "timestamp": "2025-12-19T15:49:49.099Z",
+      "version": "2.1",
+      "sampleCount": 418,
+      "durationSec": 16.1
+    },
+    {
+      "filename": "2025-12-19T15_38_28.988Z.json",
+      "size": 1629941,
+      "url": "https://raw.githubusercontent.com/christopherdebeer/simcap/data/GAMBIT/2025-12-19T15_38_28.988Z.json",
+      "timestamp": "2025-12-19T15:38:28.979Z",
+      "version": "2.1",
+      "sampleCount": 789,
+      "durationSec": 30.3
+    },
+    {
+      "filename": "2025-12-19T13_50_54.287Z.json",
+      "size": 1056285,
+      "url": "https://raw.githubusercontent.com/christopherdebeer/simcap/data/GAMBIT/2025-12-19T13_50_54.287Z.json",
+      "timestamp": "2025-12-19T13:50:54.277Z",
+      "version": "2.1",
+      "sampleCount": 515,
+      "durationSec": 19.8
+    },
+    {
+      "filename": "2025-12-19T13_48_25.409Z.json",
+      "size": 951390,
+      "url": "https://raw.githubusercontent.com/christopherdebeer/simcap/data/GAMBIT/2025-12-19T13_48_25.409Z.json",
+      "timestamp": "2025-12-19T13:48:25.397Z",
+      "version": "2.1",
+      "sampleCount": 466,
+      "durationSec": 17.9
+    },
+    {
+      "filename": "2025-12-19T13_16_59.786Z.json",
+      "size": 2676653,
+      "url": "https://raw.githubusercontent.com/christopherdebeer/simcap/data/GAMBIT/2025-12-19T13_16_59.786Z.json",
+      "timestamp": "2025-12-19T13:16:59.767Z",
+      "version": "2.1",
+      "sampleCount": 1287,
+      "durationSec": 49.5
+    },
+    {
+      "filename": "2025-12-19T12_45_15.927Z.json",
+      "size": 1068412,
+      "url": "https://raw.githubusercontent.com/christopherdebeer/simcap/data/GAMBIT/2025-12-19T12_45_15.927Z.json",
+      "timestamp": "2025-12-19T12:45:15.919Z",
+      "version": "2.1",
+      "sampleCount": 520,
+      "durationSec": 20.0
+    },
+    {
+      "filename": "2025-12-19T11_30_39.736Z.json",
+      "size": 805438,
+      "url": "https://raw.githubusercontent.com/christopherdebeer/simcap/data/GAMBIT/2025-12-19T11_30_39.736Z.json",
+      "timestamp": "2025-12-19T11:30:39.727Z",
+      "version": "2.1",
+      "sampleCount": 397,
+      "durationSec": 15.3
+    },
+    {
+      "filename": "2025-12-19T11_27_36.131Z.json",
+      "size": 854869,
+      "url": "https://raw.githubusercontent.com/christopherdebeer/simcap/data/GAMBIT/2025-12-19T11_27_36.131Z.json",
+      "timestamp": "2025-12-19T11:27:36.125Z",
+      "version": "2.1",
+      "sampleCount": 420,
+      "durationSec": 16.2
+    },
+    {
+      "filename": "2025-12-19T11_15_36.559Z.json",
+      "size": 745272,
+      "url": "https://raw.githubusercontent.com/christopherdebeer/simcap/data/GAMBIT/2025-12-19T11_15_36.559Z.json",
+      "timestamp": "2025-12-19T11:15:36.552Z",
+      "version": "2.1",
+      "sampleCount": 370,
+      "durationSec": 14.2
+    },
+    {
+      "filename": "2025-12-19T11_01_59.838Z.json",
+      "size": 299373,
+      "url": "https://raw.githubusercontent.com/christopherdebeer/simcap/data/GAMBIT/2025-12-19T11_01_59.838Z.json",
+      "timestamp": "2025-12-19T11:01:59.836Z",
+      "version": "2.1",
+      "sampleCount": 155,
+      "durationSec": 6.0
+    },
+    {
+      "filename": "2025-12-19T10_56_06.622Z.json",
+      "size": 1021762,
+      "url": "https://raw.githubusercontent.com/christopherdebeer/simcap/data/GAMBIT/2025-12-19T10_56_06.622Z.json",
+      "timestamp": "2025-12-19T10:56:06.618Z",
+      "version": "2.1",
+      "sampleCount": 501,
+      "durationSec": 19.3
+    },
+    {
+      "filename": "2025-12-19T10_50_44.595Z.json",
+      "size": 891664,
+      "url": "https://raw.githubusercontent.com/christopherdebeer/simcap/data/GAMBIT/2025-12-19T10_50_44.595Z.json",
+      "timestamp": "2025-12-19T10:50:44.587Z",
+      "version": "2.1",
+      "sampleCount": 448,
+      "durationSec": 17.2
+    },
+    {
+      "filename": "2025-12-19T10_21_39.269Z.json",
+      "size": 1016918,
+      "url": "https://raw.githubusercontent.com/christopherdebeer/simcap/data/GAMBIT/2025-12-19T10_21_39.269Z.json",
+      "timestamp": "2025-12-19T10:21:39.263Z",
+      "version": "2.1",
+      "sampleCount": 509,
+      "durationSec": 19.6
+    },
+    {
+      "filename": "2025-12-15T22:40:44.984Z.json",
+      "size": 132,
+      "url": "https://raw.githubusercontent.com/christopherdebeer/simcap/data/GAMBIT/2025-12-15T22:40:44.984Z.json",
+      "timestamp": "2025-12-15T22:40:44.984Z"
+    },
+    {
+      "filename": "2025-12-15T22_35_15.567Z.json",
+      "size": 132,
+      "url": "https://raw.githubusercontent.com/christopherdebeer/simcap/data/GAMBIT/2025-12-15T22_35_15.567Z.json",
+      "timestamp": "2025-12-15T22:35:15.567Z"
+    }
+  ]
+}

@@ -5,7 +5,7 @@
  * Returns JSON manifest compatible with VIZ explorer and session playback.
  *
  * Data is read from:
- * 1. Primary: Session manifest in main branch (data/GAMBIT/manifest.json)
+ * 1. Primary: Session manifest in main branch (visualizations/manifests/sessions.json)
  * 2. Fallback: GitHub Contents API listing of data branch
  *
  * No authentication required - sessions list is public.
@@ -21,7 +21,7 @@ const GITHUB_OWNER = 'christopherdebeer';
 const GITHUB_REPO = 'simcap';
 const DATA_BRANCH = 'data';
 const MAIN_BRANCH = 'main';
-const MANIFEST_PATH = 'data/GAMBIT/manifest.json';
+const MANIFEST_PATH = 'visualizations/manifests/sessions.json';
 const DATA_PATH = 'GAMBIT';
 
 // CORS headers for all responses

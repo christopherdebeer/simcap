@@ -90,8 +90,8 @@ images (branch)
     └── *.png
 
 main (branch)
-├── data/GAMBIT/manifest.json           # Session index
 └── visualizations/manifests/
+    ├── sessions.json                    # Session index (lists data branch files)
     ├── index.json                       # Visualization index
     └── {session}_{generated}.json       # Individual manifests
 ```
@@ -122,11 +122,14 @@ npm run fetch:visualizations -- --session 2025-12-15T22_35_15.567Z
 ## Generating New Visualizations
 
 ```bash
-# Generate visualizations for all local session data
-python -m ml.visualize --data-dir data/GAMBIT --output-dir visualizations
+# Generate visualizations to images worktree (default output)
+python -m ml.visualize --data-dir data/GAMBIT
 
 # Generate for specific session
 python -m ml.visualize --data-dir data/GAMBIT --session 2025-12-15T22_35_15.567Z
+
+# Custom output directory (not recommended)
+python -m ml.visualize --data-dir data/GAMBIT --output-dir /path/to/output
 ```
 
 ## Uploading to GitHub
@@ -135,19 +138,19 @@ python -m ml.visualize --data-dir data/GAMBIT --session 2025-12-15T22_35_15.567Z
 Session data is uploaded automatically via the web collector interface.
 Uses API proxy at `/api/github-upload` which commits to the `data` branch.
 
-### Visualizations (via Python)
+### Visualizations (via Python or Git)
 ```bash
-# Upload all visualizations to images branch
-python -m ml.github_upload --input-dir visualizations
+# Option 1: Commit directly via worktree (recommended)
+cd .worktrees/images
+git add .
+git commit -m "Add visualizations for session X"
+git push origin images
 
-# Upload with manifest generation
-python -m ml.github_upload --input-dir visualizations --manifest
-
-# Upload specific session
-python -m ml.github_upload --input-dir visualizations --session 2025-12-15T22_35_15.567Z --manifest
+# Option 2: Upload via GitHub API
+python -m ml.github_upload --input-dir images --manifest
 
 # Dry run (preview without uploading)
-python -m ml.github_upload --input-dir visualizations --dry-run
+python -m ml.github_upload --input-dir images --dry-run
 ```
 
 ## Generating Manifests
@@ -178,19 +181,15 @@ python scripts/generate-manifests.py --all --upload
 ## Full Workflow: Processing New Data
 
 1. **Collect data** via web interface (uploads to `data` branch)
-2. **Fetch locally** for processing:
+2. **Generate visualizations** (outputs to images worktree):
    ```bash
-   npm run fetch:sessions
+   python -m ml.visualize --data-dir data/GAMBIT
    ```
-3. **Generate visualizations**:
+3. **Commit visualizations** to `images` branch:
    ```bash
-   python -m ml.visualize --data-dir data/GAMBIT --output-dir visualizations
+   cd .worktrees/images && git add . && git commit -m "Add visualizations" && git push origin images
    ```
-4. **Upload visualizations** to `images` branch:
-   ```bash
-   python -m ml.github_upload --input-dir visualizations --manifest
-   ```
-5. **Update manifests** in `main` branch:
+4. **Update manifests** in `main` branch:
    ```bash
    python scripts/generate-manifests.py --all --upload
    ```
