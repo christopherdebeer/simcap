@@ -1,10 +1,10 @@
 /**
  * Visualizations Listing API Handler
  *
- * Lists visualization manifests stored in GitHub main branch.
- * Images are stored in the 'images' branch, manifests in 'main'.
+ * Lists visualization manifests stored in GitHub images branch.
+ * Both images and their manifests are stored in the 'images' branch.
  *
- * Manifest structure: visualizations/manifests/{session_ts}_{generated_ts}.json
+ * Manifest structure: manifests/{session_ts}_{generated_ts}.json
  *
  * Endpoints:
  * - GET /api/visualizations - List all sessions with latest manifests
@@ -22,10 +22,9 @@ export const config = {
 // GitHub configuration
 const GITHUB_OWNER = 'christopherdebeer';
 const GITHUB_REPO = 'simcap';
-const MAIN_BRANCH = 'main';
 const IMAGES_BRANCH = 'images';
-const MANIFESTS_PATH = 'visualizations/manifests';
-const INDEX_PATH = 'visualizations/manifests/index.json';
+const MANIFESTS_PATH = 'manifests';
+const INDEX_PATH = 'manifests/index.json';
 
 // CORS headers for all responses
 const CORS_HEADERS = {
@@ -171,10 +170,10 @@ function parseManifestFilename(filename: string): { sessionTs: string; generated
 }
 
 /**
- * Try to fetch manifest index from main branch
+ * Try to fetch manifest index from images branch
  */
 async function fetchManifestIndex(): Promise<ManifestIndex | null> {
-  const url = getRawUrl(MAIN_BRANCH, INDEX_PATH);
+  const url = getRawUrl(IMAGES_BRANCH, INDEX_PATH);
 
   try {
     const response = await fetch(url);
@@ -202,7 +201,7 @@ async function fetchManifestIndex(): Promise<ManifestIndex | null> {
  * List manifest files from GitHub Contents API
  */
 async function listManifestsFromGitHub(): Promise<GitHubContentItem[]> {
-  const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${MANIFESTS_PATH}?ref=${MAIN_BRANCH}`;
+  const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${MANIFESTS_PATH}?ref=${IMAGES_BRANCH}`;
 
   const response = await fetch(url, {
     headers: {
@@ -225,7 +224,7 @@ async function listManifestsFromGitHub(): Promise<GitHubContentItem[]> {
  * Fetch a specific manifest
  */
 async function fetchManifest(path: string): Promise<VisualizationManifest | null> {
-  const url = getRawUrl(MAIN_BRANCH, path);
+  const url = getRawUrl(IMAGES_BRANCH, path);
 
   try {
     const response = await fetch(url);
@@ -405,7 +404,7 @@ export default async function handler(request: Request): Promise<Response> {
         const versions = group.allVersions.map((v) => ({
           manifestId: `${group.sessionTs}_${v.generatedTs}`,
           generatedAt: normalizeTimestamp(v.generatedTs),
-          url: getRawUrl(MAIN_BRANCH, v.path),
+          url: getRawUrl(IMAGES_BRANCH, v.path),
         }));
 
         return new Response(

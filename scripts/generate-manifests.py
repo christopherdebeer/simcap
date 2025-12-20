@@ -337,8 +337,8 @@ def main():
     parser.add_argument(
         "--manifest-dir",
         type=Path,
-        default=PROJECT_ROOT / "visualizations" / "manifests",
-        help="Directory containing visualization manifests (default: visualizations/manifests)",
+        default=PROJECT_ROOT / "images" / "manifests",
+        help="Directory containing visualization manifests (default: images/manifests)",
     )
     parser.add_argument(
         "--output-dir",
@@ -384,12 +384,12 @@ def main():
             if verbose:
                 print(f"\nGenerating visualization index from {args.manifest_dir}")
 
-            output_path = args.output_dir / "visualizations" / "manifests" / "index.json" if args.output_dir else None
+            output_path = args.output_dir / "images" / "manifests" / "index.json" if args.output_dir else None
             index = generate_visualization_index(args.manifest_dir, output_path, verbose)
 
             if args.upload:
                 index_path = output_path or args.manifest_dir / "index.json"
-                upload_manifest(index_path, "visualizations/manifests/index.json", MAIN_BRANCH, verbose)
+                upload_manifest(index_path, "manifests/index.json", IMAGES_BRANCH, verbose)
         else:
             print(f"Warning: Manifest directory not found: {args.manifest_dir}")
 

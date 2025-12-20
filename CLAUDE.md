@@ -83,6 +83,9 @@ data (branch)
     └── {timestamp}.json      # Session data files
 
 images (branch)
+├── manifests/
+│   ├── index.json                       # Visualization index
+│   └── {session}_{generated}.json       # Individual manifests
 ├── composite_{timestamp}.png
 ├── windows_{timestamp}/
 │   └── window_*.png
@@ -91,9 +94,7 @@ images (branch)
 
 main (branch)
 └── visualizations/manifests/
-    ├── sessions.json                    # Session index (lists data branch files)
-    ├── index.json                       # Visualization index
-    └── {session}_{generated}.json       # Individual manifests
+    └── sessions.json                    # Session index (lists data branch files)
 ```
 
 ## Fetching Session Data
