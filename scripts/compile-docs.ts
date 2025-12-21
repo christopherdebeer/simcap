@@ -34,11 +34,21 @@ interface DocFile {
   htmlPath: string;    // Output HTML path relative to docs/
   title: string;       // Extracted title from file
   directory: string;   // Parent directory for grouping
-  content: string;     // Raw markdown content
+  content: string;     // Raw markdown content (without frontmatter)
   createdAt: number;   // First git commit timestamp (ms since epoch)
   lastModified: number; // Last git commit timestamp (ms since epoch)
   wordCount: number;   // Approximate word count
   excerpt: string;     // First paragraph or 200 chars
+  dateSource: 'frontmatter' | 'inline' | 'git' | 'none'; // Source of date info
+}
+
+// Frontmatter data structure
+interface Frontmatter {
+  created?: string;    // Created date (ISO or YYYY-MM-DD)
+  updated?: string;    // Updated date (ISO or YYYY-MM-DD)
+  date?: string;       // Generic date (used as created if no created field)
+  title?: string;      // Optional title override
+  [key: string]: unknown;
 }
 
 // Searchable document index entry for JSON export
@@ -51,6 +61,7 @@ interface DocIndexEntry {
   lastModified: number;
   wordCount: number;
   excerpt: string;
+  dateSource: 'frontmatter' | 'inline' | 'git' | 'none';
 }
 
 // Backlink information
@@ -143,6 +154,147 @@ function extractExcerpt(content: string): string {
   }
 
   return excerpt || 'No description available';
+}
+
+/**
+ * Parse YAML frontmatter from markdown content
+ * Returns frontmatter data and content without frontmatter
+ */
+function parseFrontmatter(content: string): { frontmatter: Frontmatter; content: string } {
+  // Check if content starts with frontmatter delimiter
+  if (!content.startsWith('---')) {
+    return { frontmatter: {}, content };
+  }
+
+  // Find the closing delimiter
+  const endMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
+  if (!endMatch) {
+    return { frontmatter: {}, content };
+  }
+
+  const yamlContent = endMatch[1];
+  const restContent = content.slice(endMatch[0].length);
+
+  // Simple YAML parser for key: value pairs
+  const frontmatter: Frontmatter = {};
+  const lines = yamlContent.split('\n');
+
+  for (const line of lines) {
+    const match = line.match(/^(\w+):\s*(.+)$/);
+    if (match) {
+      const key = match[1].toLowerCase();
+      let value = match[2].trim();
+      // Remove quotes if present
+      if ((value.startsWith('"') && value.endsWith('"')) ||
+          (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      frontmatter[key] = value;
+    }
+  }
+
+  return { frontmatter, content: restContent };
+}
+
+/**
+ * Extract inline date from markdown content
+ * Looks for patterns like:
+ * - **Date:** 2025-12-12
+ * - *Date:* 2025-12-12
+ * - Date: 2025-12-12
+ * - Created: 2025-12-12
+ * - Updated: 2025-12-12
+ */
+function extractInlineDates(content: string): { created?: number; updated?: number } {
+  const result: { created?: number; updated?: number } = {};
+
+  // Patterns for date extraction (with optional markdown formatting)
+  const datePatterns = [
+    // **Date:** YYYY-MM-DD or *Date:* YYYY-MM-DD or Date: YYYY-MM-DD
+    /\*{0,2}(?:Date|Created|Written|Published)\*{0,2}:\s*(\d{4}-\d{2}-\d{2})/i,
+    // **Updated:** YYYY-MM-DD
+    /\*{0,2}(?:Updated|Modified|Revised|Last Updated|Last Modified)\*{0,2}:\s*(\d{4}-\d{2}-\d{2})/i,
+  ];
+
+  // Extract created date
+  const createdMatch = content.match(datePatterns[0]);
+  if (createdMatch) {
+    const date = new Date(createdMatch[1]);
+    if (!isNaN(date.getTime())) {
+      result.created = date.getTime();
+    }
+  }
+
+  // Extract updated date
+  const updatedMatch = content.match(datePatterns[1]);
+  if (updatedMatch) {
+    const date = new Date(updatedMatch[1]);
+    if (!isNaN(date.getTime())) {
+      result.updated = date.getTime();
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Parse a date string to timestamp
+ * Supports ISO dates and YYYY-MM-DD format
+ */
+function parseDate(dateStr: string | undefined): number | undefined {
+  if (!dateStr) return undefined;
+
+  // Try parsing as-is (handles ISO and YYYY-MM-DD)
+  const date = new Date(dateStr);
+  if (!isNaN(date.getTime())) {
+    return date.getTime();
+  }
+
+  return undefined;
+}
+
+/**
+ * Get document dates with precedence: frontmatter > inline > git
+ * Returns dates and the source they came from
+ */
+function getDocumentDates(
+  rawContent: string,
+  frontmatter: Frontmatter,
+  filepath: string
+): { createdAt: number; lastModified: number; dateSource: 'frontmatter' | 'inline' | 'git' | 'none' } {
+  // 1. Try frontmatter dates first
+  const fmCreated = parseDate(frontmatter.created as string) || parseDate(frontmatter.date as string);
+  const fmUpdated = parseDate(frontmatter.updated as string);
+
+  if (fmCreated || fmUpdated) {
+    return {
+      createdAt: fmCreated || fmUpdated || 0,
+      lastModified: fmUpdated || fmCreated || 0,
+      dateSource: 'frontmatter'
+    };
+  }
+
+  // 2. Try inline dates from content
+  const inlineDates = extractInlineDates(rawContent);
+  if (inlineDates.created || inlineDates.updated) {
+    return {
+      createdAt: inlineDates.created || inlineDates.updated || 0,
+      lastModified: inlineDates.updated || inlineDates.created || 0,
+      dateSource: 'inline'
+    };
+  }
+
+  // 3. Fall back to git history
+  const gitDates = getGitDates(filepath);
+  if (gitDates.createdAt || gitDates.lastModified) {
+    return {
+      ...gitDates,
+      dateSource: 'git'
+    };
+  }
+
+  // 4. No dates available
+  return { createdAt: 0, lastModified: 0, dateSource: 'none' };
 }
 
 /**
@@ -1057,15 +1209,27 @@ async function main() {
   mkdirSync(OUTPUT_DIR, { recursive: true });
 
   // PASS 1: Collect all docs and their content
-  console.log('📖 Pass 1: Collecting documents and git history...');
+  console.log('📖 Pass 1: Collecting documents and extracting dates...');
   const docs: DocFile[] = [];
+
+  // Track date sources for summary
+  const dateSources = { frontmatter: 0, inline: 0, git: 0, none: 0 };
 
   for (const filepath of markdownFiles) {
     const relativePath = relative(ROOT_DIR, filepath);
-    const content = readFileSync(filepath, 'utf-8');
-    const title = extractTitle(content, filepath);
+    const rawContent = readFileSync(filepath, 'utf-8');
+
+    // Parse frontmatter (removes it from content)
+    const { frontmatter, content } = parseFrontmatter(rawContent);
+
+    // Get title: frontmatter title > extracted from content
+    const title = (frontmatter.title as string) || extractTitle(content, filepath);
+
     const htmlRelativePath = relativePath.replace(/\.md$/, '.html');
-    const gitDates = getGitDates(relativePath);
+
+    // Get dates with precedence: frontmatter > inline > git
+    const { createdAt, lastModified, dateSource } = getDocumentDates(rawContent, frontmatter, relativePath);
+    dateSources[dateSource]++;
 
     docs.push({
       path: relativePath,
@@ -1073,12 +1237,16 @@ async function main() {
       title,
       directory: dirname(relativePath),
       content,
-      createdAt: gitDates.createdAt,
-      lastModified: gitDates.lastModified,
+      createdAt,
+      lastModified,
       wordCount: extractWordCount(content),
-      excerpt: extractExcerpt(content)
+      excerpt: extractExcerpt(content),
+      dateSource
     });
   }
+
+  // Log date source summary
+  console.log(`   Date sources: ${dateSources.frontmatter} frontmatter, ${dateSources.inline} inline, ${dateSources.git} git, ${dateSources.none} none`);
 
   // Build backlinks map
   console.log('🔗 Building backlinks map...');
@@ -1136,7 +1304,8 @@ async function main() {
     createdAt: doc.createdAt,
     lastModified: doc.lastModified,
     wordCount: doc.wordCount,
-    excerpt: doc.excerpt
+    excerpt: doc.excerpt,
+    dateSource: doc.dateSource
   }));
   writeFileSync(
     join(OUTPUT_DIR, 'docs-index.json'),
