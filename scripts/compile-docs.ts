@@ -33,6 +33,13 @@ interface DocFile {
   htmlPath: string;    // Output HTML path relative to docs/
   title: string;       // Extracted title from file
   directory: string;   // Parent directory for grouping
+  content: string;     // Raw markdown content
+}
+
+// Backlink information
+interface Backlink {
+  htmlPath: string;    // Path to the linking document
+  title: string;       // Title of the linking document
 }
 
 /**
@@ -126,8 +133,9 @@ function generateBreadcrumb(relativePath: string): string {
 /**
  * Generate HTML page from markdown
  */
-function generateHtmlPage(title: string, htmlContent: string, relativePath: string): string {
+function generateHtmlPage(title: string, htmlContent: string, relativePath: string, backlinks: Backlink[] = []): string {
   const breadcrumb = generateBreadcrumb(relativePath);
+  const backlinksHtml = generateBacklinksHtml(backlinks);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -149,7 +157,7 @@ function generateHtmlPage(title: string, htmlContent: string, relativePath: stri
 ${htmlContent}
         </article>
     </main>
-
+${backlinksHtml}
     <footer class="doc-footer">
         <span>SIMCAP Documentation</span>
         <div class="footer-links">
@@ -554,6 +562,43 @@ a:hover {
     text-underline-offset: 2px;
 }
 
+/* Backlinks */
+.backlinks {
+    border-top: 1px solid var(--border);
+    padding: 1.5rem;
+    max-width: 900px;
+}
+
+.backlinks-header {
+    font-size: 0.625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--fg-muted);
+    margin-bottom: 0.75rem;
+}
+
+.backlinks-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.backlinks-list a {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    text-decoration: none;
+    transition: all 0.15s ease;
+}
+
+.backlinks-list a:hover {
+    background: var(--fg);
+    color: var(--bg);
+    border-color: var(--fg);
+    text-decoration: none;
+}
+
 /* Footer */
 .doc-footer {
     border-top: 1px solid var(--border);
@@ -630,6 +675,90 @@ a:hover {
 }
 
 /**
+ * Extract all internal markdown links from content
+ * Returns normalized paths relative to root
+ */
+function extractInternalLinks(content: string, sourceDir: string): string[] {
+  const links: string[] = [];
+  // Match markdown links: [text](url)
+  const linkRegex = /\[([^\]]*)\]\(([^)]+)\)/g;
+  let match;
+
+  while ((match = linkRegex.exec(content)) !== null) {
+    const href = match[2];
+
+    // Skip external links, anchors, and non-md links
+    if (!href ||
+        href.startsWith('http://') ||
+        href.startsWith('https://') ||
+        href.startsWith('mailto:') ||
+        href.startsWith('#') ||
+        !href.includes('.md')) {
+      continue;
+    }
+
+    // Remove anchor from href
+    const hrefWithoutAnchor = href.split('#')[0];
+
+    // Resolve relative path to get normalized path from root
+    const resolvedPath = join(sourceDir, hrefWithoutAnchor);
+    // Normalize to use forward slashes and remove leading ./
+    const normalizedPath = resolvedPath.replace(/\\/g, '/').replace(/^\.\//, '');
+
+    links.push(normalizedPath);
+  }
+
+  return links;
+}
+
+/**
+ * Build backlinks map: target path -> array of sources that link to it
+ */
+function buildBacklinksMap(docs: DocFile[]): Map<string, Backlink[]> {
+  const backlinks = new Map<string, Backlink[]>();
+
+  for (const doc of docs) {
+    const sourceDir = dirname(doc.path);
+    const internalLinks = extractInternalLinks(doc.content, sourceDir);
+
+    // Deduplicate links from same source
+    const uniqueTargets = [...new Set(internalLinks)];
+
+    for (const targetPath of uniqueTargets) {
+      if (!backlinks.has(targetPath)) {
+        backlinks.set(targetPath, []);
+      }
+      backlinks.get(targetPath)!.push({
+        htmlPath: doc.htmlPath,
+        title: doc.title
+      });
+    }
+  }
+
+  return backlinks;
+}
+
+/**
+ * Generate backlinks HTML section
+ */
+function generateBacklinksHtml(backlinks: Backlink[]): string {
+  if (backlinks.length === 0) {
+    return '';
+  }
+
+  const linksHtml = backlinks
+    .sort((a, b) => a.title.localeCompare(b.title))
+    .map(bl => `<a href="/docs/${bl.htmlPath}">${bl.title}</a>`)
+    .join('');
+
+  return `
+    <aside class="backlinks">
+        <div class="backlinks-header">Linked from</div>
+        <nav class="backlinks-list">${linksHtml}</nav>
+    </aside>`;
+}
+
+/**
  * Transform markdown links (.md) to HTML links (.html)
  * Handles relative paths, anchors, and preserves external links
  */
@@ -695,42 +824,56 @@ async function main() {
   // Create output directory
   mkdirSync(OUTPUT_DIR, { recursive: true });
 
-  // Process each markdown file
+  // PASS 1: Collect all docs and their content
+  console.log('📖 Pass 1: Collecting documents...');
   const docs: DocFile[] = [];
-
-  console.log('📝 Compiling markdown to HTML...');
 
   for (const filepath of markdownFiles) {
     const relativePath = relative(ROOT_DIR, filepath);
     const content = readFileSync(filepath, 'utf-8');
     const title = extractTitle(content, filepath);
-
-    // Convert to HTML
-    const htmlContent = marked(content) as string;
-
-    // Determine output path (preserve directory structure)
     const htmlRelativePath = relativePath.replace(/\.md$/, '.html');
-    const outputPath = join(OUTPUT_DIR, htmlRelativePath);
+
+    docs.push({
+      path: relativePath,
+      htmlPath: htmlRelativePath,
+      title,
+      directory: dirname(relativePath),
+      content
+    });
+  }
+
+  // Build backlinks map
+  console.log('🔗 Building backlinks map...');
+  const backlinksMap = buildBacklinksMap(docs);
+  const totalBacklinks = Array.from(backlinksMap.values()).reduce((sum, arr) => sum + arr.length, 0);
+  console.log(`   Found ${totalBacklinks} backlinks across ${backlinksMap.size} documents\n`);
+
+  // PASS 2: Generate HTML with backlinks
+  console.log('📝 Pass 2: Compiling markdown to HTML...');
+
+  for (const doc of docs) {
+    // Convert to HTML
+    const htmlContent = marked(doc.content) as string;
+
+    // Get backlinks for this document
+    const backlinks = backlinksMap.get(doc.path) || [];
+
+    // Determine output path
+    const outputPath = join(OUTPUT_DIR, doc.htmlPath);
     const outputDir = dirname(outputPath);
 
     // Create output directory
     mkdirSync(outputDir, { recursive: true });
 
-    // Generate full HTML page
-    const fullHtml = generateHtmlPage(title, htmlContent, htmlRelativePath);
+    // Generate full HTML page with backlinks
+    const fullHtml = generateHtmlPage(doc.title, htmlContent, doc.htmlPath, backlinks);
 
     // Write file
     writeFileSync(outputPath, fullHtml);
 
-    // Track for index
-    docs.push({
-      path: relativePath,
-      htmlPath: htmlRelativePath,
-      title,
-      directory: dirname(relativePath)
-    });
-
-    console.log(`   ✓ ${relativePath} → ${htmlRelativePath}`);
+    const backlinkInfo = backlinks.length > 0 ? ` (${backlinks.length} backlinks)` : '';
+    console.log(`   ✓ ${doc.path} → ${doc.htmlPath}${backlinkInfo}`);
   }
 
   console.log(`\n📋 Generating index page...`);
