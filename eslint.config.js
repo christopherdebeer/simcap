@@ -50,6 +50,8 @@ export default [
       'src/web/**',
       'tests/**',
       'playwright.config.ts',
+      '.worktrees/**',
+      'images/**',
     ],
   }
 ];
