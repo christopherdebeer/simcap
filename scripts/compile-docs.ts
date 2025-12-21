@@ -34,6 +34,20 @@ interface DocFile {
   title: string;       // Extracted title from file
   directory: string;   // Parent directory for grouping
   content: string;     // Raw markdown content
+  lastModified: number; // File modification timestamp (ms since epoch)
+  wordCount: number;   // Approximate word count
+  excerpt: string;     // First paragraph or 200 chars
+}
+
+// Searchable document index entry for JSON export
+interface DocIndexEntry {
+  path: string;
+  htmlPath: string;
+  title: string;
+  directory: string;
+  lastModified: number;
+  wordCount: number;
+  excerpt: string;
 }
 
 // Backlink information
@@ -86,6 +100,46 @@ function extractTitle(content: string, filepath: string): string {
   // Fall back to filename
   const name = basename(filepath, '.md');
   return name.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+/**
+ * Extract word count from markdown content
+ */
+function extractWordCount(content: string): number {
+  // Remove code blocks
+  const withoutCodeBlocks = content.replace(/```[\s\S]*?```/g, '');
+  // Remove inline code
+  const withoutInlineCode = withoutCodeBlocks.replace(/`[^`]+`/g, '');
+  // Split by whitespace and count
+  const words = withoutInlineCode.trim().split(/\s+/);
+  return words.filter(w => w.length > 0).length;
+}
+
+/**
+ * Extract excerpt from markdown content (first paragraph or 200 chars)
+ */
+function extractExcerpt(content: string): string {
+  // Remove title line if present
+  const withoutTitle = content.replace(/^#\s+.+$/m, '').trim();
+
+  // Find first paragraph (text before double newline or end)
+  const paragraphMatch = withoutTitle.match(/^[\s\S]*?(?:\n\n|$)/);
+  let excerpt = paragraphMatch ? paragraphMatch[0].trim() : withoutTitle;
+
+  // Remove markdown formatting
+  excerpt = excerpt
+    .replace(/```[\s\S]*?```/g, '') // Remove code blocks
+    .replace(/`[^`]+`/g, '')        // Remove inline code
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Convert links to text
+    .replace(/[*_~#]/g, '')         // Remove formatting chars
+    .trim();
+
+  // Truncate to 200 chars with ellipsis
+  if (excerpt.length > 200) {
+    excerpt = excerpt.substring(0, 200).trim() + '...';
+  }
+
+  return excerpt || 'No description available';
 }
 
 /**
@@ -174,58 +228,9 @@ ${backlinksHtml}
  * Generate the docs index page
  */
 function generateIndexPage(docs: DocFile[]): string {
-  // Group docs by directory
-  const grouped = new Map<string, DocFile[]>();
-
-  for (const doc of docs) {
-    const dir = doc.directory;
-    if (!grouped.has(dir)) {
-      grouped.set(dir, []);
-    }
-    grouped.get(dir)!.push(doc);
-  }
-
-  // Sort directories - root first, then docs, then alphabetically
-  const sortedDirs = Array.from(grouped.keys()).sort((a, b) => {
-    if (a === '') return -1;
-    if (b === '') return 1;
-    if (a.startsWith('docs') && !b.startsWith('docs')) return -1;
-    if (!a.startsWith('docs') && b.startsWith('docs')) return 1;
-    return a.localeCompare(b);
-  });
-
-  // Generate sections HTML
-  let sectionsHtml = '';
-
-  for (const dir of sortedDirs) {
-    const files = grouped.get(dir)!;
-    const friendlyName = getFriendlyDirName(dir);
-
-    // Sort files: README first, then alphabetically
-    files.sort((a, b) => {
-      if (a.title.toLowerCase().includes('readme')) return -1;
-      if (b.title.toLowerCase().includes('readme')) return 1;
-      return a.title.localeCompare(b.title);
-    });
-
-    sectionsHtml += `
-        <section class="doc-section">
-            <div class="section-header">${friendlyName}</div>
-            <div class="doc-links">`;
-
-    for (const file of files) {
-      const desc = dir || 'root';
-      sectionsHtml += `
-                <a href="/docs/${file.htmlPath}" class="doc-link">
-                    <span class="doc-title">${file.title}</span>
-                    <span class="doc-path">${file.path}</span>
-                </a>`;
-    }
-
-    sectionsHtml += `
-            </div>
-        </section>`;
-  }
+  // Calculate statistics
+  const totalWords = docs.reduce((sum, doc) => sum + doc.wordCount, 0);
+  const directories = new Set(docs.map(doc => doc.directory)).size;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -235,20 +240,17 @@ function generateIndexPage(docs: DocFile[]): string {
     <title>Documentation · SIMCAP</title>
     <link rel="icon" href="/favicon.ico">
     <link rel="stylesheet" href="/docs/docs.css">
+    <script type="module" src="/docs/docs-viewer.js"></script>
 </head>
 <body>
     <header class="doc-header index-header">
         <a href="/" class="home-link">SIMCAP</a>
         <h1 class="index-title">Documentation</h1>
-        <p class="index-subtitle">All markdown documentation compiled to static HTML</p>
-        <div class="index-stats">
-            <span class="stat"><strong>${docs.length}</strong> documents</span>
-            <span class="stat"><strong>${sortedDirs.length}</strong> sections</span>
-        </div>
+        <p class="index-subtitle">Interactive documentation with fuzzy search and filtering</p>
     </header>
 
     <main class="index-content">
-        ${sectionsHtml}
+        <div id="docs-viewer-container"></div>
     </main>
 
     <footer class="doc-footer">
@@ -671,6 +673,164 @@ a:hover {
         display: none;
     }
 }
+
+/* Documentation Viewer Styles */
+.docs-viewer {
+    width: 100%;
+}
+
+.docs-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+}
+
+.search-box {
+    width: 100%;
+}
+
+.search-box input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    font-family: inherit;
+    font-size: 0.875rem;
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    outline: none;
+}
+
+.search-box input:focus {
+    border-color: var(--accent);
+}
+
+.filter-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.filter-group label {
+    font-size: 0.75rem;
+    color: var(--fg-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.filter-group select {
+    padding: 0.5rem;
+    font-family: inherit;
+    font-size: 0.75rem;
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    outline: none;
+    cursor: pointer;
+}
+
+.filter-group select:focus {
+    border-color: var(--accent);
+}
+
+.docs-stats {
+    display: flex;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+    font-size: 0.75rem;
+    color: var(--fg-muted);
+    padding: 0 0.5rem;
+}
+
+.docs-results {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.doc-link {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.75rem 0;
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+}
+
+.doc-link:hover {
+    background: var(--fg);
+    color: var(--bg);
+    margin: 0 -0.75rem;
+    padding: 0.75rem;
+    text-decoration: none;
+    border-bottom-color: var(--fg);
+}
+
+.doc-link-main {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.doc-meta {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.625rem;
+    color: var(--fg-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.doc-link:hover .doc-meta {
+    color: var(--bg);
+    opacity: 0.7;
+}
+
+.doc-excerpt {
+    font-size: 0.75rem;
+    color: var(--fg-muted);
+    line-height: 1.5;
+    margin: 0;
+}
+
+.doc-link:hover .doc-excerpt {
+    color: var(--bg);
+    opacity: 0.8;
+}
+
+.no-results {
+    padding: 3rem 1rem;
+    text-align: center;
+    color: var(--fg-muted);
+    font-size: 0.875rem;
+}
+
+.error-message {
+    padding: 2rem 1rem;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    color: var(--fg-muted);
+}
+
+.error-message p {
+    margin-bottom: 0.5rem;
+}
+
+@media (min-width: 640px) {
+    .filter-controls {
+        flex-wrap: nowrap;
+    }
+}
 `;
 }
 
@@ -833,13 +993,17 @@ async function main() {
     const content = readFileSync(filepath, 'utf-8');
     const title = extractTitle(content, filepath);
     const htmlRelativePath = relativePath.replace(/\.md$/, '.html');
+    const stats = statSync(filepath);
 
     docs.push({
       path: relativePath,
       htmlPath: htmlRelativePath,
       title,
       directory: dirname(relativePath),
-      content
+      content,
+      lastModified: stats.mtimeMs,
+      wordCount: extractWordCount(content),
+      excerpt: extractExcerpt(content)
     });
   }
 
@@ -888,6 +1052,23 @@ async function main() {
   const stylesheet = generateDocsStylesheet();
   writeFileSync(join(OUTPUT_DIR, 'docs.css'), stylesheet);
   console.log(`   ✓ docs/docs.css`);
+
+  // Generate JSON index for search
+  console.log(`\n🔍 Generating search index...`);
+  const searchIndex: DocIndexEntry[] = docs.map(doc => ({
+    path: doc.path,
+    htmlPath: doc.htmlPath,
+    title: doc.title,
+    directory: doc.directory,
+    lastModified: doc.lastModified,
+    wordCount: doc.wordCount,
+    excerpt: doc.excerpt
+  }));
+  writeFileSync(
+    join(OUTPUT_DIR, 'docs-index.json'),
+    JSON.stringify(searchIndex, null, 2)
+  );
+  console.log(`   ✓ docs/docs-index.json (${searchIndex.length} entries)`);
 
   console.log(`\n✅ Done! Compiled ${docs.length} documents to dist/docs/`);
 }
