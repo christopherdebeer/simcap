@@ -10,6 +10,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSy
 import { join, dirname, relative, basename, extname } from 'path';
 import { marked, Renderer } from 'marked';
 import { fileURLToPath } from 'url';
+import { execSync } from 'child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -34,7 +35,8 @@ interface DocFile {
   title: string;       // Extracted title from file
   directory: string;   // Parent directory for grouping
   content: string;     // Raw markdown content
-  lastModified: number; // File modification timestamp (ms since epoch)
+  createdAt: number;   // First git commit timestamp (ms since epoch)
+  lastModified: number; // Last git commit timestamp (ms since epoch)
   wordCount: number;   // Approximate word count
   excerpt: string;     // First paragraph or 200 chars
 }
@@ -45,6 +47,7 @@ interface DocIndexEntry {
   htmlPath: string;
   title: string;
   directory: string;
+  createdAt: number;
   lastModified: number;
   wordCount: number;
   excerpt: string;
@@ -143,6 +146,46 @@ function extractExcerpt(content: string): string {
 }
 
 /**
+ * Get git dates for a file (created and last modified)
+ * Returns timestamps in ms since epoch for consistency with search index
+ */
+function getGitDates(filepath: string): { createdAt: number; lastModified: number } {
+  try {
+    // Get last modified date (most recent commit)
+    const lastModifiedOutput = execSync(
+      `git log -1 --format="%aI" -- "${filepath}"`,
+      { cwd: ROOT_DIR, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim();
+
+    // Get created date (first commit that added the file)
+    const createdOutput = execSync(
+      `git log --follow --format="%aI" --diff-filter=A -- "${filepath}"`,
+      { cwd: ROOT_DIR, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
+    ).trim();
+
+    return {
+      createdAt: createdOutput ? new Date(createdOutput).getTime() : 0,
+      lastModified: lastModifiedOutput ? new Date(lastModifiedOutput).getTime() : 0
+    };
+  } catch {
+    // File might not be tracked by git yet
+    return { createdAt: 0, lastModified: 0 };
+  }
+}
+
+/**
+ * Format timestamp for display
+ */
+function formatDate(timestamp: number): string {
+  if (!timestamp) return 'Unknown';
+  return new Date(timestamp).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  });
+}
+
+/**
  * Get friendly directory name for display
  */
 function getFriendlyDirName(dir: string): string {
@@ -187,9 +230,15 @@ function generateBreadcrumb(relativePath: string): string {
 /**
  * Generate HTML page from markdown
  */
-function generateHtmlPage(title: string, htmlContent: string, relativePath: string, backlinks: Backlink[] = []): string {
+function generateHtmlPage(title: string, htmlContent: string, relativePath: string, doc: DocFile, backlinks: Backlink[] = []): string {
   const breadcrumb = generateBreadcrumb(relativePath);
   const backlinksHtml = generateBacklinksHtml(backlinks);
+
+  const metaHtml = `
+        <div class="doc-meta">
+            ${doc.createdAt ? `<span class="meta-item"><span class="meta-label">Created:</span> ${formatDate(doc.createdAt)}</span>` : ''}
+            ${doc.lastModified ? `<span class="meta-item"><span class="meta-label">Updated:</span> ${formatDate(doc.lastModified)}</span>` : ''}
+        </div>`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -210,6 +259,7 @@ function generateHtmlPage(title: string, htmlContent: string, relativePath: stri
         <article class="markdown-body">
 ${htmlContent}
         </article>
+${metaHtml}
     </main>
 ${backlinksHtml}
     <footer class="doc-footer">
@@ -562,6 +612,28 @@ a:hover {
 .markdown-body a {
     text-decoration: underline;
     text-underline-offset: 2px;
+}
+
+/* Document metadata */
+.doc-meta {
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 2rem;
+    font-size: 0.75rem;
+    color: var(--fg-muted);
+}
+
+.meta-item {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.meta-label {
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.625rem;
 }
 
 /* Backlinks */
@@ -985,7 +1057,7 @@ async function main() {
   mkdirSync(OUTPUT_DIR, { recursive: true });
 
   // PASS 1: Collect all docs and their content
-  console.log('📖 Pass 1: Collecting documents...');
+  console.log('📖 Pass 1: Collecting documents and git history...');
   const docs: DocFile[] = [];
 
   for (const filepath of markdownFiles) {
@@ -993,7 +1065,7 @@ async function main() {
     const content = readFileSync(filepath, 'utf-8');
     const title = extractTitle(content, filepath);
     const htmlRelativePath = relativePath.replace(/\.md$/, '.html');
-    const stats = statSync(filepath);
+    const gitDates = getGitDates(relativePath);
 
     docs.push({
       path: relativePath,
@@ -1001,7 +1073,8 @@ async function main() {
       title,
       directory: dirname(relativePath),
       content,
-      lastModified: stats.mtimeMs,
+      createdAt: gitDates.createdAt,
+      lastModified: gitDates.lastModified,
       wordCount: extractWordCount(content),
       excerpt: extractExcerpt(content)
     });
@@ -1031,7 +1104,7 @@ async function main() {
     mkdirSync(outputDir, { recursive: true });
 
     // Generate full HTML page with backlinks
-    const fullHtml = generateHtmlPage(doc.title, htmlContent, doc.htmlPath, backlinks);
+    const fullHtml = generateHtmlPage(doc.title, htmlContent, doc.htmlPath, doc, backlinks);
 
     // Write file
     writeFileSync(outputPath, fullHtml);
@@ -1060,6 +1133,7 @@ async function main() {
     htmlPath: doc.htmlPath,
     title: doc.title,
     directory: doc.directory,
+    createdAt: doc.createdAt,
     lastModified: doc.lastModified,
     wordCount: doc.wordCount,
     excerpt: doc.excerpt
