@@ -8,7 +8,7 @@
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync, copyFileSync } from 'fs';
 import { join, dirname, relative, basename, extname } from 'path';
-import { marked } from 'marked';
+import { marked, Renderer } from 'marked';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -630,12 +630,51 @@ a:hover {
 }
 
 /**
- * Configure marked for better code highlighting
+ * Transform markdown links (.md) to HTML links (.html)
+ * Handles relative paths, anchors, and preserves external links
+ */
+function transformMdLink(href: string): string {
+  // Skip external links, anchors-only, and non-md links
+  if (!href ||
+      href.startsWith('http://') ||
+      href.startsWith('https://') ||
+      href.startsWith('mailto:') ||
+      href.startsWith('#')) {
+    return href;
+  }
+
+  // Transform .md extension to .html (handles anchors like file.md#section)
+  if (href.includes('.md')) {
+    return href.replace(/\.md(#|$)/, '.html$1');
+  }
+
+  return href;
+}
+
+/**
+ * Create custom renderer with link transformation
+ */
+function createCustomRenderer(): Renderer {
+  const renderer = new Renderer();
+
+  // Override link rendering to transform .md -> .html
+  renderer.link = function({ href, title, text }) {
+    const transformedHref = transformMdLink(href);
+    const titleAttr = title ? ` title="${title}"` : '';
+    return `<a href="${transformedHref}"${titleAttr}>${text}</a>`;
+  };
+
+  return renderer;
+}
+
+/**
+ * Configure marked with custom renderer
  */
 function configureMarked() {
   marked.setOptions({
     gfm: true,
-    breaks: false
+    breaks: false,
+    renderer: createCustomRenderer()
   });
 }
 
