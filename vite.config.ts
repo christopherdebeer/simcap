@@ -91,6 +91,17 @@ export default defineConfig({
         synth: resolve(__dirname, 'apps/gambit/synth.html'),
         viz: resolve(__dirname, 'apps/viz/index.html'),
         loader: resolve(__dirname, 'apps/loader/index.html'),
+        // Documentation viewer module
+        'docs-viewer': resolve(__dirname, 'src/docs/index.ts'),
+      },
+      output: {
+        // Ensure docs-viewer.js is placed in docs/ directory
+        entryFileNames: (chunkInfo) => {
+          if (chunkInfo.name === 'docs-viewer') {
+            return 'docs/docs-viewer.js';
+          }
+          return 'assets/[name]-[hash].js';
+        }
       }
     }
   },
