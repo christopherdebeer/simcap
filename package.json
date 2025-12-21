@@ -9,7 +9,8 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && eslint . && vite build",
+    "build": "tsc --noEmit && eslint . && vite build && npm run compile:docs",
+    "compile:docs": "npx tsx scripts/compile-docs.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "preview": "vite preview",
@@ -43,6 +44,8 @@
     "@vercel/node": "^5.5.15",
     "dotenv": "^17.2.3",
     "eslint": "^9.39.2",
+    "marked": "^17.0.1",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.0"
   }
