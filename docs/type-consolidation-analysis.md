@@ -497,20 +497,89 @@ packages/puck/src/
 
 ---
 
-## 6. Migration Checklist
+## 6. Telemetry Processing Pipeline (Deep Dive)
 
-- [ ] Create `packages/core/src/types/geometry.ts`
-- [ ] Create `packages/core/src/types/hand.ts`
-- [ ] Create `packages/core/src/types/device.ts`
-- [ ] Update `packages/core/src/types/index.ts` exports
-- [ ] Update `packages/filters/src/filters.ts` to import from core
-- [ ] Update `src/types/globals.d.ts` to reference core
-- [ ] Update `apps/gambit/gambit-client.ts` to import Puck types
-- [ ] Rename `FingerState` → `FingerLabel` in core/session.ts
-- [ ] Rename `FingerState` → `FingerPosition` in filters
-- [ ] Rename `MotionType` → `MotionLabel` in core
+The telemetry data flows through an 8-stage processing pipeline, with each stage adding decorated fields to the raw sample. Total: **47 fields** (10 raw + 37 decorated).
+
+### Pipeline Stages
+
+```
+Device (Raw LSB)
+     ↓
+[Stage 1: Unit Conversion]
+    → dt, ax_g, ay_g, az_g, gx_dps, gy_dps, gz_dps, mx_ut, my_ut, mz_ut
+     ↓
+[Stage 2: Motion Detection]
+    → isMoving, accelStd, gyroStd
+     ↓
+[Stage 3: Gyro Bias Calibration]
+    → gyroBiasCalibrated
+     ↓
+[Stage 4: IMU Fusion (Madgwick AHRS)]
+    → orientation_w/x/y/z, euler_roll/pitch/yaw, ahrs_mag_residual_*
+     ↓
+[Stage 5: Magnetometer Calibration]
+    → iron_mx/y/z, mag_cal_ready, mag_cal_confidence, mag_cal_*
+     ↓
+[Stage 6: Magnetic Residual]
+    → residual_mx/y/z, residual_magnitude
+     ↓
+[Stage 7: Magnet Detection]
+    → magnet_status, magnet_confidence, magnet_detected, magnet_deviation
+     ↓
+[Stage 8: Kalman Filtering]
+    → filtered_mx/y/z
+     ↓
+DecoratedTelemetry (stored/exported)
+```
+
+### Type Hierarchy
+
+```typescript
+// Stage interfaces build on each other:
+RawTelemetry                    // 10 fields: ax,ay,az,gx,gy,gz,mx,my,mz,t
+  + UnitConvertedFields         // +10: dt, *_g, *_dps, *_ut
+  + MotionDetectionFields       // +3: isMoving, accelStd, gyroStd
+  + GyroBiasFields              // +1: gyroBiasCalibrated
+  + OrientationFields           // +11: orientation_*, euler_*, ahrs_mag_residual_*
+  + MagCalibrationFields        // +9: iron_*, mag_cal_*
+  + MagResidualFields           // +4: residual_*
+  + MagnetDetectionFields       // +6: magnet_*
+  + KalmanFilteredFields        // +3: filtered_*
+  = DecoratedTelemetry          // 47 total fields
+```
+
+### Key Implementation Files
+
+| File | Purpose |
+|------|---------|
+| `apps/gambit/shared/telemetry-processor.ts` | Main pipeline (890 lines) |
+| `packages/filters/src/filters.ts` | Madgwick AHRS, motion detection, Kalman |
+| `apps/gambit/shared/unified-mag-calibration.ts` | Hard/soft iron, Earth field estimation |
+| `apps/gambit/shared/magnet-detector.ts` | Finger magnet detection |
+| `packages/core/src/types/telemetry.ts` | Type definitions for all stages |
+
+---
+
+## 7. Migration Checklist
+
+### Completed ✅
+
+- [x] Create `packages/core/src/types/geometry.ts` - Vector3, Quaternion, EulerAngles, Matrix types
+- [x] Create `packages/core/src/types/hand.ts` - FingerLabel, FingerLabels, FingerFlexion, tracking types
+- [x] Create `packages/core/src/types/device.ts` - DeviceInfo, FirmwareInfo, connection types
+- [x] Update `packages/core/src/types/telemetry.ts` - Full 8-stage pipeline types
+- [x] Update `packages/core/src/types/session.ts` - Use new types, add GeomagneticReference
+- [x] Update `packages/core/src/types/index.ts` exports
+- [x] TypeScript compilation passes
+
+### Remaining
+
+- [ ] Update `packages/filters/src/filters.ts` to import geometry types from core
+- [ ] Update `src/types/globals.d.ts` to reference core types
+- [ ] Update `apps/gambit/gambit-client.ts` to import Puck types from @puck
+- [ ] Update `apps/gambit/shared/telemetry-processor.ts` to import DecoratedTelemetry from core
+- [ ] Update `apps/gambit/modules/telemetry-handler.ts` to import types from core
 - [ ] Rename API `SessionData` → `SessionPayload`
-- [ ] Remove duplicate `SessionInfo` from core
 - [ ] Update all import statements across codebase
-- [ ] Run TypeScript compiler to catch any type errors
 - [ ] Update tests
