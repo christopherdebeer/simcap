@@ -342,8 +342,3 @@ export interface SessionPayload {
   labels: unknown[];
   metadata?: UploadSessionMetadata;
 }
-
-/**
- * @deprecated Use SessionPayload instead
- */
-export type SessionData = SessionPayload;

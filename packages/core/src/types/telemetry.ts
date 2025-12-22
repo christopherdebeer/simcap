@@ -365,15 +365,32 @@ export function isFullyProcessed(t: TelemetryPipelineStage): t is FilteredTeleme
 }
 
 // ============================================================================
-// DECORATED TELEMETRY (BACKWARD COMPATIBILITY)
+// DECORATED TELEMETRY (PROCESSOR OUTPUT)
 // ============================================================================
 
 /**
- * Decorated telemetry with all optional pipeline fields.
- * This is the legacy type - prefer using specific stage types.
+ * Telemetry with optional pipeline fields.
  *
- * @deprecated Use specific stage types (e.g., FilteredTelemetry) for type safety.
- *             Use type guards to narrow from TelemetryPipelineStage.
+ * This is the return type of TelemetryProcessor.process() because the processor
+ * conditionally adds fields based on runtime state:
+ * - Stages 0-3 (unit conversion, motion, gyro bias) are always applied
+ * - Stage 4 (orientation) requires IMU initialization
+ * - Stages 5-8 (mag calibration, residual, detection, filtering) require orientation
+ *
+ * For type-safe access to specific fields, use the stage types with type guards:
+ *
+ * @example
+ * ```typescript
+ * const result = processor.process(raw);
+ * if (hasOrientation(result)) {
+ *   // result is OrientationEstimatedTelemetry - euler_roll is guaranteed
+ *   console.log(result.euler_roll);
+ * }
+ * if (hasMagResidual(result)) {
+ *   // result is MagResidualTelemetry - residual_magnitude is guaranteed
+ *   const residual = extractMagResidual(result);
+ * }
+ * ```
  */
 export interface DecoratedTelemetry extends RawTelemetry {
   // Stage 1: Unit conversion
@@ -462,11 +479,14 @@ export interface PhysicalTelemetry {
 }
 
 /**
- * Session storage format (simplified).
- * @deprecated Prefer DecoratedTelemetry for full pipeline data
+ * Session storage format for JSON files.
+ * Extends RawTelemetry with optional processed fields that are
+ * persisted in session recordings.
  */
 export interface TelemetrySample extends RawTelemetry {
+  /** Device orientation at sample time */
   orientation?: Quaternion;
+  /** Finger magnet detection result */
   fingerMagnet?: {
     detected: boolean;
     confidence: number;
