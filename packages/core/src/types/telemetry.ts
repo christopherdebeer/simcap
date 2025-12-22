@@ -1,26 +1,29 @@
 /**
- * Telemetry Types - Full Processing Pipeline
+ * Telemetry Types - Progressive Pipeline Stages
  *
- * Defines the structure of sensor data as it flows through the 8-stage processing pipeline:
+ * Defines the structure of sensor data as it flows through the processing pipeline.
+ * Each stage EXTENDS the previous with REQUIRED fields (not optional).
  *
+ * Pipeline Stages:
  *   Stage 0: Raw Telemetry (LSB from device)
  *   Stage 1: Unit Conversion (g, deg/s, uT)
  *   Stage 2: Motion Detection (isMoving, std deviation)
  *   Stage 3: Gyroscope Bias Calibration
- *   Stage 4: IMU Sensor Fusion (orientation via Madgwick AHRS)
- *   Stage 5: Magnetometer Calibration (hard/soft iron, Earth field)
+ *   Stage 4: Orientation Estimation (IMU sensor fusion)
+ *   Stage 5: Magnetometer Calibration (hard/soft iron)
  *   Stage 6: Magnetic Residual (Earth field subtracted)
  *   Stage 7: Magnet Detection (finger magnet presence)
  *   Stage 8: Kalman Filtering (smoothed magnetic field)
  *
- * IMPORTANT: Raw values are ALWAYS preserved. Converted/computed fields are ADDED.
+ * DESIGN PRINCIPLE: Each stage type has REQUIRED fields. Use type guards
+ * to narrow from the union type returned by process().
  *
  * @module core/types/telemetry
  */
 
 import type { Vector3, Quaternion, EulerAngles } from './geometry';
 
-// Re-export geometry types for backward compatibility
+// Re-export geometry types for convenience
 export type { Vector3, Quaternion, EulerAngles } from './geometry';
 
 // ============================================================================
@@ -64,45 +67,30 @@ export interface RawTelemetry {
 // ============================================================================
 
 /**
- * Fields added after unit conversion.
- * Raw LSB values converted to physical units.
+ * Telemetry with physical units applied.
+ * Raw LSB values converted to g, deg/s, and µT.
  */
-export interface UnitConvertedFields {
+export interface UnitConvertedTelemetry extends RawTelemetry {
   /** Time delta since last sample (seconds) */
-  dt?: number;
+  dt: number;
   /** Acceleration X (g) */
-  ax_g?: number;
+  ax_g: number;
   /** Acceleration Y (g) */
-  ay_g?: number;
+  ay_g: number;
   /** Acceleration Z (g) */
-  az_g?: number;
+  az_g: number;
   /** Angular velocity X (degrees/second) */
-  gx_dps?: number;
+  gx_dps: number;
   /** Angular velocity Y (degrees/second) */
-  gy_dps?: number;
+  gy_dps: number;
   /** Angular velocity Z (degrees/second) */
-  gz_dps?: number;
-  /** Magnetic field X (uT, aligned to accel frame) */
-  mx_ut?: number;
-  /** Magnetic field Y (uT, aligned to accel frame) */
-  my_ut?: number;
-  /** Magnetic field Z (uT, aligned to accel frame) */
-  mz_ut?: number;
-}
-
-/**
- * Telemetry converted to physical units.
- * Alternative structure using Vector3 instead of individual fields.
- */
-export interface PhysicalTelemetry {
-  /** Acceleration vector (g) */
-  accel: Vector3;
-  /** Angular velocity vector (deg/s) */
-  gyro: Vector3;
-  /** Magnetic field vector (uT) */
-  mag: Vector3;
-  /** Timestamp (ms) */
-  timestamp: number;
+  gz_dps: number;
+  /** Magnetic field X (µT, aligned to accel frame) */
+  mx_ut: number;
+  /** Magnetic field Y (µT, aligned to accel frame) */
+  my_ut: number;
+  /** Magnetic field Z (µT, aligned to accel frame) */
+  mz_ut: number;
 }
 
 // ============================================================================
@@ -110,16 +98,16 @@ export interface PhysicalTelemetry {
 // ============================================================================
 
 /**
- * Fields added after motion detection.
- * Detects whether device is stationary or moving.
+ * Telemetry with motion detection applied.
+ * Indicates whether device is stationary or moving.
  */
-export interface MotionDetectionFields {
+export interface MotionDetectedTelemetry extends UnitConvertedTelemetry {
   /** Whether device is currently moving */
-  isMoving?: boolean;
+  isMoving: boolean;
   /** Standard deviation of acceleration magnitude (LSB) */
-  accelStd?: number;
+  accelStd: number;
   /** Standard deviation of angular velocity magnitude (LSB) */
-  gyroStd?: number;
+  gyroStd: number;
 }
 
 /**
@@ -136,11 +124,11 @@ export interface MotionDetectorState {
 // ============================================================================
 
 /**
- * Fields added after gyroscope bias calibration.
+ * Telemetry with gyroscope bias calibration status.
  */
-export interface GyroBiasFields {
+export interface GyroBiasCalibratedTelemetry extends MotionDetectedTelemetry {
   /** Whether gyroscope bias has been calibrated */
-  gyroBiasCalibrated?: boolean;
+  gyroBiasCalibrated: boolean;
 }
 
 /**
@@ -156,45 +144,43 @@ export interface GyroBiasCalibrationState {
 }
 
 // ============================================================================
-// STAGE 4: IMU SENSOR FUSION (AHRS)
+// STAGE 4: ORIENTATION ESTIMATION (IMU SENSOR FUSION)
 // ============================================================================
 
 /**
- * Fields added after IMU sensor fusion (Madgwick AHRS).
- * Provides orientation estimation from accelerometer/gyroscope/magnetometer.
+ * Telemetry with orientation from IMU sensor fusion (Madgwick AHRS).
+ * Quaternion and Euler angles are REQUIRED at this stage.
  */
-export interface OrientationFields {
+export interface OrientationEstimatedTelemetry extends GyroBiasCalibratedTelemetry {
   /** Quaternion W component */
-  orientation_w?: number;
+  orientation_w: number;
   /** Quaternion X component */
-  orientation_x?: number;
+  orientation_x: number;
   /** Quaternion Y component */
-  orientation_y?: number;
+  orientation_y: number;
   /** Quaternion Z component */
-  orientation_z?: number;
+  orientation_z: number;
   /** Euler roll angle (degrees) */
-  euler_roll?: number;
+  euler_roll: number;
   /** Euler pitch angle (degrees) */
-  euler_pitch?: number;
+  euler_pitch: number;
   /** Euler yaw angle (degrees) */
-  euler_yaw?: number;
-  /** AHRS magnetic residual X (uT) */
-  ahrs_mag_residual_x?: number;
-  /** AHRS magnetic residual Y (uT) */
-  ahrs_mag_residual_y?: number;
-  /** AHRS magnetic residual Z (uT) */
-  ahrs_mag_residual_z?: number;
-  /** AHRS magnetic residual magnitude (uT) */
-  ahrs_mag_residual_magnitude?: number;
+  euler_yaw: number;
 }
 
 /**
- * Processed telemetry with orientation (simplified).
- * @deprecated Use DecoratedTelemetry for full pipeline data
+ * Telemetry with 9-DOF magnetometer-assisted orientation.
+ * Extends OrientationEstimatedTelemetry with AHRS magnetic residual.
  */
-export interface ProcessedTelemetry extends RawTelemetry {
-  orientation?: Quaternion;
-  euler?: EulerAngles;
+export interface OrientationWithMagTelemetry extends OrientationEstimatedTelemetry {
+  /** AHRS magnetic residual X (µT) */
+  ahrs_mag_residual_x: number;
+  /** AHRS magnetic residual Y (µT) */
+  ahrs_mag_residual_y: number;
+  /** AHRS magnetic residual Z (µT) */
+  ahrs_mag_residual_z: number;
+  /** AHRS magnetic residual magnitude (µT) */
+  ahrs_mag_residual_magnitude: number;
 }
 
 // ============================================================================
@@ -202,28 +188,28 @@ export interface ProcessedTelemetry extends RawTelemetry {
 // ============================================================================
 
 /**
- * Fields added after magnetometer calibration.
- * Includes hard iron correction, soft iron correction, and Earth field estimation.
+ * Telemetry with magnetometer calibration applied.
+ * Includes hard iron correction and calibration state.
  */
-export interface MagCalibrationFields {
-  /** Hard iron corrected magnetic field X (uT) */
-  iron_mx?: number;
-  /** Hard iron corrected magnetic field Y (uT) */
-  iron_my?: number;
-  /** Hard iron corrected magnetic field Z (uT) */
-  iron_mz?: number;
+export interface MagCalibratedTelemetry extends OrientationEstimatedTelemetry {
+  /** Hard iron corrected magnetic field X (µT) */
+  iron_mx: number;
+  /** Hard iron corrected magnetic field Y (µT) */
+  iron_my: number;
+  /** Hard iron corrected magnetic field Z (µT) */
+  iron_mz: number;
   /** Whether calibration is ready for use */
-  mag_cal_ready?: boolean;
+  mag_cal_ready: boolean;
   /** Calibration confidence (0-1) */
-  mag_cal_confidence?: number;
-  /** Mean residual after calibration (uT) */
-  mag_cal_mean_residual?: number;
-  /** Estimated Earth field magnitude (uT) */
-  mag_cal_earth_magnitude?: number;
+  mag_cal_confidence: number;
+  /** Mean residual after calibration (µT) */
+  mag_cal_mean_residual: number;
+  /** Estimated Earth field magnitude (µT) */
+  mag_cal_earth_magnitude: number;
   /** Whether hard iron calibration is complete */
-  mag_cal_hard_iron?: boolean;
+  mag_cal_hard_iron: boolean;
   /** Whether soft iron calibration is complete */
-  mag_cal_soft_iron?: boolean;
+  mag_cal_soft_iron: boolean;
 }
 
 // ============================================================================
@@ -231,19 +217,18 @@ export interface MagCalibrationFields {
 // ============================================================================
 
 /**
- * Fields added after magnetic residual calculation.
+ * Telemetry with magnetic residual calculated.
  * Residual = Measured field - Expected Earth field (in device frame).
- * Represents magnetic anomalies (primarily finger magnets).
  */
-export interface MagResidualFields {
-  /** Magnetic residual X (uT) */
-  residual_mx?: number;
-  /** Magnetic residual Y (uT) */
-  residual_my?: number;
-  /** Magnetic residual Z (uT) */
-  residual_mz?: number;
-  /** Magnetic residual magnitude (uT) */
-  residual_magnitude?: number;
+export interface MagResidualTelemetry extends MagCalibratedTelemetry {
+  /** Magnetic residual X (µT) */
+  residual_mx: number;
+  /** Magnetic residual Y (µT) */
+  residual_my: number;
+  /** Magnetic residual Z (µT) */
+  residual_mz: number;
+  /** Magnetic residual magnitude (µT) */
+  residual_magnitude: number;
 }
 
 // ============================================================================
@@ -254,22 +239,22 @@ export interface MagResidualFields {
 export type MagnetStatus = 'none' | 'possible' | 'likely' | 'confirmed';
 
 /**
- * Fields added after magnet detection.
+ * Telemetry with magnet detection applied.
  * Detects presence of finger magnets based on magnetic residual.
  */
-export interface MagnetDetectionFields {
+export interface MagnetDetectedTelemetry extends MagResidualTelemetry {
   /** Detection status (none/possible/likely/confirmed) */
-  magnet_status?: MagnetStatus;
+  magnet_status: MagnetStatus;
   /** Detection confidence (0-1) */
-  magnet_confidence?: number;
+  magnet_confidence: number;
   /** Whether magnet is detected (status != 'none') */
-  magnet_detected?: boolean;
+  magnet_detected: boolean;
   /** Whether baseline has been established */
-  magnet_baseline_established?: boolean;
-  /** Baseline residual magnitude (uT) */
-  magnet_baseline_residual?: number;
-  /** Current deviation from baseline (uT) */
-  magnet_deviation?: number;
+  magnet_baseline_established: boolean;
+  /** Baseline residual magnitude (µT) */
+  magnet_baseline_residual: number;
+  /** Current deviation from baseline (µT) */
+  magnet_deviation: number;
 }
 
 // ============================================================================
@@ -277,49 +262,207 @@ export interface MagnetDetectionFields {
 // ============================================================================
 
 /**
- * Fields added after Kalman filtering.
- * Smoothed/denoised magnetic field for tracking.
+ * Fully processed telemetry with Kalman filtering.
+ * This is the final stage of the pipeline.
  */
-export interface KalmanFilteredFields {
-  /** Kalman-filtered magnetic field X (uT) */
-  filtered_mx?: number;
-  /** Kalman-filtered magnetic field Y (uT) */
-  filtered_my?: number;
-  /** Kalman-filtered magnetic field Z (uT) */
-  filtered_mz?: number;
+export interface FilteredTelemetry extends MagnetDetectedTelemetry {
+  /** Kalman-filtered magnetic field X (µT) */
+  filtered_mx: number;
+  /** Kalman-filtered magnetic field Y (µT) */
+  filtered_my: number;
+  /** Kalman-filtered magnetic field Z (µT) */
+  filtered_mz: number;
 }
 
 // ============================================================================
-// COMPLETE DECORATED TELEMETRY
+// PIPELINE STAGES UNION & TYPE GUARDS
 // ============================================================================
 
 /**
- * Fully decorated telemetry with all pipeline stages.
- * Extends RawTelemetry with all computed/converted fields.
- * Total: 10 raw fields + 37 decorated fields = 47 fields
+ * All possible telemetry pipeline stages.
+ * The processor returns this union - use type guards to narrow.
  */
-export interface DecoratedTelemetry extends
-  RawTelemetry,
-  UnitConvertedFields,
-  MotionDetectionFields,
-  GyroBiasFields,
-  OrientationFields,
-  MagCalibrationFields,
-  MagResidualFields,
-  MagnetDetectionFields,
-  KalmanFilteredFields {
-  // All fields inherited from component interfaces
-  // Allows indexing for dynamic access
+export type TelemetryPipelineStage =
+  | RawTelemetry
+  | UnitConvertedTelemetry
+  | MotionDetectedTelemetry
+  | GyroBiasCalibratedTelemetry
+  | OrientationEstimatedTelemetry
+  | OrientationWithMagTelemetry
+  | MagCalibratedTelemetry
+  | MagResidualTelemetry
+  | MagnetDetectedTelemetry
+  | FilteredTelemetry;
+
+/**
+ * Type guard: Check if telemetry has unit conversion applied.
+ */
+export function hasUnitConversion(t: TelemetryPipelineStage): t is UnitConvertedTelemetry {
+  return 'dt' in t && 'ax_g' in t && 'mx_ut' in t;
+}
+
+/**
+ * Type guard: Check if telemetry has motion detection applied.
+ */
+export function hasMotionDetection(t: TelemetryPipelineStage): t is MotionDetectedTelemetry {
+  return 'isMoving' in t && 'accelStd' in t && 'gyroStd' in t;
+}
+
+/**
+ * Type guard: Check if telemetry has gyro bias calibration status.
+ */
+export function hasGyroBiasStatus(t: TelemetryPipelineStage): t is GyroBiasCalibratedTelemetry {
+  return 'gyroBiasCalibrated' in t;
+}
+
+/**
+ * Type guard: Check if telemetry has orientation estimation.
+ */
+export function hasOrientation(t: TelemetryPipelineStage): t is OrientationEstimatedTelemetry {
+  return 'orientation_w' in t && 'euler_roll' in t;
+}
+
+/**
+ * Type guard: Check if telemetry has 9-DOF magnetometer-assisted orientation.
+ */
+export function hasOrientationWithMag(t: TelemetryPipelineStage): t is OrientationWithMagTelemetry {
+  return hasOrientation(t) && 'ahrs_mag_residual_magnitude' in t;
+}
+
+/**
+ * Type guard: Check if telemetry has magnetometer calibration.
+ */
+export function hasMagCalibration(t: TelemetryPipelineStage): t is MagCalibratedTelemetry {
+  return 'iron_mx' in t && 'mag_cal_ready' in t;
+}
+
+/**
+ * Type guard: Check if telemetry has magnetic residual.
+ */
+export function hasMagResidual(t: TelemetryPipelineStage): t is MagResidualTelemetry {
+  return 'residual_mx' in t && 'residual_magnitude' in t;
+}
+
+/**
+ * Type guard: Check if telemetry has magnet detection.
+ */
+export function hasMagnetDetection(t: TelemetryPipelineStage): t is MagnetDetectedTelemetry {
+  return 'magnet_status' in t && 'magnet_detected' in t;
+}
+
+/**
+ * Type guard: Check if telemetry has Kalman filtering.
+ */
+export function hasKalmanFiltering(t: TelemetryPipelineStage): t is FilteredTelemetry {
+  return 'filtered_mx' in t && 'filtered_my' in t && 'filtered_mz' in t;
+}
+
+/**
+ * Type guard: Check if telemetry is fully processed through all stages.
+ */
+export function isFullyProcessed(t: TelemetryPipelineStage): t is FilteredTelemetry {
+  return hasKalmanFiltering(t);
+}
+
+// ============================================================================
+// DECORATED TELEMETRY (BACKWARD COMPATIBILITY)
+// ============================================================================
+
+/**
+ * Decorated telemetry with all optional pipeline fields.
+ * This is the legacy type - prefer using specific stage types.
+ *
+ * @deprecated Use specific stage types (e.g., FilteredTelemetry) for type safety.
+ *             Use type guards to narrow from TelemetryPipelineStage.
+ */
+export interface DecoratedTelemetry extends RawTelemetry {
+  // Stage 1: Unit conversion
+  dt?: number;
+  ax_g?: number;
+  ay_g?: number;
+  az_g?: number;
+  gx_dps?: number;
+  gy_dps?: number;
+  gz_dps?: number;
+  mx_ut?: number;
+  my_ut?: number;
+  mz_ut?: number;
+
+  // Stage 2: Motion detection
+  isMoving?: boolean;
+  accelStd?: number;
+  gyroStd?: number;
+
+  // Stage 3: Gyro bias
+  gyroBiasCalibrated?: boolean;
+
+  // Stage 4: Orientation
+  orientation_w?: number;
+  orientation_x?: number;
+  orientation_y?: number;
+  orientation_z?: number;
+  euler_roll?: number;
+  euler_pitch?: number;
+  euler_yaw?: number;
+  ahrs_mag_residual_x?: number;
+  ahrs_mag_residual_y?: number;
+  ahrs_mag_residual_z?: number;
+  ahrs_mag_residual_magnitude?: number;
+
+  // Stage 5: Mag calibration
+  iron_mx?: number;
+  iron_my?: number;
+  iron_mz?: number;
+  mag_cal_ready?: boolean;
+  mag_cal_confidence?: number;
+  mag_cal_mean_residual?: number;
+  mag_cal_earth_magnitude?: number;
+  mag_cal_hard_iron?: boolean;
+  mag_cal_soft_iron?: boolean;
+
+  // Stage 6: Mag residual
+  residual_mx?: number;
+  residual_my?: number;
+  residual_mz?: number;
+  residual_magnitude?: number;
+
+  // Stage 7: Magnet detection
+  magnet_status?: MagnetStatus;
+  magnet_confidence?: number;
+  magnet_detected?: boolean;
+  magnet_baseline_established?: boolean;
+  magnet_baseline_residual?: number;
+  magnet_deviation?: number;
+
+  // Stage 8: Kalman filtering
+  filtered_mx?: number;
+  filtered_my?: number;
+  filtered_mz?: number;
+
+  // Dynamic access for backward compatibility
   [key: string]: number | string | boolean | undefined;
 }
 
 // ============================================================================
-// SESSION STORAGE TYPES
+// UTILITY TYPES
 // ============================================================================
 
 /**
- * Telemetry sample stored in session.
- * Simplified structure for session JSON files.
+ * Alternative structure using Vector3 for physical values.
+ */
+export interface PhysicalTelemetry {
+  /** Acceleration vector (g) */
+  accel: Vector3;
+  /** Angular velocity vector (deg/s) */
+  gyro: Vector3;
+  /** Magnetic field vector (µT) */
+  mag: Vector3;
+  /** Timestamp (ms) */
+  timestamp: number;
+}
+
+/**
+ * Session storage format (simplified).
  * @deprecated Prefer DecoratedTelemetry for full pipeline data
  */
 export interface TelemetrySample extends RawTelemetry {
@@ -331,54 +474,90 @@ export interface TelemetrySample extends RawTelemetry {
 }
 
 // ============================================================================
-// UTILITY TYPES
+// EXTRACTION UTILITIES
 // ============================================================================
 
 /**
- * Extract orientation as Quaternion from decorated telemetry.
+ * Extract orientation as Quaternion from telemetry with orientation.
  */
-export function extractQuaternion(t: DecoratedTelemetry): Quaternion | null {
-  if (t.orientation_w === undefined) return null;
+export function extractQuaternion(t: OrientationEstimatedTelemetry): Quaternion {
   return {
     w: t.orientation_w,
-    x: t.orientation_x ?? 0,
-    y: t.orientation_y ?? 0,
-    z: t.orientation_z ?? 0,
+    x: t.orientation_x,
+    y: t.orientation_y,
+    z: t.orientation_z,
   };
 }
 
 /**
- * Extract orientation as EulerAngles from decorated telemetry.
+ * Extract orientation as EulerAngles from telemetry with orientation.
  */
-export function extractEulerAngles(t: DecoratedTelemetry): EulerAngles | null {
-  if (t.euler_roll === undefined) return null;
+export function extractEulerAngles(t: OrientationEstimatedTelemetry): EulerAngles {
   return {
     roll: t.euler_roll,
-    pitch: t.euler_pitch ?? 0,
-    yaw: t.euler_yaw ?? 0,
+    pitch: t.euler_pitch,
+    yaw: t.euler_yaw,
   };
 }
 
 /**
- * Extract magnetic residual as Vector3 from decorated telemetry.
+ * Extract magnetic residual as Vector3 from telemetry with residual.
  */
-export function extractMagResidual(t: DecoratedTelemetry): Vector3 | null {
-  if (t.residual_mx === undefined) return null;
+export function extractMagResidual(t: MagResidualTelemetry): Vector3 {
   return {
     x: t.residual_mx,
-    y: t.residual_my ?? 0,
-    z: t.residual_mz ?? 0,
+    y: t.residual_my,
+    z: t.residual_mz,
   };
 }
 
 /**
- * Extract filtered magnetic field as Vector3 from decorated telemetry.
+ * Extract filtered magnetic field as Vector3 from fully processed telemetry.
  */
-export function extractFilteredMag(t: DecoratedTelemetry): Vector3 | null {
-  if (t.filtered_mx === undefined) return null;
+export function extractFilteredMag(t: FilteredTelemetry): Vector3 {
   return {
     x: t.filtered_mx,
-    y: t.filtered_my ?? 0,
-    z: t.filtered_mz ?? 0,
+    y: t.filtered_my,
+    z: t.filtered_mz,
   };
+}
+
+/**
+ * Safe extraction of quaternion from any telemetry (returns null if not available).
+ */
+export function tryExtractQuaternion(t: TelemetryPipelineStage): Quaternion | null {
+  if (hasOrientation(t)) {
+    return extractQuaternion(t);
+  }
+  return null;
+}
+
+/**
+ * Safe extraction of euler angles from any telemetry (returns null if not available).
+ */
+export function tryExtractEulerAngles(t: TelemetryPipelineStage): EulerAngles | null {
+  if (hasOrientation(t)) {
+    return extractEulerAngles(t);
+  }
+  return null;
+}
+
+/**
+ * Safe extraction of magnetic residual from any telemetry (returns null if not available).
+ */
+export function tryExtractMagResidual(t: TelemetryPipelineStage): Vector3 | null {
+  if (hasMagResidual(t)) {
+    return extractMagResidual(t);
+  }
+  return null;
+}
+
+/**
+ * Safe extraction of filtered mag from any telemetry (returns null if not available).
+ */
+export function tryExtractFilteredMag(t: TelemetryPipelineStage): Vector3 | null {
+  if (hasKalmanFiltering(t)) {
+    return extractFilteredMag(t);
+  }
+  return null;
 }
