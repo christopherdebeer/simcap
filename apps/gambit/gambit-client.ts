@@ -25,22 +25,27 @@
  * @requires puck.js
  */
 
-import type { TelemetrySample } from '@core/types';
+import type {
+  RawTelemetry,
+  TelemetrySample,
+  FirmwareInfo as CoreFirmwareInfo,
+  CompatibilityResult as CoreCompatibilityResult,
+  DeviceLogEntry,
+  DeviceLogStats,
+  SampleCollectionResult,
+} from '@core/types';
+import type { PuckConnection, PuckStatic } from '@puck/types';
+
+// Declare global Puck from external library
+declare const Puck: PuckStatic;
 
 // ===== Type Definitions =====
 
-export interface FirmwareInfo {
-  id: string;
-  version: string;
-  build?: string;
-  uptime?: number;
-}
+// Re-export core types with client-specific extensions
+export interface FirmwareInfo extends CoreFirmwareInfo {}
+export interface CompatibilityResult extends CoreCompatibilityResult {}
 
-export interface LogEntry {
-  level: string;
-  time: number;
-  msg: string;
-}
+export interface LogEntry extends DeviceLogEntry {}
 
 export interface LogsResponse {
   logs: LogEntry[];
@@ -48,21 +53,9 @@ export interface LogsResponse {
   since?: number;
 }
 
-export interface LogStats {
-  total: number;
-  errors: number;
-  warnings: number;
-  info: number;
-  debug: number;
-}
+export interface LogStats extends DeviceLogStats {}
 
-export interface CollectionResult {
-  collectedCount: number;
-  requestedCount: number;
-  durationMs: number;
-  requestedHz: number;
-  actualHz: number;
-}
+export interface CollectionResult extends SampleCollectionResult {}
 
 export interface GambitClientOptions {
   debug?: boolean;
@@ -74,23 +67,8 @@ export interface CollectOptions {
   progressTimeoutMs?: number;
 }
 
-export interface CompatibilityResult {
-  compatible: boolean;
-  reason?: string;
-}
-
-export interface TelemetryData {
-  ax: number;
-  ay: number;
-  az: number;
-  gx: number;
-  gy: number;
-  gz: number;
-  mx: number;
-  my: number;
-  mz: number;
-  t: number;
-}
+/** @deprecated Use RawTelemetry from @core/types */
+export interface TelemetryData extends RawTelemetry {}
 
 export interface LogLevel {
   name: string;
@@ -100,22 +78,6 @@ export interface LogLevel {
 type EventHandler<T = unknown> = (data: T) => void;
 type FrameHandler<T = unknown> = (data: T) => void;
 type WildcardHandler = (type: string, data: unknown) => void;
-
-// Puck.js interface (external library)
-interface PuckConnection {
-  isOpen: boolean;
-  on(event: 'data', handler: (data: string) => void): void;
-  on(event: 'close', handler: () => void): void;
-  write(data: string, callback?: (err?: Error) => void): void;
-  close(): void;
-}
-
-interface PuckStatic {
-  connect(callback: (conn: PuckConnection | null) => void): void;
-  eval(code: string): Promise<unknown>;
-}
-
-declare const Puck: PuckStatic;
 
 // ===== Frame Parser =====
 // Protocol: \x02TYPE:LENGTH\nPAYLOAD\x03

@@ -12,16 +12,21 @@
 import { state } from './state.js';
 import { log } from './logger.js';
 import { TelemetryProcessor } from '../shared/telemetry-processor.js';
-import type { EulerAngles, Quaternion } from '@core/types';
+import type {
+  EulerAngles,
+  Quaternion,
+  Vector3,
+  RawTelemetry,
+  DecoratedTelemetry,
+  MotionDetectorState,
+  GyroBiasCalibrationState,
+} from '@core/types';
 import type { UnifiedMagCalibration } from '../shared/unified-mag-calibration';
 
 // ===== Type Definitions =====
 
-interface MagField {
-  x: number;
-  y: number;
-  z: number;
-}
+// Use Vector3 from core for magnetic field
+type MagField = Vector3;
 
 interface PoseUpdateData {
   magField: MagField;
@@ -61,46 +66,9 @@ interface Dependencies {
   threeHandSkeleton: ThreeHandSkeleton | (() => ThreeHandSkeleton | null) | null;
 }
 
-interface RawTelemetry {
-  ax: number;
-  ay: number;
-  az: number;
-  gx: number;
-  gy: number;
-  gz: number;
-  mx: number;
-  my: number;
-  mz: number;
-  t: number;
-}
-
-interface DecoratedTelemetry extends RawTelemetry {
-  mx_ut?: number;
-  my_ut?: number;
-  mz_ut?: number;
-  calibrated_mx?: number;
-  calibrated_my?: number;
-  calibrated_mz?: number;
-  filtered_mx?: number;
-  filtered_my?: number;
-  filtered_mz?: number;
-  residual_mx?: number;
-  residual_my?: number;
-  residual_mz?: number;
-  residual_magnitude?: number;
-  [key: string]: any;
-}
-
-interface MotionState {
-  isMoving: boolean;
-  accelStd: number;
-  gyroStd: number;
-}
-
-interface GyroBiasState {
-  calibrated: boolean;
-  stationaryCount: number;
-}
+// Use core types with local aliases for backward compatibility
+type MotionState = MotionDetectorState;
+type GyroBiasState = GyroBiasCalibrationState;
 
 // ===== Module State =====
 
@@ -284,12 +252,13 @@ function updateLiveDisplay(raw: RawTelemetry, decorated: DecoratedTelemetry): vo
     if (gzEl) gzEl.textContent = String(raw.gz);
 
     // Calibrated magnetometer (show calibrated if available, otherwise raw)
+    // Note: calibrated_mx/my/mz are dynamic fields accessed via index signature
     const mxEl = $('mx');
     const myEl = $('my');
     const mzEl = $('mz');
-    if (mxEl) mxEl.textContent = (decorated.calibrated_mx ?? raw.mx).toFixed(2);
-    if (myEl) myEl.textContent = (decorated.calibrated_my ?? raw.my).toFixed(2);
-    if (mzEl) mzEl.textContent = (decorated.calibrated_mz ?? raw.mz).toFixed(2);
+    if (mxEl) mxEl.textContent = ((decorated.calibrated_mx as number | undefined) ?? raw.mx).toFixed(2);
+    if (myEl) myEl.textContent = ((decorated.calibrated_my as number | undefined) ?? raw.my).toFixed(2);
+    if (mzEl) mzEl.textContent = ((decorated.calibrated_mz as number | undefined) ?? raw.mz).toFixed(2);
 
     // Residual magnetic field display (finger magnet signals)
     // TelemetryProcessor outputs residual_mx/my/mz (Earth field subtracted)
