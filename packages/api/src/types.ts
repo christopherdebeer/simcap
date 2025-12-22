@@ -295,10 +295,12 @@ export interface SessionEntry extends SessionInfo {
   windows: WindowEntry[];
 }
 
-// ===== Session Data Types (for uploaded JSON content) =====
+// ===== Session Payload Types (for uploaded JSON content) =====
+// Note: These are API-specific types for the upload payload format.
+// For core domain types, use @core/types (SessionData, TelemetrySample, etc.)
 
-/** Raw telemetry sample */
-export interface TelemetrySample {
+/** Raw telemetry sample in upload payload */
+export interface UploadTelemetrySample {
   ax: number;
   ay: number;
   az: number;
@@ -311,8 +313,8 @@ export interface TelemetrySample {
   t: number;
 }
 
-/** Session metadata in uploaded file */
-export interface SessionMetadata {
+/** Session metadata in upload payload */
+export interface UploadSessionMetadata {
   sample_rate?: number;
   device?: string;
   firmware_version?: string;
@@ -328,11 +330,20 @@ export interface SessionMetadata {
   session_type?: string;
 }
 
-/** Full session data structure (v2.1 schema) */
-export interface SessionData {
+/**
+ * Session upload payload (v2.1 schema)
+ * This represents the JSON structure sent to the upload API.
+ * Distinct from core SessionData which is the full domain model.
+ */
+export interface SessionPayload {
   version: string;
   timestamp: string;
-  samples: TelemetrySample[];
+  samples: UploadTelemetrySample[];
   labels: unknown[];
-  metadata?: SessionMetadata;
+  metadata?: UploadSessionMetadata;
 }
+
+/**
+ * @deprecated Use SessionPayload instead
+ */
+export type SessionData = SessionPayload;

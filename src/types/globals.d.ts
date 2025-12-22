@@ -3,31 +3,29 @@
  *
  * Note: Most filter/client code is now proper TypeScript modules.
  * These declarations are only for external libraries that remain as global scripts.
+ *
+ * Geometry types (Vector3, Quaternion, EulerAngles) are now in @core/types.
+ * Import from there instead of using these global interfaces.
  */
+
+// Import canonical types from core (for type checking global interfaces)
+import type {
+  Vector3 as CoreVector3,
+  Quaternion as CoreQuaternion,
+  EulerAngles as CoreEulerAngles,
+  FirmwareInfo,
+  CompatibilityResult,
+} from '@core/types';
 
 // Make this file a module to allow `declare global`
 export {};
 
-// ===== Common Types (used by inline scripts) =====
+// ===== Common Types (for inline scripts that can't use imports) =====
+// These mirror the core types for use in global scope
 
-interface Quaternion {
-  w: number;
-  x: number;
-  y: number;
-  z: number;
-}
-
-interface Vector3 {
-  x: number;
-  y: number;
-  z: number;
-}
-
-interface EulerAngles {
-  roll: number;
-  pitch: number;
-  yaw: number;
-}
+interface Quaternion extends CoreQuaternion {}
+interface Vector3 extends CoreVector3 {}
+interface EulerAngles extends CoreEulerAngles {}
 
 // ===== puck.js (external BLE library) =====
 
@@ -48,11 +46,13 @@ interface GambitClientOptions {
   autoKeepalive?: boolean;
 }
 
+/** @deprecated Use FirmwareInfo from @core/types */
 interface GambitFirmwareInfo {
   name: string;
   version: string;
 }
 
+/** @deprecated Use CompatibilityResult from @core/types */
 interface GambitCompatibilityResult {
   compatible: boolean;
   reason?: string;
@@ -82,7 +82,7 @@ interface GambitClientInterface {
 declare global {
   // Three.js is loaded via CDN
   const THREE: any;
-  
+
   // Puck.js BLE library
   const Puck: {
     debug: number;
@@ -100,7 +100,7 @@ declare global {
     LED3: { write: (value: boolean) => void };
     log?: (level: number, message: string) => void;
   };
-  
+
   interface Window {
     GambitClient: new (options?: GambitClientOptions) => GambitClientInterface;
   }

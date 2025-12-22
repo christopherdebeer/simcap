@@ -12,7 +12,8 @@ import type {
   VisualizationSessionResponse,
   SessionVisualization,
   SessionEntry,
-  SessionData,
+  SessionPayload,
+  SessionData, // Deprecated alias, use SessionPayload
   ApiError,
   UploadOptions,
   UploadWithRetryOptions,
@@ -31,7 +32,8 @@ export type {
   VisualizationSessionResponse,
   SessionVisualization,
   SessionEntry,
-  SessionData,
+  SessionPayload,
+  SessionData, // Deprecated alias, use SessionPayload
   ApiError,
   UploadOptions,
   UploadWithRetryOptions,
@@ -119,9 +121,9 @@ export class ApiClient {
   /**
    * Fetch session data by URL
    */
-  async fetchSessionData(url: string): Promise<SessionData> {
+  async fetchSessionData(url: string): Promise<SessionPayload> {
     const response = await fetch(url);
-    return handleResponse<SessionData>(response);
+    return handleResponse<SessionPayload>(response);
   }
 
   // ===== Visualizations API =====

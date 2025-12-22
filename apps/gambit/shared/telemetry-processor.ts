@@ -44,74 +44,20 @@ import {
     createMagnetDetector
 } from './magnet-detector.js';
 
-import type { EulerAngles, Quaternion } from '@core/types';
+import type {
+  EulerAngles,
+  Quaternion,
+  RawTelemetry,
+  DecoratedTelemetry,
+  GeomagneticReference,
+  MotionDetectorState,
+  GyroBiasCalibrationState,
+} from '@core/types';
 import type { GeomagneticLocation } from './geomagnetic-field';
 import type { MagnetDetectorState } from './magnet-detector';
 
-// ===== Type Definitions =====
-
-export interface RawTelemetry {
-  ax: number;
-  ay: number;
-  az: number;
-  gx: number;
-  gy: number;
-  gz: number;
-  mx: number;
-  my: number;
-  mz: number;
-  t: number;
-}
-
-export interface DecoratedTelemetry extends RawTelemetry {
-  dt?: number;
-  ax_g?: number;
-  ay_g?: number;
-  az_g?: number;
-  gx_dps?: number;
-  gy_dps?: number;
-  gz_dps?: number;
-  mx_ut?: number;
-  my_ut?: number;
-  mz_ut?: number;
-  isMoving?: boolean;
-  accelStd?: number;
-  gyroStd?: number;
-  gyroBiasCalibrated?: boolean;
-  orientation_w?: number;
-  orientation_x?: number;
-  orientation_y?: number;
-  orientation_z?: number;
-  euler_roll?: number;
-  euler_pitch?: number;
-  euler_yaw?: number;
-  ahrs_mag_residual_x?: number;
-  ahrs_mag_residual_y?: number;
-  ahrs_mag_residual_z?: number;
-  ahrs_mag_residual_magnitude?: number;
-  iron_mx?: number;
-  iron_my?: number;
-  iron_mz?: number;
-  mag_cal_ready?: boolean;
-  mag_cal_confidence?: number;
-  mag_cal_mean_residual?: number;
-  mag_cal_earth_magnitude?: number;
-  mag_cal_hard_iron?: boolean;
-  mag_cal_soft_iron?: boolean;
-  residual_mx?: number;
-  residual_my?: number;
-  residual_mz?: number;
-  residual_magnitude?: number;
-  magnet_status?: string;
-  magnet_confidence?: number;
-  magnet_detected?: boolean;
-  magnet_baseline_established?: boolean;
-  magnet_baseline_residual?: number;
-  magnet_deviation?: number;
-  filtered_mx?: number;
-  filtered_my?: number;
-  filtered_mz?: number;
-}
+// Re-export core types for consumers
+export type { RawTelemetry, DecoratedTelemetry } from '@core/types';
 
 export interface TelemetryProcessorOptions {
   onProcessed?: ((telemetry: DecoratedTelemetry) => void) | null;
@@ -125,22 +71,12 @@ export interface TelemetryProcessorOptions {
   calibration?: any;
 }
 
-interface GeomagneticRef {
-  horizontal: number;
-  vertical: number;
-  declination: number;
-}
+// Use GeomagneticReference from core types
+type GeomagneticRef = GeomagneticReference;
 
-export interface MotionState {
-  isMoving: boolean;
-  accelStd: number;
-  gyroStd: number;
-}
-
-export interface GyroBiasState {
-  calibrated: boolean;
-  stationaryCount: number;
-}
+// Re-export motion/gyro state types with local aliases for backward compatibility
+export type MotionState = MotionDetectorState;
+export type GyroBiasState = GyroBiasCalibrationState;
 
 interface MadgwickAHRS {
   update: (ax: number, ay: number, az: number, gx: number, gy: number, gz: number, dt?: number | null, gyroInDegrees?: boolean) => void;

@@ -59,9 +59,11 @@ export interface PuckStatic {
   write(data: string, callback?: PuckWriteCallback): void;
 
   /**
-   * Evaluate JavaScript on the connected device
+   * Evaluate JavaScript on the connected device.
+   * Can be called with a callback or returns a Promise if no callback provided.
    */
   eval<T = any>(expression: string, callback: PuckEvalCallback<T>): void;
+  eval<T = any>(expression: string): Promise<T>;
 
   /**
    * Close the current connection

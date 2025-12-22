@@ -10,32 +10,31 @@
  * Based on analysis: magnetic-finger-tracking-analysis.md
  */
 
-// ===== Type Definitions =====
+// Import canonical types from core
+import type {
+  Vector3,
+  Quaternion,
+  EulerAngles,
+  FingerName,
+  HandPose,
+  FingerTrackingState,
+  GeomagneticReference,
+  MotionDetectorState,
+} from '@core/types';
 
-export interface Vector3 {
-  x: number;
-  y: number;
-  z: number;
-}
+// Re-export core types for consumers of this module
+export type {
+  Vector3,
+  Quaternion,
+  EulerAngles,
+  FingerName,
+  HandPose,
+  FingerTrackingState,
+  GeomagneticReference,
+  MotionDetectorState,
+} from '@core/types';
 
-export interface Quaternion {
-  w: number;
-  x: number;
-  y: number;
-  z: number;
-}
-
-export interface EulerAngles {
-  roll: number;
-  pitch: number;
-  yaw: number;
-}
-
-export interface GeomagneticReference {
-  horizontal: number;  // µT
-  vertical: number;    // µT
-  declination: number; // degrees
-}
+// ===== Filter-Specific Type Definitions =====
 
 export interface MadgwickOptions {
   sampleFreq?: number;
@@ -49,6 +48,7 @@ export interface MotionDetectorOptions {
   windowSize?: number;
 }
 
+/** @deprecated Use MotionDetectorState from @core/types */
 export interface MotionState {
   isMoving: boolean;
   accelStd: number;
@@ -68,31 +68,16 @@ export interface ParticleFilterOptions {
   resampleThreshold?: number;
 }
 
-export interface FingerState {
-  x: number;
-  y: number;
-  z: number;
-  vx: number;
-  vy: number;
-  vz: number;
-}
-
-export interface HandPose {
-  thumb: Vector3;
-  index: Vector3;
-  middle: Vector3;
-  ring: Vector3;
-  pinky: Vector3;
-}
-
+/** Particle state for multi-hypothesis hand tracking */
 export interface Particle {
-  thumb: FingerState;
-  index: FingerState;
-  middle: FingerState;
-  ring: FingerState;
-  pinky: FingerState;
+  thumb: FingerTrackingState;
+  index: FingerTrackingState;
+  middle: FingerTrackingState;
+  ring: FingerTrackingState;
+  pinky: FingerTrackingState;
 }
 
+/** Magnet configuration for magnetic field model */
 export interface MagnetConfig {
   thumb?: { moment: Vector3 };
   index?: { moment: Vector3 };
@@ -101,7 +86,6 @@ export interface MagnetConfig {
   pinky?: { moment: Vector3 };
 }
 
-type FingerName = 'thumb' | 'index' | 'middle' | 'ring' | 'pinky';
 const FINGER_NAMES: FingerName[] = ['thumb', 'index', 'middle', 'ring', 'pinky'];
 
 /**
