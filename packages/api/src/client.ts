@@ -13,7 +13,6 @@ import type {
   SessionVisualization,
   SessionEntry,
   SessionPayload,
-  SessionData, // Deprecated alias, use SessionPayload
   ApiError,
   UploadOptions,
   UploadWithRetryOptions,
@@ -33,7 +32,6 @@ export type {
   SessionVisualization,
   SessionEntry,
   SessionPayload,
-  SessionData, // Deprecated alias, use SessionPayload
   ApiError,
   UploadOptions,
   UploadWithRetryOptions,

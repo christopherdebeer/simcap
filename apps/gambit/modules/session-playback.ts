@@ -8,7 +8,7 @@
  */
 
 import type { TelemetrySample } from '@core/types';
-import { ApiClient, type SessionInfo, type SessionData as ApiSessionData } from '@api/client';
+import { ApiClient, type SessionInfo } from '@api/client';
 
 // ===== Type Definitions =====
 
