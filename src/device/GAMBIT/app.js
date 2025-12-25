@@ -480,6 +480,7 @@ setWatch(function(e) {
 
 // ===== State and Telemetry =====
 var telemetry = {
+    // IMU sensors (always present)
     ax: null,
     ay: null,
     az: null,
@@ -489,15 +490,19 @@ var telemetry = {
     mx: null,
     my: null,
     mz: null,
-    l: null,
-    t: null,
-    c: null,
+    // Timestamp (ms since stream start)
+    t: 0,
+    // Environmental sensors (sampled at lower rates)
+    l: null,      // Light sensor
+    c: null,      // Capacitive sensor
+    b: null,      // Battery percentage
+    temp: null,   // Temperature from magnetometer
+    // Device state
     s: state,
     n: pressCount,
-    b: null,
-    // New fields for v0.4.0
-    mode: null,
-    ctx: null,
+    // Mode and context (v0.4.0)
+    mode: 'N',
+    ctx: 'u',
     grip: null
 };
 
@@ -523,13 +528,16 @@ function emit() {
         telemetry.az * telemetry.az
     );
 
+    // Timestamp (ms since stream start)
+    telemetry.t = streamStartTime ? Date.now() - streamStartTime : 0;
+
     // BATTERY OPTIMIZATION: Read expensive sensors based on mode config
     if (sampleCount % modeConfig.magEvery === 0) {
         var mag = Puck.mag();
         telemetry.mx = mag.x;
         telemetry.my = mag.y;
         telemetry.mz = mag.z;
-        telemetry.t = Puck.magTemp();
+        telemetry.temp = Puck.magTemp();
     }
 
     // BATTERY OPTIMIZATION: Read ambient sensors based on mode config

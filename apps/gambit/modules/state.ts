@@ -38,11 +38,29 @@ export interface CurrentLabels {
 // Custom label definitions are simple strings (label names)
 export type CustomLabelDefinition = string;
 
+/** Sampling mode from firmware v0.4.0+ */
+export type SamplingMode = 'LOW_POWER' | 'NORMAL' | 'HIGH_RES' | 'BURST' | null;
+
+/** Device context from firmware v0.4.0+ */
+export type DeviceContext = 'unknown' | 'stored' | 'held' | 'active' | 'table' | null;
+
+/** Event marker from triple-tap */
+export interface EventMarker {
+  time: number;
+  sampleCount: number;
+}
+
+/** Extended session data with markers */
+export interface SessionDataExtended {
+  samples?: TelemetrySample[];
+  markers?: EventMarker[];
+}
+
 export interface AppState {
   connected: boolean;
   recording: boolean;
   paused: boolean;
-  sessionData: TelemetrySample[];
+  sessionData: TelemetrySample[] & SessionDataExtended;
   labels: LabelSegment[];
   currentLabelStart: number | null;
   gambitClient: GambitClient | null;
@@ -51,6 +69,9 @@ export interface AppState {
   currentLabels: CurrentLabels;
   customLabelDefinitions: CustomLabelDefinition[];
   activeCustomLabels: string[];
+  // v0.4.0+ state
+  samplingMode: SamplingMode;
+  deviceContext: DeviceContext;
 }
 
 // ===== Initial State =====
@@ -85,7 +106,10 @@ export const state: AppState = {
   geomagneticLocation: null,
   currentLabels: { ...initialCurrentLabels },
   customLabelDefinitions: [],
-  activeCustomLabels: []
+  activeCustomLabels: [],
+  // v0.4.0+ state
+  samplingMode: null,
+  deviceContext: null
 };
 
 // ===== State Functions =====
@@ -105,7 +129,7 @@ export function resetSession(): void {
     calibration: 'none',
     custom: []
   };
-  // Note: customLabelDefinitions and activeCustomLabels are preserved
+  // Note: customLabelDefinitions, activeCustomLabels, samplingMode, deviceContext are preserved
 }
 
 /**

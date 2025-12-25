@@ -51,24 +51,28 @@ interface PlaybackUIElements {
     speedSelect: HTMLSelectElement | null;
 }
 
-/** Extended telemetry with optional legacy firmware fields and computed values */
+/** Extended telemetry with computed values for playback */
 interface ExtendedTelemetry extends TelemetrySample {
-    /** Legacy field - loop counter */
-    l?: number;
-    /** Legacy field - sensor status */
-    s?: number;
-    /** Legacy field - calibration status */
-    c?: number;
-    /** Legacy field - notification flags */
-    n?: number;
-    /** Legacy field - battery level */
-    b?: number;
     /** Pre-computed Euler roll from session playback */
     euler_roll?: number;
     /** Pre-computed Euler pitch from session playback */
     euler_pitch?: number;
     /** Pre-computed Euler yaw from session playback */
     euler_yaw?: number;
+}
+
+/** Minimal sensor data for calibration and internal use (subset of RawTelemetry) */
+interface SensorSnapshot {
+    ax: number;
+    ay: number;
+    az: number;
+    gx: number;
+    gy: number;
+    gz: number;
+    mx?: number;
+    my?: number;
+    mz?: number;
+    t?: number;
 }
 
 // ===== Window Augmentation =====
@@ -647,7 +651,7 @@ function updateMagTrajectoryStats() {
 const observationStore = new ObservationStore();
 let currentCalibrationPose: ReferencePose | null = null;
 let currentUserAnswers: Record<string, string> = {};
-let latestSensorData: TelemetrySample | null = null;
+let latestSensorData: SensorSnapshot | null = null;
 let latestAhrsOutput: EulerAngles | null = null;
 let baselineAhrsOutput: EulerAngles | null = null;  // Stored from FLAT_PALM_UP pose
 
@@ -1002,7 +1006,7 @@ function exportObservationsToFile() {
 }
 
 // Update sensor state display
-function updateCalibrationSensorDisplay(euler: EulerAngles | null, sensorData: TelemetrySample | null) {
+function updateCalibrationSensorDisplay(euler: EulerAngles | null, sensorData: SensorSnapshot | null) {
     latestAhrsOutput = euler;
     latestSensorData = sensorData;
 
