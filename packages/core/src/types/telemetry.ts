@@ -38,8 +38,12 @@ export type { Vector3, Quaternion, EulerAngles } from './geometry';
  * - Accelerometer: LSM6DS3, ±2g range, 8192 LSB/g
  * - Gyroscope: LSM6DS3, ±245 dps range, 114.28 LSB/dps
  * - Magnetometer: MMC5603NJ, ±30 gauss range, 1024 LSB/gauss
+ *
+ * NOTE: Environmental and v0.4.0 fields may be missing in older session data.
+ * GAMBIT Firmware v0.4.0+ provides all fields.
  */
 export interface RawTelemetry {
+  // ===== IMU Sensors (always present) =====
   /** Accelerometer X (LSB, range: ±16384) */
   ax: number;
   /** Accelerometer Y (LSB, range: ±16384) */
@@ -58,29 +62,56 @@ export interface RawTelemetry {
   my: number;
   /** Magnetometer Z (LSB, range: ±30720) */
   mz: number;
-  /** Timestamp (ms since connection) */
+  /** Timestamp (ms since stream start) */
   t: number;
 
-  // ===== Optional environmental sensors =====
-  /** Light sensor (0-1 normalized, optional) */
-  l?: number;
-  /** Capacitive sensor (raw value, optional) */
-  c?: number;
-  /** Battery percentage (0-100, optional) */
-  b?: number;
-  /** Device state (0=idle, 1=streaming, optional) */
+  // ===== Environmental sensors (v0.4.0+, sampled at lower rates) =====
+  /** Light sensor (0-1 normalized) - sampled based on mode */
+  l?: number | null;
+  /** Capacitive sensor (raw value) - sampled based on mode */
+  c?: number | null;
+  /** Battery percentage (0-100) - sampled infrequently */
+  b?: number | null;
+  /** Temperature from magnetometer */
+  temp?: number | null;
+
+  // ===== Device state (v0.4.0+) =====
+  /** Device state (0=idle, 1=streaming) */
   s?: number;
-  /** Button press count (optional) */
+  /** Button press count */
   n?: number;
 
-  // ===== New v0.4.0 fields =====
-  /** Sampling mode: L=LOW_POWER, N=NORMAL, H=HIGH_RES, B=BURST (optional) */
+  // ===== Mode and Context (v0.4.0+) =====
+  /** Sampling mode: L=LOW_POWER, N=NORMAL, H=HIGH_RES, B=BURST */
   mode?: string;
-  /** Context: u=unknown, s=stored, h=held, a=active, t=table (optional) */
+  /** Context: u=unknown, s=stored, h=held, a=active, t=table */
   ctx?: string;
-  /** Grip detected: 0=no, 1=yes (optional) */
-  grip?: number;
+  /** Grip detected: 0=no, 1=yes, null=not calibrated */
+  grip?: number | null;
 }
+
+/** Sampling mode identifiers */
+export type SamplingMode = 'LOW_POWER' | 'NORMAL' | 'HIGH_RES' | 'BURST';
+
+/** Context identifiers */
+export type DeviceContext = 'unknown' | 'stored' | 'held' | 'active' | 'table';
+
+/** Mode code to full name mapping */
+export const MODE_NAMES: Record<string, SamplingMode> = {
+  'L': 'LOW_POWER',
+  'N': 'NORMAL',
+  'H': 'HIGH_RES',
+  'B': 'BURST',
+};
+
+/** Context code to full name mapping */
+export const CONTEXT_NAMES: Record<string, DeviceContext> = {
+  'u': 'unknown',
+  's': 'stored',
+  'h': 'held',
+  'a': 'active',
+  't': 'table',
+};
 
 // ============================================================================
 // STAGE 1: UNIT CONVERSION
@@ -476,8 +507,16 @@ export interface DecoratedTelemetry extends RawTelemetry {
   filtered_my?: number;
   filtered_mz?: number;
 
-  // Dynamic access for backward compatibility
-  [key: string]: number | string | boolean | undefined;
+  // Stage 9: Device context (from firmware v0.4.0)
+  /** Full sampling mode name */
+  modeName?: SamplingMode;
+  /** Full context name */
+  contextName?: DeviceContext;
+  /** Whether device is being gripped */
+  isGripped?: boolean;
+
+  // Dynamic access
+  [key: string]: number | string | boolean | null | undefined;
 }
 
 // ============================================================================
