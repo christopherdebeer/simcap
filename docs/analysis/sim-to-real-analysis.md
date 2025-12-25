@@ -248,6 +248,94 @@ Use unlabeled real data for pre-training:
 
 ---
 
+## Unsupervised Learning Results
+
+Given the absence of labeled real data, we evaluated three approaches for leveraging labeled synthetic data:
+
+### Approach Comparison
+
+| Approach | Entropy | Diversity | Domain Distance | Status |
+|----------|---------|-----------|-----------------|--------|
+| Zero-shot transfer | 0.18 | Low | 419.0 | ✗ Failed |
+| Contrastive pre-training | 0.58 | High | 10.2 | ✓ **Best** |
+| Domain adaptation | 0.36 | Medium | 4.2 | ○ Moderate |
+
+### 1. Zero-shot Transfer (Baseline)
+
+**Method**: Train directly on labeled synthetic data, evaluate on real data.
+
+**Result**: Complete failure - model collapses to single prediction ("flexed" for all fingers).
+- Prediction entropy: 0.18 (near minimum diversity)
+- Domain distance: 419 (massive embedding gap)
+- All fingers predicted as 100% flexed
+
+**Conclusion**: The sim-to-real gap is too large for direct transfer.
+
+### 2. Contrastive Pre-training (Best Approach)
+
+**Method**: SimCLR-style self-supervised pre-training on unlabeled real data, then fine-tune on synthetic labels.
+
+**Result**: Significant improvement in prediction diversity and domain alignment.
+- Prediction entropy: 0.58 (3.2x improvement)
+- Domain distance: 10.2 (40x reduction)
+- Diverse predictions across states:
+  ```
+  thumb : ext:44%, part:51%, flex:4%
+  index : ext:1%, part:42%, flex:57%
+  middle: part:2%, flex:98%
+  ring  : part:4%, flex:95%
+  pinky : ext:38%, part:18%, flex:44%
+  ```
+
+**Why it works**: Contrastive learning discovers the natural structure of the real data distribution, creating representations that transfer better from synthetic labels.
+
+### 3. Domain Adaptation
+
+**Method**: Adversarial training with domain discriminator to learn domain-invariant features.
+
+**Result**: Good domain alignment but partial mode collapse.
+- Prediction entropy: 0.36 (2x improvement)
+- Domain distance: 4.2 (100x reduction)
+- Some fingers still show collapse (ring: 99% flexed)
+
+**Conclusion**: Effective for domain alignment but less stable than contrastive pre-training.
+
+### Recommended Pipeline
+
+Based on these results, the recommended training pipeline is:
+
+```python
+from ml.unsupervised_learning import ContrastiveLearning, load_real_data, generate_synthetic_data
+
+# 1. Load data
+real_samples, _ = load_real_data()
+syn_samples, syn_labels, _ = generate_synthetic_data(n_sessions=30)
+
+# 2. Contrastive pre-training on real data
+cl = ContrastiveLearning(latent_dim=32, projection_dim=16)
+cl.pretrain(real_samples, epochs=100)
+
+# 3. Fine-tune classifier on synthetic labels
+cl.finetune_on_synthetic(syn_samples, syn_labels, epochs=30)
+
+# 4. Predict on real data
+predictions = cl.predict(real_samples)
+```
+
+### Next Steps
+
+1. **Collect labeled validation set** (100-200 samples with known gestures)
+   - Required to measure actual accuracy, not just diversity
+
+2. **Ensemble approaches** - Combine contrastive + domain adaptation
+
+3. **Temporal modeling** - Current model is sample-independent
+   - Add LSTM/Transformer for sequence context
+
+4. **Active learning** - Use model uncertainty to select samples for labeling
+
+---
+
 ## Appendix: Field Distribution Comparison
 
 ![Sim-to-Real Comparison](../../images/sim_to_real_comparison.png)
