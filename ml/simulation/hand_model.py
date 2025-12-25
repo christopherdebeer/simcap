@@ -312,7 +312,38 @@ class HandPoseGenerator:
             states = {f: np.random.choice([FingerState.EXTENDED, FingerState.PARTIAL, FingerState.FLEXED])
                       for f in self.geometry}
 
-        return self.generate_pose(states, noise_mm)
+        pose = self.generate_pose(states, noise_mm)
+
+        # Apply close-range modification for high-magnitude poses
+        if pose_name in CLOSE_RANGE_POSES:
+            pose = self._apply_close_range_offset(pose, pose_name)
+
+        return pose
+
+    def _apply_close_range_offset(self, pose: HandPose, pose_name: str) -> HandPose:
+        """
+        Modify pose to bring fingers closer to sensor for higher field magnitudes.
+
+        This addresses the sim-to-real gap where real data shows magnitudes up to
+        200+ μT while standard simulation caps at ~85 μT.
+        """
+        close_positions = {}
+        # Calibrated to produce ~120-180 μT max (matching real data P99)
+        offset_scale = 0.75 if pose_name == 'fist_tight' else 0.80
+
+        for finger, pos in pose.fingertip_positions.items():
+            # Move position closer to sensor (origin)
+            # Scale down the distance while maintaining direction
+            new_pos = pos * offset_scale
+            # Slight Z adjustment to bring closer to wrist level
+            new_pos[2] = new_pos[2] * 0.9 - 3
+            close_positions[finger] = new_pos
+
+        return HandPose(
+            finger_states=pose.finger_states,
+            fingertip_positions=close_positions,
+            timestamp=pose.timestamp
+        )
 
     def generate_transition(
         self,
@@ -409,7 +440,17 @@ POSE_TEMPLATES = {
              'ring': 'flexed', 'pinky': 'extended'},
     'call_me': {'thumb': 'extended', 'index': 'flexed', 'middle': 'flexed',
                 'ring': 'flexed', 'pinky': 'extended'},
+    # Close-range poses for higher field magnitudes (based on sim-to-real analysis)
+    'fist_tight': {'thumb': 'flexed', 'index': 'flexed', 'middle': 'flexed',
+                   'ring': 'flexed', 'pinky': 'flexed'},  # Uses special close position
+    'pinch': {'thumb': 'partial', 'index': 'partial', 'middle': 'flexed',
+              'ring': 'flexed', 'pinky': 'flexed'},
+    'grab': {'thumb': 'partial', 'index': 'partial', 'middle': 'partial',
+             'ring': 'partial', 'pinky': 'partial'},
 }
+
+# Poses that should position fingers closer to the sensor (for high-magnitude signals)
+CLOSE_RANGE_POSES = {'fist_tight', 'pinch', 'grab'}
 
 
 def pose_template_to_states(template: Dict[str, str]) -> Dict[str, FingerState]:
