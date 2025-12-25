@@ -112,6 +112,46 @@ export interface ConnectionEvent {
   addr?: string;
 }
 
+/** Connection quality statistics */
+export interface ConnectionStats {
+  connected: boolean;
+  rssi: number | null;
+  rssiQuality: 'excellent' | 'good' | 'fair' | 'weak' | 'poor' | 'unknown';
+  duration: number;
+  packetsSent: number;
+  bytesSent: number;
+  reconnects: number;
+  avgPacketRate: number;
+}
+
+/** Beacon status from device */
+export interface BeaconStatus {
+  enabled: boolean;
+  interval: number;
+}
+
+/** FIFO batch sample (raw sensor data) */
+export interface FifoBatchSample {
+  ax: number;
+  ay: number;
+  az: number;
+  gx: number;
+  gy: number;
+  gz: number;
+  mx?: number;
+  my?: number;
+  mz?: number;
+  t: number;
+  n: number;
+}
+
+/** FIFO batch event from high-resolution streaming */
+export interface FifoBatchEvent {
+  samples: FifoBatchSample[];
+  count: number;
+  total: number;
+}
+
 export interface CollectOptions {
   progressTimeoutMs?: number;
 }
@@ -127,6 +167,146 @@ export interface LogLevel {
 type EventHandler<T = unknown> = (data: T) => void;
 type FrameHandler<T = unknown> = (data: T) => void;
 type WildcardHandler = (type: string, data: unknown) => void;
+
+// ===== Binary Telemetry Parser =====
+// Binary format (28 bytes):
+// Header: [0xAB, 0xCD] (magic bytes)
+// IMU:    [ax:2][ay:2][az:2][gx:2][gy:2][gz:2][mx:2][my:2][mz:2]
+// Time:   [t:4]
+// Flags:  [flags:1] - [mode:2][ctx:3][grip:1][hasLight:1][hasBatt:1]
+// Aux:    [light:1][battery:1][temp:1]
+
+const BINARY_MAGIC = 0xABCD;
+const BINARY_PACKET_SIZE = 28;
+
+const MODE_CODES = ['LOW_POWER', 'NORMAL', 'HIGH_RES', 'BURST'] as const;
+const CTX_CODES = ['unknown', 'stored', 'held', 'active', 'table'] as const;
+
+export interface BinaryTelemetry {
+  ax: number;
+  ay: number;
+  az: number;
+  gx: number;
+  gy: number;
+  gz: number;
+  mx: number;
+  my: number;
+  mz: number;
+  t: number;
+  mode: string;
+  ctx: string;
+  grip: number | null;
+  l: number | null;
+  b: number | null;
+  temp: number | null;
+  s: number;
+  n: number;
+}
+
+export class BinaryTelemetryParser {
+  private buffer: Uint8Array = new Uint8Array(0);
+  private handlers: ((data: BinaryTelemetry) => void)[] = [];
+
+  onBinaryData(data: Uint8Array): void {
+    // Append to buffer
+    const newBuffer = new Uint8Array(this.buffer.length + data.length);
+    newBuffer.set(this.buffer);
+    newBuffer.set(data, this.buffer.length);
+    this.buffer = newBuffer;
+
+    this.processBuffer();
+  }
+
+  private processBuffer(): void {
+    while (this.buffer.length >= BINARY_PACKET_SIZE) {
+      // Look for magic header
+      let found = false;
+      for (let i = 0; i <= this.buffer.length - BINARY_PACKET_SIZE; i++) {
+        const magic = (this.buffer[i] << 8) | this.buffer[i + 1];
+        if (magic === BINARY_MAGIC) {
+          // Found a packet
+          const packet = this.buffer.slice(i, i + BINARY_PACKET_SIZE);
+          this.parsePacket(packet);
+          this.buffer = this.buffer.slice(i + BINARY_PACKET_SIZE);
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        // No valid packet found, trim buffer
+        if (this.buffer.length > BINARY_PACKET_SIZE * 2) {
+          this.buffer = this.buffer.slice(this.buffer.length - BINARY_PACKET_SIZE);
+        }
+        break;
+      }
+    }
+  }
+
+  private parsePacket(packet: Uint8Array): void {
+    const view = new DataView(packet.buffer, packet.byteOffset, packet.length);
+
+    // Parse IMU data (16-bit signed, little-endian)
+    const ax = view.getInt16(2, true);
+    const ay = view.getInt16(4, true);
+    const az = view.getInt16(6, true);
+    const gx = view.getInt16(8, true);
+    const gy = view.getInt16(10, true);
+    const gz = view.getInt16(12, true);
+    const mx = view.getInt16(14, true);
+    const my = view.getInt16(16, true);
+    const mz = view.getInt16(18, true);
+
+    // Parse timestamp (32-bit unsigned, little-endian)
+    const t = view.getUint32(20, true);
+
+    // Parse flags
+    const flags = packet[24];
+    const modeCode = (flags >> 6) & 0x03;
+    const ctxCode = (flags >> 3) & 0x07;
+    const gripBit = (flags >> 2) & 0x01;
+    const hasLight = (flags >> 1) & 0x01;
+    const hasBatt = flags & 0x01;
+
+    // Parse auxiliary data
+    const light = hasLight ? packet[25] / 255 : null;
+    const batt = hasBatt ? packet[26] : null;
+    const temp = packet[27] - 40; // Reverse offset
+
+    const telemetry: BinaryTelemetry = {
+      ax, ay, az,
+      gx, gy, gz,
+      mx, my, mz,
+      t,
+      mode: MODE_CODES[modeCode]?.charAt(0) || 'N',
+      ctx: CTX_CODES[ctxCode]?.charAt(0) || 'u',
+      grip: gripBit,
+      l: light,
+      b: batt,
+      temp: temp,
+      s: 1, // Streaming
+      n: 0  // Not tracked in binary
+    };
+
+    for (const handler of this.handlers) {
+      handler(telemetry);
+    }
+  }
+
+  on(handler: (data: BinaryTelemetry) => void): void {
+    this.handlers.push(handler);
+  }
+
+  off(handler: (data: BinaryTelemetry) => void): void {
+    const idx = this.handlers.indexOf(handler);
+    if (idx !== -1) {
+      this.handlers.splice(idx, 1);
+    }
+  }
+
+  reset(): void {
+    this.buffer = new Uint8Array(0);
+  }
+}
 
 // ===== Frame Parser =====
 // Protocol: \x02TYPE:LENGTH\nPAYLOAD\x03
@@ -239,12 +419,14 @@ export class FrameParser {
 export class GambitClient {
   private connection: PuckConnection | null = null;
   private frameParser: FrameParser;
+  private binaryParser: BinaryTelemetryParser;
   private eventHandlers: Record<string, EventHandler[]> = {};
   private debug: boolean;
   private firmwareInfo: FirmwareInfo | null = null;
   private keepaliveInterval: ReturnType<typeof setInterval> | null = null;
   private autoKeepalive: boolean;
   private keepaliveIntervalMs: number;
+  private useBinaryProtocol: boolean = false;
 
   // Static properties
   static LOG_LEVELS: Record<string, LogLevel> = {
@@ -258,6 +440,7 @@ export class GambitClient {
 
   constructor(options: GambitClientOptions = {}) {
     this.frameParser = new FrameParser();
+    this.binaryParser = new BinaryTelemetryParser();
     this.debug = options.debug || false;
     this.autoKeepalive = options.autoKeepalive !== false;
     this.keepaliveIntervalMs = options.keepaliveInterval || 20000;
@@ -269,6 +452,12 @@ export class GambitClient {
     this.frameParser.on('LOGS_CLEARED', (data: unknown) => this._handleLogsCleared(data));
     this.frameParser.on('LOG_STATS', (data: unknown) => this._handleLogStats(data as LogStats));
 
+    // Wire up binary parser to emit data events
+    this.binaryParser.on((data: BinaryTelemetry) => {
+      // Convert BinaryTelemetry to RawTelemetry format for consistency
+      this.emit('data', data as unknown as TelemetrySample);
+    });
+
     // New v0.4.0 frame handlers
     this.frameParser.on('BTN', (data: unknown) => this.emit('button', data));
     this.frameParser.on('MODE', (data: unknown) => this._handleModeChange(data as ModeChangeEvent));
@@ -278,7 +467,10 @@ export class GambitClient {
     this.frameParser.on('MARK', (data: unknown) => this.emit('mark', data));
     this.frameParser.on('CAL', (data: unknown) => this.emit('calibration', data));
     this.frameParser.on('SLEEP', (data: unknown) => this.emit('sleep', data));
-    this.frameParser.on('CONN', (data: unknown) => this._log('Device connection event: ' + JSON.stringify(data)));
+    this.frameParser.on('CONN', (data: unknown) => this.emit('connection', data));
+    this.frameParser.on('CONN_STATS', (data: unknown) => this.emit('connectionStats', data));
+    this.frameParser.on('BEACON_STATUS', (data: unknown) => this.emit('beaconStatus', data));
+    this.frameParser.on('FIFO', (data: unknown) => this._handleFifoBatch(data as FifoBatchEvent));
   }
 
   // ===== Event Handling =====
@@ -299,6 +491,10 @@ export class GambitClient {
   on(event: 'mark', handler: (data: MarkEvent) => void): this;
   on(event: 'calibration', handler: (data: CalibrationEvent) => void): this;
   on(event: 'sleep', handler: (data: { time: number }) => void): this;
+  on(event: 'fifoBatch', handler: (data: FifoBatchEvent) => void): this;
+  on(event: 'connection', handler: (data: ConnectionEvent) => void): this;
+  on(event: 'connectionStats', handler: (data: ConnectionStats) => void): this;
+  on(event: 'beaconStatus', handler: (data: BeaconStatus) => void): this;
   on<T = unknown>(event: string, handler: EventHandler<T>): this;
   on<T = unknown>(event: string, handler: EventHandler<T>): this {
     if (!this.eventHandlers[event]) {
@@ -361,9 +557,22 @@ export class GambitClient {
         this._log('Connected!');
 
         this.frameParser.clear();
+        this.binaryParser.reset();
 
-        conn.on('data', (data) => {
-          this.frameParser.onData(data);
+        conn.on('data', (data: string | ArrayBuffer) => {
+          if (this.useBinaryProtocol) {
+            // Convert string to Uint8Array for binary parsing
+            let bytes: Uint8Array;
+            if (typeof data === 'string') {
+              bytes = new Uint8Array(data.split('').map(c => c.charCodeAt(0)));
+            } else {
+              bytes = new Uint8Array(data);
+            }
+            this.binaryParser.onBinaryData(bytes);
+          } else {
+            // Text-based frame protocol
+            this.frameParser.onData(data as string);
+          }
         });
 
         conn.on('close', () => {
@@ -740,6 +949,169 @@ export class GambitClient {
     return this.write('\x10if(typeof showBatteryLevel==="function")showBatteryLevel();\n');
   }
 
+  // ===== Binary Protocol (v0.4.0+) =====
+
+  /**
+   * Enable or disable binary telemetry protocol.
+   * Binary protocol provides ~4x smaller packets for higher throughput.
+   * @param enabled - Whether to use binary protocol
+   */
+  setBinaryProtocol(enabled: boolean): Promise<void> {
+    this.useBinaryProtocol = enabled;
+    this._log(`Binary protocol ${enabled ? 'enabled' : 'disabled'}`);
+    if (enabled) {
+      this.binaryParser.reset();
+    } else {
+      this.frameParser.clear();
+    }
+    return this.write(`\x10if(typeof setBinaryProtocol==="function")setBinaryProtocol(${enabled});\n`);
+  }
+
+  /**
+   * Check if binary protocol is currently enabled.
+   */
+  isBinaryProtocol(): boolean {
+    return this.useBinaryProtocol;
+  }
+
+  // ===== Wake-on-Touch (v0.4.0+) =====
+
+  /**
+   * Enable wake-on-touch feature.
+   * Device will auto-wake from sleep when touched.
+   * Requires context calibration first.
+   */
+  enableWakeOnTouch(): Promise<void> {
+    this._log('Enabling wake-on-touch');
+    return this.write('\x10if(typeof enableWakeOnTouch==="function")enableWakeOnTouch();\n');
+  }
+
+  /**
+   * Disable wake-on-touch feature.
+   */
+  disableWakeOnTouch(): Promise<void> {
+    this._log('Disabling wake-on-touch');
+    return this.write('\x10if(typeof disableWakeOnTouch==="function")disableWakeOnTouch();\n');
+  }
+
+  /**
+   * Check if wake-on-touch is available (requires calibration).
+   */
+  isWakeOnTouchAvailable(): Promise<boolean> {
+    return Puck.eval('typeof wakeOnTouchEnabled !== "undefined" && capBaseline !== null') as Promise<boolean>;
+  }
+
+  // ===== FIFO High-Resolution Streaming (v0.4.0+) =====
+
+  /**
+   * Start high-resolution FIFO streaming.
+   * Samples at 416Hz (16x normal) using hardware FIFO buffering.
+   * Data is delivered in batches via 'fifoBatch' events.
+   * @param count - Optional number of samples to collect
+   * @param hz - Optional sample rate (104, 208, 416, 833, 1660)
+   */
+  startFifoStream(count?: number, hz?: number): Promise<void> {
+    this._log(`Starting FIFO stream${count ? ` (${count} samples)` : ''}${hz ? ` @ ${hz}Hz` : ''}`);
+    const countStr = count ? count.toString() : 'null';
+    const hzStr = hz ? `0x0${hz >= 1660 ? 8 : hz >= 833 ? 7 : hz >= 416 ? 6 : hz >= 208 ? 5 : 4}` : 'null';
+    return this.write(`\x10if(typeof startFifoStream==="function")startFifoStream(${countStr},${hzStr});\n`);
+  }
+
+  /**
+   * Stop high-resolution FIFO streaming.
+   */
+  stopFifoStream(): Promise<void> {
+    this._log('Stopping FIFO stream');
+    return this.write('\x10if(typeof stopFifoStream==="function")stopFifoStream();\n');
+  }
+
+  /**
+   * Check if FIFO streaming is available (firmware v0.4.0+).
+   */
+  isFifoAvailable(): boolean {
+    if (!this.firmwareInfo?.version) return false;
+    const [major, minor] = this.firmwareInfo.version.split('.').map(Number);
+    return major > 0 || (major === 0 && minor >= 4);
+  }
+
+  // ===== Connection Quality (v0.4.0+) =====
+
+  /**
+   * Get connection quality statistics.
+   * Returns RSSI, packet stats, and connection duration.
+   */
+  getConnectionStats(): Promise<ConnectionStats> {
+    return new Promise((resolve, reject) => {
+      if (!this.isConnected()) {
+        reject(new Error('Not connected'));
+        return;
+      }
+
+      const timeout = setTimeout(() => {
+        this.frameParser.off('CONN_STATS', handler);
+        reject(new Error('Connection stats timeout'));
+      }, 3000);
+
+      const handler = (data: unknown) => {
+        clearTimeout(timeout);
+        this.frameParser.off('CONN_STATS', handler);
+        resolve(data as ConnectionStats);
+      };
+
+      this.frameParser.on('CONN_STATS', handler);
+      this.write('\x10if(typeof getConnStats==="function")getConnStats();\n');
+    });
+  }
+
+  // ===== Beaconing (v0.4.0+) =====
+
+  /**
+   * Enable background beaconing.
+   * Device will advertise its status (battery, mode, context) even when not connected.
+   * @param intervalMs - Update interval in milliseconds (default 5000)
+   */
+  enableBeaconing(intervalMs?: number): Promise<void> {
+    this._log(`Enabling beaconing${intervalMs ? ` @ ${intervalMs}ms` : ''}`);
+    const cmd = intervalMs
+      ? `\x10if(typeof enableBeaconing==="function")enableBeaconing(${intervalMs});\n`
+      : '\x10if(typeof enableBeaconing==="function")enableBeaconing();\n';
+    return this.write(cmd);
+  }
+
+  /**
+   * Disable background beaconing.
+   */
+  disableBeaconing(): Promise<void> {
+    this._log('Disabling beaconing');
+    return this.write('\x10if(typeof disableBeaconing==="function")disableBeaconing();\n');
+  }
+
+  /**
+   * Get current beaconing status.
+   */
+  getBeaconStatus(): Promise<BeaconStatus> {
+    return new Promise((resolve, reject) => {
+      if (!this.isConnected()) {
+        reject(new Error('Not connected'));
+        return;
+      }
+
+      const timeout = setTimeout(() => {
+        this.frameParser.off('BEACON_STATUS', handler);
+        reject(new Error('Beacon status timeout'));
+      }, 3000);
+
+      const handler = (data: unknown) => {
+        clearTimeout(timeout);
+        this.frameParser.off('BEACON_STATUS', handler);
+        resolve(data as BeaconStatus);
+      };
+
+      this.frameParser.on('BEACON_STATUS', handler);
+      this.write('\x10if(typeof getBeaconStatus==="function")getBeaconStatus();\n');
+    });
+  }
+
   // ===== Internal Methods =====
 
   private _handleFirmware(data: FirmwareInfo): void {
@@ -762,6 +1134,16 @@ export class GambitClient {
   private _handleModeChange(data: ModeChangeEvent): void {
     this._log(`Mode changed to: ${data.mode}`);
     this.emit('mode', data);
+  }
+
+  private _handleFifoBatch(data: FifoBatchEvent): void {
+    this._log(`FIFO batch: ${data.count} samples (total: ${data.total})`);
+    // Emit the batch event for high-resolution processing
+    this.emit('fifoBatch', data);
+    // Also emit individual samples as 'data' events for compatibility
+    for (const sample of data.samples) {
+      this.emit('data', sample as unknown as TelemetrySample);
+    }
   }
 
   private _startKeepalive(): void {
