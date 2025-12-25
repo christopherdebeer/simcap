@@ -88,30 +88,49 @@ class MMC5603Simulator:
 
     def randomize_parameters(
         self,
-        noise_range: Tuple[float, float] = (0.5, 2.0),
-        bias_range: Tuple[float, float] = (-50, 50),
-        soft_iron_deviation: float = 0.1
+        noise_range: Tuple[float, float] = (1.0, 5.0),
+        bias_range: Tuple[float, float] = (-40, 40),
+        soft_iron_deviation: float = 0.15,
+        realistic_mode: bool = True
     ):
         """
         Randomize sensor parameters for domain randomization.
 
         Call this to simulate different devices or environmental conditions.
+        When realistic_mode=True, uses parameters calibrated from real sensor data.
 
         Args:
             noise_range: Min/max noise level (μT)
             bias_range: Min/max bias per axis (μT)
             soft_iron_deviation: Max deviation in soft iron matrix elements
+            realistic_mode: Use parameters calibrated from real data
         """
-        self._noise_ut = np.random.uniform(*noise_range)
-        self._bias_ut = np.random.uniform(bias_range[0], bias_range[1], size=3)
+        if realistic_mode:
+            # Parameters calibrated from real GAMBIT sensor data
+            # Real data shows ~66 µT mean magnitude vs Earth field ~50 µT
+            # This means significant hard iron bias present
+            self._noise_ut = np.random.uniform(2.0, 8.0)
 
-        # Random soft iron matrix: identity + small perturbation
-        perturbation = np.random.uniform(
-            -soft_iron_deviation,
-            soft_iron_deviation,
-            size=(3, 3)
-        )
-        self._soft_iron = np.eye(3) + perturbation
+            # Larger bias to match real sensor offsets (20-50 µT per axis typical)
+            self._bias_ut = np.array([
+                np.random.uniform(10, 40) * np.random.choice([-1, 1]),
+                np.random.uniform(5, 30) * np.random.choice([-1, 1]),
+                np.random.uniform(-20, 20)
+            ])
+
+            # More aggressive soft iron distortion
+            perturbation = np.random.uniform(-0.2, 0.2, size=(3, 3))
+            self._soft_iron = np.eye(3) + perturbation
+        else:
+            self._noise_ut = np.random.uniform(*noise_range)
+            self._bias_ut = np.random.uniform(bias_range[0], bias_range[1], size=3)
+
+            perturbation = np.random.uniform(
+                -soft_iron_deviation,
+                soft_iron_deviation,
+                size=(3, 3)
+            )
+            self._soft_iron = np.eye(3) + perturbation
 
     def measure(
         self,
