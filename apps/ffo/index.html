@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SIMCAP | FFO$$</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes"/>
+    <meta name="mobile-web-app-capable" content="yes"/>
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <link rel="stylesheet" href="/simcap.css">
+    <!-- Eruda Dev Console for debugging -->
+    <script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+    <script>if (typeof eruda !== 'undefined') eruda.init();</script>
+    <!-- External BLE library (non-module) -->
+    <script src="/puck.js"></script>
+    <!-- Three.js for trajectory visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        /* Page-specific styles */
+        body {
+            padding: var(--space-md);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            gap: var(--space-lg);
+        }
+
+        .grad {
+            background: linear-gradient(-45deg, #ffd700, #ff8c00, #ff6347, #ffd700);
+            background-size: 400% 400%;
+            animation: gradient 15s ease infinite;
+            overflow: visible;
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .page-title {
+            text-align: center;
+        }
+
+        .page-title h1 {
+            font-size: 1rem;
+            font-weight: normal;
+            letter-spacing: 0.35em;
+            margin-bottom: var(--space-xs);
+        }
+
+        .page-title .grad {
+            font-weight: bold;
+            display: block;
+            font-size: 2.5rem;
+        }
+
+        .page-title .subtitle {
+            font-style: italic;
+            color: var(--fg-muted);
+            font-size: 0.75rem;
+        }
+
+        main {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1em;
+        }
+
+        main > .card {
+            flex-grow: 1;
+        }
+
+        /* Collapsible card styles using details/summary */
+        details.card {
+            flex-grow: 1;
+        }
+
+        details.card > summary {
+            cursor: pointer;
+            list-style: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        details.card > summary::-webkit-details-marker {
+            display: none;
+        }
+
+        details.card > summary::after {
+            content: '\25BC';
+            font-size: 0.7em;
+            transition: transform 0.2s ease;
+            color: var(--fg-muted);
+        }
+
+        details.card:not([open]) > summary::after {
+            transform: rotate(-90deg);
+        }
+
+        details.card > summary .card-header-content {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            flex: 1;
+        }
+
+        .status-badge {
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: var(--border);
+            color: var(--fg-muted);
+        }
+
+        .status-badge.connected {
+            background: var(--success);
+            color: var(--bg);
+        }
+
+        .status-badge.recording {
+            background: var(--danger);
+            color: white;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        /* Template list */
+        .template-list {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-xs);
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .template-item {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            padding: var(--space-xs) var(--space-sm);
+            background: var(--bg);
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+        }
+
+        .template-item.selected {
+            border-color: var(--accent);
+            background: rgba(var(--accent-rgb), 0.1);
+        }
+
+        .template-item .name {
+            flex: 1;
+            font-weight: bold;
+        }
+
+        .template-item .meta {
+            font-size: 0.75rem;
+            color: var(--fg-muted);
+        }
+
+        .template-item .actions {
+            display: flex;
+            gap: var(--space-xs);
+        }
+
+        .template-item .actions button {
+            padding: 2px 6px;
+            font-size: 0.7rem;
+        }
+
+        /* Recognition result */
+        .recognition-result {
+            text-align: center;
+            padding: var(--space-lg);
+            border-radius: var(--radius);
+            background: var(--bg);
+            border: 2px solid var(--border);
+            transition: all 0.3s ease;
+        }
+
+        .recognition-result.matched {
+            border-color: var(--success);
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.2);
+        }
+
+        .recognition-result.rejected {
+            border-color: var(--danger);
+        }
+
+        .recognition-result .gesture-name {
+            font-size: 2rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .recognition-result .score {
+            font-size: 1.5rem;
+            color: var(--accent);
+            margin-top: var(--space-xs);
+        }
+
+        .recognition-result .distance {
+            font-size: 0.875rem;
+            color: var(--fg-muted);
+        }
+
+        /* Candidates list */
+        .candidates-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: var(--space-xs);
+            margin-top: var(--space-sm);
+        }
+
+        .candidate-item {
+            text-align: center;
+            padding: var(--space-xs);
+            background: var(--bg);
+            border-radius: var(--radius-sm);
+        }
+
+        .candidate-item .name {
+            font-size: 0.75rem;
+            font-weight: bold;
+        }
+
+        .candidate-item .score-bar {
+            height: 4px;
+            background: var(--border);
+            border-radius: 2px;
+            margin-top: 2px;
+            overflow: hidden;
+        }
+
+        .candidate-item .score-fill {
+            height: 100%;
+            background: var(--accent);
+            transition: width 0.2s ease;
+        }
+
+        /* 3D Canvas */
+        #trajectoryContainer {
+            width: 100%;
+            height: 300px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: #1a1a2e;
+        }
+
+        /* Recording indicator */
+        .recording-indicator {
+            display: flex;
+            align-items: center;
+            gap: var(--space-sm);
+            padding: var(--space-sm);
+            background: var(--bg);
+            border-radius: var(--radius-sm);
+            margin-bottom: var(--space-sm);
+        }
+
+        .recording-indicator .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--fg-muted);
+        }
+
+        .recording-indicator.active .dot {
+            background: var(--danger);
+            animation: pulse 1s infinite;
+        }
+
+        .recording-indicator .timer {
+            font-family: var(--font-mono);
+            font-size: 1.2rem;
+        }
+
+        .recording-indicator .sample-count {
+            font-size: 0.75rem;
+            color: var(--fg-muted);
+            margin-left: auto;
+        }
+
+        /* Data display */
+        .data-row {
+            display: flex;
+            justify-content: space-between;
+            padding: var(--space-xs) 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.85rem;
+        }
+
+        .data-row:last-child {
+            border-bottom: none;
+        }
+
+        .data-row .label {
+            color: var(--fg-muted);
+        }
+
+        .data-row .value {
+            font-family: var(--font-mono);
+            font-weight: bold;
+        }
+
+        /* Buttons row */
+        .button-row {
+            display: flex;
+            gap: var(--space-sm);
+            flex-wrap: wrap;
+        }
+
+        .button-row .btn {
+            flex: 1;
+            min-width: 100px;
+        }
+
+        #log {
+            font-family: var(--font-mono);
+            font-size: 10px;
+            max-height: 150px;
+            overflow-y: auto;
+            background: var(--bg);
+            padding: 8px;
+            border-radius: 4px;
+            color: var(--fg-muted);
+        }
+
+        .breadcrumb {
+            text-align: center;
+        }
+
+        /* Input with button */
+        .input-group {
+            display: flex;
+            gap: var(--space-xs);
+        }
+
+        .input-group input {
+            flex: 1;
+        }
+
+        /* Vocabulary info */
+        .vocab-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: var(--space-sm);
+            background: var(--bg);
+            border-radius: var(--radius-sm);
+            margin-bottom: var(--space-sm);
+        }
+
+        .vocab-info .name {
+            font-weight: bold;
+        }
+
+        .vocab-info .stats {
+            font-size: 0.75rem;
+            color: var(--fg-muted);
+        }
+    </style>
+</head>
+<body>
+    <nav class="breadcrumb">
+        <a href="/">SIMCAP</a> / FFO$$
+    </nav>
+
+    <header class="page-title">
+        <h1>- SIMCAP -<span class="grad">FFO$$</span></h1>
+        <p class="subtitle">Fist Full Of Dollars - Template-Based Gesture Recognition</p>
+    </header>
+
+    <main>
+        <!-- Device Connection -->
+        <details class="card" open>
+            <summary class="card-header">
+                <span class="card-header-content">
+                    Device
+                    <span class="status-badge" id="connectionStatus">Disconnected</span>
+                </span>
+            </summary>
+            <div class="button-row">
+                <button class="btn" id="connectBtn">Connect</button>
+                <button class="btn" id="disconnectBtn" disabled>Disconnect</button>
+            </div>
+            <div id="deviceInfo" style="margin-top: var(--space-sm); font-size: 0.8rem; color: var(--fg-muted);"></div>
+        </details>
+
+        <!-- Recording Controls -->
+        <details class="card" open>
+            <summary class="card-header">
+                <span class="card-header-content">
+                    Record Template
+                    <span class="status-badge" id="recordingStatus">Idle</span>
+                </span>
+            </summary>
+
+            <div class="recording-indicator" id="recordingIndicator">
+                <div class="dot"></div>
+                <span class="timer" id="recordingTimer">0.0s</span>
+                <span class="sample-count" id="sampleCount">0 samples</span>
+            </div>
+
+            <div class="input-group" style="margin-bottom: var(--space-sm);">
+                <input type="text" id="templateName" placeholder="Gesture name (e.g., wave, circle)" />
+            </div>
+
+            <div class="button-row">
+                <button class="btn" id="recordBtn" disabled>Start Recording</button>
+                <button class="btn" id="stopRecordBtn" disabled>Stop</button>
+                <button class="btn" id="saveTemplateBtn" disabled>Save Template</button>
+            </div>
+
+            <div id="recordingFeedback" style="margin-top: var(--space-sm); font-size: 0.8rem; color: var(--fg-muted);"></div>
+        </details>
+
+        <!-- 3D Trajectory Visualization -->
+        <details class="card" open>
+            <summary class="card-header">
+                <span class="card-header-content">
+                    Trajectory (3D)
+                </span>
+            </summary>
+            <div id="trajectoryContainer"></div>
+            <div class="button-row" style="margin-top: var(--space-sm);">
+                <button class="btn" id="clearTrajectoryBtn">Clear</button>
+                <button class="btn" id="resetViewBtn">Reset View</button>
+            </div>
+        </details>
+
+        <!-- Live Recognition -->
+        <details class="card" open>
+            <summary class="card-header">
+                <span class="card-header-content">
+                    Live Recognition
+                    <span class="status-badge" id="recognitionStatus">Idle</span>
+                </span>
+            </summary>
+
+            <div class="button-row" style="margin-bottom: var(--space-sm);">
+                <button class="btn" id="startRecognitionBtn" disabled>Start Recognition</button>
+                <button class="btn" id="stopRecognitionBtn" disabled>Stop</button>
+            </div>
+
+            <div class="recognition-result" id="recognitionResult">
+                <div class="gesture-name" id="recognizedGesture">--</div>
+                <div class="score" id="recognitionScore">--</div>
+                <div class="distance" id="recognitionDistance">Waiting for gesture...</div>
+            </div>
+
+            <div class="candidates-list" id="candidatesList">
+                <!-- Populated dynamically -->
+            </div>
+        </details>
+
+        <!-- Template Library -->
+        <details class="card" open>
+            <summary class="card-header">
+                <span class="card-header-content">
+                    Templates
+                    <span class="status-badge" id="templateCount">0</span>
+                </span>
+            </summary>
+
+            <div class="vocab-info" id="vocabInfo">
+                <span class="name">No vocabulary loaded</span>
+                <span class="stats">0 templates</span>
+            </div>
+
+            <div class="template-list" id="templateList">
+                <div style="text-align: center; color: var(--fg-muted); padding: var(--space-md);">
+                    No templates yet. Record a gesture to create one.
+                </div>
+            </div>
+
+            <div class="button-row" style="margin-top: var(--space-sm);">
+                <button class="btn" id="exportVocabBtn" disabled>Export</button>
+                <button class="btn" id="importVocabBtn">Import</button>
+                <button class="btn" id="clearVocabBtn" disabled>Clear All</button>
+            </div>
+            <input type="file" id="importFileInput" accept=".json" style="display: none;" />
+        </details>
+
+        <!-- Configuration -->
+        <details class="card">
+            <summary class="card-header">
+                <span class="card-header-content">
+                    Configuration
+                </span>
+            </summary>
+
+            <div class="data-row">
+                <span class="label">Resample Points (N)</span>
+                <input type="number" id="configNumPoints" value="32" min="8" max="128" style="width: 80px; text-align: right;" />
+            </div>
+
+            <div class="data-row">
+                <span class="label">Reject Threshold</span>
+                <input type="number" id="configRejectThreshold" value="0.5" min="0" max="2" step="0.1" style="width: 80px; text-align: right;" />
+            </div>
+
+            <div class="data-row">
+                <span class="label">Min Samples</span>
+                <input type="number" id="configMinSamples" value="15" min="5" max="100" style="width: 80px; text-align: right;" />
+            </div>
+
+            <div class="data-row">
+                <span class="label">Remove Gravity</span>
+                <input type="checkbox" id="configRemoveGravity" checked />
+            </div>
+
+            <div class="data-row">
+                <span class="label">Use Lookup Table ($Q)</span>
+                <input type="checkbox" id="configUseLookupTable" checked />
+            </div>
+
+            <div class="button-row" style="margin-top: var(--space-sm);">
+                <button class="btn" id="applyConfigBtn">Apply Configuration</button>
+            </div>
+        </details>
+
+        <!-- Sensor Data -->
+        <details class="card">
+            <summary class="card-header">
+                <span class="card-header-content">
+                    Sensor Data
+                </span>
+            </summary>
+
+            <div class="data-row">
+                <span class="label">Accelerometer (g)</span>
+                <span class="value" id="accelData">-- / -- / --</span>
+            </div>
+
+            <div class="data-row">
+                <span class="label">Gyroscope (deg/s)</span>
+                <span class="value" id="gyroData">-- / -- / --</span>
+            </div>
+
+            <div class="data-row">
+                <span class="label">Sample Rate</span>
+                <span class="value" id="sampleRate">-- Hz</span>
+            </div>
+        </details>
+
+        <!-- Log -->
+        <details class="card">
+            <summary class="card-header">Log</summary>
+            <div id="log"></div>
+        </details>
+    </main>
+
+    <footer class="page-footer">
+        <span>SIMCAP FFO$$</span>
+        <a href="/apps/gambit/">GAMBIT</a>
+        <a href="/apps/gambit/collector.html">Collector</a>
+    </footer>
+
+    <script type="module" src="./ffo-app.ts"></script>
+</body>
+</html>
