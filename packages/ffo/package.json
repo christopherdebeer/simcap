@@ -1,0 +1,15 @@
+{
+  "name": "@simcap/ffo",
+  "version": "1.0.0",
+  "description": "FFO$$ - Fist Full Of Dollars gesture recognition using $-family algorithms",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./types": "./src/types.ts"
+  },
+  "dependencies": {
+    "@simcap/core": "workspace:*"
+  }
+}
