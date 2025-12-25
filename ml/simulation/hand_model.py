@@ -257,14 +257,7 @@ class HandPoseGenerator:
         """
         Generate a named static pose.
 
-        Supported poses:
-        - 'open_palm' / 'all_extended': All fingers extended
-        - 'fist' / 'all_flexed': All fingers flexed
-        - 'pointing': Index extended, others flexed
-        - 'thumbs_up': Thumb extended, others flexed
-        - 'peace': Index and middle extended, others flexed
-        - 'pinch': Thumb and index partially flexed, others extended
-        - 'rest': Natural rest position (all partial)
+        Supports all poses defined in POSE_TEMPLATES plus additional poses.
 
         Args:
             pose_name: Name of the pose
@@ -277,7 +270,11 @@ class HandPoseGenerator:
         all_flexed = {f: FingerState.FLEXED for f in self.geometry}
         all_partial = {f: FingerState.PARTIAL for f in self.geometry}
 
-        if pose_name in ('open_palm', 'all_extended'):
+        # Check if pose is in POSE_TEMPLATES
+        if pose_name in POSE_TEMPLATES:
+            states = pose_template_to_states(POSE_TEMPLATES[pose_name])
+
+        elif pose_name in ('open_palm', 'all_extended'):
             states = all_extended
 
         elif pose_name in ('fist', 'all_flexed'):
@@ -311,7 +308,9 @@ class HandPoseGenerator:
             states = all_partial
 
         else:
-            raise ValueError(f"Unknown pose: {pose_name}")
+            # Generate a random pose if unknown
+            states = {f: np.random.choice([FingerState.EXTENDED, FingerState.PARTIAL, FingerState.FLEXED])
+                      for f in self.geometry}
 
         return self.generate_pose(states, noise_mm)
 

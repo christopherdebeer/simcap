@@ -9,6 +9,10 @@ __pycache__/
 *.pyc
 *.pyo
 
+# ML training outputs (synthetic data, models)
+ml/synthetic_output/
+ml/models/
+
 *.bak
 
 # Data directory visualizations (temporary test outputs)
