@@ -63,6 +63,55 @@ export interface GambitClientOptions {
   keepaliveInterval?: number;
 }
 
+// ===== New Frame Types for v0.4.0 =====
+
+export interface ButtonEvent {
+  gesture: 'SINGLE_TAP' | 'DOUBLE_TAP' | 'TRIPLE_TAP' | 'LONG_PRESS' | 'VERY_LONG_PRESS';
+  time: number;
+  pressCount: number;
+}
+
+export interface ModeChangeEvent {
+  mode: 'LOW_POWER' | 'NORMAL' | 'HIGH_RES' | 'BURST';
+  config: {
+    name: string;
+    accelHz: number;
+    magEvery: number;
+    lightEvery: number;
+    battEvery: number;
+  };
+}
+
+export interface ContextChangeEvent {
+  context: 'unknown' | 'stored' | 'held' | 'active' | 'table';
+  from: string;
+}
+
+export interface StreamEvent {
+  mode?: string;
+  hz?: number;
+  count?: number | null;
+  samples?: number;
+  duration?: number;
+  time: number;
+}
+
+export interface MarkEvent {
+  time: number;
+  sampleCount: number;
+}
+
+export interface CalibrationEvent {
+  type: string;
+  light?: number;
+  cap?: number;
+}
+
+export interface ConnectionEvent {
+  connected: boolean;
+  addr?: string;
+}
+
 export interface CollectOptions {
   progressTimeoutMs?: number;
 }
@@ -219,6 +268,17 @@ export class GambitClient {
     this.frameParser.on('LOGS', (data: unknown) => this._handleLogs(data as LogsResponse));
     this.frameParser.on('LOGS_CLEARED', (data: unknown) => this._handleLogsCleared(data));
     this.frameParser.on('LOG_STATS', (data: unknown) => this._handleLogStats(data as LogStats));
+
+    // New v0.4.0 frame handlers
+    this.frameParser.on('BTN', (data: unknown) => this.emit('button', data));
+    this.frameParser.on('MODE', (data: unknown) => this._handleModeChange(data as ModeChangeEvent));
+    this.frameParser.on('CTX', (data: unknown) => this.emit('context', data));
+    this.frameParser.on('STREAM_START', (data: unknown) => this.emit('streamStart', data));
+    this.frameParser.on('STREAM_STOP', (data: unknown) => this.emit('streamStop', data));
+    this.frameParser.on('MARK', (data: unknown) => this.emit('mark', data));
+    this.frameParser.on('CAL', (data: unknown) => this.emit('calibration', data));
+    this.frameParser.on('SLEEP', (data: unknown) => this.emit('sleep', data));
+    this.frameParser.on('CONN', (data: unknown) => this._log('Device connection event: ' + JSON.stringify(data)));
   }
 
   // ===== Event Handling =====
@@ -230,8 +290,15 @@ export class GambitClient {
   on(event: 'close', handler: () => void): this;
   on(event: 'error', handler: (error: Error) => void): this;
   on(event: 'connect', handler: (conn: PuckConnection) => void): this;
-  on(event: 'streamStart', handler: () => void): this;
-  on(event: 'streamStop', handler: () => void): this;
+  on(event: 'streamStart', handler: (data?: StreamEvent) => void): this;
+  on(event: 'streamStop', handler: (data?: StreamEvent) => void): this;
+  // New v0.4.0 events
+  on(event: 'button', handler: (data: ButtonEvent) => void): this;
+  on(event: 'mode', handler: (data: ModeChangeEvent) => void): this;
+  on(event: 'context', handler: (data: ContextChangeEvent) => void): this;
+  on(event: 'mark', handler: (data: MarkEvent) => void): this;
+  on(event: 'calibration', handler: (data: CalibrationEvent) => void): this;
+  on(event: 'sleep', handler: (data: { time: number }) => void): this;
   on<T = unknown>(event: string, handler: EventHandler<T>): this;
   on<T = unknown>(event: string, handler: EventHandler<T>): this {
     if (!this.eventHandlers[event]) {
@@ -615,6 +682,64 @@ export class GambitClient {
     return this.write('save();\n');
   }
 
+  // ===== Mode Control (v0.4.0+) =====
+
+  /**
+   * Set the sampling mode on the device.
+   * @param mode - LOW_POWER, NORMAL, HIGH_RES, or BURST
+   */
+  setMode(mode: 'LOW_POWER' | 'NORMAL' | 'HIGH_RES' | 'BURST'): Promise<void> {
+    return this.write(`\x10if(typeof setMode==="function")setMode("${mode}");\n`);
+  }
+
+  /**
+   * Get the current sampling mode.
+   */
+  getMode(): Promise<ModeChangeEvent> {
+    return new Promise((resolve, reject) => {
+      if (!this.isConnected()) {
+        reject(new Error('Not connected'));
+        return;
+      }
+
+      const timeout = setTimeout(() => {
+        this.frameParser.off('MODE', handler);
+        reject(new Error('Get mode timeout'));
+      }, 3000);
+
+      const handler = (data: unknown) => {
+        clearTimeout(timeout);
+        this.frameParser.off('MODE', handler);
+        resolve(data as ModeChangeEvent);
+      };
+
+      this.frameParser.on('MODE', handler);
+      this.write('\x10if(typeof getMode==="function"){var m=getMode();sendFrame("MODE",m);}\n');
+    });
+  }
+
+  /**
+   * Cycle to the next sampling mode.
+   */
+  cycleMode(): Promise<void> {
+    return this.write('\x10if(typeof cycleMode==="function")cycleMode();\n');
+  }
+
+  /**
+   * Calibrate context sensors (light and capacitive).
+   * Should be called when device is not being held.
+   */
+  calibrateContext(): Promise<void> {
+    return this.write('\x10if(typeof calibrateContext==="function")calibrateContext();\n');
+  }
+
+  /**
+   * Show battery level via LED pattern.
+   */
+  showBattery(): Promise<void> {
+    return this.write('\x10if(typeof showBatteryLevel==="function")showBatteryLevel();\n');
+  }
+
   // ===== Internal Methods =====
 
   private _handleFirmware(data: FirmwareInfo): void {
@@ -632,6 +757,11 @@ export class GambitClient {
 
   private _handleLogStats(data: LogStats): void {
     this.emit('logStats', data);
+  }
+
+  private _handleModeChange(data: ModeChangeEvent): void {
+    this._log(`Mode changed to: ${data.mode}`);
+    this.emit('mode', data);
   }
 
   private _startKeepalive(): void {
