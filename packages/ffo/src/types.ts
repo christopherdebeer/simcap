@@ -6,7 +6,7 @@
  * @module ffo/types
  */
 
-import type { Vector3, Quaternion, EulerAngles } from '@simcap/core/types';
+import type { Vector3 } from '@core/types';
 
 // ============================================================================
 // CORE TYPES

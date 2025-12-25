@@ -17,6 +17,10 @@ import {
   type RecognizerConfig,
 } from '../../packages/ffo/src/index';
 
+// Declare THREE.js from CDN (loaded via script tag)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+declare const THREE: any;
+
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -34,13 +38,14 @@ interface AppState {
   sampleTimes: number[];
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface ThreeContext {
-  scene: THREE.Scene;
-  camera: THREE.PerspectiveCamera;
-  renderer: THREE.WebGLRenderer;
-  controls: THREE.OrbitControls;
-  trajectoryLine: THREE.Line | null;
-  templateLines: THREE.Line[];
+  scene: any;
+  camera: any;
+  renderer: any;
+  controls: any;
+  trajectoryLine: any;
+  templateLines: any[];
 }
 
 // ============================================================================

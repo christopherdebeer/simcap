@@ -18,7 +18,7 @@ import type {
   NormalizationResult,
   NormalizeOptions,
 } from './types';
-import type { Vector3 } from '@simcap/core/types';
+import type { Vector3 } from '@core/types';
 
 /**
  * Default normalization options.
