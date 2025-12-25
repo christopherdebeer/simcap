@@ -82,7 +82,8 @@ class MagneticFieldSimulator:
     def compute_field_for_pose(
         self,
         pose: HandPose,
-        include_earth: bool = True
+        include_earth: bool = True,
+        device_orientation: Optional[np.ndarray] = None
     ) -> np.ndarray:
         """
         Compute magnetic field at sensor for a given hand pose.
@@ -90,30 +91,59 @@ class MagneticFieldSimulator:
         Args:
             pose: HandPose with fingertip positions
             include_earth: Include Earth's magnetic field
+            device_orientation: Optional 3x3 rotation matrix for device orientation
 
         Returns:
             Magnetic field vector at sensor in μT
         """
+        # Get Earth field (optionally rotated by device orientation)
+        if device_orientation is not None and include_earth:
+            rotated_earth = device_orientation @ self.earth_field
+        else:
+            rotated_earth = self.earth_field
+
         return compute_total_field(
             sensor_position=np.zeros(3),
             finger_positions=pose.fingertip_positions,
             magnet_config=self.magnet_config,
-            earth_field=self.earth_field,
+            earth_field=rotated_earth,
             include_earth=include_earth
         )
+
+    def random_rotation_matrix(self, max_angle_deg: float = 30.0) -> np.ndarray:
+        """Generate a random rotation matrix for device orientation variation."""
+        # Random rotation axis
+        axis = np.random.randn(3)
+        axis = axis / np.linalg.norm(axis)
+
+        # Random rotation angle
+        angle = np.random.uniform(-max_angle_deg, max_angle_deg) * np.pi / 180.0
+
+        # Rodrigues rotation formula
+        K = np.array([
+            [0, -axis[2], axis[1]],
+            [axis[2], 0, -axis[0]],
+            [-axis[1], axis[0], 0]
+        ])
+        R = np.eye(3) + np.sin(angle) * K + (1 - np.cos(angle)) * (K @ K)
+        return R
 
     def generate_sample(
         self,
         pose: HandPose,
-        sample_index: int = 0
+        sample_index: int = 0,
+        add_orientation_variation: bool = True
     ) -> Dict:
         """
         Generate a single telemetry sample for a given pose.
 
         Returns a dict in SIMCAP v2.1 sample format.
         """
-        # Compute magnetic field
-        true_field = self.compute_field_for_pose(pose)
+        # Random device orientation (simulates wrist movement)
+        orientation = self.random_rotation_matrix(max_angle_deg=25.0) if add_orientation_variation else None
+
+        # Compute magnetic field with orientation effects
+        true_field = self.compute_field_for_pose(pose, device_orientation=orientation)
 
         # Simulate magnetometer reading
         mag_reading = self.mag_sensor.measure(true_field)
