@@ -108,19 +108,20 @@ class MMC5603Simulator:
         if realistic_mode:
             # Parameters calibrated from real GAMBIT sensor data
             # Real data shows ~66 µT mean magnitude vs Earth field ~50 µT
-            # This means significant hard iron bias present
-            self._noise_ut = np.random.uniform(2.0, 8.0)
+            # Increased noise range based on sim-to-real analysis
+            self._noise_ut = np.random.uniform(3.0, 12.0)  # Increased from 2-8
 
             # Larger bias to match real sensor offsets (20-50 µT per axis typical)
             self._bias_ut = np.array([
-                np.random.uniform(10, 40) * np.random.choice([-1, 1]),
-                np.random.uniform(5, 30) * np.random.choice([-1, 1]),
-                np.random.uniform(-20, 20)
+                np.random.uniform(20, 60) * np.random.choice([-1, 1]),  # Increased from 10-40
+                np.random.uniform(10, 50) * np.random.choice([-1, 1]),  # Increased from 5-30
+                np.random.uniform(-40, 40)  # Increased from -20, 20
             ])
 
             # More aggressive soft iron distortion
-            perturbation = np.random.uniform(-0.2, 0.2, size=(3, 3))
-            self._soft_iron = np.eye(3) + perturbation
+            scale_perturbation = np.diag(np.random.uniform(0.85, 1.15, size=3))  # Axis scaling
+            rotation_perturbation = np.random.uniform(-0.15, 0.15, size=(3, 3))
+            self._soft_iron = scale_perturbation @ (np.eye(3) + rotation_perturbation)
         else:
             self._noise_ut = np.random.uniform(*noise_range)
             self._bias_ut = np.random.uniform(bias_range[0], bias_range[1], size=3)
