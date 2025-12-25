@@ -19,6 +19,10 @@ function sendFrame(type, payload) {
     var json = JSON.stringify(payload);
     var frame = '\x02' + type + ':' + json.length + '\n' + json + '\x03';
     Bluetooth.print(frame);
+    // Track packet stats if available
+    if (typeof trackPacket === 'function') {
+        trackPacket(frame.length);
+    }
 }
 
 // ===== Device Logging System =====
@@ -176,6 +180,247 @@ function cycleMode() {
 
 function getMode() {
     return { mode: currentMode, config: modeConfig };
+}
+
+// ===== LSM6DS3 FIFO Batch Mode =====
+// High-resolution mode using hardware FIFO for 400Hz+ sampling
+// FIFO can buffer samples while BLE transmits, enabling 16x resolution increase
+
+var LSM6DS3_ADDR = 0x6A;  // Default I2C address
+
+// LSM6DS3 FIFO Registers
+var LSM6DS3_FIFO_CTRL1 = 0x06;  // FIFO threshold low
+var LSM6DS3_FIFO_CTRL2 = 0x07;  // FIFO threshold high
+var LSM6DS3_FIFO_CTRL3 = 0x08;  // FIFO decimation settings
+var LSM6DS3_FIFO_CTRL4 = 0x09;  // Additional decimation
+var LSM6DS3_FIFO_CTRL5 = 0x0A;  // FIFO mode and ODR
+var LSM6DS3_FIFO_STATUS1 = 0x3A; // Number of unread samples (low)
+var LSM6DS3_FIFO_STATUS2 = 0x3B; // Number of unread samples (high) + flags
+var LSM6DS3_FIFO_DATA_OUT_L = 0x3E; // FIFO data output low
+var LSM6DS3_FIFO_DATA_OUT_H = 0x3F; // FIFO data output high
+
+// FIFO Mode constants
+var FIFO_MODE_BYPASS = 0x00;
+var FIFO_MODE_FIFO = 0x01;
+var FIFO_MODE_CONTINUOUS = 0x06;
+
+// FIFO ODR (Output Data Rate) - for 416Hz set to 0x05
+var FIFO_ODR_12_5 = 0x01;
+var FIFO_ODR_26 = 0x02;
+var FIFO_ODR_52 = 0x03;
+var FIFO_ODR_104 = 0x04;
+var FIFO_ODR_208 = 0x05;
+var FIFO_ODR_416 = 0x06;
+var FIFO_ODR_833 = 0x07;
+var FIFO_ODR_1660 = 0x08;
+
+var fifoEnabled = false;
+var fifoThreshold = 64;  // Samples before interrupt/read
+
+// Write a register to LSM6DS3
+function lsm6Write(reg, val) {
+    I2C1.writeTo(LSM6DS3_ADDR, [reg, val]);
+}
+
+// Read a register from LSM6DS3
+function lsm6Read(reg) {
+    I2C1.writeTo(LSM6DS3_ADDR, reg);
+    return I2C1.readFrom(LSM6DS3_ADDR, 1)[0];
+}
+
+// Read multiple bytes from LSM6DS3
+function lsm6ReadMulti(reg, count) {
+    I2C1.writeTo(LSM6DS3_ADDR, reg);
+    return I2C1.readFrom(LSM6DS3_ADDR, count);
+}
+
+// Configure FIFO for high-resolution batch mode
+function configureFifo(enabled, odr) {
+    if (!enabled) {
+        // Disable FIFO - bypass mode
+        lsm6Write(LSM6DS3_FIFO_CTRL5, FIFO_MODE_BYPASS);
+        fifoEnabled = false;
+        logInfo('FIFO disabled');
+        return;
+    }
+
+    odr = odr || FIFO_ODR_416;  // Default 416Hz
+
+    // Set FIFO threshold (number of 16-bit words)
+    // Each 6-axis sample = 12 bytes = 6 words
+    var thresholdWords = fifoThreshold * 6;
+    lsm6Write(LSM6DS3_FIFO_CTRL1, thresholdWords & 0xFF);
+    lsm6Write(LSM6DS3_FIFO_CTRL2, (thresholdWords >> 8) & 0x0F);
+
+    // Configure decimation: accel=1, gyro=1 (no decimation)
+    // FIFO_CTRL3: [7:5]=reserved, [4:3]=DEC_DS4_FIFO, [2:0]=DEC_DS3_FIFO
+    // For accel: DEC_FIFO_XL[2:0] at bits [2:0]
+    // For gyro: DEC_FIFO_GYRO[2:0] at bits [5:3]
+    lsm6Write(LSM6DS3_FIFO_CTRL3, 0x09);  // Gyro dec=1, Accel dec=1
+
+    // FIFO_CTRL4: No step counter or external sensors
+    lsm6Write(LSM6DS3_FIFO_CTRL4, 0x00);
+
+    // FIFO_CTRL5: Set mode (continuous) and ODR
+    // [7:6] = reserved
+    // [5:3] = ODR_FIFO
+    // [2:0] = FIFO_MODE
+    var ctrl5 = (odr << 3) | FIFO_MODE_CONTINUOUS;
+    lsm6Write(LSM6DS3_FIFO_CTRL5, ctrl5);
+
+    fifoEnabled = true;
+    var hzLookup = { 1: 12.5, 2: 26, 3: 52, 4: 104, 5: 208, 6: 416, 7: 833, 8: 1660 };
+    logInfo('FIFO enabled @ ' + (hzLookup[odr] || odr) + 'Hz (batch=' + fifoThreshold + ')');
+}
+
+// Get number of samples available in FIFO
+function getFifoCount() {
+    var status1 = lsm6Read(LSM6DS3_FIFO_STATUS1);
+    var status2 = lsm6Read(LSM6DS3_FIFO_STATUS2);
+    var count = ((status2 & 0x0F) << 8) | status1;
+    return Math.floor(count / 6);  // Convert words to 6-axis samples
+}
+
+// Read a batch of samples from FIFO
+// Returns array of {ax, ay, az, gx, gy, gz} objects
+function readFifoBatch(maxSamples) {
+    var available = getFifoCount();
+    var toRead = Math.min(available, maxSamples || 64);
+
+    if (toRead === 0) return [];
+
+    var samples = [];
+    var bytesPerSample = 12;  // 6 axes * 2 bytes each
+    var totalBytes = toRead * bytesPerSample;
+
+    // Read all data at once (more efficient)
+    var data = lsm6ReadMulti(LSM6DS3_FIFO_DATA_OUT_L, totalBytes);
+
+    for (var i = 0; i < toRead; i++) {
+        var offset = i * bytesPerSample;
+        // FIFO order: Gyro X, Y, Z then Accel X, Y, Z (little-endian 16-bit)
+        var gx = (data[offset + 1] << 8) | data[offset];
+        var gy = (data[offset + 3] << 8) | data[offset + 2];
+        var gz = (data[offset + 5] << 8) | data[offset + 4];
+        var ax = (data[offset + 7] << 8) | data[offset + 6];
+        var ay = (data[offset + 9] << 8) | data[offset + 8];
+        var az = (data[offset + 11] << 8) | data[offset + 10];
+
+        // Convert to signed 16-bit
+        if (gx > 32767) gx -= 65536;
+        if (gy > 32767) gy -= 65536;
+        if (gz > 32767) gz -= 65536;
+        if (ax > 32767) ax -= 65536;
+        if (ay > 32767) ay -= 65536;
+        if (az > 32767) az -= 65536;
+
+        samples.push({ ax: ax, ay: ay, az: az, gx: gx, gy: gy, gz: gz });
+    }
+
+    return samples;
+}
+
+// High-resolution streaming using FIFO batch mode
+// Collects samples at 416Hz and sends in batches
+var fifoStreamInterval = null;
+var fifoSampleBuffer = [];
+var fifoSampleCount = 0;
+var fifoTargetCount = null;
+var fifoStreamStart = null;
+
+function startFifoStream(count, odr) {
+    if (fifoStreamInterval) {
+        logWarn('FIFO stream already active');
+        return;
+    }
+
+    odr = odr || FIFO_ODR_416;
+    logInfo('Starting FIFO stream @ ' + (odr === FIFO_ODR_416 ? 416 : odr) + 'Hz');
+
+    // Initialize I2C for direct register access
+    I2C1.setup({ scl: D19, sda: D20, bitrate: 400000 });
+
+    // Enable accelerometer and gyroscope at high rate
+    Puck.accelOn(1660);  // Max rate
+
+    // Configure and enable FIFO
+    configureFifo(true, odr);
+
+    fifoSampleCount = 0;
+    fifoTargetCount = count || null;
+    fifoStreamStart = Date.now();
+    streamingActive = true;
+
+    // Read FIFO every 50ms (collects ~20 samples at 416Hz)
+    fifoStreamInterval = setInterval(function() {
+        var batch = readFifoBatch(64);
+        if (batch.length === 0) return;
+
+        // Add magnetometer to first sample in batch
+        var mag = Puck.mag();
+        batch[0].mx = mag.x;
+        batch[0].my = mag.y;
+        batch[0].mz = mag.z;
+
+        // Add timestamp to each sample (interpolated)
+        var now = Date.now() - bootTime;
+        var interval = 1000 / (odr === FIFO_ODR_416 ? 416 : 104);
+        for (var i = 0; i < batch.length; i++) {
+            batch[i].t = now - ((batch.length - 1 - i) * interval);
+            batch[i].n = fifoSampleCount + i;
+        }
+
+        fifoSampleCount += batch.length;
+
+        // Send batch frame
+        sendFrame('FIFO', {
+            samples: batch,
+            count: batch.length,
+            total: fifoSampleCount
+        });
+
+        // Check if we've reached target
+        if (fifoTargetCount && fifoSampleCount >= fifoTargetCount) {
+            stopFifoStream();
+        }
+    }, 50);
+
+    sendFrame('STREAM_START', {
+        mode: 'FIFO',
+        hz: odr === FIFO_ODR_416 ? 416 : 104,
+        count: count,
+        batch: true,
+        time: Date.now() - bootTime
+    });
+}
+
+function stopFifoStream() {
+    if (!fifoStreamInterval) return;
+
+    var duration = Date.now() - fifoStreamStart;
+    logInfo('FIFO stream stopped - ' + fifoSampleCount + ' samples in ' + duration + 'ms');
+    logInfo('Effective rate: ' + Math.round(fifoSampleCount * 1000 / duration) + 'Hz');
+
+    clearInterval(fifoStreamInterval);
+    fifoStreamInterval = null;
+
+    // Disable FIFO and accelerometer
+    configureFifo(false);
+    Puck.accelOff();
+
+    streamingActive = false;
+
+    sendFrame('STREAM_STOP', {
+        mode: 'FIFO',
+        samples: fifoSampleCount,
+        duration: duration,
+        effectiveHz: Math.round(fifoSampleCount * 1000 / duration),
+        time: Date.now() - bootTime
+    });
+
+    fifoSampleCount = 0;
+    fifoTargetCount = null;
+    fifoStreamStart = null;
 }
 
 // ===== Context Awareness =====
@@ -478,6 +723,123 @@ setWatch(function(e) {
     }
 }, BTN, { edge: "both", repeat: true, debounce: 30 });
 
+// ===== Binary Protocol =====
+// Binary telemetry format (28 bytes vs ~120 bytes JSON = ~4x smaller)
+// Header: [0xAB, 0xCD] (magic bytes)
+// Data:   [ax:2][ay:2][az:2][gx:2][gy:2][gz:2][mx:2][my:2][mz:2][t:4][flags:1][aux:3]
+// flags: [mode:2][ctx:3][grip:1][hasLight:1][hasBatt:1]
+// aux:   [light:1][battery:1][temp:1] (only when available)
+
+var useBinaryProtocol = false;
+
+function setBinaryProtocol(enabled) {
+    useBinaryProtocol = !!enabled;
+    logInfo('Binary protocol: ' + (useBinaryProtocol ? 'enabled' : 'disabled'));
+    sendFrame('PROTO', { binary: useBinaryProtocol });
+    return useBinaryProtocol;
+}
+
+function emitBinary() {
+    sampleCount++;
+
+    // Read accelerometer + gyroscope
+    var accel = Puck.accel();
+    var ax = accel.acc.x;
+    var ay = accel.acc.y;
+    var az = accel.acc.z;
+    var gx = accel.gyro.x;
+    var gy = accel.gyro.y;
+    var gz = accel.gyro.z;
+
+    // Calculate accel magnitude for context detection
+    var accelMag = Math.sqrt(ax*ax + ay*ay + az*az);
+
+    // Timestamp
+    var t = streamStartTime ? Date.now() - streamStartTime : 0;
+
+    // Read magnetometer on schedule
+    var mx = telemetry.mx || 0;
+    var my = telemetry.my || 0;
+    var mz = telemetry.mz || 0;
+    var temp = telemetry.temp || 0;
+
+    if (sampleCount % modeConfig.magEvery === 0) {
+        var mag = Puck.mag();
+        mx = mag.x;
+        my = mag.y;
+        mz = mag.z;
+        temp = Puck.magTemp();
+        telemetry.mx = mx;
+        telemetry.my = my;
+        telemetry.mz = mz;
+        telemetry.temp = temp;
+    }
+
+    // Read ambient sensors on schedule
+    var light = 0;
+    var hasLight = 0;
+    var hasBatt = 0;
+    var batt = 0;
+
+    if (sampleCount % modeConfig.lightEvery === 0) {
+        light = Math.round(Puck.light() * 255);
+        hasLight = 1;
+        var cap = Puck.capSense();
+        telemetry.l = light / 255;
+        telemetry.c = cap;
+        detectContext(telemetry.l, cap, accelMag);
+        if (capBaseline) {
+            telemetry.grip = (cap - capBaseline > 300) ? 1 : 0;
+        }
+    }
+
+    if (sampleCount % modeConfig.battEvery === 0) {
+        batt = Puck.getBatteryPercentage();
+        hasBatt = 1;
+        telemetry.b = batt;
+    }
+
+    // Build flags byte
+    // [mode:2][ctx:3][grip:1][hasLight:1][hasBatt:1]
+    var modeCode = {'L':0,'N':1,'H':2,'B':3}[currentMode.charAt(0)] || 1;
+    var ctxCode = {'u':0,'s':1,'h':2,'a':3,'t':4}[currentContext.charAt(0)] || 0;
+    var gripCode = telemetry.grip === 1 ? 1 : 0;
+    var flags = (modeCode << 6) | (ctxCode << 3) | (gripCode << 2) | (hasLight << 1) | hasBatt;
+
+    // Create binary buffer (28 bytes)
+    var buf = new Uint8Array(28);
+    var view = new DataView(buf.buffer);
+
+    // Magic header
+    buf[0] = 0xAB;
+    buf[1] = 0xCD;
+
+    // IMU data (16-bit signed integers, little-endian)
+    view.setInt16(2, ax, true);
+    view.setInt16(4, ay, true);
+    view.setInt16(6, az, true);
+    view.setInt16(8, gx, true);
+    view.setInt16(10, gy, true);
+    view.setInt16(12, gz, true);
+    view.setInt16(14, mx, true);
+    view.setInt16(16, my, true);
+    view.setInt16(18, mz, true);
+
+    // Timestamp (32-bit unsigned, little-endian)
+    view.setUint32(20, t, true);
+
+    // Flags and auxiliary data
+    buf[24] = flags;
+    buf[25] = light;
+    buf[26] = batt;
+    buf[27] = Math.max(0, Math.min(255, temp + 40)); // Offset for signed temp
+
+    // Send raw binary
+    Bluetooth.write(buf);
+
+    return {ax:ax, ay:ay, az:az, gx:gx, gy:gy, gz:gz, mx:mx, my:my, mz:mz, t:t};
+}
+
 // ===== State and Telemetry =====
 var telemetry = {
     // IMU sensors (always present)
@@ -564,8 +926,20 @@ function emit() {
     telemetry.mode = currentMode.charAt(0); // First letter: L/N/H/B
     telemetry.ctx = currentContext.charAt(0); // First letter
 
-    // Send telemetry using framing protocol
-    sendFrame('T', telemetry);
+    // Send telemetry using appropriate protocol
+    if (useBinaryProtocol) {
+        // Binary already sent in emitBinary, but we need to update state
+        telemetry.s = state;
+        telemetry.n = pressCount;
+        telemetry.mode = currentMode.charAt(0);
+        telemetry.ctx = currentContext.charAt(0);
+    } else {
+        telemetry.s = state;
+        telemetry.n = pressCount;
+        telemetry.mode = currentMode.charAt(0);
+        telemetry.ctx = currentContext.charAt(0);
+        sendFrame('T', telemetry);
+    }
     return telemetry;
 }
 
@@ -635,7 +1009,11 @@ function getData(count, intervalMs) {
 
     // Start streaming
     interval = setInterval(function() {
-        emit();
+        if (useBinaryProtocol) {
+            emitBinary();
+        } else {
+            emit();
+        }
 
         // Auto-stop if we've reached the target count
         if (streamCount && sampleCount >= streamCount) {
@@ -647,6 +1025,7 @@ function getData(count, intervalMs) {
         mode: currentMode,
         hz: hz,
         count: streamCount,
+        binary: useBinaryProtocol,
         time: Date.now() - bootTime
     });
 
@@ -704,6 +1083,171 @@ NRF.on('NFCoff', function() {
     }, { name: "SIMCAP GAMBIT v" + FIRMWARE_INFO.version });
 });
 
+// ===== Connection Quality Monitoring =====
+var connStats = {
+    rssi: null,           // Signal strength (dBm)
+    connected: false,     // Connection status
+    connectTime: null,    // When connected (ms since boot)
+    packetsSent: 0,       // Total packets sent
+    byteSent: 0,          // Total bytes sent
+    lastActivity: null,   // Last activity timestamp
+    reconnects: 0         // Number of reconnections
+};
+
+// Track connection events
+NRF.on('connect', function(addr) {
+    connStats.connected = true;
+    connStats.connectTime = Date.now() - bootTime;
+    connStats.lastActivity = connStats.connectTime;
+    if (connStats.packetsSent > 0) {
+        connStats.reconnects++;
+    }
+    logInfo('BLE connected: ' + (addr || 'unknown'));
+    sendFrame('CONN', { connected: true, addr: addr, time: connStats.connectTime });
+});
+
+NRF.on('disconnect', function() {
+    connStats.connected = false;
+    logInfo('BLE disconnected after ' + ((Date.now() - bootTime) - (connStats.connectTime || 0)) + 'ms');
+    sendFrame('CONN', { connected: false, time: Date.now() - bootTime });
+});
+
+// Get current RSSI (signal strength)
+function updateRssi() {
+    try {
+        var rssi = NRF.getSecurityStatus().rssi;
+        if (rssi) {
+            connStats.rssi = rssi;
+        }
+    } catch (e) {
+        // RSSI not available when not connected
+    }
+    return connStats.rssi;
+}
+
+// Get connection quality statistics
+function getConnStats() {
+    updateRssi();
+    var now = Date.now() - bootTime;
+    var duration = connStats.connected && connStats.connectTime ?
+        now - connStats.connectTime : 0;
+    var stats = {
+        connected: connStats.connected,
+        rssi: connStats.rssi,
+        rssiQuality: getRssiQuality(connStats.rssi),
+        duration: duration,
+        packetsSent: connStats.packetsSent,
+        bytesSent: connStats.byteSent,
+        reconnects: connStats.reconnects,
+        avgPacketRate: duration > 0 ? Math.round(connStats.packetsSent * 1000 / duration) : 0
+    };
+    sendFrame('CONN_STATS', stats);
+    return stats;
+}
+
+// Classify RSSI into quality levels
+function getRssiQuality(rssi) {
+    if (rssi === null) return 'unknown';
+    if (rssi >= -50) return 'excellent';
+    if (rssi >= -60) return 'good';
+    if (rssi >= -70) return 'fair';
+    if (rssi >= -80) return 'weak';
+    return 'poor';
+}
+
+// Track outgoing packets
+function trackPacket(bytes) {
+    connStats.packetsSent++;
+    connStats.byteSent += bytes || 0;
+    connStats.lastActivity = Date.now() - bootTime;
+}
+
+// ===== Background Beaconing =====
+// Advertise device status even when not connected
+var beaconEnabled = false;
+var beaconInterval = null;
+var beaconIntervalMs = 5000;  // 5 second update interval
+
+function enableBeaconing(intervalMs) {
+    if (beaconInterval) {
+        clearInterval(beaconInterval);
+    }
+
+    beaconIntervalMs = intervalMs || 5000;
+    beaconEnabled = true;
+    logInfo('Beaconing enabled @ ' + (beaconIntervalMs / 1000) + 's');
+
+    // Update advertising data periodically
+    beaconInterval = setInterval(updateBeacon, beaconIntervalMs);
+    updateBeacon(); // Initial update
+}
+
+function disableBeaconing() {
+    if (beaconInterval) {
+        clearInterval(beaconInterval);
+        beaconInterval = null;
+    }
+    beaconEnabled = false;
+    logInfo('Beaconing disabled');
+
+    // Reset to default advertising
+    try {
+        NRF.setAdvertising({}, {
+            name: "SIMCAP GAMBIT v" + FIRMWARE_INFO.version
+        });
+    } catch (e) {
+        logError('Failed to reset advertising: ' + e.message);
+    }
+}
+
+function updateBeacon() {
+    if (!beaconEnabled) return;
+
+    try {
+        var batt = Puck.getBatteryPercentage();
+        var temp = E.getTemperature();
+        var status = streamingActive ? 1 : (connStats.connected ? 2 : 0);
+        // Status: 0=idle, 1=streaming, 2=connected but not streaming
+
+        // Create manufacturer-specific data
+        // Format: [length, type=0xFF, company_id_low, company_id_high, ...data]
+        // Using 0xFFFF as company ID (test/development)
+        var mfgData = [
+            11,       // Length (including type and company ID)
+            0xFF,     // Type: Manufacturer Specific Data
+            0xFF, 0xFF,  // Company ID: 0xFFFF (test)
+            0x47,     // 'G' for GAMBIT
+            0x01,     // Protocol version
+            status,   // Device status
+            batt,     // Battery percentage
+            Math.round(temp) + 40,  // Temperature (offset for unsigned)
+            currentMode.charCodeAt(0),  // Mode: L/N/H/B
+            currentContext.charCodeAt(0)  // Context: u/s/h/a/t
+        ];
+
+        NRF.setAdvertising([
+            {},  // Include standard advertising
+            mfgData
+        ], {
+            name: "GAMBIT " + batt + "% " + currentMode.charAt(0),
+            interval: 500  // 500ms advertising interval
+        });
+
+    } catch (e) {
+        logWarn('Beacon update failed: ' + e.message);
+    }
+}
+
+// Get beacon status
+function getBeaconStatus() {
+    var status = {
+        enabled: beaconEnabled,
+        interval: beaconIntervalMs
+    };
+    sendFrame('BEACON_STATUS', status);
+    return status;
+}
+
 // ===== Initialization =====
 function init() {
     logInfo('Boot: GAMBIT v' + FIRMWARE_INFO.version);
@@ -756,6 +1300,48 @@ NRF.on('disconnect', function(reason) {
     stopData();
 });
 
+// ===== Wake-on-Touch =====
+var wakeOnTouchEnabled = false;
+var wakeOnTouchInterval = null;
+
+function enableWakeOnTouch() {
+    if (!capBaseline) {
+        logWarn('Wake-on-touch requires calibration first');
+        return false;
+    }
+
+    wakeOnTouchEnabled = true;
+    logInfo('Wake-on-touch enabled');
+
+    // Poll capacitive sensor at low frequency
+    wakeOnTouchInterval = setInterval(function() {
+        if (streamingActive) return; // Already streaming
+
+        var cap = Puck.capSense();
+        var delta = cap - capBaseline;
+
+        if (delta > 500) { // Firm grip detected
+            logInfo('Wake-on-touch triggered');
+            digitalPulse(LED3, 1, 100);
+            getData(); // Start streaming
+        }
+    }, 500); // Check every 500ms
+
+    sendFrame('WAKE', { enabled: true });
+    return true;
+}
+
+function disableWakeOnTouch() {
+    wakeOnTouchEnabled = false;
+    if (wakeOnTouchInterval) {
+        clearInterval(wakeOnTouchInterval);
+        wakeOnTouchInterval = null;
+    }
+    logInfo('Wake-on-touch disabled');
+    sendFrame('WAKE', { enabled: false });
+    return false;
+}
+
 // ===== Exported API =====
 // These functions can be called from the client via BLE:
 // - getFirmware() - Get firmware info
@@ -769,3 +1355,6 @@ NRF.on('disconnect', function(reason) {
 // - cycleMode() - Cycle to next mode
 // - calibrateContext() - Calibrate light/cap sensors
 // - showBatteryLevel() - Show battery via LEDs
+// - setBinaryProtocol(enabled) - Enable/disable binary telemetry protocol
+// - enableWakeOnTouch() - Enable wake-on-touch (requires calibration)
+// - disableWakeOnTouch() - Disable wake-on-touch
