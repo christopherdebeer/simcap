@@ -19,10 +19,10 @@ graph LR
     end
 
     subgraph "Data Flow"
-        IMU --> |50Hz| TELEMETRY[Telemetry Object]
+        IMU --> |26-104Hz| TELEMETRY[Telemetry Object]
         SENSORS --> TELEMETRY
-        BTN --> |trigger| CAPTURE[30s Capture]
-        CAPTURE --> TELEMETRY
+        BTN --> |gestures| GESTURE[Gesture Handler]
+        GESTURE --> |mode/action| CONTROL[Mode Control]
         NFC --> |tap| PAIR[Pair to Web UI]
     end
 
@@ -34,13 +34,20 @@ graph LR
 
 **Device:** Espruino Puck.js v2
 - nRF52840 processor
-- 9-DoF IMU (LSM6DS3 + LIS2MDL)
+- 9-DoF IMU (LSM6DS3 + MMC5603NJ)
 - BLE 5.0
 - NFC tag
-- RGB LED
+- RGB LED (3 LEDs)
 - Button
 - Light sensor
 - Capacitive touch
+
+## Version History
+
+| Version | Features |
+|---------|----------|
+| v0.3.x | Basic streaming, logging, framing protocol |
+| v0.4.0 | **Button gestures, sampling modes, context awareness, LED patterns** |
 
 ## Telemetry Data Structure
 
@@ -48,22 +55,22 @@ Each telemetry packet contains:
 
 ```javascript
 {
-  // Accelerometer (raw values, device coordinates)
+  // Accelerometer (raw LSB values)
   ax: number,  // X-axis acceleration
   ay: number,  // Y-axis acceleration
   az: number,  // Z-axis acceleration
 
-  // Gyroscope (raw values, degrees/second)
+  // Gyroscope (raw LSB values)
   gx: number,  // X-axis angular velocity
   gy: number,  // Y-axis angular velocity
   gz: number,  // Z-axis angular velocity
 
-  // Magnetometer (raw values, microtesla)
+  // Magnetometer (raw LSB values)
   mx: number,  // X-axis magnetic field
   my: number,  // Y-axis magnetic field
   mz: number,  // Z-axis magnetic field
 
-  // Additional sensors
+  // Environmental sensors
   l: number,   // Light sensor (0-1)
   t: number,   // Temperature (magnetometer temp)
   c: number,   // Capacitive sense value
@@ -71,76 +78,178 @@ Each telemetry packet contains:
   // State
   s: number,   // State (0=off, 1=on)
   n: number,   // Button press count
-  b: number    // Battery percentage
+  b: number,   // Battery percentage
+
+  // New in v0.4.0
+  mode: string, // Sampling mode: L/N/H/B
+  ctx: string,  // Context: u/s/h/a/t
+  grip: number  // Grip detected: 0/1
 }
 ```
 
-## Architecture
+## Button Gestures (v0.4.0+)
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant Button
-    participant Firmware
-    participant BLE
-    participant WebUI
+The button now supports multi-tap gestures:
 
-    User->>Button: Press
-    Button->>Firmware: setWatch trigger
-    Firmware->>Firmware: Toggle state
-    Firmware->>Firmware: Start 30s interval (50Hz)
+| Gesture | Detection | LED Feedback | Action |
+|---------|-----------|--------------|--------|
+| Single Tap | 1 tap, <300ms | Blue pulse | Toggle streaming |
+| Double Tap | 2 taps, <300ms each | Blue double pulse | Cycle sampling mode |
+| Triple Tap | 3+ taps, <300ms each | Green pulse | Mark event/annotation |
+| Long Press | Hold 1-3s | Green fade | Show battery / Calibrate context |
+| Very Long Press | Hold >3s | Red fade | Enter low power mode |
 
-    loop Every 20ms for 30 seconds
-        Firmware->>Firmware: Read IMU sensors
-        Firmware->>Firmware: Read additional sensors
-        Firmware->>Firmware: Build telemetry JSON
-        Firmware->>BLE: console.log(JSON)
-        BLE->>WebUI: Nordic UART data
-    end
+## Sampling Modes (v0.4.0+)
 
-    Firmware->>Firmware: Clear interval
+Four sampling modes optimize for different use cases:
+
+| Mode | Accel/Gyro | Magnetometer | Light/Cap | Battery | Use Case |
+|------|------------|--------------|-----------|---------|----------|
+| LOW_POWER | 26Hz | 5Hz | 1.3Hz | 0.13Hz | Background monitoring |
+| NORMAL | 26Hz | 13Hz | 2.6Hz | 0.26Hz | Standard tracking |
+| HIGH_RES | 52Hz | 52Hz | 10Hz | 0.52Hz | Detailed gesture capture |
+| BURST | 104Hz | 104Hz | 10Hz | 0.52Hz | Maximum resolution |
+
+**Mode Control:**
+- Double-tap button to cycle modes
+- Call `setMode("MODE_NAME")` via BLE
+- LED indicates current mode on change
+
+## Context Awareness (v0.4.0+)
+
+The firmware detects device context using light and capacitive sensors:
+
+| Context | Detection | Auto-Action |
+|---------|-----------|-------------|
+| `stored` | Dark + no grip | Switch to LOW_POWER |
+| `held` | Grip detected | Maintain current mode |
+| `active` | Grip + motion | Switch to NORMAL if LOW_POWER |
+| `table` | Light + no grip | Maintain current mode |
+| `unknown` | Undetermined | No action |
+
+**Calibration:** Long-press button (when not calibrated) to establish baseline readings.
+
+## LED Feedback System (v0.4.0+)
+
+| LED | Color | Usage |
+|-----|-------|-------|
+| LED1 | Red | Low battery, errors, very long press |
+| LED2 | Green | NFC, success, calibration, triple tap |
+| LED3 | Blue | Button press, streaming, mode indicator |
+
+**Mode Indicators:**
+- LOW_POWER: Quick green flash
+- NORMAL: Blue pulse
+- HIGH_RES: Double blue flash
+- BURST: Purple (red + blue)
+
+**Battery Indicators:**
+- >60%: Triple green flash
+- 30-60%: Yellow flashes (red + green)
+- 10-30%: Red flashes
+- <10%: Fast red flashes
+
+## Frame Protocol
+
+**Transport:** BLE Nordic UART Service (NUS)
+- Service UUID: `6e400001-b5a3-f393-e0a9-e50e24dcca9e`
+- TX Characteristic: `6e400002-b5a3-f393-e0a9-e50e24dcca9e`
+- RX Characteristic: `6e400003-b5a3-f393-e0a9-e50e24dcca9e`
+
+**Frame Format:** `\x02TYPE:LENGTH\nPAYLOAD\x03`
+
 ```
-
-## Key Features
-
-### 1. Length-Prefixed Framing Protocol (v0.2.0+)
-
-GAMBIT uses a robust framing protocol for structured data exchange:
-
-```
-Frame Format: \x02TYPE:LENGTH\nPAYLOAD\x03
-
 \x02 = STX (Start of Text) - Frame start marker
-TYPE = Message type identifier (e.g., FW, LOGS, LOG_STATS)
+TYPE = Message type identifier
 LENGTH = Payload length in bytes (decimal)
 \n = Header/payload separator
 PAYLOAD = JSON data
 \x03 = ETX (End of Text) - Frame end marker
 ```
 
-**Example Frame:**
+### Frame Types
+
+| Type | Description | Direction | Trigger |
+|------|-------------|-----------|---------|
+| `T` | Telemetry sample | Device→Host | Streaming interval |
+| `FW` | Firmware info | Device→Host | `getFirmware()` |
+| `LOGS` | Device log entries | Device→Host | `getLogs()` |
+| `LOG_STATS` | Log statistics | Device→Host | `getLogStats()` |
+| `LOGS_CLEARED` | Clear confirmation | Device→Host | `clearLogs()` |
+| `BTN` | Button gesture | Device→Host | Button interaction |
+| `MODE` | Mode change | Device→Host | Mode change |
+| `CTX` | Context change | Device→Host | Context detection |
+| `STREAM_START` | Stream started | Device→Host | `getData()` |
+| `STREAM_STOP` | Stream stopped | Device→Host | `stopData()` |
+| `MARK` | Event marker | Device→Host | Triple tap |
+| `CAL` | Calibration | Device→Host | `calibrateContext()` |
+| `SLEEP` | Sleep mode | Device→Host | Very long press |
+| `CONN` | Connection event | Device→Host | BLE connect |
+
+## API Reference
+
+### Streaming Control
+
+```javascript
+// Start streaming (30s timeout, mode-based rate)
+getData()
+
+// Start streaming with specific count
+getData(500)  // 500 samples
+
+// Start streaming with count and custom rate
+getData(500, 20)  // 500 samples at 50Hz (20ms interval)
+
+// Stop streaming
+stopData()
 ```
-\x02FW:89
-{"id":"GAMBIT","name":"GAMBIT IMU Telemetry","version":"0.2.0","uptime":12345}\x03
+
+### Mode Control (v0.4.0+)
+
+```javascript
+// Set specific mode
+setMode("LOW_POWER")
+setMode("NORMAL")
+setMode("HIGH_RES")
+setMode("BURST")
+
+// Get current mode
+getMode()  // Returns {mode: "NORMAL", config: {...}}
+
+// Cycle to next mode
+cycleMode()
 ```
 
-**Message Types:**
-| Type | Description | Triggered By |
-|------|-------------|--------------|
-| `FW` | Firmware info | `getFirmware()` |
-| `LOGS` | Device log entries | `getLogs()` |
-| `LOGS_CLEARED` | Confirmation of log clear | `clearLogs()` |
-| `LOG_STATS` | Log buffer statistics | `getLogStats()` |
+### Context & Calibration (v0.4.0+)
 
-**Benefits:**
-- Robust parsing even with BLE packet fragmentation
-- Self-describing messages with type and length
-- Clear frame boundaries prevent JSON parsing errors
-- Extensible for future message types
+```javascript
+// Calibrate light/capacitive baseline
+calibrateContext()
 
-### 2. On-Device Logging (v0.1.2+)
+// Show battery via LEDs
+showBatteryLevel()
+```
 
-GAMBIT includes a rolling-window logging system for debugging:
+### Device Info
+
+```javascript
+// Get firmware info
+getFirmware()
+
+// Get device logs
+getLogs()
+getLogs(10)  // Since index 10
+
+// Clear logs
+clearLogs()
+
+// Get log stats
+getLogStats()
+```
+
+## On-Device Logging
+
+GAMBIT includes a rolling-window logging system:
 
 ```javascript
 // Log levels: E=Error, W=Warn, I=Info, D=Debug
@@ -148,104 +257,19 @@ logError('Sensor read failed');
 logWarn('Low battery: 15%');
 logInfo('Stream started');
 logDebug('Memory: 1234/2048');
-
-// Retrieve logs via BLE
-getLogs();      // Returns all logs as JSON
-getLogs(10);    // Returns logs since index 10
-clearLogs();    // Clear all logs
-getLogStats();  // Get memory/uptime stats
 ```
 
 **What's Logged:**
 - Boot events (firmware version, battery level, memory)
 - BLE connections/disconnections
-- Button presses and state changes
+- Button gestures and actions
 - Stream start/stop with sample counts
+- Mode changes and context transitions
 - NFC field detection
+- Calibration events
 - Errors and warnings
 
 **Storage:** Rolling window of 50 entries (~2-3KB RAM)
-
-**Retrieval:** Use the "Device Logs" tab in the Firmware Loader to fetch, filter, and export logs.
-
-### 2. Sensor Sampling (50 Hz)
-
-The `emit()` function reads all sensors and constructs a telemetry object:
-
-```javascript
-function emit() {
-    var mag = Puck.mag()    // Magnetometer
-    var accel = Puck.accel() // Accelerometer + Gyroscope
-
-    telemetry.ax = accel.acc.x
-    // ... all sensor assignments
-
-    console.log("\nGAMBIT" + JSON.stringify(telemetry))
-    return telemetry;
-}
-```
-
-### 2. Burst Capture Mode
-
-Data collection runs for 30-second bursts to conserve battery:
-
-```javascript
-function getData() {
-    if (interval) return emit();
-
-    setTimeout(function(){
-        clearInterval(interval)
-        interval = null
-    }, 30000)  // 30 second capture
-
-    interval = setInterval(emit, 50)  // 50Hz = 20ms
-    return(emit())
-}
-```
-
-### 3. NFC Tap-to-Pair
-
-Tapping a phone to the device triggers the WebBLE pairing flow:
-
-```javascript
-NRF.nfcURL("webble://simcap.parc.land/src/web/GAMBIT/");
-```
-
-### 4. LED Feedback
-
-| LED | Color | Meaning |
-|-----|-------|---------|
-| LED1 | Red | (unused in current impl) |
-| LED2 | Green | NFC field detected |
-| LED3 | Blue | Button press / state toggle |
-
-### 5. Button State Machine
-
-```mermaid
-stateDiagram-v2
-    [*] --> Idle: Power on
-    Idle --> Capturing: Button press (odd)
-    Capturing --> Idle: 30s timeout
-    Capturing --> Idle: Button press (even)
-
-    Idle: state = 0
-    Idle: LED3 short flash
-    Capturing: state = 1
-    Capturing: LED3 long flash
-    Capturing: 50Hz data emission
-```
-
-## Communication Protocol
-
-**Transport:** BLE Nordic UART Service (NUS)
-- Service UUID: `6e400001-b5a3-f393-e0a9-e50e24dcca9e`
-- TX Characteristic: `6e400002-b5a3-f393-e0a9-e50e24dcca9e`
-- RX Characteristic: `6e400003-b5a3-f393-e0a9-e50e24dcca9e`
-
-**Data Format:** Newline-delimited JSON with `GAMBIT` prefix
-```
-\nGAMBIT{"ax":-464,"ay":-7949,"az":-2282,...}
-```
 
 ## Installation
 
@@ -253,23 +277,21 @@ stateDiagram-v2
 2. Copy the contents of `app.js`
 3. Paste into the IDE editor
 4. Click "Send to Espruino"
-5. For persistent storage, save to flash
+5. For persistent storage, save to flash with `save()`
 
 ## Usage
 
 1. **NFC Tap:** Tap phone to Puck.js to open web UI
 2. **Manual Connect:** Press button, then connect via web UI
-3. **Get Data:** Press "Get data" button in web UI or press device button
+3. **Get Data:** Press "Get data" button in web UI or tap device button
 
-## Disabled Features
+### Quick Start with Gestures
 
-The following features are implemented but commented out:
-
-- **Movement Sensor:** Accelerometer-based idle detection with MQTT advertising
-- **Magnetic Field Sensor:** Discrete magnetic field change detection
-- **MQTT Advertising:** BLE advertising packets for EspruinoHub integration
-
-These can be re-enabled by uncommenting the relevant code blocks.
+1. **Single tap** - Start/stop data streaming
+2. **Double tap** - Cycle through sampling modes
+3. **Triple tap** - Mark an event in the data stream
+4. **Long press** - Calibrate sensors (first time) or show battery level
+5. **Very long press** - Enter low power mode
 
 ## Data Files
 
@@ -282,14 +304,11 @@ See the [Web UI README](../../web/GAMBIT/about) for data collection workflow.
 
 ## Related Components
 
-- **Web UI:** [src/web/GAMBIT/](../../web/GAMBIT/) - Data visualization and collection interface
-- **BAE Reference:** [src/device/BAE/](../BAE/) - BLE advertising reference implementation
-- **Design Docs:** [docs/design/](../../../docs/design/) - Future vision and ML pipeline proposals
+- **Web UI:** [apps/gambit/](../../../apps/gambit/) - Data visualization and collection interface
+- **Client Library:** [apps/gambit/gambit-client.ts](../../../apps/gambit/gambit-client.ts) - TypeScript client
+- **Core Types:** [packages/core/src/types/](../../../packages/core/src/types/) - Telemetry type definitions
+- **Design Docs:** [docs/](../../../docs/) - Technical documentation
 
 ---
 
 [← Back to SIMCAP](../../../)
-
----
-
-<link rel="stylesheet" href="../../simcap.css">

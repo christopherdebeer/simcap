@@ -60,6 +60,26 @@ export interface RawTelemetry {
   mz: number;
   /** Timestamp (ms since connection) */
   t: number;
+
+  // ===== Optional environmental sensors =====
+  /** Light sensor (0-1 normalized, optional) */
+  l?: number;
+  /** Capacitive sensor (raw value, optional) */
+  c?: number;
+  /** Battery percentage (0-100, optional) */
+  b?: number;
+  /** Device state (0=idle, 1=streaming, optional) */
+  s?: number;
+  /** Button press count (optional) */
+  n?: number;
+
+  // ===== New v0.4.0 fields =====
+  /** Sampling mode: L=LOW_POWER, N=NORMAL, H=HIGH_RES, B=BURST (optional) */
+  mode?: string;
+  /** Context: u=unknown, s=stored, h=held, a=active, t=table (optional) */
+  ctx?: string;
+  /** Grip detected: 0=no, 1=yes (optional) */
+  grip?: number;
 }
 
 // ============================================================================
