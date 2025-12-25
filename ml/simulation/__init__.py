@@ -23,6 +23,16 @@ from .hand_model import HandPoseGenerator, FingerState, HandPose
 from .sensor_model import MMC5603Simulator
 from .generator import MagneticFieldSimulator, generate_synthetic_session
 
+# Optional Magpylib support for high-fidelity simulation
+try:
+    from .magpylib_sim import MagpylibSimulator, MagnetSpec, DEFAULT_MAGNET_SPECS
+    HAS_MAGPYLIB = True
+except ImportError:
+    HAS_MAGPYLIB = False
+    MagpylibSimulator = None
+    MagnetSpec = None
+    DEFAULT_MAGNET_SPECS = None
+
 # Default magnet configuration with alternating polarity
 DEFAULT_MAGNET_CONFIG = {
     'thumb': {
@@ -56,5 +66,10 @@ __all__ = [
     'MMC5603Simulator',
     'MagneticFieldSimulator',
     'generate_synthetic_session',
-    'DEFAULT_MAGNET_CONFIG'
+    'DEFAULT_MAGNET_CONFIG',
+    # Magpylib (optional)
+    'HAS_MAGPYLIB',
+    'MagpylibSimulator',
+    'MagnetSpec',
+    'DEFAULT_MAGNET_SPECS'
 ]
