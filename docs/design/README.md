@@ -44,7 +44,9 @@ A proposed dual-device BLE coordination system for emulating game controller HID
 
 See [src/web/FFO$$/](../../src/web/FFO$$/) for the research direction document.
 
-Research direction exploring $1/$P/$N family gesture recognition algorithms applied to IMU sensor data.
+See [FFO$$ Research Analysis](ffo-dollar-research-analysis.md) for comprehensive analysis of implications for SIMCAP.
+
+Research direction exploring $1/$P/$N/$Q family gesture recognition algorithms applied to IMU sensor data. The $-family offers template-based gesture recognition as a lightweight alternative to neural networks, particularly suitable for on-device inference on constrained hardware like Puck.js.
 
 ---
 
