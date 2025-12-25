@@ -36,6 +36,14 @@ from .hand_model import (
 )
 from .sensor_model import MMC5603Simulator, IMUSimulator
 
+# Try to import Magpylib for high-fidelity simulation
+try:
+    from .magpylib_sim import MagpylibSimulator, DEFAULT_MAGNET_SPECS
+    HAS_MAGPYLIB = True
+except ImportError:
+    HAS_MAGPYLIB = False
+    MagpylibSimulator = None
+
 
 class MagneticFieldSimulator:
     """
@@ -54,7 +62,8 @@ class MagneticFieldSimulator:
         earth_field: Optional[np.ndarray] = None,
         sample_rate: float = 26.0,
         randomize_geometry: bool = False,
-        randomize_sensor: bool = False
+        randomize_sensor: bool = False,
+        use_magpylib: bool = True
     ):
         """
         Initialize the magnetic field simulator.
@@ -66,15 +75,23 @@ class MagneticFieldSimulator:
             sample_rate: Sample rate in Hz
             randomize_geometry: Apply random variation to hand geometry
             randomize_sensor: Apply random variation to sensor characteristics
+            use_magpylib: Use Magpylib for accurate cylinder magnet simulation
+                         (falls back to dipole approximation if not available)
         """
         self.magnet_config = magnet_config
         self.earth_field = earth_field if earth_field is not None else EARTH_FIELD_EDINBURGH
         self.sample_rate = sample_rate
+        self.use_magpylib = use_magpylib and HAS_MAGPYLIB
 
         # Initialize components
         self.hand_generator = HandPoseGenerator(randomize_geometry=randomize_geometry)
         self.mag_sensor = MMC5603Simulator()
         self.imu_sensor = IMUSimulator()
+
+        # Initialize Magpylib simulator if available and requested
+        self.magpylib_sim = None
+        if self.use_magpylib:
+            self.magpylib_sim = MagpylibSimulator()
 
         if randomize_sensor:
             self.mag_sensor.randomize_parameters()
@@ -102,6 +119,16 @@ class MagneticFieldSimulator:
         else:
             rotated_earth = self.earth_field
 
+        # Use Magpylib if available for more accurate field calculation
+        if self.use_magpylib and self.magpylib_sim is not None:
+            field = self.magpylib_sim.compute_field(
+                finger_positions_mm=pose.fingertip_positions,
+                include_earth=include_earth,
+                earth_field_ut=rotated_earth
+            )
+            return field
+
+        # Fall back to dipole approximation
         return compute_total_field(
             sensor_position=np.zeros(3),
             finger_positions=pose.fingertip_positions,
@@ -345,7 +372,8 @@ class MagneticFieldSimulator:
             'labels': all_labels,
             'metadata': {
                 'synthetic': True,
-                'generator_version': '1.0',
+                'generator_version': '1.1',
+                'physics_engine': 'magpylib' if self.use_magpylib else 'dipole_approximation',
                 'sample_rate': self.sample_rate,
                 'magnet_config': {
                     k: {
