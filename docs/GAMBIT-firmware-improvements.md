@@ -933,13 +933,14 @@ function handleCommand(data) {
 ### Phase 2: Power Optimization (v0.5.0) ✅ COMPLETE
 - [x] FIFO batch mode for LSM6DS3 (416Hz+ via hardware FIFO)
 - [x] Adaptive sampling modes (LOW_POWER, NORMAL, HIGH_RES, BURST)
-- [x] Capacitive wake-on-touch (grip-triggered wake)
 - [x] Background beaconing (advertise status when not connected)
+- [~] Capacitive wake-on-touch (implemented but cap sensor not wired)
 
 ### Phase 3: Intelligence (v0.6.0) - IN PROGRESS
-- [x] Multi-sensor context inference (light + cap + motion → context)
-- [x] Grip-based auto mode switching (switch to HIGH_RES when gripped)
-- [x] Connection quality adaptive streaming (reduce rate on weak signal)
+- [x] Binary protocol as canonical telemetry format (JSON deprecated)
+- [~] Multi-sensor context inference (cap sensor not wired - light + motion only)
+- [~] Grip-based auto mode switching (cap sensor not wired - deferred)
+- [~] Connection quality adaptive streaming (implemented, deprioritized)
 - [ ] On-device motion classification (activity recognition)
 
 ### Phase 4: Advanced (v1.0.0) - PLANNED
@@ -950,12 +951,14 @@ function handleCommand(data) {
 
 ### App Integration Status
 
-| App | JSON Protocol | Binary Protocol | Button Events | Mode Events | Context Events |
-|-----|---------------|-----------------|---------------|-------------|----------------|
-| **Collector** | ✅ | ❌ | ✅ | ✅ | ✅ |
-| **FFO$$** | ✅ | ❌ | ✅ | ✅ | ✅ |
-| **Synth** | ✅ | ❌ | ❌ | ❌ | ❌ |
-| **Gambit-app** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| App | Binary Protocol | Button Events | Mode Events | Context Events |
+|-----|-----------------|---------------|-------------|----------------|
+| **Collector** | ✅ (auto) | ✅ | ✅ | ✅ |
+| **FFO$$** | ✅ (auto) | ✅ | ✅ | ✅ |
+| **Synth** | ✅ (auto) | ❌ | ❌ | ❌ |
+| **Gambit-app** | ✅ (auto) | ❌ | ❌ | ❌ |
+
+*Note: Binary protocol is now canonical - all apps auto-receive binary telemetry via client.*
 
 ### Integration Tasks
 - [x] FFO$$ gesture app: Add GAMBIT context event support

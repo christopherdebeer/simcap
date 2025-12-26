@@ -776,13 +776,17 @@ setWatch(function(e) {
 // flags: [mode:2][ctx:3][grip:1][hasLight:1][hasBatt:1]
 // aux:   [light:1][battery:1][temp:1] (only when available)
 
-var useBinaryProtocol = false;
+// Binary protocol is now the canonical/only telemetry format (v0.4.0+)
+// JSON frames (sendFrame) are only used for control messages
+var useBinaryProtocol = true;  // Always true - binary is canonical
 
 function setBinaryProtocol(enabled) {
-    useBinaryProtocol = !!enabled;
-    logInfo('Binary protocol: ' + (useBinaryProtocol ? 'enabled' : 'disabled'));
-    sendFrame('PROTO', { binary: useBinaryProtocol });
-    return useBinaryProtocol;
+    // Binary is always enabled - this is kept for API compatibility
+    if (!enabled) {
+        logWarn('JSON telemetry deprecated - binary protocol is canonical');
+    }
+    useBinaryProtocol = true;  // Force true
+    return true;
 }
 
 function emitBinary() {
@@ -972,20 +976,8 @@ function emit() {
     telemetry.mode = currentMode.charAt(0); // First letter: L/N/H/B
     telemetry.ctx = currentContext.charAt(0); // First letter
 
-    // Send telemetry using appropriate protocol
-    if (useBinaryProtocol) {
-        // Binary already sent in emitBinary, but we need to update state
-        telemetry.s = state;
-        telemetry.n = pressCount;
-        telemetry.mode = currentMode.charAt(0);
-        telemetry.ctx = currentContext.charAt(0);
-    } else {
-        telemetry.s = state;
-        telemetry.n = pressCount;
-        telemetry.mode = currentMode.charAt(0);
-        telemetry.ctx = currentContext.charAt(0);
-        sendFrame('T', telemetry);
-    }
+    // Note: This function is deprecated for streaming - emitBinary() is used instead
+    // This is kept for compatibility with getData() single-sample requests
     return telemetry;
 }
 
@@ -1053,13 +1045,9 @@ function getData(count, intervalMs) {
         }, 30000);
     }
 
-    // Start streaming
+    // Start streaming - binary protocol only
     interval = setInterval(function() {
-        if (useBinaryProtocol) {
-            emitBinary();
-        } else {
-            emit();
-        }
+        emitBinary();
 
         // Auto-stop if we've reached the target count
         if (streamCount && sampleCount >= streamCount) {
@@ -1071,11 +1059,11 @@ function getData(count, intervalMs) {
         mode: currentMode,
         hz: hz,
         count: streamCount,
-        binary: useBinaryProtocol,
+        binary: true,  // Always binary
         time: Date.now() - bootTime
     });
 
-    return emit();
+    return emitBinary();  // Return first sample
 }
 
 // Stop streaming
