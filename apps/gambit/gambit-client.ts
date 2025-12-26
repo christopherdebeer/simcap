@@ -439,7 +439,8 @@ export class GambitClient {
   private keepaliveInterval: ReturnType<typeof setInterval> | null = null;
   private autoKeepalive: boolean;
   private keepaliveIntervalMs: number;
-  private useBinaryProtocol: boolean = false;
+  // Binary protocol is now canonical (v0.4.0+) - always enabled
+  private useBinaryProtocol: boolean = true;
 
   // Static properties
   static LOG_LEVELS: Record<string, LogLevel> = {
@@ -458,9 +459,9 @@ export class GambitClient {
     this.autoKeepalive = options.autoKeepalive !== false;
     this.keepaliveIntervalMs = options.keepaliveInterval || 20000;
 
-    // Wire up frame parser events to client events
+    // Wire up frame parser events to client events (control messages only)
+    // Note: Telemetry data uses binary protocol, not JSON frames
     this.frameParser.on('FW', (data: unknown) => this._handleFirmware(data as FirmwareInfo));
-    this.frameParser.on('T', (data: unknown) => this.emit('data', data));
     this.frameParser.on('LOGS', (data: unknown) => this._handleLogs(data as LogsResponse));
     this.frameParser.on('LOGS_CLEARED', (data: unknown) => this._handleLogsCleared(data));
     this.frameParser.on('LOG_STATS', (data: unknown) => this._handleLogStats(data as LogStats));
@@ -577,17 +578,25 @@ export class GambitClient {
         this.binaryParser.reset();
 
         conn.on('data', (data: string | ArrayBuffer) => {
-          if (this.useBinaryProtocol) {
-            // Convert string to Uint8Array for binary parsing
-            let bytes: Uint8Array;
-            if (typeof data === 'string') {
-              bytes = new Uint8Array(data.split('').map(c => c.charCodeAt(0)));
-            } else {
-              bytes = new Uint8Array(data);
-            }
-            this.binaryParser.onBinaryData(bytes);
+          // Convert to bytes for inspection
+          let bytes: Uint8Array;
+          if (typeof data === 'string') {
+            bytes = new Uint8Array(data.split('').map(c => c.charCodeAt(0)));
           } else {
-            // Text-based frame protocol
+            bytes = new Uint8Array(data);
+          }
+
+          // Route based on packet type:
+          // - Binary telemetry: starts with magic bytes 0xAB 0xCD
+          // - JSON frames: starts with STX (0x02)
+          if (bytes.length >= 2 && bytes[0] === 0xAB && bytes[1] === 0xCD) {
+            // Binary telemetry packet
+            this.binaryParser.onBinaryData(bytes);
+          } else if (bytes.length > 0 && bytes[0] === 0x02) {
+            // JSON frame (STX = 0x02)
+            this.frameParser.onData(data as string);
+          } else {
+            // Unknown or partial data - try frame parser for control messages
             this.frameParser.onData(data as string);
           }
         });
@@ -967,25 +976,23 @@ export class GambitClient {
   }
 
   // ===== Binary Protocol (v0.4.0+) =====
+  // Binary is now the canonical/only telemetry format
 
   /**
-   * Enable or disable binary telemetry protocol.
-   * Binary protocol provides ~4x smaller packets for higher throughput.
-   * @param enabled - Whether to use binary protocol
+   * @deprecated Binary protocol is now always enabled (canonical format)
+   * This method is kept for API compatibility but always returns true.
    */
   setBinaryProtocol(enabled: boolean): Promise<void> {
-    this.useBinaryProtocol = enabled;
-    this._log(`Binary protocol ${enabled ? 'enabled' : 'disabled'}`);
-    if (enabled) {
-      this.binaryParser.reset();
-    } else {
-      this.frameParser.clear();
+    if (!enabled) {
+      this._log('Warning: JSON telemetry deprecated - binary is canonical');
     }
-    return this.write(`\x10if(typeof setBinaryProtocol==="function")setBinaryProtocol(${enabled});\n`);
+    // Binary is always enabled - just reset parser
+    this.binaryParser.reset();
+    return Promise.resolve();
   }
 
   /**
-   * Check if binary protocol is currently enabled.
+   * Check if binary protocol is enabled (always true in v0.4.0+).
    */
   isBinaryProtocol(): boolean {
     return this.useBinaryProtocol;
