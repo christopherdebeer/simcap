@@ -934,12 +934,12 @@ function handleCommand(data) {
 - [x] FIFO batch mode for LSM6DS3 (416Hz+ via hardware FIFO)
 - [x] Adaptive sampling modes (LOW_POWER, NORMAL, HIGH_RES, BURST)
 - [x] Background beaconing (advertise status when not connected)
-- [~] Capacitive wake-on-touch (implemented but cap sensor not wired)
+- [~] Capacitive wake-on-touch (implemented but cap sensor not wired - see [wiring guide](./GAMBIT-capacitive-wiring.md))
 
 ### Phase 3: Intelligence (v0.6.0) - IN PROGRESS
 - [x] Binary protocol as canonical telemetry format (JSON deprecated)
 - [~] Multi-sensor context inference (cap sensor not wired - light + motion only)
-- [~] Grip-based auto mode switching (cap sensor not wired - deferred)
+- [~] Grip-based auto mode switching (cap sensor not wired - see [wiring guide](./GAMBIT-capacitive-wiring.md))
 - [~] Connection quality adaptive streaming (implemented, deprioritized)
 - [ ] On-device motion classification (activity recognition)
 

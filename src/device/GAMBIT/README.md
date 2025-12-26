@@ -129,6 +129,8 @@ The firmware detects device context using light and capacitive sensors:
 
 **Calibration:** Long-press button (when not calibrated) to establish baseline readings.
 
+**Hardware Note:** The capacitive sensor requires physical wiring to D11. See the [Capacitive Wiring Guide](../../../docs/GAMBIT-capacitive-wiring.md) for electrode design and installation.
+
 ## LED Feedback System (v0.4.0+)
 
 | LED | Color | Usage |
