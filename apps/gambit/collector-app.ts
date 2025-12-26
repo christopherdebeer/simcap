@@ -27,6 +27,8 @@ import {
 } from './modules/wizard.js';
 import { MagneticTrajectory } from './modules/magnetic-trajectory.js';
 import { ThreeJSHandSkeleton } from './shared/threejs-hand-skeleton.js';
+import { MagneticFingerInference, createMagneticFingerInference } from './gesture-inference.js';
+import type { FingerPrediction, MagneticSample } from './gesture-inference.js';
 import {
     getBrowserLocation,
     getDefaultLocation,
@@ -156,6 +158,10 @@ const poseState: PoseState = {
 // Hand visualization
 let threeHandSkeleton: ThreeJSHandSkeleton | null = null;
 let handPreviewMode: 'labels' | 'predictions' = 'labels';
+
+// ML-based finger inference
+let magneticFingerInference: MagneticFingerInference | null = null;
+let lastFingerPrediction: FingerPrediction | null = null;
 
 // Magnetic trajectory visualization
 let magTrajectory: MagneticTrajectory | null = null;
@@ -1153,6 +1159,18 @@ function renderPoseEstimationOptions(): void {
                     <span id="handOrientationAlphaValue" style="width: 30px; text-align: right;">${(poseEstimationOptions.handOrientationAlpha * 100).toFixed(0)}%</span>
                 </div>
             </div>
+            <div style="font-size: 11px; color: var(--fg-muted); margin-bottom: 8px;">Finger Tracking:</div>
+            <div style="display: inline-flex; gap: 6px; font-size: 11px; margin-bottom: 12px;">
+                <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input style="flex-basis: 0;" type="checkbox" id="useMLInferenceToggle" ${poseEstimationOptions.useMLInference ? 'checked' : ''}
+                           ${magneticFingerInference ? '' : 'disabled'}
+                           onchange="togglePoseOption('useMLInference')" />
+                    <span>ML-Based Inference</span>
+                    <span id="mlInferenceStatus" style="font-size: 10px; color: ${magneticFingerInference ? 'var(--success)' : 'var(--fg-muted)'};">
+                        ${magneticFingerInference ? '✓ Model loaded' : '(loading...)'}
+                    </span>
+                </label>
+            </div>
         </div>
     `;
 
@@ -1188,6 +1206,29 @@ function updateHandOrientationAlpha(value: string): void {
     }
 }
 
+/**
+ * Update pose options UI (called when model loads)
+ */
+function updatePoseOptionsUI(): void {
+    const mlToggle = $('useMLInferenceToggle') as HTMLInputElement | null;
+    const mlStatus = $('mlInferenceStatus');
+
+    if (mlToggle) {
+        mlToggle.disabled = !magneticFingerInference;
+        mlToggle.checked = poseEstimationOptions.useMLInference;
+    }
+
+    if (mlStatus) {
+        if (magneticFingerInference) {
+            mlStatus.textContent = '✓ Model loaded';
+            mlStatus.style.color = 'var(--success)';
+        } else {
+            mlStatus.textContent = '(loading...)';
+            mlStatus.style.color = 'var(--fg-muted)';
+        }
+    }
+}
+
 window.togglePoseOption = togglePoseOption;
 window.updateHandOrientationAlpha = updateHandOrientationAlpha;
 
@@ -1204,7 +1245,13 @@ function updatePoseEstimationFromMag(data: PoseUpdateData): void {
     let my = magField.y;
     let mz = magField.z;
 
+    // Get accelerometer data for ML inference
+    let ax = 0, ay = 0, az = 1;
     if (sample) {
+        ax = sample.ax_g ?? 0;
+        ay = sample.ay_g ?? 0;
+        az = sample.az_g ?? 1;
+
         if (poseEstimationOptions.useFiltering && sample.filtered_mx !== undefined) {
             mx = sample.filtered_mx;
             my = sample.filtered_my;
@@ -1223,26 +1270,61 @@ function updatePoseEstimationFromMag(data: PoseUpdateData): void {
     }
 
     const strength = Math.sqrt(mx * mx + my * my + mz * mz);
-    poseState.confidence = Math.min(1.0, strength / 100);
 
-    let baseThreshold = 20;
-    let highThreshold = 60;
+    // Use ML inference if enabled and model is loaded
+    if (poseEstimationOptions.useMLInference && magneticFingerInference) {
+        const magneticSample: MagneticSample = {
+            mx_ut: mx,
+            my_ut: my,
+            mz_ut: mz,
+            ax_g: ax,
+            ay_g: ay,
+            az_g: az
+        };
 
-    if (poseEstimationOptions.useOrientation && euler) {
-        const tiltFactor = Math.abs(Math.cos(euler.pitch * Math.PI / 180) * Math.cos(euler.roll * Math.PI / 180));
-        baseThreshold *= tiltFactor;
-        highThreshold *= tiltFactor;
-        poseState.orientation = { roll: euler.roll, pitch: euler.pitch, yaw: euler.yaw };
-    }
+        // Run ML inference (async, updates lastFingerPrediction via callback)
+        magneticFingerInference.predict(magneticSample).then(prediction => {
+            if (prediction) {
+                // Update pose state from ML prediction
+                poseState.currentPose = {
+                    thumb: prediction.states['thumb'] || 0,
+                    index: prediction.states['index'] || 0,
+                    middle: prediction.states['middle'] || 0,
+                    ring: prediction.states['ring'] || 0,
+                    pinky: prediction.states['pinky'] || 0
+                };
+                poseState.confidence = prediction.overallConfidence;
 
-    if (strength < baseThreshold) {
-        poseState.currentPose = { thumb: 0, index: 0, middle: 0, ring: 0, pinky: 0 };
-    } else if (strength > highThreshold) {
-        poseState.currentPose = { thumb: 2, index: 2, middle: 2, ring: 2, pinky: 2 };
+                // Update 3D hand visualization with finger curls
+                if (threeHandSkeleton && handPreviewMode === 'predictions') {
+                    const curls = magneticFingerInference.toCurls(prediction);
+                    threeHandSkeleton.setFingerCurls(curls);
+                }
+            }
+        });
     } else {
-        const flex = (strength - baseThreshold) / (highThreshold - baseThreshold);
-        const fingerState = Math.round(flex * 2);
-        poseState.currentPose = { thumb: fingerState, index: fingerState, middle: fingerState, ring: fingerState, pinky: fingerState };
+        // Fallback to threshold-based estimation
+        poseState.confidence = Math.min(1.0, strength / 100);
+
+        let baseThreshold = 20;
+        let highThreshold = 60;
+
+        if (poseEstimationOptions.useOrientation && euler) {
+            const tiltFactor = Math.abs(Math.cos(euler.pitch * Math.PI / 180) * Math.cos(euler.roll * Math.PI / 180));
+            baseThreshold *= tiltFactor;
+            highThreshold *= tiltFactor;
+            poseState.orientation = { roll: euler.roll, pitch: euler.pitch, yaw: euler.yaw };
+        }
+
+        if (strength < baseThreshold) {
+            poseState.currentPose = { thumb: 0, index: 0, middle: 0, ring: 0, pinky: 0 };
+        } else if (strength > highThreshold) {
+            poseState.currentPose = { thumb: 2, index: 2, middle: 2, ring: 2, pinky: 2 };
+        } else {
+            const flex = (strength - baseThreshold) / (highThreshold - baseThreshold);
+            const fingerState = Math.round(flex * 2);
+            poseState.currentPose = { thumb: fingerState, index: fingerState, middle: fingerState, ring: fingerState, pinky: fingerState };
+        }
     }
 
     if (poseEstimationOptions.enableHandOrientation && euler && threeHandSkeleton) {
@@ -1306,7 +1388,38 @@ function initHandVisualization(): void {
         }
     }
 
+    // Initialize ML-based finger inference
+    initMagneticFingerInference();
+
     updateHandVisualization();
+}
+
+/**
+ * Initialize ML-based magnetic finger inference
+ */
+async function initMagneticFingerInference(): Promise<void> {
+    try {
+        log('Loading ML finger inference model...');
+        magneticFingerInference = createMagneticFingerInference({
+            smoothingAlpha: 0.4,
+            onPrediction: (prediction: FingerPrediction) => {
+                lastFingerPrediction = prediction;
+            },
+            onReady: () => {
+                log('✓ ML finger inference model loaded');
+                poseEstimationOptions.useMLInference = true;
+                updatePoseOptionsUI();
+            },
+            onError: (error: Error) => {
+                console.warn('ML inference model failed to load:', error.message);
+                log('ML inference model unavailable');
+            }
+        });
+
+        await magneticFingerInference.load();
+    } catch (err) {
+        console.warn('Failed to initialize ML finger inference:', err);
+    }
 }
 
 /**
