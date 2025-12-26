@@ -14,8 +14,10 @@
 
 declare const GestureInference: any;
 declare const FingerTrackingInference: any;
+declare const MagneticFingerInference: any;
 declare const createGestureInference: (version?: string, options?: GestureInferenceOptions) => any;
 declare const createFingerTrackingInference: (version?: string, options?: FingerTrackingOptions) => any;
+declare const createMagneticFingerInference: (options?: any) => any;
 declare const GESTURE_MODELS: Record<string, any>;
 declare const FINGER_MODELS: Record<string, any>;
 
@@ -101,6 +103,25 @@ export function getFingerTrackingInferenceClass(): any {
     return FingerTrackingInference;
 }
 
+/**
+ * Get the MagneticFingerInference class
+ * @throws If gesture-inference.js not loaded
+ */
+export function getMagneticFingerInferenceClass(): any {
+    if (typeof MagneticFingerInference === 'undefined') {
+        throw new Error('MagneticFingerInference not available. Load gesture-inference.js first.');
+    }
+    return MagneticFingerInference;
+}
+
+/**
+ * Check if magnetic finger inference is available
+ */
+export function isMagneticFingerInferenceAvailable(): boolean {
+    return typeof MagneticFingerInference !== 'undefined' &&
+           typeof createMagneticFingerInference !== 'undefined';
+}
+
 // ===== Factory Functions =====
 
 /**
@@ -123,6 +144,17 @@ export function createFingerTracking(version: string = 'v1', options: FingerTrac
         throw new Error('createFingerTrackingInference not available. Load gesture-inference.js first.');
     }
     return createFingerTrackingInference(version, options);
+}
+
+/**
+ * Create a magnetic finger inference instance
+ * Uses contrastive pre-trained model for single-sample inference
+ */
+export function createMagneticFinger(options: any = {}): any {
+    if (typeof createMagneticFingerInference === 'undefined') {
+        throw new Error('createMagneticFingerInference not available. Load gesture-inference.js first.');
+    }
+    return createMagneticFingerInference(options);
 }
 
 // ===== Model Registries =====
@@ -266,9 +298,11 @@ export function createGestureUI(elements: GestureUIElements): GestureUIControlle
 export default {
     createGesture,
     createFingerTracking,
+    createMagneticFinger,
     createGestureUI,
     isGestureInferenceAvailable,
     isFingerTrackingAvailable,
+    isMagneticFingerInferenceAvailable,
     getGestureModels,
     getFingerModels,
     GESTURE_LABELS_V1,
