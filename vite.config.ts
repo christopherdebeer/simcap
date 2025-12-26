@@ -89,6 +89,7 @@ export default defineConfig({
         gambit: resolve(__dirname, 'apps/gambit/index.html'),
         collector: resolve(__dirname, 'apps/gambit/collector.html'),
         synth: resolve(__dirname, 'apps/gambit/synth.html'),
+        ffo: resolve(__dirname, 'apps/ffo/index.html'),
         viz: resolve(__dirname, 'apps/viz/index.html'),
         loader: resolve(__dirname, 'apps/loader/index.html'),
         // Documentation viewer module
