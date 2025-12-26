@@ -109,6 +109,63 @@ export async function connect(): Promise<boolean> {
             log(`Error: ${err.message}`);
         });
 
+        // Handle button gestures (v0.4.0+)
+        state.gambitClient!.on('button', (event) => {
+            console.log('[GAMBIT] Button gesture:', event.gesture);
+            log(`Button: ${event.gesture}`);
+        });
+
+        // Handle mode changes (v0.4.0+)
+        state.gambitClient!.on('mode', (event) => {
+            console.log('[GAMBIT] Mode changed:', event.mode);
+            state.samplingMode = event.mode;
+            log(`Mode: ${event.mode} (${event.config.accelHz}Hz)`);
+            if (updateUI) updateUI();
+        });
+
+        // Handle context changes (v0.4.0+)
+        state.gambitClient!.on('context', (event) => {
+            console.log('[GAMBIT] Context changed:', event.context);
+            state.deviceContext = event.context;
+            log(`Context: ${event.from} → ${event.context}`);
+            if (updateUI) updateUI();
+        });
+
+        // Handle stream events (v0.4.0+)
+        state.gambitClient!.on('streamStart', (event) => {
+            if (event) {
+                console.log('[GAMBIT] Stream started:', event.mode, event.hz + 'Hz');
+            }
+        });
+
+        state.gambitClient!.on('streamStop', (event) => {
+            if (event) {
+                console.log('[GAMBIT] Stream stopped:', event.samples, 'samples');
+            }
+        });
+
+        // Handle event markers (v0.4.0+)
+        state.gambitClient!.on('mark', (event) => {
+            console.log('[GAMBIT] Event marked at sample:', event.sampleCount);
+            log(`Marker at sample ${event.sampleCount}`);
+            // Store marker in session if recording
+            if (state.recording && state.sessionData) {
+                if (!state.sessionData.markers) {
+                    state.sessionData.markers = [];
+                }
+                state.sessionData.markers.push({
+                    time: event.time,
+                    sampleCount: event.sampleCount
+                });
+            }
+        });
+
+        // Handle calibration events (v0.4.0+)
+        state.gambitClient!.on('calibration', (event) => {
+            console.log('[GAMBIT] Calibration:', event);
+            log(`Calibrated: light=${event.light?.toFixed(3)}, cap=${event.cap?.toFixed(0)}`);
+        });
+
         // Attempt connection
         await state.gambitClient!.connect();
 

@@ -755,6 +755,35 @@ export class TelemetryProcessor {
             // Filtering failed, skip decoration
         }
 
+        // ===== Step 7: Device Context (v0.4.0) =====
+        // Map mode code to full name
+        if (raw.mode) {
+            const modeMap: Record<string, 'LOW_POWER' | 'NORMAL' | 'HIGH_RES' | 'BURST'> = {
+                'L': 'LOW_POWER',
+                'N': 'NORMAL',
+                'H': 'HIGH_RES',
+                'B': 'BURST',
+            };
+            decorated.modeName = modeMap[raw.mode] || undefined;
+        }
+
+        // Map context code to full name
+        if (raw.ctx) {
+            const ctxMap: Record<string, 'unknown' | 'stored' | 'held' | 'active' | 'table'> = {
+                'u': 'unknown',
+                's': 'stored',
+                'h': 'held',
+                'a': 'active',
+                't': 'table',
+            };
+            decorated.contextName = ctxMap[raw.ctx] || undefined;
+        }
+
+        // Map grip state
+        if (raw.grip !== null && raw.grip !== undefined) {
+            decorated.isGripped = raw.grip === 1;
+        }
+
         // Notify processed telemetry
         if (this.onProcessed) {
             this.onProcessed(decorated);
