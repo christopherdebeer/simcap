@@ -284,6 +284,11 @@ async function connect(): Promise<void> {
       elements.deviceInfo.textContent = `${info.name} v${info.version}`;
     });
 
+    // Button events for hands-free control (v0.4.0+)
+    state.client.on('button', onButtonEvent);
+    state.client.on('mode', onModeChange);
+    state.client.on('context', onContextChange);
+
     await state.client.connect();
 
     state.connected = true;
@@ -398,6 +403,85 @@ function onTelemetry(data: {
     // Keep a sliding window of samples
     if (state.recordingBuffer.length > 100) {
       state.recordingBuffer.shift();
+    }
+  }
+}
+
+// ============================================================================
+// BUTTON EVENTS (v0.4.0+)
+// ============================================================================
+
+function onButtonEvent(event: { gesture: string; time: number }): void {
+  log(`Button: ${event.gesture}`);
+
+  switch (event.gesture) {
+    case 'SINGLE_TAP':
+      // Toggle recording or recognition
+      if (state.recognizing) {
+        stopRecognition();
+      } else if (state.recording) {
+        stopRecording();
+      } else if (state.recognizer.templateCount > 0) {
+        startRecognition();
+      } else {
+        startRecording();
+      }
+      break;
+
+    case 'DOUBLE_TAP':
+      // Clear trajectory
+      clearTrajectory();
+      log('Trajectory cleared via button');
+      break;
+
+    case 'TRIPLE_TAP':
+      // Toggle between recording and recognition modes
+      if (state.recording) {
+        stopRecording();
+        if (state.recognizer.templateCount > 0) {
+          startRecognition();
+        }
+      } else if (state.recognizing) {
+        stopRecognition();
+        startRecording();
+      }
+      break;
+
+    case 'LONG_PRESS':
+      // Save current recording as template (if we have one)
+      if (state.recordingBuffer.length >= state.recognizer.getConfig().minSamples) {
+        const autoName = `gesture_${Date.now()}`;
+        elements.templateName.value = autoName;
+        saveTemplate();
+      }
+      break;
+
+    case 'VERY_LONG_PRESS':
+      // Emergency stop all
+      if (state.recording) stopRecording();
+      if (state.recognizing) stopRecognition();
+      log('All operations stopped');
+      break;
+  }
+}
+
+function onModeChange(event: { mode: string }): void {
+  log(`Device mode: ${event.mode}`);
+  // Could adjust recognition sensitivity based on mode
+}
+
+function onContextChange(event: { context: string; from?: string }): void {
+  log(`Device context: ${event.context}`);
+  // Could adjust behavior based on context (e.g., pause when stored)
+  if (event.context === 'stored') {
+    // Device in pocket - pause active operations
+    if (state.recording) {
+      log('Pausing recording - device stored');
+      stopRecording();
+    }
+    if (state.recognizing) {
+      log('Pausing recognition - device stored');
+      stopRecognition();
     }
   }
 }
