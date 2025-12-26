@@ -1296,7 +1296,7 @@ function updatePoseEstimationFromMag(data: PoseUpdateData): void {
                 poseState.confidence = prediction.overallConfidence;
 
                 // Update 3D hand visualization with finger curls
-                if (threeHandSkeleton && handPreviewMode === 'predictions') {
+                if (threeHandSkeleton && handPreviewMode === 'predictions' && magneticFingerInference) {
                     const curls = magneticFingerInference.toCurls(prediction);
                     threeHandSkeleton.setFingerCurls(curls);
                 }

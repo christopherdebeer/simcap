@@ -104,6 +104,7 @@ interface TFModel {
 interface TFStatic {
   version: { tfjs: string };
   zeros(shape: number[]): TFTensor;
+  tensor2d(data: number[][], shape?: [number, number]): TFTensor;
   tensor3d(data: number[][][]): TFTensor;
   loadLayersModel(path: string): Promise<TFModel>;
   loadGraphModel(path: string): Promise<TFModel>;
