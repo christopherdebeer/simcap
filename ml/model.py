@@ -437,23 +437,22 @@ def create_finger_tracking_model_keras(
     x = layers.Dense(64, activation='relu')(x)
     x = layers.Dropout(dropout)(x)
     
-    # Per-finger output heads
-    outputs = {}
-    for finger in ['thumb', 'index', 'middle', 'ring', 'pinky']:
-        out = layers.Dense(16, activation='relu')(x)
+    # Per-finger output heads - use consistent naming
+    fingers = ['thumb', 'index', 'middle', 'ring', 'pinky']
+    outputs = []
+    for finger in fingers:
+        out = layers.Dense(16, activation='relu', name=f'{finger}_hidden')(x)
         out = layers.Dropout(dropout / 2)(out)
         out = layers.Dense(num_states, activation='softmax', name=f'{finger}_state')(out)
-        outputs[finger] = out
-    
+        outputs.append(out)
+
     model = keras.Model(inputs=inputs, outputs=outputs)
-    
-    # Multi-output loss and metrics
+
+    # Multi-output loss and metrics - use output order matching
     model.compile(
         optimizer=keras.optimizers.Adam(learning_rate=1e-3),
-        loss={f'{finger}_state': 'sparse_categorical_crossentropy' 
-              for finger in ['thumb', 'index', 'middle', 'ring', 'pinky']},
-        metrics={f'{finger}_state': 'accuracy' 
-                 for finger in ['thumb', 'index', 'middle', 'ring', 'pinky']}
+        loss=['sparse_categorical_crossentropy'] * 5,
+        metrics=[['accuracy'] for _ in range(5)]
     )
     
     return model
@@ -487,11 +486,11 @@ def train_finger_tracking_model_keras(
     """
     if not HAS_TF:
         raise ImportError("TensorFlow/Keras not installed")
-    
-    # Convert label array to dict format for multi-output model
-    fingers = ['thumb', 'index', 'middle', 'ring', 'pinky']
-    y_train_dict = {f'{finger}_state': y_train[:, i] for i, finger in enumerate(fingers)}
-    y_val_dict = {f'{finger}_state': y_val[:, i] for i, finger in enumerate(fingers)}
+
+    # Convert label array to list format for multi-output model
+    # Model outputs are [thumb, index, middle, ring, pinky]
+    y_train_list = [y_train[:, i] for i in range(5)]
+    y_val_list = [y_val[:, i] for i in range(5)]
     
     callbacks = [
         keras.callbacks.EarlyStopping(
@@ -511,8 +510,8 @@ def train_finger_tracking_model_keras(
         )
     
     history = model.fit(
-        X_train, y_train_dict,
-        validation_data=(X_val, y_val_dict),
+        X_train, y_train_list,
+        validation_data=(X_val, y_val_list),
         epochs=epochs,
         batch_size=batch_size,
         callbacks=callbacks,
@@ -541,21 +540,22 @@ def evaluate_finger_tracking_model(
     if not HAS_TF:
         raise ImportError("TensorFlow/Keras not installed")
     
-    # Get predictions
+    # Get predictions (returns list of arrays for multi-output model)
     predictions = model.predict(X_test, verbose=0)
-    
+
     fingers = ['thumb', 'index', 'middle', 'ring', 'pinky']
     results = {
         'per_finger_accuracy': {},
         'per_finger_confusion': {},
         'overall_accuracy': 0.0
     }
-    
+
     correct_total = 0
     total_predictions = 0
-    
+
     for i, finger in enumerate(fingers):
-        y_pred = np.argmax(predictions[f'{finger}_state'], axis=1)
+        # predictions is a list of arrays [thumb_pred, index_pred, ...]
+        y_pred = np.argmax(predictions[i], axis=1)
         y_true = y_test[:, i]
         
         # Accuracy

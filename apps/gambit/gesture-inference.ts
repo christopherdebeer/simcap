@@ -104,6 +104,7 @@ interface TFModel {
 interface TFStatic {
   version: { tfjs: string };
   zeros(shape: number[]): TFTensor;
+  tensor2d(data: number[][], shape?: [number, number]): TFTensor;
   tensor3d(data: number[][][]): TFTensor;
   loadLayersModel(path: string): Promise<TFModel>;
   loadGraphModel(path: string): Promise<TFModel>;
@@ -700,6 +701,326 @@ export class FingerTrackingInference {
   }
 }
 
+// ===== Magnetic Finger Inference Class (Single-Sample, 6 Features) =====
+
+export interface MagneticSample {
+  mx_ut: number;
+  my_ut: number;
+  mz_ut: number;
+  ax_g: number;
+  ay_g: number;
+  az_g: number;
+}
+
+export interface MagneticFingerOptions {
+  modelPath?: string;
+  smoothingAlpha?: number;
+  onPrediction?: ((result: FingerPrediction) => void) | null;
+  onReady?: (() => void) | null;
+  onError?: ((error: Error) => void) | null;
+}
+
+/**
+ * Magnetic field-based finger tracking using contrastive pre-trained model.
+ * Uses single samples with 6 features (mx, my, mz, ax, ay, az).
+ */
+export class MagneticFingerInference {
+  private modelPath: string;
+  private model: TFModel | null = null;
+  private isReady: boolean = false;
+  private stats: NormalizationStats;
+  private fingerNames: string[];
+  private stateNames: string[];
+  private onPrediction: ((result: FingerPrediction) => void) | null;
+  private onReady: (() => void) | null;
+  private onError: ((error: Error) => void) | null;
+  private lastInferenceTime: number = 0;
+  private inferenceCount: number = 0;
+  private smoothingAlpha: number;
+  private lastPrediction: FingerPrediction | null = null;
+
+  constructor(options: MagneticFingerOptions = {}) {
+    this.modelPath = options.modelPath || 'models/finger_contrastive_v1/model.json';
+    this.smoothingAlpha = options.smoothingAlpha || 0.4;
+
+    // Stats from contrastive pre-trained model (6 features: mx, my, mz, ax, ay, az)
+    this.stats = {
+      mean: [31.03, -4.78, 0.10, -0.04, -0.03, 0.34],
+      std: [24.85, 40.71, 48.16, 0.51, 0.53, 0.61]
+    };
+
+    this.fingerNames = ['thumb', 'index', 'middle', 'ring', 'pinky'];
+    this.stateNames = ['extended', 'partial', 'flexed'];
+
+    this.onPrediction = options.onPrediction || null;
+    this.onReady = options.onReady || null;
+    this.onError = options.onError || null;
+
+    console.log('[MagneticFingerInference] Initialized with config:', {
+      modelPath: this.modelPath,
+      fingerNames: this.fingerNames,
+      stateNames: this.stateNames
+    });
+  }
+
+  async load(): Promise<boolean> {
+    try {
+      console.log('[MagneticFingerInference] Checking TensorFlow.js availability...');
+      if (typeof tf === 'undefined') {
+        throw new Error('TensorFlow.js not loaded');
+      }
+      console.log('[MagneticFingerInference] TensorFlow.js version:', tf.version);
+
+      const absoluteUrl = new URL(this.modelPath, window.location.href).href;
+      console.log(`[MagneticFingerInference] Loading model from: ${absoluteUrl}`);
+
+      try {
+        this.model = await tf.loadLayersModel(this.modelPath);
+        console.log('[MagneticFingerInference] ✓ Loaded as layers model');
+      } catch (e) {
+        console.warn('[MagneticFingerInference] Layers model failed, trying graph model...');
+        this.model = await tf.loadGraphModel(this.modelPath);
+        console.log('[MagneticFingerInference] ✓ Loaded as graph model');
+      }
+
+      // Warmup with single sample
+      console.log('[MagneticFingerInference] Warming up model...');
+      const dummyInput = tf.zeros([1, 6]);
+      const warmup = this.model.predict(dummyInput);
+
+      if (Array.isArray(warmup)) {
+        console.log('[MagneticFingerInference] Multi-output model, outputs:', warmup.length);
+        warmup.forEach(t => t.dispose());
+      } else {
+        console.log('[MagneticFingerInference] Single output, shape:', warmup.shape);
+        warmup.dispose();
+      }
+      dummyInput.dispose();
+
+      this.isReady = true;
+      console.log('[MagneticFingerInference] ✓ Model ready for inference');
+
+      if (this.onReady) {
+        this.onReady();
+      }
+
+      return true;
+    } catch (error) {
+      const err = error as Error;
+      console.error('[MagneticFingerInference] ✗ Failed to load model:', err);
+      if (this.onError) {
+        this.onError(err);
+      }
+      return false;
+    }
+  }
+
+  /**
+   * Run inference on a single magnetic sample
+   */
+  async predict(sample: MagneticSample): Promise<FingerPrediction | null> {
+    if (!this.isReady || !this.model) {
+      return null;
+    }
+
+    const startTime = performance.now();
+
+    try {
+      // Create feature vector [mx, my, mz, ax, ay, az]
+      const features = [
+        sample.mx_ut, sample.my_ut, sample.mz_ut,
+        sample.ax_g, sample.ay_g, sample.az_g
+      ];
+
+      // Normalize
+      const normalized = features.map((val, i) =>
+        (val - this.stats.mean[i]) / this.stats.std[i]
+      );
+
+      // Create tensor and predict
+      const inputTensor = tf.tensor2d([normalized], [1, 6]);
+      const outputs = this.model.predict(inputTensor);
+
+      const prediction = await this.parseOutputs(outputs);
+      prediction.inferenceTime = performance.now() - startTime;
+
+      inputTensor.dispose();
+      if (Array.isArray(outputs)) {
+        outputs.forEach(t => t.dispose());
+      } else {
+        outputs.dispose();
+      }
+
+      const smoothed = this.smoothPrediction(prediction);
+      this.lastPrediction = smoothed;
+      this.lastInferenceTime = smoothed.inferenceTime || 0;
+      this.inferenceCount++;
+
+      if (this.onPrediction) {
+        this.onPrediction(smoothed);
+      }
+
+      return smoothed;
+    } catch (error) {
+      const err = error as Error;
+      console.error('[MagneticFingerInference] Inference error:', err);
+      if (this.onError) {
+        this.onError(err);
+      }
+      return null;
+    }
+  }
+
+  private async parseOutputs(outputs: TFTensor | TFTensor[]): Promise<FingerPrediction> {
+    const prediction: FingerPrediction = {
+      fingers: {},
+      states: {},
+      confidences: {},
+      probabilities: {},
+      timestamp: Date.now(),
+      overallConfidence: 0,
+      binaryString: ''
+    };
+
+    if (Array.isArray(outputs)) {
+      // Multi-output model (5 outputs, one per finger)
+      for (let i = 0; i < this.fingerNames.length; i++) {
+        const finger = this.fingerNames[i];
+        const probs = await outputs[i].data();
+
+        const state = this.argmax(Array.from(probs));
+        prediction.fingers[finger] = this.stateNames[state];
+        prediction.states[finger] = state;
+        prediction.confidences[finger] = probs[state];
+        prediction.probabilities[finger] = Array.from(probs);
+      }
+    } else {
+      // Single output (flattened 15 values = 5 fingers × 3 states)
+      const data = await outputs.data();
+
+      for (let i = 0; i < this.fingerNames.length; i++) {
+        const finger = this.fingerNames[i];
+        const probs = Array.from(data.slice(i * 3, (i + 1) * 3));
+
+        const state = this.argmax(probs);
+        prediction.fingers[finger] = this.stateNames[state];
+        prediction.states[finger] = state;
+        prediction.confidences[finger] = probs[state];
+        prediction.probabilities[finger] = probs;
+      }
+    }
+
+    const confidences = Object.values(prediction.confidences);
+    prediction.overallConfidence = confidences.reduce((a, b) => a + b, 0) / confidences.length;
+    prediction.binaryString = this.fingerNames.map(f => prediction.states[f]).join('');
+
+    return prediction;
+  }
+
+  private argmax(arr: number[]): number {
+    let maxIdx = 0;
+    let maxVal = arr[0];
+    for (let i = 1; i < arr.length; i++) {
+      if (arr[i] > maxVal) {
+        maxVal = arr[i];
+        maxIdx = i;
+      }
+    }
+    return maxIdx;
+  }
+
+  private smoothPrediction(prediction: FingerPrediction): FingerPrediction {
+    if (!this.lastPrediction) {
+      return prediction;
+    }
+
+    const smoothed: FingerPrediction = {
+      ...prediction,
+      states: { ...prediction.states },
+      confidences: { ...prediction.confidences },
+      fingers: { ...prediction.fingers }
+    };
+
+    for (const finger of this.fingerNames) {
+      const newConf = prediction.confidences[finger];
+      const oldConf = this.lastPrediction.confidences[finger] || newConf;
+      smoothed.confidences[finger] = this.smoothingAlpha * newConf + (1 - this.smoothingAlpha) * oldConf;
+    }
+
+    smoothed.binaryString = this.fingerNames.map(f => smoothed.states[f]).join('');
+    return smoothed;
+  }
+
+  /**
+   * Convert prediction to curl values for 3D hand visualization
+   * Maps: extended=0.0, partial=0.5, flexed=1.0
+   */
+  toCurls(prediction: FingerPrediction | null = null): FingerPose {
+    const pred = prediction || this.lastPrediction;
+    if (!pred) {
+      return { thumb: 0, index: 0, middle: 0, ring: 0, pinky: 0 };
+    }
+
+    const stateToeCurl = (state: number): number => {
+      switch (state) {
+        case 0: return 0.0;   // extended
+        case 1: return 0.5;   // partial
+        case 2: return 1.0;   // flexed
+        default: return 0.0;
+      }
+    };
+
+    return {
+      thumb: stateToeCurl(pred.states['thumb'] || 0),
+      index: stateToeCurl(pred.states['index'] || 0),
+      middle: stateToeCurl(pred.states['middle'] || 0),
+      ring: stateToeCurl(pred.states['ring'] || 0),
+      pinky: stateToeCurl(pred.states['pinky'] || 0)
+    };
+  }
+
+  getCurrentPrediction(): FingerPrediction | null {
+    return this.lastPrediction;
+  }
+
+  setStats(mean: number[], std: number[]): void {
+    this.stats.mean = mean;
+    this.stats.std = std;
+  }
+
+  getInfo(): {
+    modelPath: string;
+    isReady: boolean;
+    fingerNames: string[];
+    stateNames: string[];
+    lastInferenceTime: number;
+    inferenceCount: number;
+  } {
+    return {
+      modelPath: this.modelPath,
+      isReady: this.isReady,
+      fingerNames: this.fingerNames,
+      stateNames: this.stateNames,
+      lastInferenceTime: this.lastInferenceTime,
+      inferenceCount: this.inferenceCount
+    };
+  }
+
+  reset(): void {
+    this.lastPrediction = null;
+    this.inferenceCount = 0;
+  }
+
+  dispose(): void {
+    if (this.model) {
+      this.model.dispose();
+      this.model = null;
+    }
+    this.isReady = false;
+    this.lastPrediction = null;
+  }
+}
+
 // ===== Finger Model Registry =====
 
 export const FINGER_MODELS: Record<string, FingerModelConfig> = {
@@ -711,6 +1032,15 @@ export const FINGER_MODELS: Record<string, FingerModelConfig> = {
     },
     description: 'Multi-output finger tracking model (5 fingers × 3 states)',
     date: '2025-01-12'
+  },
+  'contrastive_v1': {
+    path: 'models/finger_contrastive_v1/model.json',
+    stats: {
+      mean: [31.03, -4.78, 0.10, -0.04, -0.03, 0.34],
+      std: [24.85, 40.71, 48.16, 0.51, 0.53, 0.61]
+    },
+    description: 'Contrastive pre-trained model (6 features: mx, my, mz, ax, ay, az)',
+    date: '2025-12-26'
   }
 };
 
@@ -749,23 +1079,37 @@ export function createGestureInference(version: string = 'v1', options: GestureI
   return inference;
 }
 
+export function createMagneticFingerInference(options: MagneticFingerOptions = {}): MagneticFingerInference {
+  const modelConfig = FINGER_MODELS['contrastive_v1'];
+  const inference = new MagneticFingerInference({
+    modelPath: modelConfig.path,
+    ...options
+  });
+  inference.setStats(modelConfig.stats.mean, modelConfig.stats.std);
+  return inference;
+}
+
 // Export as globals for backward compatibility
 declare global {
   interface Window {
     GestureInference: typeof GestureInference;
     FingerTrackingInference: typeof FingerTrackingInference;
+    MagneticFingerInference: typeof MagneticFingerInference;
     GESTURE_MODELS: typeof GESTURE_MODELS;
     FINGER_MODELS: typeof FINGER_MODELS;
     createGestureInference: typeof createGestureInference;
     createFingerTrackingInference: typeof createFingerTrackingInference;
+    createMagneticFingerInference: typeof createMagneticFingerInference;
   }
 }
 
 if (typeof window !== 'undefined') {
   window.GestureInference = GestureInference;
   window.FingerTrackingInference = FingerTrackingInference;
+  window.MagneticFingerInference = MagneticFingerInference;
   window.GESTURE_MODELS = GESTURE_MODELS;
   window.FINGER_MODELS = FINGER_MODELS;
   window.createGestureInference = createGestureInference;
   window.createFingerTrackingInference = createFingerTrackingInference;
+  window.createMagneticFingerInference = createMagneticFingerInference;
 }
