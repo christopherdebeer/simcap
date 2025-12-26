@@ -938,8 +938,8 @@ function handleCommand(data) {
 
 ### Phase 3: Intelligence (v0.6.0) - IN PROGRESS
 - [x] Multi-sensor context inference (light + cap + motion → context)
-- [ ] Grip-based auto mode switching (switch to HIGH_RES when gripped)
-- [ ] Connection quality adaptive streaming (reduce rate on weak signal)
+- [x] Grip-based auto mode switching (switch to HIGH_RES when gripped)
+- [x] Connection quality adaptive streaming (reduce rate on weak signal)
 - [ ] On-device motion classification (activity recognition)
 
 ### Phase 4: Advanced (v1.0.0) - PLANNED
@@ -948,11 +948,22 @@ function handleCommand(data) {
 - [ ] On-device Kalman filtering (sensor fusion)
 - [ ] ML-ready feature extraction (real-time features for inference)
 
-### Integration Tasks - NEW
-- [ ] FFO$$ gesture app: Add GAMBIT context event support
+### App Integration Status
+
+| App | JSON Protocol | Binary Protocol | Button Events | Mode Events | Context Events |
+|-----|---------------|-----------------|---------------|-------------|----------------|
+| **Collector** | ✅ | ❌ | ✅ | ✅ | ✅ |
+| **FFO$$** | ✅ | ❌ | ✅ | ✅ | ✅ |
+| **Synth** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Gambit-app** | ✅ | ❌ | ❌ | ❌ | ❌ |
+
+### Integration Tasks
+- [x] FFO$$ gesture app: Add GAMBIT context event support
 - [ ] FFO$$ gesture app: Add orientation-aware gesture processing
 - [ ] FFO$$ gesture app: Motion segmentation from GAMBIT pipeline
-- [ ] Collector app: Update for new firmware events/features
+- [ ] Synth app: Add button/mode/context event handlers
+- [ ] Gambit-app: Add button/mode/context event handlers
+- [ ] All apps: Add binary protocol toggle option
 
 ---
 
