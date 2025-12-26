@@ -130,6 +130,19 @@ export interface BeaconStatus {
   interval: number;
 }
 
+/** Auto mode status from device */
+export interface AutoModeEvent {
+  enabled: boolean;
+}
+
+/** Adaptive streaming event when quality changes mode */
+export interface AdaptiveEvent {
+  quality: 'excellent' | 'good' | 'fair' | 'weak' | 'poor' | 'unknown';
+  rssi: number | null;
+  deliveryRate: number;
+  newMode: 'LOW_POWER' | 'NORMAL' | 'HIGH_RES' | 'BURST';
+}
+
 /** FIFO batch sample (raw sensor data) */
 export interface FifoBatchSample {
   ax: number;
@@ -470,6 +483,8 @@ export class GambitClient {
     this.frameParser.on('CONN', (data: unknown) => this.emit('connection', data));
     this.frameParser.on('CONN_STATS', (data: unknown) => this.emit('connectionStats', data));
     this.frameParser.on('BEACON_STATUS', (data: unknown) => this.emit('beaconStatus', data));
+    this.frameParser.on('AUTO_MODE', (data: unknown) => this.emit('autoMode', data));
+    this.frameParser.on('ADAPTIVE', (data: unknown) => this.emit('adaptive', data));
     this.frameParser.on('FIFO', (data: unknown) => this._handleFifoBatch(data as FifoBatchEvent));
   }
 
@@ -495,6 +510,8 @@ export class GambitClient {
   on(event: 'connection', handler: (data: ConnectionEvent) => void): this;
   on(event: 'connectionStats', handler: (data: ConnectionStats) => void): this;
   on(event: 'beaconStatus', handler: (data: BeaconStatus) => void): this;
+  on(event: 'autoMode', handler: (data: AutoModeEvent) => void): this;
+  on(event: 'adaptive', handler: (data: AdaptiveEvent) => void): this;
   on<T = unknown>(event: string, handler: EventHandler<T>): this;
   on<T = unknown>(event: string, handler: EventHandler<T>): this {
     if (!this.eventHandlers[event]) {
@@ -1110,6 +1127,51 @@ export class GambitClient {
       this.frameParser.on('BEACON_STATUS', handler);
       this.write('\x10if(typeof getBeaconStatus==="function")getBeaconStatus();\n');
     });
+  }
+
+  // ===== Auto Mode (v0.4.0+) =====
+
+  /**
+   * Enable auto mode switching based on device context.
+   * Device will automatically switch modes based on grip, motion, and light.
+   */
+  enableAutoMode(): Promise<void> {
+    this._log('Enabling auto mode');
+    return this.write('\x10if(typeof setAutoMode==="function")setAutoMode(true);\n');
+  }
+
+  /**
+   * Disable auto mode switching for manual control.
+   */
+  disableAutoMode(): Promise<void> {
+    this._log('Disabling auto mode');
+    return this.write('\x10if(typeof setAutoMode==="function")setAutoMode(false);\n');
+  }
+
+  /**
+   * Check if auto mode is currently enabled.
+   */
+  isAutoModeEnabled(): Promise<boolean> {
+    return Puck.eval('typeof getAutoMode==="function"?getAutoMode():false') as Promise<boolean>;
+  }
+
+  // ===== Adaptive Streaming (v0.4.0+) =====
+
+  /**
+   * Enable adaptive streaming.
+   * Device will automatically reduce streaming rate on poor connections.
+   */
+  enableAdaptiveStreaming(): Promise<void> {
+    this._log('Enabling adaptive streaming');
+    return this.write('\x10if(typeof enableAdaptiveStreaming==="function")enableAdaptiveStreaming();\n');
+  }
+
+  /**
+   * Disable adaptive streaming.
+   */
+  disableAdaptiveStreaming(): Promise<void> {
+    this._log('Disabling adaptive streaming');
+    return this.write('\x10if(typeof disableAdaptiveStreaming==="function")disableAdaptiveStreaming();\n');
   }
 
   // ===== Internal Methods =====

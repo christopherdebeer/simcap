@@ -513,15 +513,61 @@ function detectContext(light, cap, accelMag) {
         logInfo('Context: ' + oldContext + ' -> ' + currentContext);
         sendFrame('CTX', { context: currentContext, from: oldContext });
 
-        // Auto-adjust mode based on context
-        if (currentContext === CONTEXTS.STORED && currentMode !== 'LOW_POWER') {
-            setMode('LOW_POWER');
-        } else if (currentContext === CONTEXTS.ACTIVE && currentMode === 'LOW_POWER') {
-            setMode('NORMAL');
+        // Auto-adjust mode based on context (if auto-mode enabled)
+        if (autoModeEnabled) {
+            autoAdjustMode(currentContext);
         }
     }
 
     return currentContext;
+}
+
+// ===== Auto Mode Switching =====
+var autoModeEnabled = true;  // Can be disabled for manual control
+
+function autoAdjustMode(context) {
+    var targetMode = null;
+
+    switch (context) {
+        case CONTEXTS.STORED:
+            // In pocket/bag - minimize power
+            targetMode = 'LOW_POWER';
+            break;
+
+        case CONTEXTS.HELD:
+            // Being held but not moving - anticipate use, increase resolution
+            targetMode = 'HIGH_RES';
+            break;
+
+        case CONTEXTS.ACTIVE:
+            // Active use - normal is sufficient for most gestures
+            targetMode = 'NORMAL';
+            break;
+
+        case CONTEXTS.TABLE:
+            // On surface - low power but ready for pickup
+            targetMode = 'LOW_POWER';
+            break;
+
+        default:
+            // Unknown - keep current mode
+            return;
+    }
+
+    if (targetMode && targetMode !== currentMode) {
+        logInfo('Auto mode: ' + context + ' -> ' + targetMode);
+        setMode(targetMode);
+    }
+}
+
+function setAutoMode(enabled) {
+    autoModeEnabled = enabled;
+    logInfo('Auto mode: ' + (enabled ? 'enabled' : 'disabled'));
+    sendFrame('AUTO_MODE', { enabled: enabled });
+}
+
+function getAutoMode() {
+    return autoModeEnabled;
 }
 
 // ===== LED Patterns =====
@@ -1153,6 +1199,75 @@ function getRssiQuality(rssi) {
     if (rssi >= -70) return 'fair';
     if (rssi >= -80) return 'weak';
     return 'poor';
+}
+
+// ===== Adaptive Streaming =====
+// Automatically adjust streaming rate based on connection quality
+var adaptiveStreamingEnabled = false;
+var adaptiveCheckInterval = null;
+var lastAdaptiveCheck = 0;
+
+function enableAdaptiveStreaming() {
+    adaptiveStreamingEnabled = true;
+    logInfo('Adaptive streaming enabled');
+
+    // Check connection quality every 2 seconds
+    adaptiveCheckInterval = setInterval(checkAndAdaptStreaming, 2000);
+}
+
+function disableAdaptiveStreaming() {
+    adaptiveStreamingEnabled = false;
+    if (adaptiveCheckInterval) {
+        clearInterval(adaptiveCheckInterval);
+        adaptiveCheckInterval = null;
+    }
+    logInfo('Adaptive streaming disabled');
+}
+
+function checkAndAdaptStreaming() {
+    if (!streamingActive || !adaptiveStreamingEnabled) return;
+
+    updateRssi();
+    var quality = getRssiQuality(connStats.rssi);
+
+    // Track packet delivery rate
+    var now = Date.now() - bootTime;
+    var expectedPackets = (now - lastAdaptiveCheck) / (1000 / modeConfig.accelHz);
+    var actualPackets = connStats.packetsSent - (connStats.lastAdaptivePackets || 0);
+    var deliveryRate = expectedPackets > 0 ? actualPackets / expectedPackets : 1;
+
+    connStats.lastAdaptivePackets = connStats.packetsSent;
+    lastAdaptiveCheck = now;
+
+    // Adapt based on quality and delivery rate
+    var targetMode = null;
+
+    if (quality === 'poor' || deliveryRate < 0.5) {
+        // Poor connection - reduce rate significantly
+        if (currentMode !== 'LOW_POWER') {
+            targetMode = 'LOW_POWER';
+            logWarn('Weak signal - reducing to LOW_POWER mode');
+        }
+    } else if (quality === 'weak' || deliveryRate < 0.8) {
+        // Weak connection - use normal rate
+        if (currentMode === 'HIGH_RES' || currentMode === 'BURST') {
+            targetMode = 'NORMAL';
+            logWarn('Fair signal - reducing to NORMAL mode');
+        }
+    } else if (quality === 'excellent' && deliveryRate > 0.95) {
+        // Excellent connection - can use higher rate if needed
+        // Don't auto-increase, just allow manual increase
+    }
+
+    if (targetMode && targetMode !== currentMode) {
+        setMode(targetMode);
+        sendFrame('ADAPTIVE', {
+            quality: quality,
+            rssi: connStats.rssi,
+            deliveryRate: deliveryRate,
+            newMode: targetMode
+        });
+    }
 }
 
 // Track outgoing packets

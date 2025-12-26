@@ -924,29 +924,35 @@ function handleCommand(data) {
 
 ## 6. Implementation Roadmap
 
-### Phase 1: Quick Wins (v0.4.0)
-- [ ] Multi-tap button gestures
-- [ ] LED status patterns
-- [ ] Binary protocol option
-- [ ] Light-based power mode switching
+### Phase 1: Quick Wins (v0.4.0) ✅ COMPLETE
+- [x] Multi-tap button gestures (SINGLE_TAP, DOUBLE_TAP, TRIPLE_TAP, LONG_PRESS, VERY_LONG_PRESS)
+- [x] LED status patterns (mode indicators, streaming, battery, calibration)
+- [x] Binary protocol option (28-byte packets, 4x bandwidth improvement)
+- [x] Light-based power mode switching (context awareness)
 
-### Phase 2: Power Optimization (v0.5.0)
-- [ ] FIFO batch mode for LSM6DS3
-- [ ] Adaptive sampling modes
-- [ ] Capacitive wake-on-touch
-- [ ] Background beaconing
+### Phase 2: Power Optimization (v0.5.0) ✅ COMPLETE
+- [x] FIFO batch mode for LSM6DS3 (416Hz+ via hardware FIFO)
+- [x] Adaptive sampling modes (LOW_POWER, NORMAL, HIGH_RES, BURST)
+- [x] Capacitive wake-on-touch (grip-triggered wake)
+- [x] Background beaconing (advertise status when not connected)
 
-### Phase 3: Intelligence (v0.6.0)
-- [ ] Multi-sensor context inference
-- [ ] Grip-based mode switching
-- [ ] Connection quality adaptation
-- [ ] On-device motion classification
+### Phase 3: Intelligence (v0.6.0) - IN PROGRESS
+- [x] Multi-sensor context inference (light + cap + motion → context)
+- [ ] Grip-based auto mode switching (switch to HIGH_RES when gripped)
+- [ ] Connection quality adaptive streaming (reduce rate on weak signal)
+- [ ] On-device motion classification (activity recognition)
 
-### Phase 4: Advanced (v1.0.0)
-- [ ] Multi-connection support
-- [ ] Full binary protocol with batching
-- [ ] On-device Kalman filtering
-- [ ] ML-ready feature extraction
+### Phase 4: Advanced (v1.0.0) - PLANNED
+- [ ] Multi-connection support (up to 3 simultaneous clients)
+- [ ] Full binary protocol with batch compression (13 bytes/sample)
+- [ ] On-device Kalman filtering (sensor fusion)
+- [ ] ML-ready feature extraction (real-time features for inference)
+
+### Integration Tasks - NEW
+- [ ] FFO$$ gesture app: Add GAMBIT context event support
+- [ ] FFO$$ gesture app: Add orientation-aware gesture processing
+- [ ] FFO$$ gesture app: Motion segmentation from GAMBIT pipeline
+- [ ] Collector app: Update for new firmware events/features
 
 ---
 
