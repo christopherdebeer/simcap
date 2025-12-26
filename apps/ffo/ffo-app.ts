@@ -217,7 +217,7 @@ function updateTrajectory(points: Array<{ x: number; y: number; z: number }>): v
   if (threeContext.trajectoryLine) {
     threeContext.scene.remove(threeContext.trajectoryLine);
     threeContext.trajectoryLine.geometry.dispose();
-    (threeContext.trajectoryLine.material as THREE.Material).dispose();
+    (threeContext.trajectoryLine.material as any).dispose();
   }
 
   if (points.length < 2) return;
