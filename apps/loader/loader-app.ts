@@ -93,6 +93,55 @@ const state: AppState = {
     uploading: false
 };
 
+// ===== Console Output Buffering =====
+// Prevents UI freeze by batching console updates during upload
+
+let pauseConsoleOutput = false;
+let consoleBuffer: string[] = [];
+let consoleFlushRAF: number | null = null;
+const MAX_CONSOLE_BUFFER = 100; // Max buffered messages before forced flush
+const MAX_CONSOLE_LINES = 500; // Max lines in console output element
+
+function flushConsoleBuffer(): void {
+    if (consoleBuffer.length === 0) return;
+
+    // Batch all buffered data into a single DOM update
+    const fragment = document.createDocumentFragment();
+    for (const data of consoleBuffer) {
+        const span = document.createElement('span');
+        span.textContent = data;
+        fragment.appendChild(span);
+    }
+    consoleBuffer = [];
+
+    consoleOutput.appendChild(fragment);
+
+    // Limit total console lines to prevent memory bloat
+    while (consoleOutput.childNodes.length > MAX_CONSOLE_LINES) {
+        consoleOutput.removeChild(consoleOutput.firstChild!);
+    }
+
+    consoleOutput.scrollTop = consoleOutput.scrollHeight;
+    consoleFlushRAF = null;
+}
+
+function appendConsoleData(data: string): void {
+    if (pauseConsoleOutput) {
+        // During upload, buffer but don't exceed limit
+        if (consoleBuffer.length < MAX_CONSOLE_BUFFER) {
+            consoleBuffer.push(data);
+        }
+        return;
+    }
+
+    // Normal operation: batch updates using requestAnimationFrame
+    consoleBuffer.push(data);
+
+    if (!consoleFlushRAF) {
+        consoleFlushRAF = requestAnimationFrame(flushConsoleBuffer);
+    }
+}
+
 // ===== DOM Elements =====
 
 const $ = (id: string) => document.getElementById(id);
@@ -495,6 +544,7 @@ function queryFirmwareInfo(): void {
  * - Uses \x10 prefix for echo-off-per-line during upload
  * - Lets puck.js library handle BLE chunking (20 bytes default)
  * - Proper progress tracking via puck.writeProgress
+ * - Throttled UI updates to prevent browser freeze
  *
  * See: https://www.espruino.com/Interfacing
  */
@@ -510,6 +560,22 @@ async function uploadCode(code: string, name: string = 'code'): Promise<void> {
 
     // Store original writeProgress handler
     const originalWriteProgress = Puck.writeProgress;
+
+    // Throttle progress updates to prevent UI freeze
+    let lastProgressUpdate = 0;
+    let pendingProgress: { sent: number; total: number } | null = null;
+    let progressRAF: number | null = null;
+
+    const updateProgressUI = () => {
+        if (pendingProgress && pendingProgress.total > 0) {
+            const { sent, total } = pendingProgress;
+            const uploadProgress = 15 + (sent / total) * 75;
+            progressFill.style.width = uploadProgress + '%';
+            progressText.textContent = `Uploading... ${(sent / 1024).toFixed(1)}/${(total / 1024).toFixed(1)} KB`;
+            pendingProgress = null;
+        }
+        progressRAF = null;
+    };
 
     try {
         // Step 1: Bundle any required modules
@@ -531,6 +597,9 @@ async function uploadCode(code: string, name: string = 'code'): Promise<void> {
         progressText.textContent = 'Resetting device...';
         progressFill.style.width = '10%';
 
+        // Pause console output during upload to prevent DOM flooding
+        pauseConsoleOutput = true;
+
         await writeWithTimeout('\x03', 500); // Clear input
         await writeWithTimeout('echo(0);\n', 1000); // Disable echo globally
         await delay(200);
@@ -541,12 +610,19 @@ async function uploadCode(code: string, name: string = 'code'): Promise<void> {
         progressText.textContent = 'Uploading code...';
         progressFill.style.width = '15%';
 
-        // Set up progress tracking via puck.js
+        // Set up throttled progress tracking via puck.js
+        // Only update UI at most every 100ms to prevent freeze
         Puck.writeProgress = (sent?: number, total?: number) => {
             if (sent !== undefined && total !== undefined && total > 0) {
-                const uploadProgress = 15 + (sent / total) * 75;
-                progressFill.style.width = uploadProgress + '%';
-                progressText.textContent = `Uploading... ${Math.round(sent / 1024 * 10) / 10}/${Math.round(total / 1024 * 10) / 10} KB`;
+                const now = Date.now();
+                pendingProgress = { sent, total };
+
+                // Throttle: update at most every 100ms
+                if (now - lastProgressUpdate >= 100) {
+                    lastProgressUpdate = now;
+                    if (progressRAF) cancelAnimationFrame(progressRAF);
+                    progressRAF = requestAnimationFrame(updateProgressUI);
+                }
             }
         };
 
@@ -565,6 +641,10 @@ async function uploadCode(code: string, name: string = 'code'): Promise<void> {
                 else resolve();
             });
         });
+
+        // Final progress update
+        if (progressRAF) cancelAnimationFrame(progressRAF);
+        updateProgressUI();
 
         // Step 5: Re-enable echo and verify
         progressText.textContent = 'Finalizing...';
@@ -589,6 +669,12 @@ async function uploadCode(code: string, name: string = 'code'): Promise<void> {
     } finally {
         // Restore original progress handler
         Puck.writeProgress = originalWriteProgress;
+        if (progressRAF) cancelAnimationFrame(progressRAF);
+
+        // Resume console output
+        pauseConsoleOutput = false;
+        flushConsoleBuffer();
+
         state.uploading = false;
         updateUI();
         setTimeout(() => { progressContainer.style.display = 'none'; }, 2000);
@@ -668,10 +754,8 @@ async function handleConnect(): Promise<void> {
 
         conn.on('data', (data: string) => {
             frameParser.onData(data);
-            const line = document.createElement('span');
-            line.textContent = data;
-            consoleOutput.appendChild(line);
-            consoleOutput.scrollTop = consoleOutput.scrollHeight;
+            // Use buffered console output to prevent UI freeze
+            appendConsoleData(data);
         });
 
         frameParser.clear();
