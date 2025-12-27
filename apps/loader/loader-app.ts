@@ -173,13 +173,53 @@ let exportLogsBtn: HTMLButtonElement;
 
 // ===== Console Logging =====
 
-function log(msg: string, type: string = 'info'): void {
-    const line = document.createElement('div');
-    line.className = type;
-    line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-    consoleOutput.appendChild(line);
+// Log buffer for batched updates during upload
+let logBuffer: Array<{msg: string, type: string}> = [];
+let logFlushRAF: number | null = null;
+
+function flushLogBuffer(): void {
+    if (logBuffer.length === 0) return;
+
+    const fragment = document.createDocumentFragment();
+    for (const {msg, type} of logBuffer) {
+        const line = document.createElement('div');
+        line.className = type;
+        line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        fragment.appendChild(line);
+    }
+    logBuffer = [];
+
+    consoleOutput.appendChild(fragment);
+
+    // Limit total lines
+    while (consoleOutput.childNodes.length > MAX_CONSOLE_LINES) {
+        consoleOutput.removeChild(consoleOutput.firstChild!);
+    }
+
     consoleOutput.scrollTop = consoleOutput.scrollHeight;
+    logFlushRAF = null;
+}
+
+function log(msg: string, type: string = 'info'): void {
+    // Always log to browser console
     console.log({ type, msg });
+
+    // During upload, buffer log messages to prevent UI freeze
+    if (pauseConsoleOutput) {
+        // Only keep important messages during upload (errors, success, key milestones)
+        if (type === 'error' || type === 'success' || !msg.startsWith('<BLE>')) {
+            logBuffer.push({msg, type});
+        }
+        // Skip BLE spam during upload
+        return;
+    }
+
+    // Normal operation: batch updates using requestAnimationFrame
+    logBuffer.push({msg, type});
+
+    if (!logFlushRAF) {
+        logFlushRAF = requestAnimationFrame(flushLogBuffer);
+    }
 }
 
 // ===== Frame Parser =====
@@ -685,9 +725,10 @@ async function uploadCode(code: string, name: string = 'code'): Promise<void> {
         Puck.writeProgress = originalWriteProgress;
         if (progressRAF) cancelAnimationFrame(progressRAF);
 
-        // Resume console output
+        // Resume console output and flush buffers
         pauseConsoleOutput = false;
         flushConsoleBuffer();
+        flushLogBuffer();
 
         state.uploading = false;
         updateUI();
