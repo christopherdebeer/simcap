@@ -85,20 +85,23 @@ declare global {
 
   // Puck.js BLE library
   const Puck: {
+    version: string;
     debug: number;
     flowControl: boolean;
-    chunkSize: number;
+    increaseMTU: boolean;
+    timeoutNormal: number;
+    timeoutNewline: number;
+    timeoutMax: number;
     connect(callback: PuckConnectionCallback): Promise<void>;
     write(data: string, callback?: PuckWriteCallback): void;
     eval(expression: string, callback: (result: any) => void): void;
     close(): void;
     isConnected(): boolean;
+    getConnection(): any;
     setTime(): void;
-    getBattery(): Promise<number>;
-    LED1: { write: (value: boolean) => void };
-    LED2: { write: (value: boolean) => void };
-    LED3: { write: (value: boolean) => void };
     log?: (level: number, message: string) => void;
+    /** Called with upload progress - can be overridden for custom progress tracking */
+    writeProgress: (charsSent?: number, charsTotal?: number) => void;
   };
 
   interface Window {

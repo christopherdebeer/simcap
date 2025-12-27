@@ -486,8 +486,20 @@ function queryFirmwareInfo(): void {
 
 // ===== Upload Code =====
 
+/**
+ * Upload code to Espruino device with proper BLE flow control.
+ *
+ * Key improvements over naive approach:
+ * - Uses echo(0) to suppress echo (halves data transfer)
+ * - Uses \x03 (Ctrl-C) to clear any pending input
+ * - Uses \x10 prefix for echo-off-per-line during upload
+ * - Lets puck.js library handle BLE chunking (20 bytes default)
+ * - Proper progress tracking via puck.writeProgress
+ *
+ * See: https://www.espruino.com/Interfacing
+ */
 async function uploadCode(code: string, name: string = 'code'): Promise<void> {
-    if (!state.connected || state.uploading) return;
+    if (!state.connected || state.uploading || !state.connection) return;
 
     state.uploading = true;
     updateUI();
@@ -496,52 +508,69 @@ async function uploadCode(code: string, name: string = 'code'): Promise<void> {
     progressText.textContent = 'Bundling modules...';
     log(`Uploading ${name}...`);
 
+    // Store original writeProgress handler
+    const originalWriteProgress = Puck.writeProgress;
+
     try {
+        // Step 1: Bundle any required modules
         progressFill.style.width = '5%';
         code = await bundleModules(code);
+        log(`Code size: ${code.length} bytes`);
 
+        // Step 2: Prepare the code
+        // - Prefix with \x03 to clear input line (Ctrl-C)
+        // - Use \x10 at start of each line to suppress echo per-line
+        progressText.textContent = 'Preparing code...';
+        progressFill.style.width = '8%';
+
+        // Split code into lines and prefix each with \x10 (echo off for line)
+        const lines = code.split('\n');
+        const preparedCode = lines.map(line => '\x10' + line).join('\n');
+
+        // Step 3: Send Ctrl-C to clear any pending input, then reset
         progressText.textContent = 'Resetting device...';
         progressFill.style.width = '10%';
 
-        await new Promise<void>((resolve, reject) => {
-            const timeout = setTimeout(() => reject(new Error('Reset timeout')), 5000);
-            state.connection!.write('reset();\n', (err) => {
-                clearTimeout(timeout);
-                err ? reject(err) : resolve();
-            });
-        });
+        await writeWithTimeout('\x03', 500); // Clear input
+        await writeWithTimeout('echo(0);\n', 1000); // Disable echo globally
+        await delay(200);
+        await writeWithTimeout('reset();\n', 3000);
+        await delay(1000); // Wait for reset to complete
 
-        await new Promise(r => setTimeout(r, 500));
-
+        // Step 4: Upload the code using puck.js internal chunking
         progressText.textContent = 'Uploading code...';
         progressFill.style.width = '15%';
 
-        const uploadData = '\x10' + code + '\n';
-        const chunkSize = 500;
-        const chunks: string[] = [];
-        for (let i = 0; i < uploadData.length; i += chunkSize) {
-            chunks.push(uploadData.slice(i, i + chunkSize));
-        }
+        // Set up progress tracking via puck.js
+        Puck.writeProgress = (sent?: number, total?: number) => {
+            if (sent !== undefined && total !== undefined && total > 0) {
+                const uploadProgress = 15 + (sent / total) * 75;
+                progressFill.style.width = uploadProgress + '%';
+                progressText.textContent = `Uploading... ${Math.round(sent / 1024 * 10) / 10}/${Math.round(total / 1024 * 10) / 10} KB`;
+            }
+        };
 
-        for (let i = 0; i < chunks.length; i++) {
-            await new Promise<void>((resolve, reject) => {
-                const timeout = setTimeout(() => reject(new Error('Chunk timeout')), 10000);
-                state.connection!.write(chunks[i], (err) => {
-                    clearTimeout(timeout);
-                    err ? reject(err) : resolve();
-                });
+        // Send the prepared code - let puck.js handle chunking
+        // The \x10 prefix suppresses echo, \x03 at start clears any leftover
+        const uploadData = '\x03' + preparedCode + '\n';
+
+        await new Promise<void>((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                reject(new Error('Upload timeout (60s) - device may be unresponsive'));
+            }, 60000);
+
+            state.connection!.write(uploadData, (err?: Error) => {
+                clearTimeout(timeout);
+                if (err) reject(err);
+                else resolve();
             });
+        });
 
-            const progress = 15 + ((i + 1) / chunks.length) * 80;
-            progressFill.style.width = progress + '%';
-            progressText.textContent = `Uploading... (${i + 1}/${chunks.length})`;
-
-            if (i < chunks.length - 1) await new Promise(r => setTimeout(r, 20));
-        }
-
-        progressText.textContent = 'Executing...';
-        progressFill.style.width = '95%';
-        await new Promise(r => setTimeout(r, 1000));
+        // Step 5: Re-enable echo and verify
+        progressText.textContent = 'Finalizing...';
+        progressFill.style.width = '92%';
+        await delay(500);
+        await writeWithTimeout('echo(1);\n', 1000); // Re-enable echo
 
         progressFill.style.width = '100%';
         progressText.textContent = 'Upload complete!';
@@ -550,11 +579,41 @@ async function uploadCode(code: string, name: string = 'code'): Promise<void> {
     } catch (err) {
         log(`Upload failed: ${(err as Error).message}`, 'error');
         progressText.textContent = `Error: ${(err as Error).message}`;
+
+        // Try to re-enable echo on error
+        try {
+            await writeWithTimeout('echo(1);\n', 1000);
+        } catch {
+            // Ignore - connection may be broken
+        }
     } finally {
+        // Restore original progress handler
+        Puck.writeProgress = originalWriteProgress;
         state.uploading = false;
         updateUI();
         setTimeout(() => { progressContainer.style.display = 'none'; }, 2000);
     }
+}
+
+/**
+ * Helper to write with timeout
+ */
+function writeWithTimeout(data: string, timeoutMs: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error(`Write timeout: ${data.substring(0, 20)}...`)), timeoutMs);
+        state.connection!.write(data, (err?: Error) => {
+            clearTimeout(timeout);
+            if (err) reject(err);
+            else resolve();
+        });
+    });
+}
+
+/**
+ * Simple delay helper
+ */
+function delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 // ===== Connection =====
