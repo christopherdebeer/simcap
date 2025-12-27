@@ -2,6 +2,7 @@ import { defineConfig, Plugin, loadEnv } from 'vite';
 import { resolve } from 'path';
 import { IncomingMessage, ServerResponse } from 'http';
 import { config as dotenvConfig } from 'dotenv';
+import { viteStaticCopy } from 'vite-plugin-static-copy';
 
 // Load .env.local for server-side API handlers
 dotenvConfig({ path: '.env.local' });
@@ -122,5 +123,25 @@ export default defineConfig({
   publicDir: 'public',
 
   // Plugins
-  plugins: [apiPlugin()]
+  plugins: [
+    apiPlugin(),
+    // Copy firmware files to dist for runtime loading
+    viteStaticCopy({
+      targets: [
+        {
+          src: 'src/device/**/app.js',
+          dest: 'src/device',
+          rename: (_name, _ext, srcPath) => {
+            // Preserve directory structure: src/device/GAMBIT/app.js -> src/device/GAMBIT/app.js
+            const parts = srcPath.split('/');
+            const deviceIdx = parts.indexOf('device');
+            if (deviceIdx >= 0 && parts.length > deviceIdx + 1) {
+              return parts.slice(deviceIdx + 1).join('/');
+            }
+            return srcPath;
+          }
+        }
+      ]
+    })
+  ]
 });
