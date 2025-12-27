@@ -630,12 +630,26 @@ async function uploadCode(code: string, name: string = 'code'): Promise<void> {
         // The \x10 prefix suppresses echo, \x03 at start clears any leftover
         const uploadData = '\x03' + preparedCode + '\n';
 
+        // Track if upload is still in progress for connection close detection
+        let uploadComplete = false;
+
         await new Promise<void>((resolve, reject) => {
             const timeout = setTimeout(() => {
                 reject(new Error('Upload timeout (60s) - device may be unresponsive'));
             }, 60000);
 
+            // Poll for connection state during upload (puck.js doesn't support multiple handlers)
+            const connectionCheck = setInterval(() => {
+                if (!state.connected && !uploadComplete) {
+                    clearInterval(connectionCheck);
+                    clearTimeout(timeout);
+                    reject(new Error('Connection lost during upload'));
+                }
+            }, 500);
+
             state.connection!.write(uploadData, (err?: Error) => {
+                uploadComplete = true;
+                clearInterval(connectionCheck);
                 clearTimeout(timeout);
                 if (err) reject(err);
                 else resolve();
