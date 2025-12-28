@@ -669,12 +669,31 @@ async function uploadCode(code: string, name: string = 'code'): Promise<void> {
         progressText.textContent = 'Uploading code...';
         progressFill.style.width = '15%';
 
+        // Dynamic timeout: reset when progress is made (handles XOFF/XON flow control)
+        const STALL_TIMEOUT_MS = 30000; // 30s with no progress = stalled
+        let lastProgressTime = Date.now();
+        let stallTimeoutId: ReturnType<typeof setTimeout> | null = null;
+        let rejectFn: ((err: Error) => void) | null = null;
+
+        const resetStallTimeout = () => {
+            lastProgressTime = Date.now();
+            if (stallTimeoutId) clearTimeout(stallTimeoutId);
+            stallTimeoutId = setTimeout(() => {
+                const elapsed = Date.now() - uploadStart;
+                const lastKB = lastProgressLog / 1024;
+                rejectFn?.(new Error(`Upload stalled for ${STALL_TIMEOUT_MS/1000}s at ~${lastKB.toFixed(1)}KB (total: ${(elapsed/1000).toFixed(0)}s)`));
+            }, STALL_TIMEOUT_MS);
+        };
+
         // Set up throttled progress tracking via puck.js
         // Only update UI at most every 100ms to prevent freeze
         Puck.writeProgress = (sent?: number, total?: number) => {
             if (sent !== undefined && total !== undefined && total > 0) {
                 const now = Date.now();
                 pendingProgress = { sent, total };
+
+                // Reset stall timeout on any progress
+                resetStallTimeout();
 
                 // Throttle UI: update at most every 100ms
                 if (now - lastProgressUpdate >= 100) {
@@ -700,17 +719,14 @@ async function uploadCode(code: string, name: string = 'code'): Promise<void> {
         let uploadComplete = false;
 
         await new Promise<void>((resolve, reject) => {
-            const timeout = setTimeout(() => {
-                const elapsed = Date.now() - uploadStart;
-                const lastKB = lastProgressLog / 1024;
-                reject(new Error(`Upload timeout after ${elapsed}ms - stalled at ~${lastKB.toFixed(1)}KB`));
-            }, 60000);
+            rejectFn = reject;
+            resetStallTimeout(); // Start initial timeout
 
             // Poll for connection state during upload (puck.js doesn't support multiple handlers)
             const connectionCheck = setInterval(() => {
                 if (!state.connected && !uploadComplete) {
                     clearInterval(connectionCheck);
-                    clearTimeout(timeout);
+                    if (stallTimeoutId) clearTimeout(stallTimeoutId);
                     reject(new Error('Connection lost during upload'));
                 }
             }, 500);
@@ -718,7 +734,7 @@ async function uploadCode(code: string, name: string = 'code'): Promise<void> {
             state.connection!.write(uploadData, (err?: Error) => {
                 uploadComplete = true;
                 clearInterval(connectionCheck);
-                clearTimeout(timeout);
+                if (stallTimeoutId) clearTimeout(stallTimeoutId);
                 if (err) {
                     logStep(`Write callback error: ${err.message}`);
                     reject(err);
