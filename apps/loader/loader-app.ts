@@ -201,20 +201,21 @@ function flushLogBuffer(): void {
 }
 
 function log(msg: string, type: string = 'info'): void {
-    // Always log to browser console
-    console.log({ type, msg });
-
-    // During upload, buffer log messages to prevent UI freeze
+    // During upload, only log important messages to console (skip BLE noise)
     if (pauseConsoleOutput) {
-        // Only keep important messages during upload (errors, success, key milestones)
-        if (type === 'error' || type === 'success' || !msg.startsWith('<BLE>')) {
+        // Only log errors, successes, and [UPLOAD] step messages
+        if (type === 'error' || type === 'success' || msg.startsWith('[UPLOAD]')) {
+            console.log(`[loader] ${msg}`);
             logBuffer.push({msg, type});
         }
-        // Skip BLE spam during upload
+        // Skip all BLE spam during upload
         return;
     }
 
-    // Normal operation: batch updates using requestAnimationFrame
+    // Normal operation: log everything
+    console.log(`[loader] ${msg}`);
+
+    // Batch UI updates using requestAnimationFrame
     logBuffer.push({msg, type});
 
     if (!logFlushRAF) {
@@ -1036,39 +1037,38 @@ function setupPuckLogging(): void {
     }
 
     // Level 1 = errors only, 2 = +warnings, 3 = +info (verbose)
-    Puck.debug = 2;
+    Puck.debug = 1; // Only errors - we handle important events ourselves
     const originalLog = Puck.log;
 
-    // Filter out noisy BLE messages during upload
+    // Patterns to always filter out (raw data transfer noise)
     const noisyPatterns = [
         /^BT> /,           // Raw BLE data
-        /^Sending /,       // "Sending X bytes"
+        /^Sending /,       // "Sending X bytes" or chunk data
         /^Got /,           // "Got X bytes"
         /^GATT /,          // GATT operations
         /^Write /,         // Write confirmations
+        /^Received /,      // "Received X"
+        /^Sent$/,          // "Sent"
     ];
 
     Puck.log = function(level: number, message: string) {
-        originalLog?.call(Puck, level, message);
+        // Skip calling originalLog to reduce noise in browser console
+        // originalLog?.call(Puck, level, message);
 
-        // During upload, only show errors/warnings and key events
+        const isNoisy = noisyPatterns.some(p => p.test(message));
+
+        // During upload, only log actual errors (not noise)
         if (state.uploading) {
-            // Always show errors
-            if (level === 1) {
+            if (level === 1 && !isNoisy) {
                 log(`<BLE> ${message}`, 'error');
             }
-            // Show warnings
-            else if (level === 2) {
-                log(`<BLE> ${message}`, 'warn');
-            }
-            // Skip noisy info messages during upload
+            // Skip everything else during upload
             return;
         }
 
-        // Normal operation: filter noise but show important messages
-        const isNoisy = noisyPatterns.some(p => p.test(message));
-        if (isNoisy && level === 3) {
-            return; // Skip noisy info messages
+        // Normal operation: filter noise
+        if (isNoisy) {
+            return;
         }
 
         const logType = level === 1 ? 'error' : (level === 2 ? 'warn' : 'info');
