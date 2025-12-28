@@ -578,7 +578,7 @@ export class GambitClient {
         this.binaryParser.reset();
 
         conn.on('data', (data: string | ArrayBuffer) => {
-          // Convert to bytes for inspection
+          // Convert to bytes for binary parser
           let bytes: Uint8Array;
           if (typeof data === 'string') {
             bytes = new Uint8Array(data.split('').map(c => c.charCodeAt(0)));
@@ -586,19 +586,15 @@ export class GambitClient {
             bytes = new Uint8Array(data);
           }
 
-          // Route based on packet type:
-          // - Binary telemetry: starts with magic bytes 0xAB 0xCD
-          // - JSON frames: starts with STX (0x02)
-          if (bytes.length >= 2 && bytes[0] === 0xAB && bytes[1] === 0xCD) {
-            // Binary telemetry packet
-            this.binaryParser.onBinaryData(bytes);
-          } else if (bytes.length > 0 && bytes[0] === 0x02) {
-            // JSON frame (STX = 0x02)
-            this.frameParser.onData(data as string);
-          } else {
-            // Unknown or partial data - try frame parser for control messages
-            this.frameParser.onData(data as string);
-          }
+          // IMPORTANT: Pass data to BOTH parsers
+          // Each parser extracts its own packet format:
+          // - Frame parser: looks for STX (0x02) ... ETX (0x03) JSON frames
+          // - Binary parser: looks for 0xAB 0xCD magic + 28-byte packets
+          //
+          // This handles the case where JSON frames and binary telemetry
+          // arrive in the same BLE chunk (e.g., STREAM_START + first sample)
+          this.frameParser.onData(data as string);
+          this.binaryParser.onBinaryData(bytes);
         });
 
         conn.on('close', () => {
