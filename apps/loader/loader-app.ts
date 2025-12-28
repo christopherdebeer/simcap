@@ -640,11 +640,11 @@ async function uploadCode(code: string, name: string = 'code'): Promise<void> {
         // Pause console output during upload to prevent DOM flooding
         pauseConsoleOutput = true;
 
-        await writeWithTimeout('\x03', 500); // Clear input
-        await writeWithTimeout('echo(0);\n', 1000); // Disable echo globally
-        await delay(200);
-        await writeWithTimeout('reset();\n', 3000);
+        await writeWithTimeout('\x03', 500); // Clear any pending input
+        await writeWithTimeout('reset();\n', 3000); // Reset device first
         await delay(1000); // Wait for reset to complete
+        await writeWithTimeout('echo(0);\n', 1000); // Disable echo AFTER reset (reset restores defaults!)
+        await delay(200);
 
         // Step 4: Upload the code using puck.js internal chunking
         progressText.textContent = 'Uploading code...';
