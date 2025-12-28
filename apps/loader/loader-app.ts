@@ -639,22 +639,31 @@ async function uploadCode(code: string, name: string = 'code'): Promise<void> {
         const preparedCode = lines.map(line => '\x10' + line).join('\n');
         logStep(`Prepared: ${preparedCode.length} bytes with \\x10 prefixes`);
 
-        // Step 3: Send Ctrl-C to clear any pending input, then reset
-        progressText.textContent = 'Resetting device...';
+        // Step 3: Clear saved code and reset to get clean memory state
+        // IMPORTANT: reset() runs saved code from flash, which uses memory!
+        // We must clear saved code first, otherwise device runs out of memory.
+        progressText.textContent = 'Clearing saved code...';
         progressFill.style.width = '10%';
 
         // Pause console output during upload to prevent DOM flooding
         pauseConsoleOutput = true;
 
         logStep('Sending Ctrl-C...');
-        await writeWithTimeout('\x03', 500); // Clear any pending input
+        await writeWithTimeout('\x03', 500); // Stop any running code
+
+        logStep('Clearing saved code from flash...');
+        await writeWithTimeout('E.setBootCode("");save();\n', 5000); // Clear boot code and save to flash
+        await delay(500); // Wait for flash write
+
         logStep('Sending reset()...');
-        await writeWithTimeout('reset();\n', 3000); // Reset device first
+        progressText.textContent = 'Resetting device...';
+        await writeWithTimeout('reset();\n', 3000); // Reset now starts with empty interpreter
         await delay(1000); // Wait for reset to complete
+
         logStep('Sending echo(0)...');
-        await writeWithTimeout('echo(0);\n', 1000); // Disable echo AFTER reset (reset restores defaults!)
+        await writeWithTimeout('echo(0);\n', 1000); // Disable echo
         await delay(200);
-        logStep('Device ready, starting code upload');
+        logStep('Device ready (memory cleared), starting code upload');
 
         // Step 4: Upload the code using puck.js internal chunking
         progressText.textContent = 'Uploading code...';
