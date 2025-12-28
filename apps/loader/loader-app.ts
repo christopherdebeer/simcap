@@ -591,18 +591,22 @@ function queryFirmwareInfo(): void {
 async function uploadCode(code: string, name: string = 'code'): Promise<void> {
     if (!state.connected || state.uploading || !state.connection) return;
 
+    const uploadStart = Date.now();
+    const logStep = (step: string) => log(`[UPLOAD] ${step} (+${Date.now() - uploadStart}ms)`);
+
     state.uploading = true;
     updateUI();
     progressContainer.style.display = 'block';
     progressFill.style.width = '0%';
     progressText.textContent = 'Bundling modules...';
-    log(`Uploading ${name}...`);
+    logStep(`Starting upload of ${name}`);
 
     // Store original writeProgress handler
     const originalWriteProgress = Puck.writeProgress;
 
     // Throttle progress updates to prevent UI freeze
     let lastProgressUpdate = 0;
+    let lastProgressLog = 0;
     let pendingProgress: { sent: number; total: number } | null = null;
     let progressRAF: number | null = null;
 
@@ -621,7 +625,7 @@ async function uploadCode(code: string, name: string = 'code'): Promise<void> {
         // Step 1: Bundle any required modules
         progressFill.style.width = '5%';
         code = await bundleModules(code);
-        log(`Code size: ${code.length} bytes`);
+        logStep(`Bundled: ${code.length} bytes (${code.split('\n').length} lines)`);
 
         // Step 2: Prepare the code
         // - Prefix with \x03 to clear input line (Ctrl-C)
@@ -632,6 +636,7 @@ async function uploadCode(code: string, name: string = 'code'): Promise<void> {
         // Split code into lines and prefix each with \x10 (echo off for line)
         const lines = code.split('\n');
         const preparedCode = lines.map(line => '\x10' + line).join('\n');
+        logStep(`Prepared: ${preparedCode.length} bytes with \\x10 prefixes`);
 
         // Step 3: Send Ctrl-C to clear any pending input, then reset
         progressText.textContent = 'Resetting device...';
@@ -640,11 +645,15 @@ async function uploadCode(code: string, name: string = 'code'): Promise<void> {
         // Pause console output during upload to prevent DOM flooding
         pauseConsoleOutput = true;
 
+        logStep('Sending Ctrl-C...');
         await writeWithTimeout('\x03', 500); // Clear any pending input
+        logStep('Sending reset()...');
         await writeWithTimeout('reset();\n', 3000); // Reset device first
         await delay(1000); // Wait for reset to complete
+        logStep('Sending echo(0)...');
         await writeWithTimeout('echo(0);\n', 1000); // Disable echo AFTER reset (reset restores defaults!)
         await delay(200);
+        logStep('Device ready, starting code upload');
 
         // Step 4: Upload the code using puck.js internal chunking
         progressText.textContent = 'Uploading code...';
@@ -657,11 +666,17 @@ async function uploadCode(code: string, name: string = 'code'): Promise<void> {
                 const now = Date.now();
                 pendingProgress = { sent, total };
 
-                // Throttle: update at most every 100ms
+                // Throttle UI: update at most every 100ms
                 if (now - lastProgressUpdate >= 100) {
                     lastProgressUpdate = now;
                     if (progressRAF) cancelAnimationFrame(progressRAF);
                     progressRAF = requestAnimationFrame(updateProgressUI);
+                }
+
+                // Log progress every 5KB
+                if (sent - lastProgressLog >= 5000 || sent === total) {
+                    lastProgressLog = sent;
+                    logStep(`Progress: ${(sent / 1024).toFixed(1)}/${(total / 1024).toFixed(1)} KB (${Math.round(sent / total * 100)}%)`);
                 }
             }
         };
@@ -669,13 +684,16 @@ async function uploadCode(code: string, name: string = 'code'): Promise<void> {
         // Send the prepared code - let puck.js handle chunking
         // The \x10 prefix suppresses echo, \x03 at start clears any leftover
         const uploadData = '\x03' + preparedCode + '\n';
+        logStep(`Calling puck.write() with ${uploadData.length} bytes`);
 
         // Track if upload is still in progress for connection close detection
         let uploadComplete = false;
 
         await new Promise<void>((resolve, reject) => {
             const timeout = setTimeout(() => {
-                reject(new Error('Upload timeout (60s) - device may be unresponsive'));
+                const elapsed = Date.now() - uploadStart;
+                const lastKB = lastProgressLog / 1024;
+                reject(new Error(`Upload timeout after ${elapsed}ms - stalled at ~${lastKB.toFixed(1)}KB`));
             }, 60000);
 
             // Poll for connection state during upload (puck.js doesn't support multiple handlers)
@@ -691,8 +709,13 @@ async function uploadCode(code: string, name: string = 'code'): Promise<void> {
                 uploadComplete = true;
                 clearInterval(connectionCheck);
                 clearTimeout(timeout);
-                if (err) reject(err);
-                else resolve();
+                if (err) {
+                    logStep(`Write callback error: ${err.message}`);
+                    reject(err);
+                } else {
+                    logStep('Write callback success');
+                    resolve();
+                }
             });
         });
 
@@ -701,6 +724,7 @@ async function uploadCode(code: string, name: string = 'code'): Promise<void> {
         updateProgressUI();
 
         // Step 5: Re-enable echo and verify
+        logStep('Upload complete, finalizing...');
         progressText.textContent = 'Finalizing...';
         progressFill.style.width = '92%';
         await delay(500);
@@ -708,10 +732,12 @@ async function uploadCode(code: string, name: string = 'code'): Promise<void> {
 
         progressFill.style.width = '100%';
         progressText.textContent = 'Upload complete!';
-        log(`${name} uploaded successfully!`, 'success');
+        const totalTime = ((Date.now() - uploadStart) / 1000).toFixed(1);
+        log(`[UPLOAD] ${name} uploaded successfully in ${totalTime}s`, 'success');
 
     } catch (err) {
-        log(`Upload failed: ${(err as Error).message}`, 'error');
+        const totalTime = ((Date.now() - uploadStart) / 1000).toFixed(1);
+        log(`[UPLOAD] FAILED after ${totalTime}s: ${(err as Error).message}`, 'error');
         progressText.textContent = `Error: ${(err as Error).message}`;
 
         // Try to re-enable echo on error
@@ -1009,11 +1035,42 @@ function setupPuckLogging(): void {
         return;
     }
 
-    Puck.debug = 3;
+    // Level 1 = errors only, 2 = +warnings, 3 = +info (verbose)
+    Puck.debug = 2;
     const originalLog = Puck.log;
+
+    // Filter out noisy BLE messages during upload
+    const noisyPatterns = [
+        /^BT> /,           // Raw BLE data
+        /^Sending /,       // "Sending X bytes"
+        /^Got /,           // "Got X bytes"
+        /^GATT /,          // GATT operations
+        /^Write /,         // Write confirmations
+    ];
 
     Puck.log = function(level: number, message: string) {
         originalLog?.call(Puck, level, message);
+
+        // During upload, only show errors/warnings and key events
+        if (state.uploading) {
+            // Always show errors
+            if (level === 1) {
+                log(`<BLE> ${message}`, 'error');
+            }
+            // Show warnings
+            else if (level === 2) {
+                log(`<BLE> ${message}`, 'warn');
+            }
+            // Skip noisy info messages during upload
+            return;
+        }
+
+        // Normal operation: filter noise but show important messages
+        const isNoisy = noisyPatterns.some(p => p.test(message));
+        if (isNoisy && level === 3) {
+            return; // Skip noisy info messages
+        }
+
         const logType = level === 1 ? 'error' : (level === 2 ? 'warn' : 'info');
         log(`<BLE> ${message}`, logType);
 
