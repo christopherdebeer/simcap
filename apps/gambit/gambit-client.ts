@@ -219,6 +219,8 @@ export interface BinaryTelemetry {
 export class BinaryTelemetryParser {
   private buffer: Uint8Array = new Uint8Array(0);
   private handlers: ((data: BinaryTelemetry) => void)[] = [];
+  private lastTimestamp: number = 0;
+  private consecutiveRejects: number = 0;
 
   onBinaryData(data: Uint8Array): void {
     // Append to buffer
@@ -237,12 +239,27 @@ export class BinaryTelemetryParser {
       for (let i = 0; i <= this.buffer.length - BINARY_PACKET_SIZE; i++) {
         const magic = (this.buffer[i] << 8) | this.buffer[i + 1];
         if (magic === BINARY_MAGIC) {
-          // Found a packet
+          // Found potential packet - validate before accepting
           const packet = this.buffer.slice(i, i + BINARY_PACKET_SIZE);
-          this.parsePacket(packet);
-          this.buffer = this.buffer.slice(i + BINARY_PACKET_SIZE);
-          found = true;
-          break;
+          if (this.validateAndParsePacket(packet)) {
+            // Valid packet - consume it
+            this.buffer = this.buffer.slice(i + BINARY_PACKET_SIZE);
+            this.consecutiveRejects = 0;
+            found = true;
+            break;
+          } else {
+            // Invalid packet - skip this magic byte and keep searching
+            this.consecutiveRejects++;
+            if (this.consecutiveRejects > 10) {
+              // Too many rejects - reset state
+              this.lastTimestamp = 0;
+              this.consecutiveRejects = 0;
+            }
+            // Skip just one byte to find next potential magic
+            this.buffer = this.buffer.slice(i + 1);
+            found = true; // Continue searching
+            break;
+          }
         }
       }
       if (!found) {
@@ -253,6 +270,50 @@ export class BinaryTelemetryParser {
         break;
       }
     }
+  }
+
+  private validateAndParsePacket(packet: Uint8Array): boolean {
+    const view = new DataView(packet.buffer, packet.byteOffset, packet.length);
+
+    // Parse timestamp first for validation
+    const t = view.getUint32(20, true);
+
+    // Validation 1: Timestamp sanity check
+    // Reject if timestamp jumps by more than 10 seconds (10000ms)
+    // or goes backwards by more than 1 second
+    if (this.lastTimestamp > 0) {
+      const dt = t - this.lastTimestamp;
+      if (dt > 10000 || dt < -1000) {
+        // Suspicious timestamp - likely corrupt packet
+        return false;
+      }
+    }
+
+    // Parse accelerometer for validation
+    const az = view.getInt16(6, true);
+
+    // Validation 2: Accelerometer sanity check
+    // At rest, az should be close to 8192 (1g) or -8192 (inverted)
+    // Allow range of ±4g for motion, but reject extreme values
+    // that suggest corrupt data (like az near 0 at rest is suspicious)
+    // Skip this check if we haven't established baseline yet
+    if (this.lastTimestamp > 0) {
+      const accelMag = Math.sqrt(
+        view.getInt16(2, true) ** 2 +
+        view.getInt16(4, true) ** 2 +
+        az ** 2
+      );
+      // At rest or normal motion, accel magnitude should be 6000-12000
+      // (0.7g to 1.5g) - reject if way outside this
+      if (accelMag < 4000 || accelMag > 20000) {
+        return false;
+      }
+    }
+
+    // Packet looks valid - parse and emit
+    this.lastTimestamp = t;
+    this.parsePacket(packet);
+    return true;
   }
 
   private parsePacket(packet: Uint8Array): void {
@@ -318,6 +379,8 @@ export class BinaryTelemetryParser {
 
   reset(): void {
     this.buffer = new Uint8Array(0);
+    this.lastTimestamp = 0;
+    this.consecutiveRejects = 0;
   }
 }
 
