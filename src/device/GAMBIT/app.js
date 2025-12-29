@@ -1388,8 +1388,10 @@ function init() {
     digitalPulse(LED2, 1, 200); // Green flash to indicate ready
 }
 
-// Initialize
-init();
+// Initialize after a short delay to allow upload to complete
+// This prevents "Interrupted processing event" errors during upload
+// See: https://www.espruino.com/Troubleshooting
+setTimeout(init, 100);
 
 // ===== BLE Connection Events =====
 NRF.on('connect', function(addr) {
