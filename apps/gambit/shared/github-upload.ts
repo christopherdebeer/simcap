@@ -42,6 +42,9 @@ const DEFAULT_REPO = 'simcap';
 const STORAGE_KEY = 'simcap_upload_secret';
 const UPLOAD_API_ENDPOINT = '/api/github-upload';
 
+// Compression threshold: compress if content exceeds 100KB
+const COMPRESSION_THRESHOLD = 100 * 1024;
+
 // ===== Types =====
 
 export interface GitHubUploadOptions {
@@ -147,6 +150,47 @@ function base64Encode(str: string): string {
   const bytes = new TextEncoder().encode(str);
   const binString = Array.from(bytes, (byte) => String.fromCodePoint(byte)).join('');
   return btoa(binString);
+}
+
+/**
+ * Compress a string using gzip and return base64-encoded result
+ * Uses native CompressionStream API (available in modern browsers)
+ */
+async function compressToBase64(str: string): Promise<string> {
+  const bytes = new TextEncoder().encode(str);
+  const cs = new CompressionStream('gzip');
+  const writer = cs.writable.getWriter();
+  writer.write(bytes);
+  writer.close();
+
+  const compressedChunks: Uint8Array[] = [];
+  const reader = cs.readable.getReader();
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    compressedChunks.push(value);
+  }
+
+  // Concatenate chunks
+  const totalLength = compressedChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const compressed = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of compressedChunks) {
+    compressed.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  // Convert to base64
+  const binString = Array.from(compressed, (byte) => String.fromCodePoint(byte)).join('');
+  return btoa(binString);
+}
+
+/**
+ * Check if compression is available (CompressionStream API)
+ */
+function isCompressionAvailable(): boolean {
+  return typeof CompressionStream !== 'undefined';
 }
 
 /**
@@ -281,6 +325,7 @@ export async function uploadToGitHub(
  * Upload file via API proxy (keeps GitHub PAT server-side)
  *
  * Requires upload secret for authentication.
+ * Automatically compresses large payloads to avoid Vercel's 4.5MB limit.
  */
 export async function uploadViaProxy(
   options: ProxyUploadOptions
@@ -296,6 +341,22 @@ export async function uploadViaProxy(
 
   const contentSize = new TextEncoder().encode(content).length;
 
+  // Use compression for large payloads (>100KB) to avoid Vercel's size limit
+  const shouldCompress = contentSize > COMPRESSION_THRESHOLD && isCompressionAvailable();
+  let uploadContent: string;
+  let compressed = false;
+
+  if (shouldCompress) {
+    onProgress?.({ stage: 'preparing', message: `Compressing ${(contentSize / 1024).toFixed(0)}KB...` });
+    uploadContent = await compressToBase64(content);
+    compressed = true;
+    const compressedSize = uploadContent.length;
+    const ratio = ((1 - compressedSize / contentSize) * 100).toFixed(0);
+    onProgress?.({ stage: 'preparing', message: `Compressed to ${(compressedSize / 1024).toFixed(0)}KB (${ratio}% reduction)` });
+  } else {
+    uploadContent = content;
+  }
+
   onProgress?.({ stage: 'uploading', message: 'Uploading via API...' });
 
   const response = await fetch(UPLOAD_API_ENDPOINT, {
@@ -307,8 +368,9 @@ export async function uploadViaProxy(
       secret,
       branch,
       path,
-      content,
+      content: uploadContent,
       message,
+      compressed, // Signal to server that content is gzip+base64 encoded
     }),
   });
 
