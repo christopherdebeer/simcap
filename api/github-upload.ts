@@ -54,6 +54,7 @@ interface UploadRequest {
   content: string;
   message: string;
   validate?: boolean;
+  compressed?: boolean; // If true, content is gzip+base64 encoded
 }
 
 interface GitHubContentResponse {
@@ -77,6 +78,46 @@ function base64Encode(str: string): string {
   const bytes = new TextEncoder().encode(str);
   const binString = Array.from(bytes, (byte) => String.fromCodePoint(byte)).join('');
   return btoa(binString);
+}
+
+/**
+ * Decompress gzip+base64 encoded content
+ * Uses native DecompressionStream API (available in Edge runtime)
+ */
+async function decompressFromBase64(compressedBase64: string): Promise<string> {
+  // Decode base64 to bytes
+  const binaryString = atob(compressedBase64);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+
+  // Decompress using DecompressionStream
+  const ds = new DecompressionStream('gzip');
+  const writer = ds.writable.getWriter();
+  writer.write(bytes);
+  writer.close();
+
+  const decompressedChunks: Uint8Array[] = [];
+  const reader = ds.readable.getReader();
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    decompressedChunks.push(value);
+  }
+
+  // Concatenate chunks
+  const totalLength = decompressedChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const decompressed = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of decompressedChunks) {
+    decompressed.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  // Decode UTF-8
+  return new TextDecoder().decode(decompressed);
 }
 
 /**
@@ -232,11 +273,30 @@ export default async function handler(request: Request): Promise<Response> {
     const owner = DEFAULT_OWNER;
     const repo = DEFAULT_REPO;
 
+    // Decompress content if it was compressed by the client
+    let actualContent = body.content;
+    if (body.compressed) {
+      try {
+        console.log(`Decompressing content for ${body.path}...`);
+        actualContent = await decompressFromBase64(body.content);
+        console.log(`Decompressed: ${body.content.length} -> ${actualContent.length} bytes`);
+      } catch (decompressError) {
+        console.error('Decompression failed:', decompressError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to decompress content' }),
+          {
+            status: 400,
+            headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+          }
+        );
+      }
+    }
+
     // Check if file exists (for update)
     const existingSha = await getFileSha(owner, repo, body.path, body.branch, githubToken);
 
-    // Encode content
-    const encodedContent = base64Encode(body.content);
+    // Encode content for GitHub API
+    const encodedContent = base64Encode(actualContent);
 
     // Prepare request
     const requestBody: Record<string, string> = {
