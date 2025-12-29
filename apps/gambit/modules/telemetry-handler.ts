@@ -37,6 +37,7 @@ interface PoseUpdateData {
 
 interface ThreeHandSkeleton {
   updateOrientation: (euler: EulerAngles) => void;
+  updateQuaternion?: (q: Quaternion) => void;  // Preferred: gimbal lock free
 }
 
 interface WizardState {
@@ -116,11 +117,14 @@ export function initProcessor(): void {
         onLog: log, // Route diagnostic logs through shared logger
         onOrientationUpdate: (euler: EulerAngles, quaternion: Quaternion) => {
             // Update Three.js hand skeleton if available
-            if (euler) {
-                const threeSkeleton = typeof deps.threeHandSkeleton === 'function'
-                    ? deps.threeHandSkeleton()
-                    : deps.threeHandSkeleton;
-                if (threeSkeleton) {
+            const threeSkeleton = typeof deps.threeHandSkeleton === 'function'
+                ? deps.threeHandSkeleton()
+                : deps.threeHandSkeleton;
+            if (threeSkeleton) {
+                // Prefer quaternion (gimbal lock free) over Euler angles
+                if (quaternion && threeSkeleton.updateQuaternion) {
+                    threeSkeleton.updateQuaternion(quaternion);
+                } else if (euler) {
                     threeSkeleton.updateOrientation(euler);
                 }
             }

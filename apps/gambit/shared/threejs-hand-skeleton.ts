@@ -6,7 +6,7 @@
  * @module shared/threejs-hand-skeleton
  */
 
-import type { EulerAngles } from '@core/types';
+import type { EulerAngles, Quaternion } from '@core/types';
 
 // ===== Type Definitions =====
 
@@ -143,6 +143,10 @@ export class ThreeJSHandSkeleton {
   private orientationLerpFactor: number;
   private orientationOffsets: OrientationOffsets;
   private axisSigns: AxisSigns;
+  // Quaternion-based orientation (gimbal lock free)
+  private useQuaternion: boolean = false;
+  private targetQuaternion: { w: number; x: number; y: number; z: number } = { w: 1, x: 0, y: 0, z: 0 };
+  private currentQuaternion: { w: number; x: number; y: number; z: number } = { w: 1, x: 0, y: 0, z: 0 };
   private handedness: 'left' | 'right';
   private fingerCurls: FingerCurls;
   private bones: Record<string, any>;
@@ -530,10 +534,26 @@ export class ThreeJSHandSkeleton {
 
   updateOrientation(euler: EulerAngles | null): void {
     if (!euler) return;
+    this.useQuaternion = false;  // Switch to Euler mode
     this.targetOrientation = {
       roll: euler.roll ?? 0,
       pitch: euler.pitch ?? 0,
       yaw: euler.yaw ?? 0,
+    };
+  }
+
+  /**
+   * Update orientation using quaternion (gimbal lock free)
+   * Prefer this method over updateOrientation for smooth rotation at all angles
+   */
+  updateQuaternion(q: Quaternion | null): void {
+    if (!q) return;
+    this.useQuaternion = true;  // Switch to quaternion mode
+    this.targetQuaternion = {
+      w: q.w ?? 1,
+      x: q.x ?? 0,
+      y: q.y ?? 0,
+      z: q.z ?? 0,
     };
   }
 
@@ -597,34 +617,78 @@ export class ThreeJSHandSkeleton {
   }
 
   private _applyOrientation(): void {
-    this.currentOrientation.roll = lerpAngleDeg(
-      this.currentOrientation.roll,
-      this.targetOrientation.roll,
-      this.orientationLerpFactor
-    );
-    this.currentOrientation.pitch = lerpAngleDeg(
-      this.currentOrientation.pitch,
-      this.targetOrientation.pitch,
-      this.orientationLerpFactor
-    );
-    this.currentOrientation.yaw = lerpAngleDeg(
-      this.currentOrientation.yaw,
-      this.targetOrientation.yaw,
-      this.orientationLerpFactor
-    );
+    if (this.useQuaternion) {
+      // Quaternion mode: SLERP interpolation (gimbal lock free)
+      const t = this.orientationLerpFactor;
 
-    const offsets = this.orientationOffsets || { roll: 0, pitch: 0, yaw: 0 };
-    const signs = this.axisSigns || { negateRoll: false, negatePitch: true, negateYaw: false };
+      // SLERP: Spherical Linear Interpolation
+      const cq = this.currentQuaternion;
+      const tq = this.targetQuaternion;
 
-    const sensorRoll = this.currentOrientation.roll;
-    const sensorPitch = this.currentOrientation.pitch;
-    const sensorYaw = this.currentOrientation.yaw;
+      // Compute dot product
+      let dot = cq.w * tq.w + cq.x * tq.x + cq.y * tq.y + cq.z * tq.z;
 
-    const pitch = ((signs.negatePitch ? -sensorPitch : sensorPitch) + offsets.pitch) * (Math.PI / 180);
-    const yaw = (((signs.negateYaw ? 1 : -1) * sensorRoll) + offsets.yaw) * (Math.PI / 180);
-    const roll = ((signs.negateRoll ? -sensorYaw : sensorYaw) + offsets.roll) * (Math.PI / 180);
+      // If dot < 0, negate one quaternion to take shorter path
+      const sign = dot < 0 ? -1 : 1;
+      dot = Math.abs(dot);
 
-    this.handGroup.rotation.set(pitch, yaw, roll, "YXZ");
+      let s0: number, s1: number;
+      if (dot > 0.9995) {
+        // Linear interpolation for very close quaternions
+        s0 = 1 - t;
+        s1 = t * sign;
+      } else {
+        const theta = Math.acos(dot);
+        const sinTheta = Math.sin(theta);
+        s0 = Math.sin((1 - t) * theta) / sinTheta;
+        s1 = Math.sin(t * theta) / sinTheta * sign;
+      }
+
+      this.currentQuaternion = {
+        w: s0 * cq.w + s1 * tq.w,
+        x: s0 * cq.x + s1 * tq.x,
+        y: s0 * cq.y + s1 * tq.y,
+        z: s0 * cq.z + s1 * tq.z,
+      };
+
+      // Apply quaternion directly to Three.js (no gimbal lock!)
+      this.handGroup.quaternion.set(
+        this.currentQuaternion.x,
+        this.currentQuaternion.y,
+        this.currentQuaternion.z,
+        this.currentQuaternion.w
+      );
+    } else {
+      // Euler mode: Original behavior (has gimbal lock at ±90° pitch)
+      this.currentOrientation.roll = lerpAngleDeg(
+        this.currentOrientation.roll,
+        this.targetOrientation.roll,
+        this.orientationLerpFactor
+      );
+      this.currentOrientation.pitch = lerpAngleDeg(
+        this.currentOrientation.pitch,
+        this.targetOrientation.pitch,
+        this.orientationLerpFactor
+      );
+      this.currentOrientation.yaw = lerpAngleDeg(
+        this.currentOrientation.yaw,
+        this.targetOrientation.yaw,
+        this.orientationLerpFactor
+      );
+
+      const offsets = this.orientationOffsets || { roll: 0, pitch: 0, yaw: 0 };
+      const signs = this.axisSigns || { negateRoll: false, negatePitch: true, negateYaw: false };
+
+      const sensorRoll = this.currentOrientation.roll;
+      const sensorPitch = this.currentOrientation.pitch;
+      const sensorYaw = this.currentOrientation.yaw;
+
+      const pitch = ((signs.negatePitch ? -sensorPitch : sensorPitch) + offsets.pitch) * (Math.PI / 180);
+      const yaw = (((signs.negateYaw ? 1 : -1) * sensorRoll) + offsets.yaw) * (Math.PI / 180);
+      const roll = ((signs.negateRoll ? -sensorYaw : sensorYaw) + offsets.roll) * (Math.PI / 180);
+
+      this.handGroup.rotation.set(pitch, yaw, roll, "YXZ");
+    }
   }
 
   setAxisSigns(signs: Partial<AxisSigns>): void {
