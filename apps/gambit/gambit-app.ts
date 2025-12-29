@@ -213,7 +213,7 @@ import {
     exportLocationMetadata,
     formatLocation
 } from './shared/geomagnetic-field.js';
-import { ThreeJSHandSkeleton } from './shared/threejs-hand-skeleton.js';
+import { ThreeJSHandSkeleton, MagSample, AxisProgress } from './shared/threejs-hand-skeleton.js';
 import { MagneticTrajectory } from './modules/magnetic-trajectory.js';
 import {
     REFERENCE_POSES,
@@ -307,6 +307,9 @@ document.addEventListener('DOMContentLoaded', () => {
 // ===== Calibration Confidence UI =====
 let lastConfidenceUpdate = 0;
 const CONFIDENCE_UPDATE_INTERVAL = 500;  // Update UI every 500ms
+let lastCalibrationSave = 0;
+const CALIBRATION_SAVE_INTERVAL = 10000;  // Save calibration every 10 seconds when ready
+let wasAutoHardIronReady = false;  // Track transition to ready state
 
 // ===== Initialize Logger =====
 // Initialize with UI element for log display
@@ -396,6 +399,25 @@ function initThreeHandSkeleton() {
         });
 
         console.log('[ThreeHand] Skeleton initialized');
+
+        // Initialize magnetometer calibration visualization
+        const location = geomagneticLocation || getDefaultLocation();
+        const expectedMag = location
+            ? Math.sqrt(location.horizontal ** 2 + location.vertical ** 2)
+            : 50;
+
+        threeHandSkeleton.initMagCalibrationVis({
+            enabled: true,
+            maxPoints: 300,
+            pointSize: 4,
+            expectedMagnitude: expectedMag,
+            showExpectedSphere: true,
+            showHardIronMarker: true,
+            showAxisCoverage: true,
+            showPointCloud: true,
+            scale: 0.02
+        });
+        console.log('[ThreeHand] Mag calibration visualization initialized');
 
         // Toggle handler
         const toggle = document.getElementById('threeHandToggle') as HTMLInputElement | null;
@@ -1393,6 +1415,75 @@ function updateCalibrationConfidenceUI() {
             overallEl.style.color = 'var(--error)';
         }
     }
+
+    // Update 3D magnetometer calibration visualization
+    updateMagCalibrationVis({
+        autoHardIronEstimate: state.autoHardIronEstimate,
+        autoHardIronRanges: state.autoHardIronRanges
+    });
+
+    // Save calibration to localStorage for next session bootstrap
+    const now = performance.now();
+    if (state.autoHardIronReady) {
+        // Save immediately when auto hard iron first becomes ready
+        if (!wasAutoHardIronReady) {
+            wasAutoHardIronReady = true;
+            magCal.save('gambit_calibration');
+            console.log('[Calibration] Saved auto hard iron calibration for next session bootstrap');
+        } else if (now - lastCalibrationSave > CALIBRATION_SAVE_INTERVAL) {
+            // Also save periodically to capture refined estimates
+            lastCalibrationSave = now;
+            magCal.save('gambit_calibration');
+        }
+    }
+}
+
+// Update 3D magnetometer calibration visualization
+function updateMagCalibrationVis(calState: {
+    autoHardIronEstimate?: { x: number; y: number; z: number };
+    autoHardIronRanges?: { x: number; y: number; z: number };
+}): void {
+    if (!threeHandSkeleton || !threeHandSkeleton.isMagCalibrationEnabled()) return;
+
+    // Get recent magnetometer samples from session data
+    const recentSamples: MagSample[] = [];
+    const startIdx = Math.max(0, sessionData.length - 300);
+    for (let i = startIdx; i < sessionData.length; i++) {
+        const sample = sessionData[i] as unknown as Record<string, number>;
+        if (sample.mx_ut !== undefined) {
+            recentSamples.push({
+                x: sample.mx_ut,
+                y: sample.my_ut,
+                z: sample.mz_ut
+            });
+        }
+    }
+
+    // Get hard iron offset from calibration state
+    const hardIronOffset: MagSample = calState.autoHardIronEstimate || { x: 0, y: 0, z: 0 };
+
+    // Calculate expected magnitude for target range
+    const location = geomagneticLocation || getDefaultLocation();
+    const expectedMag = location
+        ? Math.sqrt(location.horizontal ** 2 + location.vertical ** 2)
+        : 50;
+    const targetRange = expectedMag * 1.5;  // Match threshold from unified-mag-calibration
+
+    // Calculate axis progress
+    const ranges = calState.autoHardIronRanges || { x: 0, y: 0, z: 0 };
+    const axisProgress: AxisProgress = {
+        x: Math.min(1, ranges.x / targetRange),
+        y: Math.min(1, ranges.y / targetRange),
+        z: Math.min(1, ranges.z / targetRange)
+    };
+
+    // Update the 3D visualization
+    threeHandSkeleton.updateMagCalibration({
+        samples: recentSamples,
+        hardIronOffset: hardIronOffset,
+        axisProgress: axisProgress,
+        expectedMagnitude: expectedMag
+    });
 }
 
 function updateData(prenorm: ExtendedTelemetry) {

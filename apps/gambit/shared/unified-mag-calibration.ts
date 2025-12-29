@@ -137,6 +137,12 @@ export interface CalibrationJSON {
   earthFieldWorld: Vector3;
   earthFieldMagnitude: number;
   timestamp: string;
+  // Auto hard iron bootstrap state (location-independent)
+  autoHardIron?: {
+    estimate: Vector3;
+    ranges: Vector3;
+    ready: boolean;
+  };
   units: {
     hardIronOffset: string;
     softIronMatrix: string;
@@ -1617,6 +1623,72 @@ export class UnifiedMagCalibration {
     }
 
     /**
+     * Bootstrap auto hard iron calibration from a previous session's estimate.
+     * This initializes the min/max tracking around the provided offset,
+     * giving the calibration a head start instead of starting from scratch.
+     *
+     * The algorithm will naturally expand the min/max as new samples come in,
+     * refining the estimate for the current session.
+     *
+     * @param estimate Previous session's hard iron offset
+     * @param ranges Optional previous session's axis ranges (for faster convergence)
+     */
+    bootstrapAutoHardIron(estimate: Vector3, ranges?: Vector3): void {
+        if (!this._autoHardIronEnabled) return;
+
+        // If ranges are provided, use them to set initial min/max
+        // Otherwise, use a small initial range that will expand naturally
+        const initialHalfRange = ranges
+            ? { x: ranges.x / 2, y: ranges.y / 2, z: ranges.z / 2 }
+            : { x: 10, y: 10, z: 10 };  // Start with ±10µT around estimate
+
+        this._autoHardIronMin = {
+            x: estimate.x - initialHalfRange.x,
+            y: estimate.y - initialHalfRange.y,
+            z: estimate.z - initialHalfRange.z
+        };
+        this._autoHardIronMax = {
+            x: estimate.x + initialHalfRange.x,
+            y: estimate.y + initialHalfRange.y,
+            z: estimate.z + initialHalfRange.z
+        };
+        this._autoHardIronEstimate = { ...estimate };
+
+        // If previous ranges were provided and were sufficient, mark as having some progress
+        // but don't mark as ready - let the current session verify
+        if (ranges && ranges.x > 40 && ranges.y > 40 && ranges.z > 40) {
+            this._autoHardIronSampleCount = 50;  // Give it a head start but require verification
+        }
+
+        this._log(`[UnifiedMagCal] Bootstrapped auto hard iron from previous session:`);
+        this._log(`  Initial estimate: [${estimate.x.toFixed(1)}, ${estimate.y.toFixed(1)}, ${estimate.z.toFixed(1)}] µT`);
+        if (ranges) {
+            this._log(`  Previous ranges: [${ranges.x.toFixed(1)}, ${ranges.y.toFixed(1)}, ${ranges.z.toFixed(1)}] µT`);
+        }
+    }
+
+    /**
+     * Get current auto hard iron state for persistence
+     */
+    getAutoHardIronState(): {
+        estimate: Vector3;
+        ranges: Vector3;
+        ready: boolean;
+        sampleCount: number;
+    } {
+        return {
+            estimate: { ...this._autoHardIronEstimate },
+            ranges: {
+                x: this._autoHardIronMax.x - this._autoHardIronMin.x,
+                y: this._autoHardIronMax.y - this._autoHardIronMin.y,
+                z: this._autoHardIronMax.z - this._autoHardIronMin.z
+            },
+            ready: this._autoHardIronReady,
+            sampleCount: this._autoHardIronSampleCount
+        };
+    }
+
+    /**
      * Save to localStorage
      */
     save(key: string = 'gambit_calibration'): void {
@@ -1644,6 +1716,10 @@ export class UnifiedMagCalibration {
             this._extendedBaseline.y ** 2 +
             this._extendedBaseline.z ** 2
         );
+
+        // Get auto hard iron state for bootstrap
+        const autoHardIronState = this.getAutoHardIronState();
+
         return {
             hardIronOffset: this.hardIronOffset,
             softIronMatrix: this.softIronMatrix.toArray(),
@@ -1654,6 +1730,12 @@ export class UnifiedMagCalibration {
             earthFieldWorld: this._earthFieldWorld,
             earthFieldMagnitude: this._earthFieldMagnitude,
             timestamp: new Date().toISOString(),
+            // Include auto hard iron for session bootstrap (location-independent)
+            autoHardIron: {
+                estimate: autoHardIronState.estimate,
+                ranges: autoHardIronState.ranges,
+                ready: autoHardIronState.ready
+            },
             units: {
                 hardIronOffset: 'µT',
                 softIronMatrix: 'dimensionless',
@@ -1677,6 +1759,17 @@ export class UnifiedMagCalibration {
             this.setExtendedBaseline(json.extendedBaseline);
         } else {
             this.clearExtendedBaseline();
+        }
+
+        // Bootstrap auto hard iron from previous session if available
+        // This gives calibration a head start instead of starting from scratch
+        if (json.autoHardIron && json.autoHardIron.estimate) {
+            const estimate = json.autoHardIron.estimate;
+            const ranges = json.autoHardIron.ranges;
+            // Only bootstrap if the previous session had meaningful data
+            if (ranges && (ranges.x > 20 || ranges.y > 20 || ranges.z > 20)) {
+                this.bootstrapAutoHardIron(estimate, ranges);
+            }
         }
 
         this._resetEarthEstimation();
