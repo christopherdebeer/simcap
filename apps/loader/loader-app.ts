@@ -685,6 +685,11 @@ async function uploadCode(code: string, name: string = 'code'): Promise<void> {
         const preparedCode = lines.map(line => '\x10' + line).join('\n');
         logStep(`Prepared: ${preparedCode.length} bytes with \\x10 prefixes`);
 
+        // Store for XOFF diagnostics
+        uploadCodeLines = lines;
+        uploadTotalBytes = preparedCode.length;
+        uploadProgressBytes = 0;
+
         // Step 3: Clear saved code and reset to get clean memory state
         // IMPORTANT: reset() runs saved code from flash, which uses memory!
         // We must clear saved code first, otherwise device runs out of memory.
@@ -737,6 +742,9 @@ async function uploadCode(code: string, name: string = 'code'): Promise<void> {
             if (sent !== undefined && total !== undefined && total > 0) {
                 const now = Date.now();
                 pendingProgress = { sent, total };
+
+                // Update global progress for XOFF diagnostics
+                uploadProgressBytes = sent;
 
                 // Reset stall timeout on any progress
                 resetStallTimeout();
@@ -842,6 +850,11 @@ async function uploadCode(code: string, name: string = 'code'): Promise<void> {
         // Restore original progress handler
         Puck.writeProgress = originalWriteProgress;
         if (progressRAF) cancelAnimationFrame(progressRAF);
+
+        // Clear XOFF diagnostic state
+        uploadCodeLines = [];
+        uploadTotalBytes = 0;
+        uploadProgressBytes = 0;
 
         // Resume console output and flush buffers
         pauseConsoleOutput = false;
@@ -1121,6 +1134,11 @@ function setupEventListeners(): void {
 
 // ===== Puck.js Logging =====
 
+// Track upload progress for XOFF diagnostics
+let uploadProgressBytes = 0;
+let uploadTotalBytes = 0;
+let uploadCodeLines: string[] = [];
+
 function setupPuckLogging(): void {
     if (typeof Puck === 'undefined') {
         log('WARNING: Puck.js library not loaded!', 'error');
@@ -1148,8 +1166,23 @@ function setupPuckLogging(): void {
 
         const isNoisy = noisyPatterns.some(p => p.test(message));
 
-        // During upload, only log actual errors (not noise)
+        // During upload, track XOFF events for diagnostics
         if (state.uploading) {
+            // XOFF/XON detection - log with progress context
+            if (message.includes('XOFF')) {
+                const pct = uploadTotalBytes > 0 ? Math.round(uploadProgressBytes / uploadTotalBytes * 100) : 0;
+                const approxLine = uploadCodeLines.length > 0
+                    ? Math.round(pct / 100 * uploadCodeLines.length)
+                    : 0;
+                const linePreview = uploadCodeLines[approxLine]
+                    ? uploadCodeLines[approxLine].substring(0, 50)
+                    : '';
+                log(`[UPLOAD] XOFF at ${pct}% (~line ${approxLine}): ${linePreview}...`, 'warn');
+            } else if (message.includes('XON')) {
+                const pct = uploadTotalBytes > 0 ? Math.round(uploadProgressBytes / uploadTotalBytes * 100) : 0;
+                log(`[UPLOAD] XON resume at ${pct}%`, 'info');
+            }
+
             if (level === 1 && !isNoisy) {
                 log(`<BLE> ${message}`, 'error');
             }
