@@ -491,7 +491,7 @@ function onContextChange(event: { context: string; from?: string }): void {
 // ============================================================================
 
 function startRecording(): void {
-  if (state.recording || !state.connected) return;
+  if (state.recording || !state.connected || !state.client) return;
 
   state.recording = true;
   state.recordingBuffer = [];
@@ -503,6 +503,11 @@ function startRecording(): void {
   elements.recordingStatus.textContent = 'Recording';
   elements.recordingStatus.classList.add('recording');
   elements.recordingIndicator.classList.add('active');
+
+  // Start streaming from device
+  state.client.startStreaming().catch((e: Error) => {
+    log(`Failed to start streaming: ${e.message}`);
+  });
 
   // Update timer
   recordingTimer = window.setInterval(() => {
@@ -521,6 +526,13 @@ function stopRecording(): void {
   if (recordingTimer) {
     clearInterval(recordingTimer);
     recordingTimer = null;
+  }
+
+  // Stop streaming from device
+  if (state.client) {
+    state.client.stopStreaming().catch((e: Error) => {
+      log(`Failed to stop streaming: ${e.message}`);
+    });
   }
 
   elements.recordBtn.disabled = !state.connected;
@@ -567,7 +579,7 @@ function saveTemplate(): void {
 // ============================================================================
 
 function startRecognition(): void {
-  if (state.recognizing || !state.connected) return;
+  if (state.recognizing || !state.connected || !state.client) return;
   if (state.recognizer.templateCount === 0) {
     log('No templates - add templates first');
     return;
@@ -580,6 +592,11 @@ function startRecognition(): void {
   elements.stopRecognitionBtn.disabled = false;
   elements.recognitionStatus.textContent = 'Active';
   elements.recognitionStatus.classList.add('connected');
+
+  // Start streaming from device
+  state.client.startStreaming().catch((e: Error) => {
+    log(`Failed to start streaming: ${e.message}`);
+  });
 
   // Recognize every 500ms
   recognitionInterval = window.setInterval(() => {
@@ -602,6 +619,13 @@ function stopRecognition(): void {
   if (recognitionInterval) {
     clearInterval(recognitionInterval);
     recognitionInterval = null;
+  }
+
+  // Stop streaming from device
+  if (state.client) {
+    state.client.stopStreaming().catch((e: Error) => {
+      log(`Failed to stop streaming: ${e.message}`);
+    });
   }
 
   elements.startRecognitionBtn.disabled = !state.connected || state.recognizer.templateCount === 0;
