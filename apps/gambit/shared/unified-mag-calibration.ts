@@ -314,6 +314,18 @@ export class UnifiedMagCalibration {
         // Diagnostic logging callback
         this._onLog = options.onLog || null;
 
+        // Apply hardcoded default from last known good session (2025-12-29T22_34_22.919Z)
+        // This is the LOWEST precedence - will be overridden by:
+        // 1. localStorage saved data (via load() -> fromJSON() -> bootstrapAutoHardIron())
+        // 2. Auto calibration during current session
+        // 3. Wizard calibration (hardIronCalibrated = true)
+        // Values derived with 3-sigma outlier filtering from 3571 samples
+        if (this._autoHardIronEnabled) {
+            this._autoHardIronEstimate = { x: -33.0, y: -69.1, z: -50.8 };
+            this._autoHardIronMin = { x: -33.0 - 39.8, y: -69.1 - 49.5, z: -50.8 - 57.7 };
+            this._autoHardIronMax = { x: -33.0 + 39.8, y: -69.1 + 49.5, z: -50.8 + 57.7 };
+        }
+
         // Apply pre-computed baseline if provided
         if (options.extendedBaseline) {
             this.setExtendedBaseline(options.extendedBaseline);
