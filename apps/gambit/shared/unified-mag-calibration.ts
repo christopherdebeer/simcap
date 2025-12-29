@@ -744,6 +744,20 @@ export class UnifiedMagCalibration {
             return { earthReady: false, confidence: 0, earthMagnitude: 0 };
         }
 
+        // ===== OUTLIER REJECTION =====
+        // Reject physically implausible magnetometer readings early
+        // This prevents sensor glitches or external interference from corrupting calibration
+        const MAX_PLAUSIBLE_MAGNITUDE = 200;  // µT - max plausible with hard iron
+        const rawMagnitude = Math.sqrt(mx_ut * mx_ut + my_ut * my_ut + mz_ut * mz_ut);
+        if (rawMagnitude > MAX_PLAUSIBLE_MAGNITUDE) {
+            // Return current state without processing this outlier sample
+            return {
+                earthReady: this._earthFieldMagnitude > 0,
+                confidence: this.getConfidence(),
+                earthMagnitude: this._earthFieldMagnitude
+            };
+        }
+
         this._totalSamples++;
 
         if (this.autoBaseline && this.extendedBaselineEnabled &&
@@ -827,6 +841,18 @@ export class UnifiedMagCalibration {
         // Only collect if we have valid accelerometer data
         const accelMag = Math.sqrt(ax**2 + ay**2 + az**2);
         if (accelMag < 0.5 || accelMag > 2.0) return;  // Invalid accel (should be ~1g)
+
+        // ===== OUTLIER REJECTION =====
+        // Reject magnetometer readings that are physically implausible
+        const MAX_PLAUSIBLE_MAGNITUDE = 200;  // µT
+        const MAX_PLAUSIBLE_COMPONENT = 150;  // µT
+        const magMagnitude = Math.sqrt(mx * mx + my * my + mz * mz);
+        if (magMagnitude > MAX_PLAUSIBLE_MAGNITUDE ||
+            Math.abs(mx) > MAX_PLAUSIBLE_COMPONENT ||
+            Math.abs(my) > MAX_PLAUSIBLE_COMPONENT ||
+            Math.abs(mz) > MAX_PLAUSIBLE_COMPONENT) {
+            return;  // Skip outlier
+        }
 
         this._orientationAwareCalSamples.push({ mx, my, mz, ax, ay, az });
 
@@ -1128,6 +1154,33 @@ export class UnifiedMagCalibration {
      * - Minimum range per axis ensures rotation has occurred
      */
     private _updateAutoHardIron(mx_ut: number, my_ut: number, mz_ut: number, _orientation: Quaternion): void {
+        // ===== OUTLIER REJECTION =====
+        // Earth's magnetic field is ~25-65 µT depending on location
+        // With hard iron offsets, readings should never exceed ~200 µT
+        // Anything above this is a sensor glitch or external magnetic interference
+        const MAX_PLAUSIBLE_MAGNITUDE = 200;  // µT - physically impossible on Earth to exceed
+        const MAX_PLAUSIBLE_COMPONENT = 150;  // µT - no single axis should exceed this
+
+        // Check for implausible readings
+        const magnitude = Math.sqrt(mx_ut * mx_ut + my_ut * my_ut + mz_ut * mz_ut);
+        if (magnitude > MAX_PLAUSIBLE_MAGNITUDE) {
+            // Skip this sample - it's an outlier (e.g., passing near strong magnet, sensor glitch)
+            if (this.debug && this._autoHardIronSampleCount % 100 === 0) {
+                this._log(`[UnifiedMagCal] ⚠️ Outlier rejected: magnitude ${magnitude.toFixed(0)} µT > ${MAX_PLAUSIBLE_MAGNITUDE} µT`);
+            }
+            return;
+        }
+
+        // Also reject if any single component is implausibly large
+        if (Math.abs(mx_ut) > MAX_PLAUSIBLE_COMPONENT ||
+            Math.abs(my_ut) > MAX_PLAUSIBLE_COMPONENT ||
+            Math.abs(mz_ut) > MAX_PLAUSIBLE_COMPONENT) {
+            if (this.debug && this._autoHardIronSampleCount % 100 === 0) {
+                this._log(`[UnifiedMagCal] ⚠️ Outlier rejected: component exceeds ${MAX_PLAUSIBLE_COMPONENT} µT [${mx_ut.toFixed(0)}, ${my_ut.toFixed(0)}, ${mz_ut.toFixed(0)}]`);
+            }
+            return;
+        }
+
         // Update min/max tracking
         this._autoHardIronMin.x = Math.min(this._autoHardIronMin.x, mx_ut);
         this._autoHardIronMin.y = Math.min(this._autoHardIronMin.y, my_ut);
