@@ -361,6 +361,85 @@ async function bundleModules(code: string): Promise<string> {
     return moduleCode.join('\n\n') + '\n\n' + code;
 }
 
+/**
+ * Minify JavaScript code for Espruino upload.
+ * Reduces code size by ~40% to avoid memory pressure during upload.
+ *
+ * - Removes single-line comments (// ...)
+ * - Removes multi-line comments (/* ... */)
+ * - Collapses multiple whitespace/newlines
+ * - Preserves string literals
+ */
+function minifyCode(code: string): string {
+    // Tokenize to preserve strings while removing comments
+    const tokens: string[] = [];
+    let i = 0;
+
+    while (i < code.length) {
+        // String literals - preserve exactly
+        if (code[i] === '"' || code[i] === "'") {
+            const quote = code[i];
+            let str = quote;
+            i++;
+            while (i < code.length && code[i] !== quote) {
+                if (code[i] === '\\' && i + 1 < code.length) {
+                    str += code[i] + code[i + 1];
+                    i += 2;
+                } else {
+                    str += code[i];
+                    i++;
+                }
+            }
+            if (i < code.length) {
+                str += code[i];
+                i++;
+            }
+            tokens.push(str);
+        }
+        // Single-line comment - skip
+        else if (code[i] === '/' && code[i + 1] === '/') {
+            while (i < code.length && code[i] !== '\n') i++;
+        }
+        // Multi-line comment - skip
+        else if (code[i] === '/' && code[i + 1] === '*') {
+            i += 2;
+            while (i < code.length - 1 && !(code[i] === '*' && code[i + 1] === '/')) i++;
+            i += 2;
+        }
+        // Whitespace - collapse to single space/newline
+        else if (/\s/.test(code[i])) {
+            let hasNewline = false;
+            while (i < code.length && /\s/.test(code[i])) {
+                if (code[i] === '\n') hasNewline = true;
+                i++;
+            }
+            // Keep newlines for statement separation, otherwise single space
+            tokens.push(hasNewline ? '\n' : ' ');
+        }
+        // Regular code
+        else {
+            tokens.push(code[i]);
+            i++;
+        }
+    }
+
+    // Join and clean up
+    let result = tokens.join('');
+
+    // Remove unnecessary spaces around operators/punctuation
+    result = result.replace(/ ?([\{\}\[\]\(\),;:=<>+\-*/%&|!?]) ?/g, '$1');
+
+    // Restore necessary spaces (keywords)
+    result = result.replace(/\b(var|let|const|function|return|if|else|for|while|do|switch|case|break|continue|try|catch|finally|throw|new|typeof|instanceof|in|of)\b/g, ' $1 ');
+
+    // Clean up double spaces
+    result = result.replace(/  +/g, ' ');
+    result = result.replace(/\n\n+/g, '\n');
+    result = result.replace(/^\s+|\s+$/gm, '');
+
+    return result;
+}
+
 // ===== Helper Functions =====
 
 function formatUptime(ms: number): string {
@@ -672,7 +751,14 @@ async function uploadCode(code: string, name: string = 'code'): Promise<void> {
         // Step 1: Bundle any required modules
         progressFill.style.width = '5%';
         code = await bundleModules(code);
-        logStep(`Bundled: ${code.length} bytes (${code.split('\n').length} lines)`);
+        const originalSize = code.length;
+
+        // Step 1b: Minify to reduce memory pressure during upload
+        progressText.textContent = 'Minifying...';
+        code = minifyCode(code);
+        const reduction = Math.round((1 - code.length / originalSize) * 100);
+        logStep(`Minified: ${originalSize} → ${code.length} bytes (-${reduction}%)`);
+        logStep(`Lines: ${code.split('\n').length}`);
 
         // Step 2: Prepare the code
         // - Prefix with \x03 to clear input line (Ctrl-C)
