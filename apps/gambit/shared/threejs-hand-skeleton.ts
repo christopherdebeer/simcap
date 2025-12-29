@@ -205,7 +205,7 @@ export class ThreeJSHandSkeleton {
   private magCalOptions: Required<MagCalibrationVisOptions> = {
     enabled: false,
     maxPoints: 500,
-    pointSize: 3,
+    pointSize: 2,           // Pixels (with sizeAttenuation: false)
     expectedMagnitude: 50,
     showExpectedSphere: true,
     showHardIronMarker: true,
@@ -948,8 +948,9 @@ export class ThreeJSHandSkeleton {
         size: this.magCalOptions.pointSize,
         vertexColors: true,
         transparent: true,
-        opacity: 0.8,
-        sizeAttenuation: true
+        opacity: 0.6,
+        sizeAttenuation: false,  // Size in pixels, not world units
+        depthWrite: false        // Better blending for overlapping points
       });
       this.magPointCloud = new THREE.Points(pointsGeometry, pointsMaterial);
       this.magPointCloud.name = "magPointCloud";

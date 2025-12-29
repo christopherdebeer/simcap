@@ -409,7 +409,7 @@ function initThreeHandSkeleton() {
         threeHandSkeleton.initMagCalibrationVis({
             enabled: true,
             maxPoints: 300,
-            pointSize: 4,
+            pointSize: 2,           // Small pixel dots (sizeAttenuation: false)
             expectedMagnitude: expectedMag,
             showExpectedSphere: true,
             showHardIronMarker: true,
