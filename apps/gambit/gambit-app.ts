@@ -1546,18 +1546,31 @@ function updateData(prenorm: ExtendedTelemetry) {
 
     (window as any).cubeG.style = `transform: rotateX(${filteredGyroPitch}deg) rotateY(${filteredGyroRoll}deg) rotateZ(${filteredGyroYaw}deg);`;
 
-    // Update hand 3D renderer with orientation
-    // Use stored orientation from playback if available, otherwise use live AHRS
-    const handEuler = {
-        roll: prenorm.euler_roll !== undefined ? prenorm.euler_roll : euler.roll,
-        pitch: prenorm.euler_pitch !== undefined ? prenorm.euler_pitch : euler.pitch,
-        yaw: prenorm.euler_yaw !== undefined ? prenorm.euler_yaw : euler.yaw
-    };
+    // Update hand 3D renderer with orientation using quaternion (avoids gimbal lock)
+    // Priority: stored quaternion from playback > live processing result > live AHRS
+    const handQuaternion = (prenorm as any).orientation_w !== undefined ? {
+        w: (prenorm as any).orientation_w,
+        x: (prenorm as any).orientation_x ?? 0,
+        y: (prenorm as any).orientation_y ?? 0,
+        z: (prenorm as any).orientation_z ?? 0
+    } : decoratedData.orientation_w !== undefined ? {
+        w: decoratedData.orientation_w,
+        x: decoratedData.orientation_x ?? 0,
+        y: decoratedData.orientation_y ?? 0,
+        z: decoratedData.orientation_z ?? 0
+    } : telemetryProcessor.getQuaternion();
 
-    // Update Three.js hand skeleton with orientation
-    if (threeHandSkeleton && threeHandEnabled) {
-        threeHandSkeleton.updateOrientation(handEuler);
+    // Update Three.js hand skeleton with quaternion (gimbal lock free)
+    if (threeHandSkeleton && threeHandEnabled && handQuaternion) {
+        threeHandSkeleton.updateQuaternion(handQuaternion);
     }
+
+    // Keep Euler angles for other uses (cube display, validation panel)
+    const handEuler = {
+        roll: (prenorm as any).euler_roll !== undefined ? (prenorm as any).euler_roll : euler.roll,
+        pitch: (prenorm as any).euler_pitch !== undefined ? (prenorm as any).euler_pitch : euler.pitch,
+        yaw: (prenorm as any).euler_yaw !== undefined ? (prenorm as any).euler_yaw : euler.yaw
+    };
 
     // Update magnetic trajectory with residual field
     if (magTrajectory && magTrajectoryEnabled && decoratedData.residual_mx !== undefined) {
