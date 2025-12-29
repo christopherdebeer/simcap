@@ -26,7 +26,7 @@ import {
     getCalibrationBuffers
 } from './modules/wizard.js';
 import { MagneticTrajectory } from './modules/magnetic-trajectory.js';
-import { ThreeJSHandSkeleton } from './shared/threejs-hand-skeleton.js';
+import { ThreeJSHandSkeleton, type MagSample, type AxisProgress } from './shared/threejs-hand-skeleton.js';
 import { MagneticFingerInference, createMagneticFingerInference } from './gesture-inference.js';
 import type { FingerPrediction, MagneticSample } from './gesture-inference.js';
 import {
@@ -371,6 +371,62 @@ function updateCalibrationConfidenceUI(): void {
             overallEl.style.color = 'var(--danger)';
         }
     }
+
+    // Update magnetometer calibration 3D visualization
+    updateMagCalibrationVis(calState);
+}
+
+/**
+ * Update magnetometer calibration 3D visualization
+ * Shows point cloud, expected sphere, and axis coverage
+ */
+function updateMagCalibrationVis(calState: {
+    autoHardIronEstimate?: { x: number; y: number; z: number };
+    autoHardIronRanges?: { x: number; y: number; z: number };
+}): void {
+    if (!threeHandSkeleton || !threeHandSkeleton.isMagCalibrationEnabled()) return;
+
+    // Get recent magnetometer samples from session data (last 300)
+    // Session data is decorated telemetry with mx_ut, my_ut, mz_ut
+    const recentSamples: MagSample[] = [];
+    const startIdx = Math.max(0, state.sessionData.length - 300);
+    for (let i = startIdx; i < state.sessionData.length; i++) {
+        const sample = state.sessionData[i] as unknown as Record<string, number>;
+        if (sample.mx_ut !== undefined) {
+            recentSamples.push({
+                x: sample.mx_ut,
+                y: sample.my_ut,
+                z: sample.mz_ut
+            });
+        }
+    }
+
+    // Get hard iron offset from calibration state
+    const hardIronOffset: MagSample = calState.autoHardIronEstimate || { x: 0, y: 0, z: 0 };
+
+    // Calculate axis progress
+    // Expected range is 2x magnitude, we want progress toward that
+    const location = state.geomagneticLocation || getDefaultLocation();
+    // Default to 50 µT if no location (typical mid-latitude value)
+    const expectedMag = location
+        ? Math.sqrt(location.horizontal ** 2 + location.vertical ** 2)
+        : 50;
+    const targetRange = expectedMag * 1.5;  // Match the 1.5x threshold from calibration
+
+    const ranges = calState.autoHardIronRanges || { x: 0, y: 0, z: 0 };
+    const axisProgress: AxisProgress = {
+        x: Math.min(1, ranges.x / targetRange),
+        y: Math.min(1, ranges.y / targetRange),
+        z: Math.min(1, ranges.z / targetRange)
+    };
+
+    // Bulk update the visualization
+    threeHandSkeleton.updateMagCalibration({
+        samples: recentSamples,
+        hardIronOffset: hardIronOffset,
+        axisProgress: axisProgress,
+        expectedMagnitude: expectedMag
+    });
 }
 
 /**
@@ -1386,7 +1442,27 @@ function initHandVisualization(): void {
                 yaw: -180
             });
 
-            log('Three.js hand skeleton initialized');
+            // Initialize magnetometer calibration visualization
+            // Get expected magnitude from current location
+            const location = state.geomagneticLocation || getDefaultLocation();
+            // Default to 50 µT if no location (typical mid-latitude value)
+            const expectedMag = location
+                ? Math.sqrt(location.horizontal ** 2 + location.vertical ** 2)
+                : 50;
+
+            threeHandSkeleton.initMagCalibrationVis({
+                enabled: true,
+                maxPoints: 300,
+                pointSize: 4,
+                expectedMagnitude: expectedMag,
+                showExpectedSphere: true,
+                showHardIronMarker: true,
+                showAxisCoverage: true,
+                showPointCloud: true,
+                scale: 0.02  // 50 µT = 1 unit in scene
+            });
+
+            log('Three.js hand skeleton initialized with mag calibration vis');
         } catch (err) {
             console.error('Failed to initialize Three.js hand skeleton:', err);
         }

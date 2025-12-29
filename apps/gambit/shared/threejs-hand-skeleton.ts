@@ -58,6 +58,34 @@ export interface VisualizationOptions {
   showBoneCylinders?: boolean;
   showPuckDevice?: boolean;
   showPuckAxes?: boolean;
+  showMagCalibration?: boolean;
+}
+
+// Magnetometer calibration visualization options
+export interface MagCalibrationVisOptions {
+  enabled?: boolean;
+  maxPoints?: number;           // Max points to display (older points fade)
+  pointSize?: number;           // Size of sample points
+  expectedMagnitude?: number;   // Expected Earth field magnitude (µT)
+  showExpectedSphere?: boolean; // Show wireframe sphere
+  showHardIronMarker?: boolean; // Show center of ellipsoid
+  showAxisCoverage?: boolean;   // Show coverage arcs per axis
+  showPointCloud?: boolean;     // Show magnetometer samples
+  scale?: number;               // Scale factor (µT to scene units)
+}
+
+// Magnetometer sample for visualization
+export interface MagSample {
+  x: number;  // µT
+  y: number;  // µT
+  z: number;  // µT
+}
+
+// Calibration progress per axis
+export interface AxisProgress {
+  x: number;  // 0.0 to 1.0
+  y: number;
+  z: number;
 }
 
 interface BoneConfig {
@@ -165,6 +193,29 @@ export class ThreeJSHandSkeleton {
   private controls: any;
   private northIndicator: any;
   private animationId: number | null;
+
+  // Magnetometer calibration visualization
+  private magCalGroup: any;
+  private magPointCloud: any;
+  private magPointPositions: number[] = [];
+  private magPointColors: number[] = [];
+  private magExpectedSphere: any;
+  private magHardIronMarker: any;
+  private magAxisArcs: { x: any; y: any; z: any } = { x: null, y: null, z: null };
+  private magCalOptions: Required<MagCalibrationVisOptions> = {
+    enabled: false,
+    maxPoints: 500,
+    pointSize: 3,
+    expectedMagnitude: 50,
+    showExpectedSphere: true,
+    showHardIronMarker: true,
+    showAxisCoverage: true,
+    showPointCloud: true,
+    scale: 0.02  // 50 µT = 1 unit in scene
+  };
+  private magSamples: MagSample[] = [];
+  private magHardIronOffset: MagSample = { x: 0, y: 0, z: 0 };
+  private magAxisProgress: AxisProgress = { x: 0, y: 0, z: 0 };
 
   constructor(container: HTMLElement, options: HandSkeletonOptions = {}) {
     if (!THREE) {
@@ -833,6 +884,365 @@ export class ThreeJSHandSkeleton {
         this.container.removeChild(this.renderer.domElement);
       }
     }
+
+    // Dispose mag calibration visualization
+    this._disposeMagCalibrationVis();
+  }
+
+  // =========================================================================
+  // MAGNETOMETER CALIBRATION VISUALIZATION
+  // =========================================================================
+
+  /**
+   * Initialize magnetometer calibration visualization
+   * Creates point cloud, expected sphere, and axis coverage arcs
+   */
+  initMagCalibrationVis(options: MagCalibrationVisOptions = {}): void {
+    // Apply options
+    Object.assign(this.magCalOptions, options);
+    this.magCalOptions.enabled = true;
+
+    // Create container group (fixed in world space, doesn't rotate with hand)
+    this.magCalGroup = new THREE.Group();
+    this.magCalGroup.name = "magCalibration";
+    this.scene.add(this.magCalGroup);
+
+    const scale = this.magCalOptions.scale;
+    const expectedRadius = this.magCalOptions.expectedMagnitude * scale;
+
+    // Create expected sphere (wireframe)
+    if (this.magCalOptions.showExpectedSphere) {
+      const sphereGeometry = new THREE.SphereGeometry(expectedRadius, 24, 16);
+      const sphereMaterial = new THREE.MeshBasicMaterial({
+        color: 0x4488ff,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.3
+      });
+      this.magExpectedSphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+      this.magExpectedSphere.name = "expectedSphere";
+      this.magCalGroup.add(this.magExpectedSphere);
+    }
+
+    // Create hard iron marker (center of ellipsoid)
+    if (this.magCalOptions.showHardIronMarker) {
+      const markerGeometry = new THREE.SphereGeometry(0.03, 8, 8);
+      const markerMaterial = new THREE.MeshPhongMaterial({
+        color: 0xff0000,
+        emissive: 0x880000
+      });
+      this.magHardIronMarker = new THREE.Mesh(markerGeometry, markerMaterial);
+      this.magHardIronMarker.name = "hardIronMarker";
+      this.magCalGroup.add(this.magHardIronMarker);
+    }
+
+    // Create axis coverage arcs (circular progress for each axis)
+    if (this.magCalOptions.showAxisCoverage) {
+      this._createAxisCoverageArcs();
+    }
+
+    // Create point cloud geometry (will be populated with samples)
+    if (this.magCalOptions.showPointCloud) {
+      const pointsGeometry = new THREE.BufferGeometry();
+      const pointsMaterial = new THREE.PointsMaterial({
+        size: this.magCalOptions.pointSize,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.8,
+        sizeAttenuation: true
+      });
+      this.magPointCloud = new THREE.Points(pointsGeometry, pointsMaterial);
+      this.magPointCloud.name = "magPointCloud";
+      this.magCalGroup.add(this.magPointCloud);
+    }
+  }
+
+  /**
+   * Create axis coverage arc indicators
+   * Shows progress as colored arcs around each axis
+   */
+  private _createAxisCoverageArcs(): void {
+    const arcRadius = this.magCalOptions.expectedMagnitude * this.magCalOptions.scale * 1.2;
+    const tubeRadius = 0.015;
+
+    // X-axis arc (red) - rotates around X axis (YZ plane)
+    const xArcGeometry = new THREE.TorusGeometry(arcRadius, tubeRadius, 8, 32, Math.PI * 2);
+    const xArcMaterial = new THREE.MeshPhongMaterial({ color: 0xff4444, transparent: true, opacity: 0.3 });
+    this.magAxisArcs.x = new THREE.Mesh(xArcGeometry, xArcMaterial);
+    this.magAxisArcs.x.rotation.y = Math.PI / 2;  // Align with YZ plane
+    this.magAxisArcs.x.name = "xAxisArc";
+    this.magCalGroup.add(this.magAxisArcs.x);
+
+    // Y-axis arc (green) - rotates around Y axis (XZ plane)
+    const yArcGeometry = new THREE.TorusGeometry(arcRadius, tubeRadius, 8, 32, Math.PI * 2);
+    const yArcMaterial = new THREE.MeshPhongMaterial({ color: 0x44ff44, transparent: true, opacity: 0.3 });
+    this.magAxisArcs.y = new THREE.Mesh(yArcGeometry, yArcMaterial);
+    this.magAxisArcs.y.rotation.x = Math.PI / 2;  // Align with XZ plane
+    this.magAxisArcs.y.name = "yAxisArc";
+    this.magCalGroup.add(this.magAxisArcs.y);
+
+    // Z-axis arc (blue) - rotates around Z axis (XY plane)
+    const zArcGeometry = new THREE.TorusGeometry(arcRadius, tubeRadius, 8, 32, Math.PI * 2);
+    const zArcMaterial = new THREE.MeshPhongMaterial({ color: 0x4444ff, transparent: true, opacity: 0.3 });
+    this.magAxisArcs.z = new THREE.Mesh(zArcGeometry, zArcMaterial);
+    this.magAxisArcs.z.name = "zAxisArc";
+    this.magCalGroup.add(this.magAxisArcs.z);
+  }
+
+  /**
+   * Set magnetometer calibration visualization options
+   */
+  setMagCalibrationOptions(options: Partial<MagCalibrationVisOptions>): void {
+    Object.assign(this.magCalOptions, options);
+
+    // Update expected sphere size if magnitude changed
+    if (options.expectedMagnitude !== undefined && this.magExpectedSphere) {
+      const newRadius = options.expectedMagnitude * this.magCalOptions.scale;
+      this.magExpectedSphere.geometry.dispose();
+      this.magExpectedSphere.geometry = new THREE.SphereGeometry(newRadius, 24, 16);
+    }
+
+    // Update visibility
+    if (this.magCalGroup) {
+      this.magCalGroup.visible = this.magCalOptions.enabled;
+    }
+    if (this.magExpectedSphere) {
+      this.magExpectedSphere.visible = this.magCalOptions.showExpectedSphere;
+    }
+    if (this.magHardIronMarker) {
+      this.magHardIronMarker.visible = this.magCalOptions.showHardIronMarker;
+    }
+    if (this.magPointCloud) {
+      this.magPointCloud.visible = this.magCalOptions.showPointCloud;
+    }
+    for (const arc of Object.values(this.magAxisArcs)) {
+      if (arc) arc.visible = this.magCalOptions.showAxisCoverage;
+    }
+  }
+
+  /**
+   * Add a magnetometer sample to the point cloud
+   * @param sample Raw magnetometer reading in µT
+   * @param hardIronOffset Current hard iron offset estimate in µT
+   */
+  addMagSample(sample: MagSample, hardIronOffset?: MagSample): void {
+    if (!this.magCalOptions.enabled || !this.magPointCloud) return;
+
+    // Update hard iron offset if provided
+    if (hardIronOffset) {
+      this.magHardIronOffset = hardIronOffset;
+    }
+
+    // Center the sample around hard iron offset
+    const centered = {
+      x: sample.x - this.magHardIronOffset.x,
+      y: sample.y - this.magHardIronOffset.y,
+      z: sample.z - this.magHardIronOffset.z
+    };
+
+    // Store sample
+    this.magSamples.push(sample);
+
+    // Trim to max points
+    if (this.magSamples.length > this.magCalOptions.maxPoints) {
+      this.magSamples.shift();
+    }
+
+    // Rebuild point cloud geometry
+    this._updatePointCloud();
+
+    // Update hard iron marker position
+    if (this.magHardIronMarker) {
+      const scale = this.magCalOptions.scale;
+      this.magHardIronMarker.position.set(
+        this.magHardIronOffset.x * scale,
+        this.magHardIronOffset.y * scale,
+        this.magHardIronOffset.z * scale
+      );
+    }
+  }
+
+  /**
+   * Update point cloud geometry from samples
+   */
+  private _updatePointCloud(): void {
+    if (!this.magPointCloud) return;
+
+    const scale = this.magCalOptions.scale;
+    const expectedMag = this.magCalOptions.expectedMagnitude;
+    const positions: number[] = [];
+    const colors: number[] = [];
+
+    for (let i = 0; i < this.magSamples.length; i++) {
+      const sample = this.magSamples[i];
+
+      // Center around hard iron offset
+      const cx = sample.x - this.magHardIronOffset.x;
+      const cy = sample.y - this.magHardIronOffset.y;
+      const cz = sample.z - this.magHardIronOffset.z;
+
+      // Scale to scene units
+      positions.push(cx * scale, cy * scale, cz * scale);
+
+      // Color based on magnitude (green = close to expected, red = far)
+      const mag = Math.sqrt(cx * cx + cy * cy + cz * cz);
+      const magError = Math.abs(mag - expectedMag) / expectedMag;
+      const age = 1 - (i / this.magSamples.length) * 0.5;  // Fade older points
+
+      if (magError < 0.1) {
+        // Good - green
+        colors.push(0.2 * age, 0.9 * age, 0.2 * age);
+      } else if (magError < 0.3) {
+        // OK - yellow
+        colors.push(0.9 * age, 0.9 * age, 0.2 * age);
+      } else {
+        // Bad - red
+        colors.push(0.9 * age, 0.2 * age, 0.2 * age);
+      }
+    }
+
+    const geometry = this.magPointCloud.geometry;
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geometry.attributes.position.needsUpdate = true;
+    geometry.attributes.color.needsUpdate = true;
+  }
+
+  /**
+   * Update axis coverage progress (0.0 to 1.0 for each axis)
+   */
+  updateAxisProgress(progress: AxisProgress): void {
+    this.magAxisProgress = progress;
+
+    // Update arc materials based on progress
+    // Full opacity when complete, partial when in progress
+    if (this.magAxisArcs.x) {
+      const xProgress = Math.min(1, progress.x);
+      (this.magAxisArcs.x.material as any).opacity = 0.3 + xProgress * 0.5;
+      (this.magAxisArcs.x.material as any).color.setHex(xProgress >= 1 ? 0x44ff44 : 0xff4444);
+    }
+    if (this.magAxisArcs.y) {
+      const yProgress = Math.min(1, progress.y);
+      (this.magAxisArcs.y.material as any).opacity = 0.3 + yProgress * 0.5;
+      (this.magAxisArcs.y.material as any).color.setHex(yProgress >= 1 ? 0x44ff44 : 0x44ff44);
+    }
+    if (this.magAxisArcs.z) {
+      const zProgress = Math.min(1, progress.z);
+      (this.magAxisArcs.z.material as any).opacity = 0.3 + zProgress * 0.5;
+      (this.magAxisArcs.z.material as any).color.setHex(zProgress >= 1 ? 0x44ff44 : 0x4444ff);
+    }
+  }
+
+  /**
+   * Bulk update calibration state
+   */
+  updateMagCalibration(state: {
+    samples?: MagSample[];
+    hardIronOffset?: MagSample;
+    axisProgress?: AxisProgress;
+    expectedMagnitude?: number;
+  }): void {
+    if (state.expectedMagnitude !== undefined) {
+      this.setMagCalibrationOptions({ expectedMagnitude: state.expectedMagnitude });
+    }
+
+    if (state.hardIronOffset) {
+      this.magHardIronOffset = state.hardIronOffset;
+      if (this.magHardIronMarker) {
+        const scale = this.magCalOptions.scale;
+        this.magHardIronMarker.position.set(
+          state.hardIronOffset.x * scale,
+          state.hardIronOffset.y * scale,
+          state.hardIronOffset.z * scale
+        );
+      }
+    }
+
+    if (state.samples) {
+      this.magSamples = state.samples.slice(-this.magCalOptions.maxPoints);
+      this._updatePointCloud();
+    }
+
+    if (state.axisProgress) {
+      this.updateAxisProgress(state.axisProgress);
+    }
+  }
+
+  /**
+   * Clear all magnetometer samples
+   */
+  clearMagSamples(): void {
+    this.magSamples = [];
+    if (this.magPointCloud) {
+      const geometry = this.magPointCloud.geometry;
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute([], 3));
+      geometry.setAttribute('color', new THREE.Float32BufferAttribute([], 3));
+    }
+    this.magHardIronOffset = { x: 0, y: 0, z: 0 };
+    this.magAxisProgress = { x: 0, y: 0, z: 0 };
+    this.updateAxisProgress(this.magAxisProgress);
+  }
+
+  /**
+   * Enable/disable magnetometer calibration visualization
+   */
+  setMagCalibrationEnabled(enabled: boolean): void {
+    this.magCalOptions.enabled = enabled;
+    if (this.magCalGroup) {
+      this.magCalGroup.visible = enabled;
+    }
+  }
+
+  /**
+   * Check if mag calibration visualization is enabled
+   */
+  isMagCalibrationEnabled(): boolean {
+    return this.magCalOptions.enabled;
+  }
+
+  /**
+   * Dispose magnetometer calibration visualization
+   */
+  private _disposeMagCalibrationVis(): void {
+    if (this.magPointCloud) {
+      this.magPointCloud.geometry.dispose();
+      (this.magPointCloud.material as any).dispose();
+      if (this.magPointCloud.parent) this.magPointCloud.parent.remove(this.magPointCloud);
+      this.magPointCloud = null;
+    }
+
+    if (this.magExpectedSphere) {
+      this.magExpectedSphere.geometry.dispose();
+      (this.magExpectedSphere.material as any).dispose();
+      if (this.magExpectedSphere.parent) this.magExpectedSphere.parent.remove(this.magExpectedSphere);
+      this.magExpectedSphere = null;
+    }
+
+    if (this.magHardIronMarker) {
+      this.magHardIronMarker.geometry.dispose();
+      (this.magHardIronMarker.material as any).dispose();
+      if (this.magHardIronMarker.parent) this.magHardIronMarker.parent.remove(this.magHardIronMarker);
+      this.magHardIronMarker = null;
+    }
+
+    for (const key of ['x', 'y', 'z'] as const) {
+      const arc = this.magAxisArcs[key];
+      if (arc) {
+        arc.geometry.dispose();
+        arc.material.dispose();
+        if (arc.parent) arc.parent.remove(arc);
+        this.magAxisArcs[key] = null;
+      }
+    }
+
+    if (this.magCalGroup) {
+      if (this.magCalGroup.parent) this.magCalGroup.parent.remove(this.magCalGroup);
+      this.magCalGroup = null;
+    }
+
+    this.magSamples = [];
+    this.magPointPositions = [];
+    this.magPointColors = [];
   }
 }
 
