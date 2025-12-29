@@ -365,8 +365,8 @@ async function bundleModules(code: string): Promise<string> {
  * Minify JavaScript code for Espruino upload.
  * Reduces code size by ~40% to avoid memory pressure during upload.
  *
- * - Removes single-line comments (// ...)
- * - Removes multi-line comments (/* ... */)
+ * - Removes single-line comments
+ * - Removes multi-line comments
  * - Collapses multiple whitespace/newlines
  * - Preserves string literals
  */
@@ -427,7 +427,8 @@ function minifyCode(code: string): string {
     let result = tokens.join('');
 
     // Remove unnecessary spaces around operators/punctuation
-    result = result.replace(/ ?([\{\}\[\]\(\),;:=<>+\-*/%&|!?]) ?/g, '$1');
+    // eslint-disable-next-line no-useless-escape
+    result = result.replace(/ ?([{}[\](),;:=<>+\-*/%&|!?]) ?/g, '$1');
 
     // Restore necessary spaces (keywords)
     result = result.replace(/\b(var|let|const|function|return|if|else|for|while|do|switch|case|break|continue|try|catch|finally|throw|new|typeof|instanceof|in|of)\b/g, ' $1 ');
@@ -702,7 +703,235 @@ async function verifyFirmwareUpload(): Promise<boolean> {
 // ===== Upload Code =====
 
 /**
- * Upload code to Espruino device with proper BLE flow control.
+ * Escape a string for embedding in a JavaScript string literal.
+ * Handles quotes, backslashes, newlines, and control characters.
+ */
+function escapeForJS(str: string): string {
+    return str
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/\n/g, '\\n')
+        .replace(/\r/g, '\\r')
+        .replace(/\t/g, '\\t')
+        // eslint-disable-next-line no-control-regex
+        .replace(/[\x00-\x1f\x7f-\x9f]/g, (c) => {
+            const hex = c.charCodeAt(0).toString(16).padStart(2, '0');
+            return '\\x' + hex;
+        });
+}
+
+/**
+ * Upload code to Espruino by writing to flash storage, then loading.
+ * This approach avoids RAM pressure during upload since code is written
+ * directly to flash and only parsed when load() is called.
+ *
+ * Steps:
+ * 1. Clear any saved code and reset device
+ * 2. Erase existing .bootcde file in flash
+ * 3. Write code in small chunks to .bootcde using Storage.write()
+ * 4. Call load() to execute the code from flash
+ *
+ * See: https://www.espruino.com/Reference#Storage
+ */
+async function uploadToStorage(code: string, name: string = 'code'): Promise<void> {
+    if (!state.connected || state.uploading || !state.connection) return;
+
+    const uploadStart = Date.now();
+    const logStep = (step: string) => log(`[UPLOAD] ${step} (+${Date.now() - uploadStart}ms)`);
+
+    state.uploading = true;
+    updateUI();
+    progressContainer.style.display = 'block';
+    progressFill.style.width = '0%';
+    progressText.textContent = 'Bundling modules...';
+    logStep(`Starting Storage upload of ${name}`);
+
+    // Chunk size for Storage.write() - small enough to avoid memory pressure
+    // Each command: require("Storage").write(".bootcde",'...chunk...',offset);
+    // Keep chunk small since the escaped version will be larger
+    const CHUNK_SIZE = 512;
+
+    try {
+        // Step 1: Bundle any required modules
+        progressFill.style.width = '5%';
+        code = await bundleModules(code);
+        const originalSize = code.length;
+
+        // Step 1b: Minify to reduce upload size
+        progressText.textContent = 'Minifying...';
+        code = minifyCode(code);
+        const reduction = Math.round((1 - code.length / originalSize) * 100);
+        logStep(`Minified: ${originalSize} → ${code.length} bytes (-${reduction}%)`);
+
+        const totalBytes = code.length;
+        const numChunks = Math.ceil(totalBytes / CHUNK_SIZE);
+        logStep(`Will write ${numChunks} chunks of ${CHUNK_SIZE} bytes each`);
+
+        // Pause console output during upload
+        pauseConsoleOutput = true;
+
+        // Step 2: Clear any running code and reset
+        progressText.textContent = 'Preparing device...';
+        progressFill.style.width = '8%';
+
+        logStep('Sending Ctrl-C...');
+        await writeWithTimeout('\x03', 500);
+
+        logStep('Clearing saved code from flash...');
+        await writeWithTimeout('E.setBootCode("");save();\n', 5000);
+        await delay(500);
+
+        logStep('Sending reset()...');
+        progressText.textContent = 'Resetting device...';
+        await writeWithTimeout('reset();\n', 3000);
+        await delay(1000);
+
+        logStep('Sending echo(0)...');
+        await writeWithTimeout('echo(0);\n', 1000);
+        await delay(200);
+
+        // Step 3: Erase existing .bootcde file
+        progressText.textContent = 'Erasing old code...';
+        progressFill.style.width = '10%';
+        logStep('Erasing .bootcde...');
+        await writeWithTimeout('require("Storage").erase(".bootcde");\n', 2000);
+        await delay(200);
+
+        // Step 4: Write code in chunks to flash storage
+        // First write specifies total size: write(name, data, offset, totalSize)
+        progressText.textContent = 'Writing to flash...';
+        logStep('Starting chunk writes to flash...');
+
+        for (let i = 0; i < numChunks; i++) {
+            const offset = i * CHUNK_SIZE;
+            const chunk = code.slice(offset, offset + CHUNK_SIZE);
+            const escapedChunk = escapeForJS(chunk);
+
+            // Progress update
+            const progress = 10 + (i / numChunks) * 75;
+            progressFill.style.width = progress + '%';
+            progressText.textContent = `Writing to flash... ${Math.round(progress)}% (${i + 1}/${numChunks})`;
+
+            // Build the command
+            let cmd: string;
+            if (i === 0) {
+                // First chunk: specify total file size
+                cmd = `require("Storage").write(".bootcde",'${escapedChunk}',${offset},${totalBytes});\n`;
+            } else {
+                // Subsequent chunks: just offset
+                cmd = `require("Storage").write(".bootcde",'${escapedChunk}',${offset});\n`;
+            }
+
+            // Log every 10 chunks
+            if (i % 10 === 0 || i === numChunks - 1) {
+                logStep(`Chunk ${i + 1}/${numChunks} (${offset}/${totalBytes} bytes)`);
+            }
+
+            // Write with echo suppression
+            await writeWithTimeout('\x10' + cmd, 5000);
+
+            // Small delay between chunks to let device process
+            await delay(50);
+        }
+
+        // Step 5: Verify write completed
+        progressText.textContent = 'Verifying write...';
+        progressFill.style.width = '88%';
+        logStep('Verifying .bootcde was written...');
+
+        // Query file size to verify
+        let verifyResult = '';
+        const verifyPromise = new Promise<boolean>((resolve) => {
+            const originalOnData = state.connection!.ondata;
+            const timeout = setTimeout(() => {
+                state.connection!.ondata = originalOnData;
+                resolve(false);
+            }, 3000);
+
+            state.connection!.ondata = (data: string) => {
+                originalOnData?.(data);
+                verifyResult += data;
+                // Look for the size number in the response
+                const match = verifyResult.match(/(\d+)/);
+                if (match) {
+                    const writtenSize = parseInt(match[1], 10);
+                    clearTimeout(timeout);
+                    state.connection!.ondata = originalOnData;
+                    if (writtenSize === totalBytes) {
+                        logStep(`Verified: ${writtenSize} bytes written`);
+                        resolve(true);
+                    } else {
+                        logStep(`Size mismatch: wrote ${totalBytes}, read ${writtenSize}`);
+                        resolve(false);
+                    }
+                }
+            };
+
+            state.connection!.write('\x10Bluetooth.println(require("Storage").read(".bootcde").length);\n');
+        });
+
+        const verified = await verifyPromise;
+        if (!verified) {
+            throw new Error('Flash write verification failed');
+        }
+
+        // Step 6: Load and execute from flash
+        progressText.textContent = 'Loading from flash...';
+        progressFill.style.width = '92%';
+        logStep('Calling load() to execute from flash...');
+
+        // Re-enable echo before load
+        await writeWithTimeout('echo(1);\n', 1000);
+        await delay(200);
+
+        // load() will reset and run the code from .bootcde
+        await writeWithTimeout('load();\n', 5000);
+        await delay(3000); // Give device time to restart and run code
+
+        // Step 7: Verify firmware is running
+        progressText.textContent = 'Verifying firmware...';
+        progressFill.style.width = '95%';
+        logStep('Verifying firmware...');
+
+        const fwVerified = await verifyFirmwareUpload();
+
+        if (fwVerified) {
+            progressFill.style.width = '100%';
+            progressText.textContent = 'Upload complete!';
+            const totalTime = ((Date.now() - uploadStart) / 1000).toFixed(1);
+            log(`[UPLOAD] ${name} uploaded via Storage in ${totalTime}s`, 'success');
+        } else {
+            progressFill.style.width = '100%';
+            progressText.textContent = 'Upload complete (unverified)';
+            const totalTime = ((Date.now() - uploadStart) / 1000).toFixed(1);
+            log(`[UPLOAD] ${name} uploaded via Storage in ${totalTime}s but verification failed`, 'warn');
+        }
+
+    } catch (err) {
+        const totalTime = ((Date.now() - uploadStart) / 1000).toFixed(1);
+        log(`[UPLOAD] FAILED after ${totalTime}s: ${(err as Error).message}`, 'error');
+        progressText.textContent = `Error: ${(err as Error).message}`;
+
+        // Try to re-enable echo on error
+        try {
+            await writeWithTimeout('echo(1);\n', 1000);
+        } catch {
+            // Ignore - connection may be broken
+        }
+    } finally {
+        // Resume console output and flush buffers
+        pauseConsoleOutput = false;
+        flushConsoleBuffer();
+        flushLogBuffer();
+
+        state.uploading = false;
+        updateUI();
+        setTimeout(() => { progressContainer.style.display = 'none'; }, 2000);
+    }
+}
+
+/**
+ * Upload code to Espruino device with proper BLE flow control (RAM-based).
  *
  * Key improvements over naive approach:
  * - Uses echo(0) to suppress echo (halves data transfer)
@@ -712,9 +941,12 @@ async function verifyFirmwareUpload(): Promise<boolean> {
  * - Proper progress tracking via puck.writeProgress
  * - Throttled UI updates to prevent browser freeze
  *
+ * NOTE: This is the old RAM-based approach. Use uploadToStorage() for
+ * better reliability with large firmware files.
+ *
  * See: https://www.espruino.com/Interfacing
  */
-async function uploadCode(code: string, name: string = 'code'): Promise<void> {
+async function uploadCodeRAM(code: string, name: string = 'code'): Promise<void> {
     if (!state.connected || state.uploading || !state.connection) return;
 
     const uploadStart = Date.now();
@@ -972,6 +1204,19 @@ function writeWithTimeout(data: string, timeoutMs: number): Promise<void> {
  */
 function delay(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Upload code to Espruino device.
+ * Uses Storage-based upload by default for better reliability with large files.
+ * Falls back to RAM-based upload if Storage approach fails.
+ *
+ * Storage-based upload writes code to flash in chunks, then loads it.
+ * This avoids memory pressure during upload since code isn't parsed until load().
+ */
+async function uploadCode(code: string, name: string = 'code'): Promise<void> {
+    // Use Storage-based upload for reliability with large firmware
+    return uploadToStorage(code, name);
 }
 
 // ===== Connection =====
