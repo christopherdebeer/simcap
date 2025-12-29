@@ -112,7 +112,7 @@ export class MadgwickAHRS {
     this.beta = options.beta ?? 0.1;
     this.q = { w: 1, x: 0, y: 0, z: 0 };
     this.gyroBias = { x: 0, y: 0, z: 0 };
-    this.biasAlpha = 0.1;  // Increased from 0.001 for faster convergence
+    this.biasAlpha = 0.2;  // Fast convergence: 50 samples → >99% converged
     this.geomagneticRef = options.geomagneticRef ?? null;
     this.magRefNormalized = null;
     this.magTrust = 1.0;

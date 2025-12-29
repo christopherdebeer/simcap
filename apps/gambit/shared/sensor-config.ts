@@ -203,8 +203,12 @@ export function createLowPassFilter(alpha = 0.3): LowPassFilter {
 
 // ===== Calibration Configuration =====
 
-/** Number of stationary samples required before gyro bias calibration */
-export const STATIONARY_SAMPLES_FOR_CALIBRATION = 20;
+/**
+ * Number of stationary samples required before gyro bias calibration.
+ * At 26Hz, 50 samples ≈ 2 seconds of being stationary.
+ * With biasAlpha=0.2, this achieves >99% convergence.
+ */
+export const STATIONARY_SAMPLES_FOR_CALIBRATION = 50;
 
 /** Create gyroscope bias calibration state object */
 export function createGyroBiasState(): GyroBiasState {
