@@ -574,6 +574,52 @@ function queryFirmwareInfo(): void {
     });
 }
 
+// ===== Upload Verification =====
+
+/**
+ * Verify firmware upload by querying getFirmware() and waiting for FW frame response.
+ * Returns true if firmware responds correctly, false otherwise.
+ */
+async function verifyFirmwareUpload(): Promise<boolean> {
+    if (!state.connection) return false;
+
+    return new Promise((resolve) => {
+        let resolved = false;
+        let timeoutId: ReturnType<typeof setTimeout>;
+
+        // Use the wildcard handler to catch the FW frame
+        const verifyHandler = (data: any, type?: string) => {
+            if (!resolved && type === 'FW' && data && (data.id || data.name)) {
+                resolved = true;
+                clearTimeout(timeoutId);
+                log(`[UPLOAD] Verified: ${data.name || data.id} v${data.version || '?'}`, 'success');
+                resolve(true);
+            }
+        };
+
+        // Temporarily register wildcard handler
+        frameParser.on('*', verifyHandler);
+
+        // Timeout after 5 seconds
+        timeoutId = setTimeout(() => {
+            if (!resolved) {
+                resolved = true;
+                log('[UPLOAD] Verification timeout - no firmware response', 'warn');
+                resolve(false);
+            }
+        }, 5000);
+
+        // Query firmware
+        state.connection!.write('\x10if(typeof getFirmware==="function")getFirmware();\n', (err) => {
+            if (err && !resolved) {
+                resolved = true;
+                clearTimeout(timeoutId);
+                resolve(false);
+            }
+        });
+    });
+}
+
 // ===== Upload Code =====
 
 /**
@@ -749,17 +795,37 @@ async function uploadCode(code: string, name: string = 'code'): Promise<void> {
         if (progressRAF) cancelAnimationFrame(progressRAF);
         updateProgressUI();
 
-        // Step 5: Re-enable echo and verify
-        logStep('Upload complete, finalizing...');
-        progressText.textContent = 'Finalizing...';
-        progressFill.style.width = '92%';
-        await delay(500);
-        await writeWithTimeout('echo(1);\n', 1000); // Re-enable echo
+        // Step 5: Wait for code to finish executing
+        // The write callback fires when data is sent, but device still needs time to parse/execute
+        logStep('Code sent, waiting for execution...');
+        progressText.textContent = 'Executing code...';
+        progressFill.style.width = '90%';
+        await delay(3000); // Give device 3s to parse and execute the code
 
-        progressFill.style.width = '100%';
-        progressText.textContent = 'Upload complete!';
-        const totalTime = ((Date.now() - uploadStart) / 1000).toFixed(1);
-        log(`[UPLOAD] ${name} uploaded successfully in ${totalTime}s`, 'success');
+        // Step 6: Re-enable echo
+        logStep('Re-enabling echo...');
+        progressText.textContent = 'Finalizing...';
+        progressFill.style.width = '95%';
+        await writeWithTimeout('echo(1);\n', 1000);
+        await delay(500);
+
+        // Step 7: Verify upload by querying firmware
+        logStep('Verifying firmware...');
+        progressText.textContent = 'Verifying...';
+
+        const verified = await verifyFirmwareUpload();
+
+        if (verified) {
+            progressFill.style.width = '100%';
+            progressText.textContent = 'Upload complete!';
+            const totalTime = ((Date.now() - uploadStart) / 1000).toFixed(1);
+            log(`[UPLOAD] ${name} uploaded and verified in ${totalTime}s`, 'success');
+        } else {
+            progressFill.style.width = '100%';
+            progressText.textContent = 'Upload complete (unverified)';
+            const totalTime = ((Date.now() - uploadStart) / 1000).toFixed(1);
+            log(`[UPLOAD] ${name} uploaded in ${totalTime}s but verification failed - code may be corrupted`, 'warn');
+        }
 
     } catch (err) {
         const totalTime = ((Date.now() - uploadStart) / 1000).toFixed(1);
