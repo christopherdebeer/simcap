@@ -2,8 +2,8 @@
 var FIRMWARE_INFO = {
     id: "GAMBIT",
     name: "GAMBIT IMU Telemetry",
-    version: "0.4.0",
-    features: ["imu", "magnetometer", "environmental", "streaming", "logging", "framing", "gestures", "modes", "context"],
+    version: "0.4.1",
+    features: ["imu", "magnetometer", "environmental", "streaming", "logging", "framing", "gestures", "modes", "context", "mag-degauss"],
     author: "SIMCAP"
 };
 
@@ -116,6 +116,46 @@ function getFirmware() {
     });
     sendFrame('FW', info);
     return info;
+}
+
+// ===== Magnetometer SET/RESET (Degauss) =====
+// The MMC5603NJ magnetometer can develop large null field offsets (up to ±100µT)
+// due to temperature changes or exposure to strong magnetic fields (>32 Gauss).
+// The SET/RESET operation clears residual magnetization and establishes a known
+// reference state. This should be performed at boot and when calibration is requested.
+//
+// MMC5603NJ Register 0x1B (Internal Control 0):
+//   Bit 3: Do_Set   - Triggers SET operation (375ns pulse)
+//   Bit 4: Do_Reset - Triggers RESET operation (375ns pulse)
+//   Bit 5: Auto_SR_en - Enables automatic SET/RESET (handled by Espruino)
+//
+// Note: Wait at least 1ms between SET/RESET and next operation (tSR from datasheet)
+
+function degaussMag() {
+    try {
+        // Perform SET operation (bit 3 = 0x08)
+        Puck.magWr(0x1B, 0x08);
+        // Wait 1ms for SET to complete (tSR)
+        // Note: We can't use blocking delay in Espruino, so we schedule RESET
+    } catch (e) {
+        logError('Mag SET failed: ' + e.message);
+        return false;
+    }
+
+    // Schedule RESET operation after 2ms delay
+    setTimeout(function() {
+        try {
+            // Perform RESET operation (bit 4 = 0x10)
+            Puck.magWr(0x1B, 0x10);
+            logInfo('Magnetometer degaussed (SET/RESET complete)');
+            sendFrame('MAG_DEGAUSS', { success: true, timestamp: Date.now() });
+        } catch (e) {
+            logError('Mag RESET failed: ' + e.message);
+            sendFrame('MAG_DEGAUSS', { success: false, error: e.message });
+        }
+    }, 2);
+
+    return true;
 }
 
 // ===== Sampling Modes =====
@@ -1419,6 +1459,7 @@ function disableWakeOnTouch() {
 // - setBinaryProtocol(enabled) - Enable/disable binary telemetry protocol
 // - enableWakeOnTouch() - Enable wake-on-touch (requires calibration)
 // - disableWakeOnTouch() - Disable wake-on-touch
+// - degaussMag() - Clear magnetometer null field offset via SET/RESET
 
 // ===== Initialization =====
 // IMPORTANT: All setup code is wrapped in functions and called here at the VERY END.
@@ -1432,6 +1473,10 @@ function init() {
     setupButtonHandler();
     setupNFC();
     setupConnectionHandlers();
+
+    // Degauss magnetometer to clear any null field offset
+    // This establishes a known reference state after power-up
+    degaussMag();
 
     // Set Bluetooth appearance and flags for sensor device
     try {

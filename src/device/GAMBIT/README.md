@@ -48,6 +48,7 @@ graph LR
 |---------|----------|
 | v0.3.x | Basic streaming, logging, framing protocol |
 | v0.4.0 | **Button gestures, sampling modes, context awareness, LED patterns** |
+| v0.4.1 | **Magnetometer degauss (SET/RESET) at boot to clear null field offset** |
 
 ## Telemetry Data Structure
 
@@ -187,6 +188,7 @@ PAYLOAD = JSON data
 | `CAL` | Calibration | Device→Host | `calibrateContext()` |
 | `SLEEP` | Sleep mode | Device→Host | Very long press |
 | `CONN` | Connection event | Device→Host | BLE connect |
+| `MAG_DEGAUSS` | Mag SET/RESET result | Device→Host | `degaussMag()` or boot |
 
 ## API Reference
 
@@ -231,6 +233,20 @@ calibrateContext()
 // Show battery via LEDs
 showBatteryLevel()
 ```
+
+### Magnetometer Calibration (v0.4.1+)
+
+```javascript
+// Degauss magnetometer via SET/RESET operation
+// Clears null field offset caused by temperature changes or strong magnetic fields
+degaussMag()
+```
+
+**Note:** The MMC5603NJ magnetometer can develop null field offsets up to ±100µT due to:
+- Temperature changes (0.2-1.0 mG/°C)
+- Exposure to magnetic fields >32 Gauss (disturbing field threshold)
+
+The degauss operation is automatically performed at boot. Call `degaussMag()` manually if you observe magnetometer drift after extended use or exposure to strong magnets.
 
 ### Device Info
 
