@@ -193,6 +193,9 @@ let uploadMethod: 'proxy' | 'github' = 'proxy';
 // Live calibration UI update interval
 let calibrationUIInterval: ReturnType<typeof setInterval> | null = null;
 const CALIBRATION_UI_UPDATE_INTERVAL = 500;
+let lastCalibrationSave = 0;
+const CALIBRATION_SAVE_INTERVAL = 10000;  // Save calibration every 10 seconds when ready
+let wasAutoHardIronReady = false;  // Track transition to ready state
 
 /**
  * Update calibration confidence UI
@@ -374,6 +377,21 @@ function updateCalibrationConfidenceUI(): void {
 
     // Update magnetometer calibration 3D visualization
     updateMagCalibrationVis(calState);
+
+    // Save calibration to localStorage for next session bootstrap
+    const now = performance.now();
+    if (calState.autoHardIronReady) {
+        // Save immediately when auto hard iron first becomes ready
+        if (!wasAutoHardIronReady) {
+            wasAutoHardIronReady = true;
+            magCal.save('gambit_calibration');
+            console.log('[Calibration] Saved auto hard iron calibration for next session bootstrap');
+        } else if (now - lastCalibrationSave > CALIBRATION_SAVE_INTERVAL) {
+            // Also save periodically to capture refined estimates
+            lastCalibrationSave = now;
+            magCal.save('gambit_calibration');
+        }
+    }
 }
 
 /**
