@@ -491,13 +491,32 @@ export class UnifiedMagCalibration {
         if (this._useFullSoftIronMatrix && this._orientationAwareCalReady) {
             // Full 3x3 soft iron matrix from orientation-aware calibration
             corrected = this._autoSoftIronMatrix.multiply(corrected);
-        } else if (this._autoSoftIronEnabled && this._autoHardIronReady) {
-            // Diagonal scale factors from min-max calibration
-            corrected = {
-                x: corrected.x * this._autoSoftIronScale.x,
-                y: corrected.y * this._autoSoftIronScale.y,
-                z: corrected.z * this._autoSoftIronScale.z
-            };
+        } else if (this._autoSoftIronEnabled) {
+            // Progressive soft iron correction using current scale estimates
+            // Start applying at 70% progress, full application at 100%
+            const progress = this.getAutoHardIronProgress();
+
+            if (this._autoHardIronReady) {
+                // Fully ready - use final scale factors
+                corrected = {
+                    x: corrected.x * this._autoSoftIronScale.x,
+                    y: corrected.y * this._autoSoftIronScale.y,
+                    z: corrected.z * this._autoSoftIronScale.z
+                };
+            } else if (progress >= 0.7) {
+                // Progressive application from 70% to 100%
+                // Interpolate between no correction (t=0) and full correction (t=1)
+                const t = (progress - 0.7) / 0.3;  // 0 at 70%, 1 at 100%
+                const currentScale = this.getCurrentSoftIronScale();
+
+                // Lerp from 1.0 (no correction) toward computed scale
+                corrected = {
+                    x: corrected.x * (1 + (currentScale.x - 1) * t),
+                    y: corrected.y * (1 + (currentScale.y - 1) * t),
+                    z: corrected.z * (1 + (currentScale.z - 1) * t)
+                };
+            }
+            // Below 70% - no soft iron correction applied yet
         }
 
         return corrected;
@@ -533,6 +552,43 @@ export class UnifiedMagCalibration {
     }
 
     /**
+     * Get current soft iron scale factors (even if not ready)
+     * Computes scales based on current min-max ranges vs expected Earth field
+     * Returns scale factors that would normalize current ellipsoid toward sphere
+     */
+    getCurrentSoftIronScale(): Vector3 {
+        // Need minimum samples for meaningful range
+        if (this._autoHardIronSampleCount < 50) {
+            return { x: 1, y: 1, z: 1 };
+        }
+
+        const rangeX = this._autoHardIronMax.x - this._autoHardIronMin.x;
+        const rangeY = this._autoHardIronMax.y - this._autoHardIronMin.y;
+        const rangeZ = this._autoHardIronMax.z - this._autoHardIronMin.z;
+
+        // Get expected magnitude from geomagnetic reference, or use 50 µT default
+        let expectedMag = 50.0;
+        if (this._geomagneticRef) {
+            expectedMag = Math.sqrt(
+                this._geomagneticRef.horizontal ** 2 +
+                this._geomagneticRef.vertical ** 2
+            );
+        }
+        const expectedRange = 2 * expectedMag;
+
+        // Compute scale factors, clamping to avoid extreme values
+        const minAllowedRange = 20;  // µT
+        const maxScale = 2.0;  // Prevent extreme scaling
+        const minScale = 0.5;
+
+        return {
+            x: Math.max(minScale, Math.min(maxScale, rangeX > minAllowedRange ? expectedRange / rangeX : 1)),
+            y: Math.max(minScale, Math.min(maxScale, rangeY > minAllowedRange ? expectedRange / rangeY : 1)),
+            z: Math.max(minScale, Math.min(maxScale, rangeZ > minAllowedRange ? expectedRange / rangeZ : 1))
+        };
+    }
+
+    /**
      * Get auto hard iron calibration progress (0.0 to 1.0)
      * Based on min-max range coverage across all axes
      */
@@ -545,13 +601,14 @@ export class UnifiedMagCalibration {
         const rangeZ = this._autoHardIronMax.z - this._autoHardIronMin.z;
 
         // Use geomagnetic reference to set target, or fallback to 80 µT
+        // Note: Using 1.5x to match _updateAutoHardIron threshold
         let rangeThreshold = this._autoHardIronMinRangeRequired;
         if (this._geomagneticRef) {
             const expectedMag = Math.sqrt(
                 this._geomagneticRef.horizontal ** 2 +
                 this._geomagneticRef.vertical ** 2
             );
-            rangeThreshold = Math.max(rangeThreshold, expectedMag * 1.6);
+            rangeThreshold = Math.max(rangeThreshold, expectedMag * 1.5);
         }
 
         // Progress is based on the MINIMUM range (limiting axis)
@@ -865,12 +922,17 @@ export class UnifiedMagCalibration {
         // Log progress periodically
         if (this.debug && this._orientationAwareCalSamples.length % 100 === 0) {
             const hasGeoRef = this._geomagneticRef !== null;
-            const hasAutoHardIron = this._autoHardIronReady;
-            this._log(`[UnifiedMagCal] Orientation-aware cal: ${this._orientationAwareCalSamples.length}/${this._orientationAwareCalMinSamples} samples | geoRef=${hasGeoRef} | autoHardIron=${hasAutoHardIron}`);
+            const progress = this.getAutoHardIronProgress();
+            this._log(`[UnifiedMagCal] Orientation-aware cal: ${this._orientationAwareCalSamples.length}/${this._orientationAwareCalMinSamples} samples | geoRef=${hasGeoRef} | progress=${(progress * 100).toFixed(0)}%`);
         }
 
         // Check if we have enough samples and enough rotation coverage
-        if (this._orientationAwareCalSamples.length >= this._orientationAwareCalMinSamples && this._autoHardIronReady) {
+        // Trigger at 90% progress (not 100%) to avoid edge cases where calibration stalls
+        // The orientation-aware optimization will refine the estimate with the current data
+        const progress = this.getAutoHardIronProgress();
+        const hasEnoughProgress = this._autoHardIronReady || progress >= 0.9;
+
+        if (this._orientationAwareCalSamples.length >= this._orientationAwareCalMinSamples && hasEnoughProgress) {
             if (!this._geomagneticRef) {
                 if (this._orientationAwareCalSamples.length === this._orientationAwareCalMinSamples) {
                     this._log(`[UnifiedMagCal] Orientation-aware cal: waiting for geomagnetic reference`);
@@ -879,7 +941,7 @@ export class UnifiedMagCalibration {
             }
             // Log that we're about to run (always, not just debug)
             if (!this._orientationAwareCalReady && this._orientationAwareCalSamples.length === this._orientationAwareCalMinSamples) {
-                this._log(`[UnifiedMagCal] Orientation-aware cal: triggering with ${this._orientationAwareCalSamples.length} samples`);
+                this._log(`[UnifiedMagCal] Orientation-aware cal: triggering at ${(progress * 100).toFixed(0)}% progress with ${this._orientationAwareCalSamples.length} samples`);
             }
             this._runOrientationAwareCalibration();
         }
@@ -1206,15 +1268,16 @@ export class UnifiedMagCalibration {
 
         // Check if ready: sufficient samples AND sufficient rotation coverage
         // We need at least minRangeRequired on each axis to ensure device was rotated
-        // If we have geomagnetic reference, use 1.6x expected magnitude as threshold
-        // (Earth field of 50 µT should give ~100 µT range, so 80 µT = 80% coverage)
+        // If we have geomagnetic reference, use 1.5x expected magnitude as threshold
+        // (Earth field of 50 µT should give ~100 µT range, so 75 µT = 75% coverage)
+        // Note: Lowered from 1.6x to 1.5x to avoid edge cases where calibration stalls at 99%
         let rangeThreshold = this._autoHardIronMinRangeRequired;
         if (this._geomagneticRef) {
             const expectedMag = Math.sqrt(
                 this._geomagneticRef.horizontal ** 2 +
                 this._geomagneticRef.vertical ** 2
             );
-            rangeThreshold = Math.max(rangeThreshold, expectedMag * 1.6);  // 80% of full swing (2x magnitude)
+            rangeThreshold = Math.max(rangeThreshold, expectedMag * 1.5);  // 75% of full swing (2x magnitude)
         }
 
         const hasEnoughSamples = this._autoHardIronSampleCount >= this._autoHardIronMinSamples;
