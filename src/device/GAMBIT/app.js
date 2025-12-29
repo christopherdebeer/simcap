@@ -782,6 +782,11 @@ function setupButtonHandler() {
 // JSON frames (sendFrame) are only used for control messages
 var useBinaryProtocol = true;  // Always true - binary is canonical
 
+// Pre-allocate binary buffer to avoid GC pressure during streaming
+// Creating new Uint8Array on every sample causes memory fragmentation
+var binaryBuf = new Uint8Array(28);
+var binaryView = new DataView(binaryBuf.buffer);
+
 function setBinaryProtocol(enabled) {
     // Binary is always enabled - this is kept for API compatibility
     if (!enabled) {
@@ -858,36 +863,33 @@ function emitBinary() {
     var gripCode = telemetry.grip === 1 ? 1 : 0;
     var flags = (modeCode << 6) | (ctxCode << 3) | (gripCode << 2) | (hasLight << 1) | hasBatt;
 
-    // Create binary buffer (28 bytes)
-    var buf = new Uint8Array(28);
-    var view = new DataView(buf.buffer);
-
+    // Use pre-allocated binary buffer (28 bytes) to avoid GC pressure
     // Magic header
-    buf[0] = 0xAB;
-    buf[1] = 0xCD;
+    binaryBuf[0] = 0xAB;
+    binaryBuf[1] = 0xCD;
 
     // IMU data (16-bit signed integers, little-endian)
-    view.setInt16(2, ax, true);
-    view.setInt16(4, ay, true);
-    view.setInt16(6, az, true);
-    view.setInt16(8, gx, true);
-    view.setInt16(10, gy, true);
-    view.setInt16(12, gz, true);
-    view.setInt16(14, mx, true);
-    view.setInt16(16, my, true);
-    view.setInt16(18, mz, true);
+    binaryView.setInt16(2, ax, true);
+    binaryView.setInt16(4, ay, true);
+    binaryView.setInt16(6, az, true);
+    binaryView.setInt16(8, gx, true);
+    binaryView.setInt16(10, gy, true);
+    binaryView.setInt16(12, gz, true);
+    binaryView.setInt16(14, mx, true);
+    binaryView.setInt16(16, my, true);
+    binaryView.setInt16(18, mz, true);
 
     // Timestamp (32-bit unsigned, little-endian)
-    view.setUint32(20, t, true);
+    binaryView.setUint32(20, t, true);
 
     // Flags and auxiliary data
-    buf[24] = flags;
-    buf[25] = light;
-    buf[26] = batt;
-    buf[27] = Math.max(0, Math.min(255, temp + 40)); // Offset for signed temp
+    binaryBuf[24] = flags;
+    binaryBuf[25] = light;
+    binaryBuf[26] = batt;
+    binaryBuf[27] = Math.max(0, Math.min(255, temp + 40)); // Offset for signed temp
 
     // Send raw binary
-    Bluetooth.write(buf);
+    Bluetooth.write(binaryBuf);
 
     return {ax:ax, ay:ay, az:az, gx:gx, gy:gy, gz:gz, mx:mx, my:my, mz:mz, t:t};
 }
