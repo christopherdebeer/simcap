@@ -313,8 +313,16 @@ export async function uploadViaProxy(
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    const errorMessage = error.error || error.message || `HTTP ${response.status}`;
+    // Handle non-JSON error responses (e.g., HTML error pages)
+    let errorMessage: string;
+    const responseText = await response.text().catch(() => '');
+    try {
+      const error = JSON.parse(responseText);
+      errorMessage = error.error || error.message || `HTTP ${response.status}`;
+    } catch {
+      // Response wasn't JSON - likely an HTML error page or network issue
+      errorMessage = `HTTP ${response.status}: ${response.statusText || 'Upload failed'}${responseText ? ` - ${responseText.slice(0, 100)}` : ''}`;
+    }
     onProgress?.({ stage: 'error', message: `Upload failed: ${errorMessage}` });
     throw new Error(errorMessage);
   }
