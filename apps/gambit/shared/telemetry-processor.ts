@@ -471,11 +471,15 @@ export class TelemetryProcessor {
                 let residualTrustScale = 1.0;
                 const ahrsResidualMag = this.imuFusion.getMagResidualMagnitude();
                 if (ahrsResidualMag > 0) {
-                    // Scale down trust when residual exceeds 10µT threshold
-                    // At 30µT residual, trust drops to ~0.25 (sqrt falloff)
+                    // Thresholds based on expected Earth field (~50µT)
                     const residualThreshold = 10.0; // µT - below this, full trust
-                    const residualMax = 40.0; // µT - at or above this, minimal trust
-                    if (ahrsResidualMag > residualThreshold) {
+                    const residualMax = 40.0; // µT - at or above this, minimal trust (10%)
+                    const residualCritical = 60.0; // µT - above this, disable mag (use 6-DOF)
+
+                    if (ahrsResidualMag > residualCritical) {
+                        // Residual exceeds Earth field magnitude - mag data is unusable
+                        residualTrustScale = 0.0;
+                    } else if (ahrsResidualMag > residualThreshold) {
                         const excess = Math.min(ahrsResidualMag - residualThreshold, residualMax - residualThreshold);
                         residualTrustScale = 1.0 - (excess / (residualMax - residualThreshold)) * 0.9;
                     }
@@ -484,16 +488,21 @@ export class TelemetryProcessor {
                 // Final effective trust combines calibration progress AND residual quality
                 const finalMagTrust = effectiveMagTrust * residualTrustScale;
 
-                // Set dynamic mag trust on AHRS
-                this.imuFusion.setMagTrust(finalMagTrust);
+                // If residual is critical, fall back to 6-DOF (gyro+accel only)
+                if (residualTrustScale === 0.0) {
+                    this.imuFusion.update(ax_g, ay_g, az_g, gx_dps, gy_dps, gz_dps, dt, true);
+                } else {
+                    // Set dynamic mag trust on AHRS
+                    this.imuFusion.setMagTrust(finalMagTrust);
 
-                // 9-DOF fusion with magnetometer (always, with scaled trust)
-                this.imuFusion.updateWithMag(
-                    ax_g, ay_g, az_g,
-                    gx_dps, gy_dps, gz_dps,
-                    ironCorrected.x, ironCorrected.y, ironCorrected.z,
-                    dt, true, false
-                );
+                    // 9-DOF fusion with magnetometer (always, with scaled trust)
+                    this.imuFusion.updateWithMag(
+                        ax_g, ay_g, az_g,
+                        gx_dps, gy_dps, gz_dps,
+                        ironCorrected.x, ironCorrected.y, ironCorrected.z,
+                        dt, true, false
+                    );
+                }
 
                 // === COMPREHENSIVE DIAGNOSTIC LOGGING ===
                 const calState = this.magCalibration.getState();
@@ -505,8 +514,15 @@ export class TelemetryProcessor {
                 if (!this._loggedMagFusion) {
                     this._logDiagnostic(`[MagDiag] 🚀 Progressive 9-DOF fusion ENABLED from start`);
                     this._logDiagnostic(`[MagDiag] Strategy: scale magTrust by calibration progress AND residual quality`);
+                    this._logDiagnostic(`[MagDiag] Thresholds: full trust <10µT, min trust 40-60µT, 6-DOF fallback >60µT`);
                     this._logDiagnostic(`[MagDiag] Base magTrust: ${this.magTrust}, effective: ${finalMagTrust.toFixed(3)}`);
                     this._loggedMagFusion = true;
+                }
+
+                // Log when falling back to 6-DOF due to extreme residual
+                if (residualTrustScale === 0.0 && !this._loggedMagFusionDisabled) {
+                    this._logDiagnostic(`[MagDiag] ⚠️ 6-DOF FALLBACK: residual ${ahrsResidualMag.toFixed(0)}µT > 60µT threshold`);
+                    this._logDiagnostic(`[MagDiag] Magnetometer data unusable - using gyro+accel only`);
                 }
 
                 // Log progress periodically (every 50 samples during calibration)
