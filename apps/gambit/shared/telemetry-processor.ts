@@ -486,23 +486,21 @@ export class TelemetryProcessor {
                 }
 
                 // Final effective trust combines calibration progress AND residual quality
-                const finalMagTrust = effectiveMagTrust * residualTrustScale;
+                // When residual is critical, use very low trust (0.001) instead of 0 to keep residual updating
+                const minTrust = 0.001; // Minimal trust to keep AHRS residual updating
+                const finalMagTrust = residualTrustScale === 0.0
+                    ? minTrust
+                    : effectiveMagTrust * residualTrustScale;
 
-                // If residual is critical, fall back to 6-DOF (gyro+accel only)
-                if (residualTrustScale === 0.0) {
-                    this.imuFusion.update(ax_g, ay_g, az_g, gx_dps, gy_dps, gz_dps, dt, true);
-                } else {
-                    // Set dynamic mag trust on AHRS
-                    this.imuFusion.setMagTrust(finalMagTrust);
-
-                    // 9-DOF fusion with magnetometer (always, with scaled trust)
-                    this.imuFusion.updateWithMag(
-                        ax_g, ay_g, az_g,
-                        gx_dps, gy_dps, gz_dps,
-                        ironCorrected.x, ironCorrected.y, ironCorrected.z,
-                        dt, true, false
-                    );
-                }
+                // Always use 9-DOF fusion with magnetometer (even with minimal trust)
+                // This ensures AHRS residual keeps updating, allowing recovery when calibration improves
+                this.imuFusion.setMagTrust(finalMagTrust);
+                this.imuFusion.updateWithMag(
+                    ax_g, ay_g, az_g,
+                    gx_dps, gy_dps, gz_dps,
+                    ironCorrected.x, ironCorrected.y, ironCorrected.z,
+                    dt, true, false
+                );
 
                 // === COMPREHENSIVE DIAGNOSTIC LOGGING ===
                 const calState = this.magCalibration.getState();
@@ -519,10 +517,10 @@ export class TelemetryProcessor {
                     this._loggedMagFusion = true;
                 }
 
-                // Log when falling back to 6-DOF due to extreme residual
+                // Log when using minimal trust due to extreme residual
                 if (residualTrustScale === 0.0 && !this._loggedMagFusionDisabled) {
-                    this._logDiagnostic(`[MagDiag] ⚠️ 6-DOF FALLBACK: residual ${ahrsResidualMag.toFixed(0)}µT > 60µT threshold`);
-                    this._logDiagnostic(`[MagDiag] Magnetometer data unusable - using gyro+accel only`);
+                    this._logDiagnostic(`[MagDiag] ⚠️ MINIMAL TRUST: residual ${ahrsResidualMag.toFixed(0)}µT > 60µT threshold`);
+                    this._logDiagnostic(`[MagDiag] Using trust=${minTrust} to keep residual updating (will recover when cal improves)`);
                 }
 
                 // Log progress periodically (every 50 samples during calibration)
