@@ -731,43 +731,45 @@ function handleGesture(gesture) {
 }
 
 // Button handler with gesture recognition
-setWatch(function(e) {
-    var now = Date.now();
+function setupButtonHandler() {
+    setWatch(function(e) {
+        var now = Date.now();
 
-    if (e.state) {
-        // Button pressed
-        pressStart = now;
-    } else {
-        // Button released
-        pressCount++;
-        var holdTime = now - pressStart;
-
-        if (holdTime > VERY_LONG_PRESS) {
-            handleGesture('VERY_LONG_PRESS');
-            tapCount = 0;
-            if (tapTimer) clearTimeout(tapTimer);
-        } else if (holdTime > LONG_PRESS) {
-            handleGesture('LONG_PRESS');
-            tapCount = 0;
-            if (tapTimer) clearTimeout(tapTimer);
+        if (e.state) {
+            // Button pressed
+            pressStart = now;
         } else {
-            // Short press - count as tap
-            tapCount++;
+            // Button released
+            pressCount++;
+            var holdTime = now - pressStart;
 
-            if (tapTimer) clearTimeout(tapTimer);
-            tapTimer = setTimeout(function() {
-                if (tapCount === 1) {
-                    handleGesture('SINGLE_TAP');
-                } else if (tapCount === 2) {
-                    handleGesture('DOUBLE_TAP');
-                } else if (tapCount >= 3) {
-                    handleGesture('TRIPLE_TAP');
-                }
+            if (holdTime > VERY_LONG_PRESS) {
+                handleGesture('VERY_LONG_PRESS');
                 tapCount = 0;
-            }, TAP_WINDOW);
+                if (tapTimer) clearTimeout(tapTimer);
+            } else if (holdTime > LONG_PRESS) {
+                handleGesture('LONG_PRESS');
+                tapCount = 0;
+                if (tapTimer) clearTimeout(tapTimer);
+            } else {
+                // Short press - count as tap
+                tapCount++;
+
+                if (tapTimer) clearTimeout(tapTimer);
+                tapTimer = setTimeout(function() {
+                    if (tapCount === 1) {
+                        handleGesture('SINGLE_TAP');
+                    } else if (tapCount === 2) {
+                        handleGesture('DOUBLE_TAP');
+                    } else if (tapCount >= 3) {
+                        handleGesture('TRIPLE_TAP');
+                    }
+                    tapCount = 0;
+                }, TAP_WINDOW);
+            }
         }
-    }
-}, BTN, { edge: "both", repeat: true, debounce: 30 });
+    }, BTN, { edge: "both", repeat: true, debounce: 30 });
+}
 
 // ===== Binary Protocol =====
 // Binary telemetry format (28 bytes vs ~120 bytes JSON = ~4x smaller)
@@ -1099,23 +1101,25 @@ function stopData() {
 
 
 // ===== NFC Detection =====
-NRF.nfcURL("webble://simcap.parc.land/src/web/GAMBIT/");
-NRF.on('NFCon', function() {
-    logInfo('NFC field detected');
-    digitalPulse(LED2, 1, 500);
-    console.log('nfc_field : [1]');
-    NRF.setAdvertising({
-        0x183e: [1],
-    }, { name: "SIMCAP GAMBIT v" + FIRMWARE_INFO.version });
-});
-NRF.on('NFCoff', function() {
-    logDebug('NFC field removed');
-    digitalPulse(LED2, 1, 200);
-    console.log('nfc_field : [0]');
-    NRF.setAdvertising({
-        0x183e: [0],
-    }, { name: "SIMCAP GAMBIT v" + FIRMWARE_INFO.version });
-});
+function setupNFC() {
+    NRF.nfcURL("webble://simcap.parc.land/src/web/GAMBIT/");
+    NRF.on('NFCon', function() {
+        logInfo('NFC field detected');
+        digitalPulse(LED2, 1, 500);
+        console.log('nfc_field : [1]');
+        NRF.setAdvertising({
+            0x183e: [1],
+        }, { name: "SIMCAP GAMBIT v" + FIRMWARE_INFO.version });
+    });
+    NRF.on('NFCoff', function() {
+        logDebug('NFC field removed');
+        digitalPulse(LED2, 1, 200);
+        console.log('nfc_field : [0]');
+        NRF.setAdvertising({
+            0x183e: [0],
+        }, { name: "SIMCAP GAMBIT v" + FIRMWARE_INFO.version });
+    });
+}
 
 // ===== Connection Quality Monitoring =====
 var connStats = {
@@ -1129,22 +1133,26 @@ var connStats = {
 };
 
 // Track connection events
-NRF.on('connect', function(addr) {
-    connStats.connected = true;
-    connStats.connectTime = Date.now() - bootTime;
-    connStats.lastActivity = connStats.connectTime;
-    if (connStats.packetsSent > 0) {
-        connStats.reconnects++;
-    }
-    logInfo('BLE connected: ' + (addr || 'unknown'));
-    sendFrame('CONN', { connected: true, addr: addr, time: connStats.connectTime });
-});
+function setupConnectionHandlers() {
+    NRF.on('connect', function(addr) {
+        connStats.connected = true;
+        connStats.connectTime = Date.now() - bootTime;
+        connStats.lastActivity = connStats.connectTime;
+        if (connStats.packetsSent > 0) {
+            connStats.reconnects++;
+        }
+        logInfo('BLE connected: ' + (addr || 'unknown'));
+        sendFrame('CONN', { connected: true, addr: addr, time: connStats.connectTime });
+    });
 
-NRF.on('disconnect', function() {
-    connStats.connected = false;
-    logInfo('BLE disconnected after ' + ((Date.now() - bootTime) - (connStats.connectTime || 0)) + 'ms');
-    sendFrame('CONN', { connected: false, time: Date.now() - bootTime });
-});
+    NRF.on('disconnect', function() {
+        connStats.connected = false;
+        logInfo('BLE disconnected after ' + ((Date.now() - bootTime) - (connStats.connectTime || 0)) + 'ms');
+        sendFrame('CONN', { connected: false, time: Date.now() - bootTime });
+        // Stop streaming if client disconnects
+        stopData();
+    });
+}
 
 // Get current RSSI (signal strength)
 function updateRssi() {
@@ -1351,60 +1359,6 @@ function getBeaconStatus() {
     return status;
 }
 
-// ===== Initialization =====
-function init() {
-    logInfo('Boot: GAMBIT v' + FIRMWARE_INFO.version);
-
-    // Set Bluetooth appearance and flags for sensor device
-    try {
-        NRF.setAdvertising([
-            {}, // include original advertising packet
-            [
-                2, 1, 6,           // Bluetooth flags (General Discoverable, BR/EDR Not Supported)
-                3, 0x19, 0x40, 0x05 // Appearance: Generic Sensor (0x0540)
-            ]
-        ], { name: "SIMCAP GAMBIT v" + FIRMWARE_INFO.version });
-        logInfo('BLE advertising configured');
-    } catch (e) {
-        logError('BLE init failed: ' + e.message);
-    }
-
-    // Log initial memory state
-    var mem = process.memory();
-    logDebug('Memory: ' + mem.usage + '/' + mem.total);
-
-    // Log battery level at boot
-    var batt = Puck.getBatteryPercentage();
-    if (batt < 20) {
-        logWarn('Low battery: ' + batt + '%');
-    } else {
-        logInfo('Battery: ' + batt + '%');
-    }
-
-    // Initialize mode
-    setMode('NORMAL');
-
-    console.log("SIMCAP GAMBIT v" + FIRMWARE_INFO.version + " initialized");
-    digitalPulse(LED2, 1, 200); // Green flash to indicate ready
-}
-
-// Initialize after a short delay to allow upload to complete
-// This prevents "Interrupted processing event" errors during upload
-// See: https://www.espruino.com/Troubleshooting
-setTimeout(init, 100);
-
-// ===== BLE Connection Events =====
-NRF.on('connect', function(addr) {
-    logInfo('BLE connected: ' + addr);
-    sendFrame('CONN', { connected: true, addr: addr });
-});
-
-NRF.on('disconnect', function(reason) {
-    logInfo('BLE disconnected: ' + reason);
-    // Stop streaming if client disconnects
-    stopData();
-});
-
 // ===== Wake-on-Touch =====
 var wakeOnTouchEnabled = false;
 var wakeOnTouchInterval = null;
@@ -1463,3 +1417,55 @@ function disableWakeOnTouch() {
 // - setBinaryProtocol(enabled) - Enable/disable binary telemetry protocol
 // - enableWakeOnTouch() - Enable wake-on-touch (requires calibration)
 // - disableWakeOnTouch() - Disable wake-on-touch
+
+// ===== Initialization =====
+// IMPORTANT: All setup code is wrapped in functions and called here at the VERY END.
+// This prevents "Interrupted processing event" errors during upload because
+// Espruino executes code as it's received - any blocking calls mid-file will
+// interrupt the upload of remaining code.
+function init() {
+    logInfo('Boot: GAMBIT v' + FIRMWARE_INFO.version);
+
+    // Setup all handlers first (these are quick)
+    setupButtonHandler();
+    setupNFC();
+    setupConnectionHandlers();
+
+    // Set Bluetooth appearance and flags for sensor device
+    try {
+        NRF.setAdvertising([
+            {}, // include original advertising packet
+            [
+                2, 1, 6,           // Bluetooth flags (General Discoverable, BR/EDR Not Supported)
+                3, 0x19, 0x40, 0x05 // Appearance: Generic Sensor (0x0540)
+            ]
+        ], { name: "SIMCAP GAMBIT v" + FIRMWARE_INFO.version });
+        logInfo('BLE advertising configured');
+    } catch (e) {
+        logError('BLE init failed: ' + e.message);
+    }
+
+    // Log initial memory state
+    var mem = process.memory();
+    logDebug('Memory: ' + mem.usage + '/' + mem.total);
+
+    // Log battery level at boot
+    var batt = Puck.getBatteryPercentage();
+    if (batt < 20) {
+        logWarn('Low battery: ' + batt + '%');
+    } else {
+        logInfo('Battery: ' + batt + '%');
+    }
+
+    // Initialize mode
+    setMode('NORMAL');
+
+    console.log("SIMCAP GAMBIT v" + FIRMWARE_INFO.version + " initialized");
+    digitalPulse(LED2, 1, 200); // Green flash to indicate ready
+}
+
+// ===== FINAL INITIALIZATION =====
+// This MUST be the last line of the file.
+// The setTimeout ensures init() runs AFTER the entire file is parsed and uploaded.
+// See: https://www.espruino.com/Troubleshooting
+setTimeout(init, 100);
