@@ -221,6 +221,10 @@ export class BinaryTelemetryParser {
   private handlers: ((data: BinaryTelemetry) => void)[] = [];
   private lastTimestamp: number = 0;
   private consecutiveRejects: number = 0;
+  // Track previous accelerometer for gravity direction stability check
+  private lastAx: number = 0;
+  private lastAy: number = 0;
+  private lastAz: number = 0;
 
   onBinaryData(data: Uint8Array): void {
     // Append to buffer
@@ -290,28 +294,48 @@ export class BinaryTelemetryParser {
     }
 
     // Parse accelerometer for validation
+    const ax = view.getInt16(2, true);
+    const ay = view.getInt16(4, true);
     const az = view.getInt16(6, true);
 
-    // Validation 2: Accelerometer sanity check
-    // At rest, az should be close to 8192 (1g) or -8192 (inverted)
-    // Allow range of ±4g for motion, but reject extreme values
-    // that suggest corrupt data (like az near 0 at rest is suspicious)
-    // Skip this check if we haven't established baseline yet
+    // Validation 2: Accelerometer magnitude sanity check
+    // At rest or normal motion, magnitude should be ~8192 (1g)
+    // Allow range of 0.5g-2.5g for motion
     if (this.lastTimestamp > 0) {
-      const accelMag = Math.sqrt(
-        view.getInt16(2, true) ** 2 +
-        view.getInt16(4, true) ** 2 +
-        az ** 2
-      );
-      // At rest or normal motion, accel magnitude should be 6000-12000
-      // (0.7g to 1.5g) - reject if way outside this
+      const accelMag = Math.sqrt(ax ** 2 + ay ** 2 + az ** 2);
       if (accelMag < 4000 || accelMag > 20000) {
         return false;
       }
     }
 
-    // Packet looks valid - parse and emit
+    // Validation 3: Gravity direction stability check
+    // The gravity vector shouldn't change by more than ~45° in one sample
+    // At 100Hz, that would require 4500°/s rotation (physically impossible)
+    // This catches byte-misalignment causing axis swaps
+    if (this.lastTimestamp > 0 && this.lastAz !== 0) {
+      // Calculate dot product of current and previous gravity vectors
+      // Normalized: cos(angle) = (a1·a2) / (|a1| * |a2|)
+      const lastMag = Math.sqrt(this.lastAx ** 2 + this.lastAy ** 2 + this.lastAz ** 2);
+      const currMag = Math.sqrt(ax ** 2 + ay ** 2 + az ** 2);
+
+      if (lastMag > 0 && currMag > 0) {
+        const dot = (this.lastAx * ax + this.lastAy * ay + this.lastAz * az);
+        const cosAngle = dot / (lastMag * currMag);
+
+        // cos(45°) ≈ 0.707, cos(60°) ≈ 0.5
+        // Reject if angle change > 60° (very generous threshold)
+        if (cosAngle < 0.5) {
+          // Gravity vector changed too rapidly - likely corrupt/swapped data
+          return false;
+        }
+      }
+    }
+
+    // Packet looks valid - update state and parse
     this.lastTimestamp = t;
+    this.lastAx = ax;
+    this.lastAy = ay;
+    this.lastAz = az;
     this.parsePacket(packet);
     return true;
   }
@@ -381,6 +405,9 @@ export class BinaryTelemetryParser {
     this.buffer = new Uint8Array(0);
     this.lastTimestamp = 0;
     this.consecutiveRejects = 0;
+    this.lastAx = 0;
+    this.lastAy = 0;
+    this.lastAz = 0;
   }
 }
 
