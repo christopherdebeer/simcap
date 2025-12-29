@@ -216,6 +216,191 @@ export interface BinaryTelemetry {
   n: number;
 }
 
+// ===== Quaternion-based Orientation Tracking =====
+// Solves gimbal lock by representing orientation as quaternion (w, x, y, z)
+// Uses complementary filter: integrates gyro for smooth tracking,
+// corrects drift using accelerometer gravity reference
+
+export interface Orientation {
+  // Quaternion representation (no gimbal lock)
+  quaternion: { w: number; x: number; y: number; z: number };
+  // Euler angles in degrees (for display, derived from quaternion)
+  roll: number;
+  pitch: number;
+  yaw: number;
+  // Timestamp
+  t: number;
+}
+
+export class QuaternionTracker {
+  // Quaternion state [w, x, y, z]
+  private q: [number, number, number, number] = [1, 0, 0, 0];
+  private lastTimestamp: number = 0;
+  private initialized: boolean = false;
+
+  // Sensor scale factors (raw to physical units)
+  private static readonly ACCEL_SCALE = 8192.0;  // ±4g: 8192 LSB/g
+  private static readonly GYRO_SCALE = 131.0;    // ±250 dps: 131 LSB/(°/s)
+
+  // Complementary filter weight: 0.98 = trust gyro, 0.02 = correct with accel
+  private static readonly ALPHA = 0.98;
+
+  /**
+   * Update orientation with new sensor data
+   * @param data Raw sensor values (ax, ay, az in LSB; gx, gy, gz in LSB; t in ms)
+   * @returns Current orientation
+   */
+  update(data: { ax: number; ay: number; az: number; gx: number; gy: number; gz: number; t: number }): Orientation {
+    // Convert to physical units
+    const ax = data.ax / QuaternionTracker.ACCEL_SCALE;
+    const ay = data.ay / QuaternionTracker.ACCEL_SCALE;
+    const az = data.az / QuaternionTracker.ACCEL_SCALE;
+    const gx = (data.gx / QuaternionTracker.GYRO_SCALE) * Math.PI / 180; // rad/s
+    const gy = (data.gy / QuaternionTracker.GYRO_SCALE) * Math.PI / 180;
+    const gz = (data.gz / QuaternionTracker.GYRO_SCALE) * Math.PI / 180;
+
+    // Calculate dt
+    let dt = 0.01; // default 10ms
+    if (this.lastTimestamp > 0) {
+      dt = (data.t - this.lastTimestamp) / 1000.0;
+      if (dt <= 0 || dt > 0.1) dt = 0.01;
+    }
+    this.lastTimestamp = data.t;
+
+    // Initialize from accelerometer on first sample
+    if (!this.initialized) {
+      this.q = this.quaternionFromAccel(ax, ay, az);
+      this.initialized = true;
+      return this.getOrientation(data.t);
+    }
+
+    // --- Gyroscope integration ---
+    // Create delta quaternion from angular velocity
+    const halfDt = dt / 2;
+    const dq: [number, number, number, number] = [
+      1,
+      gx * halfDt,
+      gy * halfDt,
+      gz * halfDt
+    ];
+    const dqNorm = this.normalize(dq);
+
+    // Update quaternion: q_new = q * dq
+    this.q = this.multiply(this.q, dqNorm);
+    this.q = this.normalize(this.q);
+
+    // --- Complementary filter: correct with accelerometer ---
+    const qAccel = this.quaternionFromAccel(ax, ay, az);
+
+    // Blend: q = α*q_gyro + (1-α)*q_accel
+    // Use simple linear blend (sufficient for small corrections)
+    const alpha = QuaternionTracker.ALPHA;
+    this.q = [
+      alpha * this.q[0] + (1 - alpha) * qAccel[0],
+      alpha * this.q[1] + (1 - alpha) * qAccel[1],
+      alpha * this.q[2] + (1 - alpha) * qAccel[2],
+      alpha * this.q[3] + (1 - alpha) * qAccel[3]
+    ];
+    this.q = this.normalize(this.q);
+
+    return this.getOrientation(data.t);
+  }
+
+  /**
+   * Get current orientation
+   */
+  getOrientation(t: number = 0): Orientation {
+    const [w, x, y, z] = this.q;
+    const euler = this.quaternionToEuler(this.q);
+
+    return {
+      quaternion: { w, x, y, z },
+      roll: euler.roll,
+      pitch: euler.pitch,
+      yaw: euler.yaw,
+      t
+    };
+  }
+
+  /**
+   * Reset tracker to initial state
+   */
+  reset(): void {
+    this.q = [1, 0, 0, 0];
+    this.lastTimestamp = 0;
+    this.initialized = false;
+  }
+
+  // --- Private helper methods ---
+
+  private normalize(q: [number, number, number, number]): [number, number, number, number] {
+    const norm = Math.sqrt(q[0]*q[0] + q[1]*q[1] + q[2]*q[2] + q[3]*q[3]);
+    if (norm < 0.0001) return [1, 0, 0, 0];
+    return [q[0]/norm, q[1]/norm, q[2]/norm, q[3]/norm];
+  }
+
+  private multiply(q1: [number, number, number, number], q2: [number, number, number, number]): [number, number, number, number] {
+    const [w1, x1, y1, z1] = q1;
+    const [w2, x2, y2, z2] = q2;
+    return [
+      w1*w2 - x1*x2 - y1*y2 - z1*z2,
+      w1*x2 + x1*w2 + y1*z2 - z1*y2,
+      w1*y2 - x1*z2 + y1*w2 + z1*x2,
+      w1*z2 + x1*y2 - y1*x2 + z1*w2
+    ];
+  }
+
+  private quaternionFromAccel(ax: number, ay: number, az: number): [number, number, number, number] {
+    // Normalize accelerometer to get gravity direction
+    const norm = Math.sqrt(ax*ax + ay*ay + az*az);
+    if (norm < 0.01) return [1, 0, 0, 0];
+
+    const gx = ax / norm;
+    const gy = ay / norm;
+    const gz = az / norm;
+
+    // Find quaternion that rotates [0,0,1] to [gx,gy,gz]
+    if (gz > 0.9999) return [1, 0, 0, 0];  // Already aligned
+    if (gz < -0.9999) return [0, 1, 0, 0]; // Upside down
+
+    // Rotation axis = [0,0,1] × [gx,gy,gz] = [-gy, gx, 0]
+    const axisNorm = Math.sqrt(gx*gx + gy*gy);
+    if (axisNorm < 0.0001) return [1, 0, 0, 0];
+
+    const angle = Math.acos(Math.max(-1, Math.min(1, gz)));
+    const sinHalf = Math.sin(angle / 2);
+    const cosHalf = Math.cos(angle / 2);
+
+    return [
+      cosHalf,
+      (-gy / axisNorm) * sinHalf,
+      (gx / axisNorm) * sinHalf,
+      0
+    ];
+  }
+
+  private quaternionToEuler(q: [number, number, number, number]): { roll: number; pitch: number; yaw: number } {
+    const [w, x, y, z] = q;
+
+    // Roll (x-axis rotation)
+    const sinr_cosp = 2 * (w * x + y * z);
+    const cosr_cosp = 1 - 2 * (x * x + y * y);
+    const roll = Math.atan2(sinr_cosp, cosr_cosp) * 180 / Math.PI;
+
+    // Pitch (y-axis rotation) - clamp to avoid NaN
+    let sinp = 2 * (w * y - z * x);
+    sinp = Math.max(-1, Math.min(1, sinp));
+    const pitch = Math.asin(sinp) * 180 / Math.PI;
+
+    // Yaw (z-axis rotation)
+    const siny_cosp = 2 * (w * z + x * y);
+    const cosy_cosp = 1 - 2 * (y * y + z * z);
+    const yaw = Math.atan2(siny_cosp, cosy_cosp) * 180 / Math.PI;
+
+    return { roll, pitch, yaw };
+  }
+}
+
 export class BinaryTelemetryParser {
   private buffer: Uint8Array = new Uint8Array(0);
   private handlers: ((data: BinaryTelemetry) => void)[] = [];
