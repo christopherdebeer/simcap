@@ -1327,8 +1327,12 @@ function updatePoseEstimationFromMag(data: PoseUpdateData): void {
         }
     }
 
-    if (poseEstimationOptions.enableHandOrientation && euler && threeHandSkeleton) {
-        threeHandSkeleton.updateOrientation(euler);
+    // Use quaternion for hand orientation to avoid gimbal lock at steep pitches
+    if (poseEstimationOptions.enableHandOrientation && threeHandSkeleton) {
+        const quaternion = imuFusion.getQuaternion();
+        if (quaternion) {
+            threeHandSkeleton.updateQuaternion(quaternion);
+        }
     }
 
     if (poseState.updateCount % 10 === 0) {
