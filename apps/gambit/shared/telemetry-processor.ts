@@ -466,8 +466,26 @@ export class TelemetryProcessor {
                 const ironCorrected = this.magCalibration.applyProgressiveIronCorrection({ x: mx_ut, y: my_ut, z: mz_ut });
                 const corrMag = Math.sqrt(ironCorrected.x**2 + ironCorrected.y**2 + ironCorrected.z**2);
 
+                // Residual-based trust scaling: reduce trust when AHRS residual is high
+                // High residual indicates poor mag calibration causing drift
+                let residualTrustScale = 1.0;
+                const ahrsResidualMag = this.imuFusion.getMagResidualMagnitude();
+                if (ahrsResidualMag > 0) {
+                    // Scale down trust when residual exceeds 10µT threshold
+                    // At 30µT residual, trust drops to ~0.25 (sqrt falloff)
+                    const residualThreshold = 10.0; // µT - below this, full trust
+                    const residualMax = 40.0; // µT - at or above this, minimal trust
+                    if (ahrsResidualMag > residualThreshold) {
+                        const excess = Math.min(ahrsResidualMag - residualThreshold, residualMax - residualThreshold);
+                        residualTrustScale = 1.0 - (excess / (residualMax - residualThreshold)) * 0.9;
+                    }
+                }
+
+                // Final effective trust combines calibration progress AND residual quality
+                const finalMagTrust = effectiveMagTrust * residualTrustScale;
+
                 // Set dynamic mag trust on AHRS
-                this.imuFusion.setMagTrust(effectiveMagTrust);
+                this.imuFusion.setMagTrust(finalMagTrust);
 
                 // 9-DOF fusion with magnetometer (always, with scaled trust)
                 this.imuFusion.updateWithMag(
@@ -486,8 +504,8 @@ export class TelemetryProcessor {
                 // Log state transition: first time or significant change
                 if (!this._loggedMagFusion) {
                     this._logDiagnostic(`[MagDiag] 🚀 Progressive 9-DOF fusion ENABLED from start`);
-                    this._logDiagnostic(`[MagDiag] Strategy: scale magTrust by calibration progress`);
-                    this._logDiagnostic(`[MagDiag] Base magTrust: ${this.magTrust}, effective: ${effectiveMagTrust.toFixed(3)}`);
+                    this._logDiagnostic(`[MagDiag] Strategy: scale magTrust by calibration progress AND residual quality`);
+                    this._logDiagnostic(`[MagDiag] Base magTrust: ${this.magTrust}, effective: ${finalMagTrust.toFixed(3)}`);
                     this._loggedMagFusion = true;
                 }
 
@@ -495,8 +513,8 @@ export class TelemetryProcessor {
                 if (!calState.autoHardIronReady && calState.autoHardIronSampleCount % 50 === 0 && calState.autoHardIronSampleCount > 0) {
                     const coveragePct = (calProgress * 100).toFixed(0);
                     const autoEstMag = Math.sqrt(autoEst.x**2 + autoEst.y**2 + autoEst.z**2);
-                    this._logDiagnostic(`[MagDiag] Cal progress: ${coveragePct}% | trust: ${effectiveMagTrust.toFixed(2)} | ranges: [${ranges.x.toFixed(0)}, ${ranges.y.toFixed(0)}, ${ranges.z.toFixed(0)}] µT`);
-                    this._logDiagnostic(`[MagDiag]   offset: [${autoEst.x.toFixed(1)}, ${autoEst.y.toFixed(1)}, ${autoEst.z.toFixed(1)}] µT (|${autoEstMag.toFixed(1)}|) | corrMag: ${corrMag.toFixed(1)} µT | rawMag: ${rawMag.toFixed(1)} µT`);
+                    this._logDiagnostic(`[MagDiag] Cal progress: ${coveragePct}% | trust: ${finalMagTrust.toFixed(2)} (resScale=${residualTrustScale.toFixed(2)}) | ranges: [${ranges.x.toFixed(0)}, ${ranges.y.toFixed(0)}, ${ranges.z.toFixed(0)}] µT`);
+                    this._logDiagnostic(`[MagDiag]   offset: [${autoEst.x.toFixed(1)}, ${autoEst.y.toFixed(1)}, ${autoEst.z.toFixed(1)}] µT (|${autoEstMag.toFixed(1)}|) | corrMag: ${corrMag.toFixed(1)} µT | ahrsRes: ${ahrsResidualMag.toFixed(1)} µT`);
                 }
 
                 // Log when calibration reaches 100%
