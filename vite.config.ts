@@ -129,12 +129,13 @@ export default defineConfig({
     // Build with: npm run build:firmware (runs automatically in npm run build)
     viteStaticCopy({
       targets: [
-        // Copy minified firmware from dist/firmware/ (built by build-firmware.ts)
+        // Copy minified firmware from .build/firmware/ (built by build-firmware.ts)
+        // Uses .build/ to avoid Vite clearing dist/ before copying
         {
-          src: 'dist/firmware/**/app.min.js',
+          src: '.build/firmware/**/app.min.js',
           dest: 'firmware',
           rename: (_name, _ext, srcPath) => {
-            // dist/firmware/GAMBIT/app.min.js -> firmware/GAMBIT/app.min.js
+            // .build/firmware/GAMBIT/app.min.js -> firmware/GAMBIT/app.min.js
             const parts = srcPath.split('/');
             const firmwareIdx = parts.indexOf('firmware');
             if (firmwareIdx >= 0 && parts.length > firmwareIdx + 1) {
