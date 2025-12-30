@@ -21,6 +21,9 @@ data/GAMBIT/visualizations/
 # Build output
 dist/
 
+# Espruino module cache (downloaded during firmware build)
+node_modules/.cache/espruino-modules/
+
 .env.local
 
 # Git worktrees for data and images branches

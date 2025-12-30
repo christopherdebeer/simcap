@@ -125,14 +125,29 @@ export default defineConfig({
   // Plugins
   plugins: [
     apiPlugin(),
-    // Copy firmware files to dist for runtime loading
+    // Copy pre-built firmware files to dist for runtime loading
+    // Build with: npm run build:firmware (runs automatically in npm run build)
     viteStaticCopy({
       targets: [
+        // Copy minified firmware from dist/firmware/ (built by build-firmware.ts)
+        {
+          src: 'dist/firmware/**/app.min.js',
+          dest: 'firmware',
+          rename: (_name, _ext, srcPath) => {
+            // dist/firmware/GAMBIT/app.min.js -> firmware/GAMBIT/app.min.js
+            const parts = srcPath.split('/');
+            const firmwareIdx = parts.indexOf('firmware');
+            if (firmwareIdx >= 0 && parts.length > firmwareIdx + 1) {
+              return parts.slice(firmwareIdx + 1).join('/');
+            }
+            return srcPath;
+          }
+        },
+        // Also copy raw source for development/debugging
         {
           src: 'src/device/**/app.js',
           dest: 'src/device',
           rename: (_name, _ext, srcPath) => {
-            // Preserve directory structure: src/device/GAMBIT/app.js -> src/device/GAMBIT/app.js
             const parts = srcPath.split('/');
             const deviceIdx = parts.indexOf('device');
             if (deviceIdx >= 0 && parts.length > deviceIdx + 1) {
