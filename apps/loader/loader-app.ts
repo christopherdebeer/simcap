@@ -1,14 +1,36 @@
 /**
  * SIMCAP Firmware Loader Application
  * Upload firmware to Espruino Puck.js devices via WebBLE
+ *
+ * Features:
+ * - Pre-built minified firmware loading (from build-firmware.ts)
+ * - Fault-tolerant uploads with chunk validation and retry
+ * - Module bundling for Espruino libraries
+ * - Progress tracking with detailed diagnostics
  */
+
+import {
+    createUploadState,
+    getNextChunk,
+    markChunkVerified,
+    markChunkFailed,
+    getUploadProgress,
+    getUploadStats,
+    formatUploadStats,
+    withRetry,
+    sleep,
+    escapeForJS,
+    xorChecksum,
+    type UploadState,
+} from './upload-utils.js';
 
 // ===== Type Definitions =====
 
 interface FirmwareDefinition {
     name: string;
     description: string;
-    path: string;
+    path: string;           // Source path (for development/debugging)
+    minifiedPath: string;   // Pre-built minified path (for production)
     size: string;
 }
 
@@ -60,27 +82,34 @@ const FIRMWARE: Record<string, FirmwareDefinition> = {
         name: "GAMBIT",
         description: "9-DoF IMU telemetry for ML data collection",
         path: "/src/device/GAMBIT/app.js",
-        size: "~4 KB"
+        minifiedPath: "/firmware/GAMBIT/app.min.js",
+        size: "~46 KB (source) / ~27 KB (minified)"
     },
     mouse: {
         name: "MOUSE",
         description: "BLE HID Mouse - tilt to move cursor",
         path: "/src/device/MOUSE/app.js",
-        size: "~3 KB"
+        minifiedPath: "/firmware/MOUSE/app.min.js",
+        size: "~6 KB"
     },
     keyboard: {
         name: "KEYBOARD",
         description: "BLE HID Keyboard - macros & gestures",
         path: "/src/device/KEYBOARD/app.js",
-        size: "~5 KB"
+        minifiedPath: "/firmware/KEYBOARD/app.min.js",
+        size: "~9 KB"
     },
     bae: {
         name: "BAE",
         description: "Bluetooth Advertise Everything (reference)",
         path: "/src/device/BAE/app.js",
-        size: "~2 KB"
+        minifiedPath: "/firmware/BAE/app.min.js",
+        size: "~4 KB"
     }
 };
+
+// Prefer minified firmware in production, fall back to source
+const USE_MINIFIED_FIRMWARE = true;
 
 // ===== State =====
 
@@ -702,23 +731,7 @@ async function verifyFirmwareUpload(): Promise<boolean> {
 
 // ===== Upload Code =====
 
-/**
- * Escape a string for embedding in a JavaScript string literal.
- * Handles quotes, backslashes, newlines, and control characters.
- */
-function escapeForJS(str: string): string {
-    return str
-        .replace(/\\/g, '\\\\')
-        .replace(/'/g, "\\'")
-        .replace(/\n/g, '\\n')
-        .replace(/\r/g, '\\r')
-        .replace(/\t/g, '\\t')
-        // eslint-disable-next-line no-control-regex
-        .replace(/[\x00-\x1f\x7f-\x9f]/g, (c) => {
-            const hex = c.charCodeAt(0).toString(16).padStart(2, '0');
-            return '\\x' + hex;
-        });
-}
+// Note: escapeForJS is now imported from upload-utils.ts
 
 /**
  * Upload code to Espruino by writing to flash storage, then loading.
@@ -733,7 +746,7 @@ function escapeForJS(str: string): string {
  *
  * See: https://www.espruino.com/Reference#Storage
  */
-async function uploadToStorage(code: string, name: string = 'code'): Promise<void> {
+async function uploadToStorage(code: string, name: string = 'code', isPreMinified: boolean = false): Promise<void> {
     if (!state.connected || state.uploading || !state.connection) return;
 
     const uploadStart = Date.now();
@@ -743,28 +756,42 @@ async function uploadToStorage(code: string, name: string = 'code'): Promise<voi
     updateUI();
     progressContainer.style.display = 'block';
     progressFill.style.width = '0%';
-    progressText.textContent = 'Bundling modules...';
-    logStep(`Starting Storage upload of ${name}`);
+    progressText.textContent = 'Preparing...';
+    logStep(`Starting Storage upload of ${name}${isPreMinified ? ' (pre-minified)' : ''}`);
 
     // Chunk size for Storage.write() - small enough to avoid memory pressure
     // Each command: require("Storage").write(".bootcde",'...chunk...',offset);
     // Keep chunk small since the escaped version will be larger
     const CHUNK_SIZE = 512;
+    const MAX_RETRIES_PER_CHUNK = 3;
+    const MAX_CONSECUTIVE_FAILURES = 5;
+
+    // Track upload state for fault tolerance
+    let uploadState: UploadState | null = null;
 
     try {
-        // Step 1: Bundle any required modules
+        // Step 1: Bundle any required modules (only if not pre-minified)
         progressFill.style.width = '5%';
-        code = await bundleModules(code);
+        if (!isPreMinified) {
+            progressText.textContent = 'Bundling modules...';
+            code = await bundleModules(code);
+        }
         const originalSize = code.length;
 
-        // Step 1b: Minify to reduce upload size
-        progressText.textContent = 'Minifying...';
-        code = minifyCode(code);
-        const reduction = Math.round((1 - code.length / originalSize) * 100);
-        logStep(`Minified: ${originalSize} → ${code.length} bytes (-${reduction}%)`);
+        // Step 1b: Minify to reduce upload size (only if not pre-minified)
+        if (!isPreMinified) {
+            progressText.textContent = 'Minifying...';
+            code = minifyCode(code);
+            const reduction = Math.round((1 - code.length / originalSize) * 100);
+            logStep(`Minified: ${originalSize} → ${code.length} bytes (-${reduction}%)`);
+        } else {
+            logStep(`Using pre-minified code: ${code.length} bytes`);
+        }
 
-        const totalBytes = code.length;
-        const numChunks = Math.ceil(totalBytes / CHUNK_SIZE);
+        // Create upload state for fault-tolerant chunked upload
+        uploadState = createUploadState(name, code, CHUNK_SIZE, MAX_RETRIES_PER_CHUNK);
+        const totalBytes = uploadState.totalBytes;
+        const numChunks = uploadState.chunks.length;
         logStep(`Will write ${numChunks} chunks of ${CHUNK_SIZE} bytes each`);
 
         // Pause console output during upload
@@ -773,70 +800,119 @@ async function uploadToStorage(code: string, name: string = 'code'): Promise<voi
         // Step 2: Clear any running code and reset
         progressText.textContent = 'Preparing device...';
         progressFill.style.width = '8%';
+        uploadState.phase = 'preparing';
 
         logStep('Sending Ctrl-C...');
         await writeWithTimeout('\x03', 500);
 
         logStep('Clearing saved code from flash...');
         await writeWithTimeout('E.setBootCode("");save();\n', 5000);
-        await delay(500);
+        await sleep(500);
 
         logStep('Sending reset()...');
         progressText.textContent = 'Resetting device...';
         await writeWithTimeout('reset();\n', 3000);
-        await delay(1000);
+        await sleep(1000);
 
         logStep('Sending echo(0)...');
         await writeWithTimeout('echo(0);\n', 1000);
-        await delay(200);
+        await sleep(200);
 
         // Step 3: Erase existing .bootcde file
         progressText.textContent = 'Erasing old code...';
         progressFill.style.width = '10%';
         logStep('Erasing .bootcde...');
         await writeWithTimeout('require("Storage").erase(".bootcde");\n', 2000);
-        await delay(200);
+        await sleep(200);
 
-        // Step 4: Write code in chunks to flash storage
-        // First write specifies total size: write(name, data, offset, totalSize)
+        // Step 4: Write code in chunks to flash storage with fault tolerance
         progressText.textContent = 'Writing to flash...';
-        logStep('Starting chunk writes to flash...');
+        logStep('Starting fault-tolerant chunk writes to flash...');
+        uploadState.phase = 'uploading';
 
-        for (let i = 0; i < numChunks; i++) {
-            const offset = i * CHUNK_SIZE;
-            const chunk = code.slice(offset, offset + CHUNK_SIZE);
-            const escapedChunk = escapeForJS(chunk);
+        let chunk = getNextChunk(uploadState);
+        while (chunk !== null) {
+            const chunkData = code.slice(chunk.offset, chunk.offset + chunk.length);
+            const escapedChunk = escapeForJS(chunkData);
 
             // Progress update
-            const progress = 10 + (i / numChunks) * 75;
+            const progress = 10 + (getUploadProgress(uploadState) * 0.75);
             progressFill.style.width = progress + '%';
-            progressText.textContent = `Writing to flash... ${Math.round(progress)}% (${i + 1}/${numChunks})`;
+
+            const stats = getUploadStats(uploadState);
+            progressText.textContent = `Writing to flash... ${formatUploadStats(stats)}`;
 
             // Build the command
             let cmd: string;
-            if (i === 0) {
+            if (chunk.index === 0) {
                 // First chunk: specify total file size
-                cmd = `require("Storage").write(".bootcde",'${escapedChunk}',${offset},${totalBytes});\n`;
+                cmd = `require("Storage").write(".bootcde",'${escapedChunk}',${chunk.offset},${totalBytes});\n`;
             } else {
                 // Subsequent chunks: just offset
-                cmd = `require("Storage").write(".bootcde",'${escapedChunk}',${offset});\n`;
+                cmd = `require("Storage").write(".bootcde",'${escapedChunk}',${chunk.offset});\n`;
             }
 
-            // Log every 10 chunks
-            if (i % 10 === 0 || i === numChunks - 1) {
-                logStep(`Chunk ${i + 1}/${numChunks} (${offset}/${totalBytes} bytes)`);
+            // Log every 10 chunks or on retry
+            if (chunk.index % 10 === 0 || chunk.index === numChunks - 1 || chunk.retries > 0) {
+                const retryInfo = chunk.retries > 0 ? ` (retry ${chunk.retries})` : '';
+                logStep(`Chunk ${chunk.index + 1}/${numChunks} (${chunk.offset}/${totalBytes} bytes)${retryInfo}`);
             }
 
-            // Write with echo suppression
-            await writeWithTimeout('\x10' + cmd, 5000);
+            try {
+                // Write chunk with retry logic
+                await withRetry(
+                    async () => {
+                        await writeWithTimeout('\x10' + cmd, 5000);
+                    },
+                    {
+                        maxRetries: 2,
+                        initialDelayMs: 100,
+                        onRetry: (attempt, delay) => {
+                            logStep(`Chunk ${chunk!.index + 1} write retry ${attempt} (waiting ${delay}ms)`);
+                        }
+                    }
+                );
+
+                // Verify chunk with XOR checksum (periodically, not every chunk for speed)
+                const shouldVerify = chunk.retries > 0 || chunk.index % 20 === 0 || chunk.index === numChunks - 1;
+                if (shouldVerify) {
+                    const verified = await verifyChunk(chunk.offset, chunk.length, chunkData);
+                    if (!verified) {
+                        throw new Error(`Chunk ${chunk.index + 1} verification failed`);
+                    }
+                }
+
+                // Mark chunk as verified
+                markChunkVerified(uploadState, chunk.index);
+                uploadState.bytesWritten += chunk.length;
+
+            } catch (err) {
+                // Mark chunk as failed and check if we should retry
+                const shouldRetry = markChunkFailed(uploadState, chunk.index);
+
+                if (!shouldRetry) {
+                    throw new Error(`Chunk ${chunk.index + 1} failed after ${MAX_RETRIES_PER_CHUNK} retries: ${(err as Error).message}`);
+                }
+
+                if (uploadState.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+                    throw new Error(`Too many consecutive failures (${uploadState.consecutiveFailures}), aborting upload`);
+                }
+
+                // Log warning and continue to next iteration (will retry this chunk)
+                logStep(`Chunk ${chunk.index + 1} failed, will retry: ${(err as Error).message}`);
+            }
 
             // Small delay between chunks to let device process
-            await delay(50);
+            await sleep(50);
+
+            // Get next chunk (may be same chunk if it needs retry, or next unverified chunk)
+            chunk = getNextChunk(uploadState);
         }
 
         // Step 5: Verify write completed
         progressText.textContent = 'Verifying write...';
         progressFill.style.width = '88%';
+        uploadState.phase = 'verifying';
         logStep('Verifying .bootcde was written...');
 
         // Query file size to verify
@@ -878,15 +954,16 @@ async function uploadToStorage(code: string, name: string = 'code'): Promise<voi
         // Step 6: Load and execute from flash
         progressText.textContent = 'Loading from flash...';
         progressFill.style.width = '92%';
+        uploadState.phase = 'executing';
         logStep('Calling load() to execute from flash...');
 
         // Re-enable echo before load
         await writeWithTimeout('echo(1);\n', 1000);
-        await delay(200);
+        await sleep(200);
 
         // load() will reset and run the code from .bootcde
         await writeWithTimeout('load();\n', 5000);
-        await delay(3000); // Give device time to restart and run code
+        await sleep(3000); // Give device time to restart and run code
 
         // Step 7: Verify firmware is running
         progressText.textContent = 'Verifying firmware...';
@@ -894,12 +971,15 @@ async function uploadToStorage(code: string, name: string = 'code'): Promise<voi
         logStep('Verifying firmware...');
 
         const fwVerified = await verifyFirmwareUpload();
+        uploadState.phase = fwVerified ? 'complete' : 'failed';
 
+        // Log final stats
+        const finalStats = getUploadStats(uploadState);
         if (fwVerified) {
             progressFill.style.width = '100%';
             progressText.textContent = 'Upload complete!';
             const totalTime = ((Date.now() - uploadStart) / 1000).toFixed(1);
-            log(`[UPLOAD] ${name} uploaded via Storage in ${totalTime}s`, 'success');
+            log(`[UPLOAD] ${name} uploaded via Storage in ${totalTime}s (${finalStats.totalRetries} retries)`, 'success');
         } else {
             progressFill.style.width = '100%';
             progressText.textContent = 'Upload complete (unverified)';
@@ -909,8 +989,14 @@ async function uploadToStorage(code: string, name: string = 'code'): Promise<voi
 
     } catch (err) {
         const totalTime = ((Date.now() - uploadStart) / 1000).toFixed(1);
-        log(`[UPLOAD] FAILED after ${totalTime}s: ${(err as Error).message}`, 'error');
+        const retryInfo = uploadState ? ` (${uploadState.totalRetries} retries)` : '';
+        log(`[UPLOAD] FAILED after ${totalTime}s${retryInfo}: ${(err as Error).message}`, 'error');
         progressText.textContent = `Error: ${(err as Error).message}`;
+
+        if (uploadState) {
+            uploadState.phase = 'failed';
+            uploadState.error = (err as Error).message;
+        }
 
         // Try to re-enable echo on error
         try {
@@ -1207,16 +1293,58 @@ function delay(ms: number): Promise<void> {
 }
 
 /**
+ * Verify a chunk was written correctly using XOR checksum
+ * Reads the chunk from device Storage and compares checksum
+ */
+async function verifyChunk(offset: number, length: number, expectedData: string): Promise<boolean> {
+    if (!state.connection) return false;
+
+    const expectedChecksum = xorChecksum(expectedData);
+
+    return new Promise<boolean>((resolve) => {
+        const originalOnData = state.connection!.ondata;
+        let responseBuffer = '';
+
+        const timeout = setTimeout(() => {
+            state.connection!.ondata = originalOnData;
+            resolve(false); // Timeout = verification failed
+        }, 2000);
+
+        state.connection!.ondata = (data: string) => {
+            originalOnData?.(data);
+            responseBuffer += data;
+
+            // Look for the checksum number in the response
+            const match = responseBuffer.match(/=(\d+)/);
+            if (match) {
+                const deviceChecksum = parseInt(match[1], 10);
+                clearTimeout(timeout);
+                state.connection!.ondata = originalOnData;
+                resolve(deviceChecksum === expectedChecksum);
+            }
+        };
+
+        // Send verification command - reads chunk and computes XOR checksum
+        const verifyCmd = `\x10Bluetooth.println("="+(function(){var d=require("Storage").read(".bootcde",${offset},${length});var c=0;for(var i=0;i<d.length;i++)c^=d.charCodeAt(i);return c;})());\n`;
+        state.connection!.write(verifyCmd);
+    });
+}
+
+/**
  * Upload code to Espruino device.
  * Uses Storage-based upload by default for better reliability with large files.
  * Falls back to RAM-based upload if Storage approach fails.
  *
  * Storage-based upload writes code to flash in chunks, then loads it.
  * This avoids memory pressure during upload since code isn't parsed until load().
+ *
+ * @param code - The JavaScript code to upload
+ * @param name - Display name for the firmware
+ * @param isPreMinified - If true, skip client-side minification (already done at build time)
  */
-async function uploadCode(code: string, name: string = 'code'): Promise<void> {
+async function uploadCode(code: string, name: string = 'code', isPreMinified: boolean = false): Promise<void> {
     // Use Storage-based upload for reliability with large firmware
-    return uploadToStorage(code, name);
+    return uploadToStorage(code, name, isPreMinified);
 }
 
 // ===== Connection =====
@@ -1378,10 +1506,35 @@ function setupEventListeners(): void {
     uploadBtn.addEventListener('click', async () => {
         if (!state.selectedFirmware) return;
         const fw = FIRMWARE[state.selectedFirmware];
+
         try {
-            const response = await fetch(fw.path);
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            await uploadCode(await response.text(), fw.name);
+            let code: string;
+            let usedMinified = false;
+
+            // Try minified firmware first (pre-built, faster upload)
+            if (USE_MINIFIED_FIRMWARE) {
+                try {
+                    const minResponse = await fetch(fw.minifiedPath);
+                    if (minResponse.ok) {
+                        code = await minResponse.text();
+                        usedMinified = true;
+                        log(`Using pre-minified firmware (${(code.length / 1024).toFixed(1)} KB)`, 'info');
+                    } else {
+                        throw new Error('Minified not available');
+                    }
+                } catch {
+                    log('Pre-minified firmware not found, using source...', 'warn');
+                    const response = await fetch(fw.path);
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    code = await response.text();
+                }
+            } else {
+                const response = await fetch(fw.path);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                code = await response.text();
+            }
+
+            await uploadCode(code, fw.name, usedMinified);
         } catch (err) {
             log(`Failed to fetch firmware: ${(err as Error).message}`, 'error');
         }
