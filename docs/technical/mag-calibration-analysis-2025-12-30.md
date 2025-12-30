@@ -155,12 +155,56 @@ if (hRatio > 0.8 || hRatio < 0.1) {
 const maxIterations = 200;  // Was 50
 ```
 
-### 4. Use scipy least_squares approach (OPTIONAL)
+### 4. Replace Gradient Descent with Levenberg-Marquardt (HIGH PRIORITY)
 
-The Python analysis achieved 12.1µT residual using `scipy.optimize.least_squares`. Consider:
-- Levenberg-Marquardt algorithm
-- Analytical Jacobian instead of numerical gradients
-- Trust-region approach
+**Validation across 22 sessions showed:**
+- Epsilon fix alone: Mean residual 19.2 → 19.3 µT (no improvement)
+- Scipy least_squares: Mean residual **3.5 µT** (5-6x better!)
+
+The gradient descent with numerical gradients gets stuck in local minima. Need to:
+- Implement Levenberg-Marquardt algorithm
+- Or use trust-region method
+- Consider analytical Jacobian for efficiency
+
+```typescript
+// Pseudo-code for LM approach
+function levenbergMarquardt(samples, initialParams) {
+  let lambda = 0.01;  // Damping factor
+  let params = initialParams;
+
+  for (let iter = 0; iter < maxIter; iter++) {
+    const J = computeJacobian(samples, params);  // Analytical or numerical
+    const r = computeResiduals(samples, params);
+
+    // LM update: (J^T J + λI)^(-1) J^T r
+    const H = J.T @ J + lambda * I;
+    const delta = solve(H, J.T @ r);
+
+    const newParams = params - delta;
+    const newResidual = computeResiduals(samples, newParams);
+
+    if (norm(newResidual) < norm(r)) {
+      params = newParams;
+      lambda /= 10;  // Reduce damping
+    } else {
+      lambda *= 10;  // Increase damping
+    }
+  }
+  return params;
+}
+```
+
+## Validation Results
+
+Tested proposed fixes on 22 sessions:
+
+| Metric | Current | Proposed (epsilon fix) | Scipy LM |
+|--------|---------|------------------------|----------|
+| Mean Residual | 19.2 µT | 19.3 µT | **3.5 µT** |
+| Median Residual | 20.8 µT | 20.7 µT | **3.2 µT** |
+| Sessions Improved | - | 68% | 100% |
+
+**Conclusion:** The epsilon fix is insufficient. The entire optimization algorithm needs to be replaced with Levenberg-Marquardt for reliable convergence.
 
 ## Files to Modify
 
