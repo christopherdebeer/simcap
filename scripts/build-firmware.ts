@@ -2,24 +2,25 @@
 /**
  * Firmware Build Script
  *
- * Processes Espruino firmware files at build time:
- * - Bundles required modules from espruino.com or local cache
- * - Minifies code using EspruinoTools
+ * Uses EspruinoTools CLI to process firmware files at build time:
+ * - Bundles required modules (fetched from GitHub)
+ * - Minifies code
  * - Outputs production-ready firmware to dist/firmware/
+ *
+ * The espruino CLI handles module resolution, bundling, and minification natively.
+ * We configure it to use GitHub raw URLs since espruino.com may be blocked.
  *
  * Usage:
  *   npx tsx scripts/build-firmware.ts [--watch] [--verbose]
  */
 
-import { execSync, spawn } from 'child_process';
+import { execSync } from 'child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, watchFile, unwatchFile } from 'fs';
-import { join, dirname, basename } from 'path';
+import { join, dirname } from 'path';
 
 // Configuration
 const FIRMWARE_SRC_DIR = 'src/device';
 const FIRMWARE_OUT_DIR = 'dist/firmware';
-const MODULE_CACHE_DIR = 'node_modules/.cache/espruino-modules';
-const ESPRUINO_MODULE_URL = 'https://www.espruino.com/modules/';
 
 // Board configurations for different devices
 const BOARD_CONFIG: Record<string, string> = {
@@ -29,6 +30,13 @@ const BOARD_CONFIG: Record<string, string> = {
     'BAE': 'PUCKJS',
 };
 
+// Module URLs - GitHub raw as primary, espruino.com as fallback
+// EspruinoDocs repo contains the module source files
+const MODULE_URLS = [
+    'https://raw.githubusercontent.com/espruino/EspruinoDocs/master/modules',
+    'https://www.espruino.com/modules',
+].join('|');
+
 interface BuildResult {
     device: string;
     inputPath: string;
@@ -36,7 +44,6 @@ interface BuildResult {
     originalSize: number;
     minifiedSize: number;
     reduction: number;
-    modules: string[];
     success: boolean;
     error?: string;
 }
@@ -47,170 +54,20 @@ interface BuildOptions {
     devices?: string[];
 }
 
-// ===== Module Resolution =====
+// ===== Fallback Minification =====
+// Used when espruino CLI fails (e.g., network issues)
 
-/**
- * Extract module names from require() statements
- */
-function extractModules(code: string): string[] {
-    const requireRegex = /require\s*\(\s*["']([^"']+)["']\s*\)/g;
-    const modules = new Set<string>();
-    let match;
-
-    while ((match = requireRegex.exec(code)) !== null) {
-        // Skip built-in modules (Storage, etc.)
-        const moduleName = match[1];
-        if (!isBuiltinModule(moduleName)) {
-            modules.add(moduleName);
-        }
-    }
-
-    return Array.from(modules);
-}
-
-/**
- * Check if a module is built into Espruino
- */
-function isBuiltinModule(name: string): boolean {
-    const builtins = [
-        'Storage', 'Flash', 'fs', 'http', 'net', 'dgram', 'tls',
-        'crypto', 'neopixel', 'Wifi', 'ESP8266', 'ESP32', 'CC3000',
-        'WIZnet', 'AT', 'MQTT', 'tensorflow', 'heatshrink'
-    ];
-    return builtins.includes(name);
-}
-
-/**
- * Fetch a module from Espruino CDN or local cache
- */
-async function fetchModule(moduleName: string, verbose: boolean): Promise<string> {
-    // Check cache first
-    const cachePath = join(MODULE_CACHE_DIR, `${moduleName}.min.js`);
-    if (existsSync(cachePath)) {
-        if (verbose) console.log(`  [cache] ${moduleName}`);
-        return readFileSync(cachePath, 'utf-8');
-    }
-
-    // Fetch from CDN
-    const urls = [
-        `${ESPRUINO_MODULE_URL}${moduleName}.min.js`,
-        `${ESPRUINO_MODULE_URL}${moduleName}.js`
-    ];
-
-    for (const url of urls) {
-        try {
-            if (verbose) console.log(`  [fetch] ${url}`);
-            const response = await fetch(url);
-            if (response.ok) {
-                const code = await response.text();
-
-                // Cache the module
-                mkdirSync(dirname(cachePath), { recursive: true });
-                writeFileSync(cachePath, code);
-
-                return code;
-            }
-        } catch (e) {
-            // Continue to next URL
-        }
-    }
-
-    throw new Error(`Module ${moduleName} not found`);
-}
-
-/**
- * Bundle all required modules into the code
- */
-async function bundleModules(code: string, verbose: boolean): Promise<{ code: string; modules: string[] }> {
-    const modules = extractModules(code);
-
-    if (modules.length === 0) {
-        return { code, modules: [] };
-    }
-
-    if (verbose) console.log(`  Bundling ${modules.length} modules...`);
-
-    const moduleCode: string[] = [];
-    for (const moduleName of modules) {
-        try {
-            const modCode = await fetchModule(moduleName, verbose);
-            // Wrap in Modules.addCached for Espruino's module system
-            moduleCode.push(`Modules.addCached("${moduleName}", function() {\n${modCode}\n});`);
-        } catch (e) {
-            console.warn(`  [warn] Could not fetch module: ${moduleName}`);
-        }
-    }
-
-    const bundledCode = moduleCode.join('\n\n') + '\n\n' + code;
-    return { code: bundledCode, modules };
-}
-
-// ===== Minification =====
-
-/**
- * Minify code using EspruinoTools CLI
- */
-async function minifyWithEspruino(inputPath: string, outputPath: string, board: string, verbose: boolean): Promise<boolean> {
-    return new Promise((resolve) => {
-        const args = [
-            'espruino',
-            '--board', board,
-            '--minify',
-            '-o', outputPath,
-            inputPath
-        ];
-
-        if (verbose) {
-            console.log(`  Running: npx ${args.join(' ')}`);
-        }
-
-        try {
-            execSync(`npx ${args.join(' ')}`, {
-                stdio: verbose ? 'inherit' : 'pipe',
-                encoding: 'utf-8'
-            });
-            resolve(true);
-        } catch (e) {
-            if (verbose) console.error(`  [error] Espruino minification failed`);
-            resolve(false);
-        }
-    });
-}
-
-/**
- * Fallback minification using our own tokenizer
- * (Same logic as in loader-app.ts but at build time)
- */
 function minifyFallback(code: string): string {
     const tokens: string[] = [];
     let i = 0;
 
     while (i < code.length) {
         // String literals - preserve exactly
-        if (code[i] === '"' || code[i] === "'") {
+        if (code[i] === '"' || code[i] === "'" || code[i] === '`') {
             const quote = code[i];
             let str = quote;
             i++;
             while (i < code.length && code[i] !== quote) {
-                if (code[i] === '\\' && i + 1 < code.length) {
-                    str += code[i] + code[i + 1];
-                    i += 2;
-                } else {
-                    str += code[i];
-                    i++;
-                }
-            }
-            if (i < code.length) {
-                str += code[i];
-                i++;
-            }
-            tokens.push(str);
-        }
-        // Template literals - preserve exactly
-        else if (code[i] === '`') {
-            let str = '`';
-            i++;
-            while (i < code.length && code[i] !== '`') {
                 if (code[i] === '\\' && i + 1 < code.length) {
                     str += code[i] + code[i + 1];
                     i += 2;
@@ -270,7 +127,7 @@ function minifyFallback(code: string): string {
 // ===== Build Process =====
 
 /**
- * Build a single firmware file
+ * Build a single firmware file using espruino CLI
  */
 async function buildFirmware(device: string, options: BuildOptions): Promise<BuildResult> {
     const inputPath = join(FIRMWARE_SRC_DIR, device, 'app.js');
@@ -284,7 +141,6 @@ async function buildFirmware(device: string, options: BuildOptions): Promise<Bui
         originalSize: 0,
         minifiedSize: 0,
         reduction: 0,
-        modules: [],
         success: false,
     };
 
@@ -295,39 +151,61 @@ async function buildFirmware(device: string, options: BuildOptions): Promise<Bui
         }
 
         // Read source
-        let code = readFileSync(inputPath, 'utf-8');
-        result.originalSize = code.length;
+        const sourceCode = readFileSync(inputPath, 'utf-8');
+        result.originalSize = sourceCode.length;
 
         if (options.verbose) {
             console.log(`\nBuilding ${device}...`);
-            console.log(`  Source: ${inputPath} (${(code.length / 1024).toFixed(1)} KB)`);
+            console.log(`  Source: ${inputPath} (${(sourceCode.length / 1024).toFixed(1)} KB)`);
         }
-
-        // Bundle modules
-        const bundled = await bundleModules(code, options.verbose || false);
-        code = bundled.code;
-        result.modules = bundled.modules;
 
         // Create output directory
         mkdirSync(dirname(outputPath), { recursive: true });
 
-        // Write bundled (but not minified) version for espruino CLI
-        const tempPath = outputPath.replace('.min.js', '.bundled.js');
-        writeFileSync(tempPath, code);
+        // Try espruino CLI with GitHub module URLs
+        // Note: MODULE_URL needs proper quoting since it contains pipe characters
+        const moduleUrlConfig = `MODULE_URL=${MODULE_URLS}`;
+        const espruinoCmd = [
+            'npx', 'espruino',
+            '--board', board,
+            '--minify',
+            '--config', `"${moduleUrlConfig}"`,
+            '-o', outputPath,
+            inputPath
+        ].join(' ');
 
-        // Try espruino CLI minification first
-        const espruinoSuccess = await minifyWithEspruino(tempPath, outputPath, board, options.verbose || false);
+        if (options.verbose) {
+            console.log(`  Running: ${espruinoCmd}`);
+        }
 
+        let espruinoSuccess = false;
+        try {
+            execSync(espruinoCmd, {
+                stdio: options.verbose ? 'inherit' : 'pipe',
+                encoding: 'utf-8',
+                timeout: 60000, // 60 second timeout
+                shell: true, // Use shell for proper quoting
+            });
+            espruinoSuccess = existsSync(outputPath) &&
+                              readFileSync(outputPath, 'utf-8').length > 0;
+        } catch (e) {
+            if (options.verbose) {
+                console.log('  Espruino CLI failed, using fallback minification...');
+            }
+        }
+
+        // Fallback to our own minification if espruino CLI fails
         if (!espruinoSuccess) {
-            // Fallback to our own minification
-            if (options.verbose) console.log('  Using fallback minification...');
-            const minified = minifyFallback(code);
+            if (options.verbose) {
+                console.log('  Using fallback minification...');
+            }
+            const minified = minifyFallback(sourceCode);
             writeFileSync(outputPath, minified);
         }
 
         // Also write unminified version for debugging
         const debugPath = outputPath.replace('.min.js', '.debug.js');
-        writeFileSync(debugPath, code);
+        writeFileSync(debugPath, sourceCode);
 
         // Calculate results
         const minifiedCode = readFileSync(outputPath, 'utf-8');
@@ -338,9 +216,6 @@ async function buildFirmware(device: string, options: BuildOptions): Promise<Bui
         if (options.verbose) {
             console.log(`  Output: ${outputPath} (${(result.minifiedSize / 1024).toFixed(1)} KB)`);
             console.log(`  Reduction: ${result.reduction}%`);
-            if (result.modules.length > 0) {
-                console.log(`  Bundled modules: ${result.modules.join(', ')}`);
-            }
         }
 
     } catch (e) {
@@ -379,7 +254,7 @@ function discoverFirmwareDevices(): string[] {
  * Build all firmware files
  */
 async function buildAll(options: BuildOptions): Promise<BuildResult[]> {
-    const devices = options.devices || discoverFirmwareDevices();
+    const devices = options.devices?.length ? options.devices : discoverFirmwareDevices();
     const results: BuildResult[] = [];
 
     console.log(`\n🔧 Building ${devices.length} firmware file(s)...\n`);
@@ -419,7 +294,7 @@ async function buildAll(options: BuildOptions): Promise<BuildResult[]> {
 async function watchMode(options: BuildOptions): Promise<void> {
     console.log('\n👀 Watching for firmware changes...\n');
 
-    const devices = options.devices || discoverFirmwareDevices();
+    const devices = options.devices?.length ? options.devices : discoverFirmwareDevices();
 
     for (const device of devices) {
         const inputPath = join(FIRMWARE_SRC_DIR, device, 'app.js');
