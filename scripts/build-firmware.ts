@@ -20,7 +20,7 @@ import { join, dirname } from 'path';
 
 // Configuration
 const FIRMWARE_SRC_DIR = 'src/device';
-const FIRMWARE_OUT_DIR = 'dist/firmware';
+const FIRMWARE_OUT_DIR = '.build/firmware';  // Use .build/ to avoid Vite clearing dist/
 
 // Board configurations for different devices
 const BOARD_CONFIG: Record<string, string> = {
