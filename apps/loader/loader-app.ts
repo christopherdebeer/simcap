@@ -342,32 +342,51 @@ let deviceLogsQueryTimeout: ReturnType<typeof setTimeout> | null = null;
 let deviceLogs: LogEntry[] = [];
 
 // ===== Module Bundler =====
+// Used for custom code uploads that need modules at runtime
+// Pre-built firmware uses espruino CLI which handles modules at build time
 
-const ESPRUINO_MODULE_URL = 'https://www.espruino.com/modules/';
+// Module sources - GitHub raw as primary (more reliable), espruino.com as fallback
+const MODULE_SOURCES = [
+    'https://raw.githubusercontent.com/espruino/EspruinoDocs/master/modules/',
+    'https://www.espruino.com/modules/',
+];
 const moduleCache: Record<string, string> = {};
 
+// Built-in modules that don't need to be fetched
+const BUILTIN_MODULES = new Set([
+    'Storage', 'Flash', 'fs', 'http', 'net', 'dgram', 'tls',
+    'crypto', 'neopixel', 'Wifi', 'ESP8266', 'ESP32', 'CC3000',
+    'WIZnet', 'AT', 'MQTT', 'tensorflow', 'heatshrink'
+]);
+
 async function fetchModule(moduleName: string): Promise<string> {
+    // Skip built-in modules
+    if (BUILTIN_MODULES.has(moduleName)) {
+        return ''; // Built-in, no code to bundle
+    }
+
     if (moduleCache[moduleName]) return moduleCache[moduleName];
 
-    const urls = [
-        ESPRUINO_MODULE_URL + moduleName + '.min.js',
-        ESPRUINO_MODULE_URL + moduleName + '.js'
-    ];
-
-    for (const url of urls) {
-        try {
-            const response = await fetch(url);
-            if (response.ok) {
-                const code = await response.text();
-                moduleCache[moduleName] = code;
-                return code;
+    // Try each source with both .min.js and .js extensions
+    for (const baseUrl of MODULE_SOURCES) {
+        for (const ext of ['.min.js', '.js']) {
+            try {
+                const url = baseUrl + moduleName + ext;
+                const response = await fetch(url);
+                if (response.ok) {
+                    const code = await response.text();
+                    moduleCache[moduleName] = code;
+                    log(`Fetched module: ${moduleName}`, 'info');
+                    return code;
+                }
+            } catch {
+                // Continue to next URL
             }
-        } catch (e) {
-            // Continue to next URL
         }
     }
 
-    throw new Error(`Module ${moduleName} not found`);
+    log(`Module ${moduleName} not found (may be built-in)`, 'warn');
+    return ''; // Return empty - may be built into Espruino
 }
 
 async function bundleModules(code: string): Promise<string> {
@@ -376,16 +395,26 @@ async function bundleModules(code: string): Promise<string> {
     let match;
 
     while ((match = requireRegex.exec(code)) !== null) {
-        modules.add(match[1]);
+        const moduleName = match[1];
+        // Skip built-in modules
+        if (!BUILTIN_MODULES.has(moduleName)) {
+            modules.add(moduleName);
+        }
     }
 
     if (modules.size === 0) return code;
 
+    log(`Bundling ${modules.size} module(s): ${Array.from(modules).join(', ')}`, 'info');
+
     const moduleCode: string[] = [];
     for (const moduleName of modules) {
         const modCode = await fetchModule(moduleName);
-        moduleCode.push(`Modules.addCached("${moduleName}", function() {\n${modCode}\n});`);
+        if (modCode) {
+            moduleCode.push(`Modules.addCached("${moduleName}", function() {\n${modCode}\n});`);
+        }
     }
+
+    if (moduleCode.length === 0) return code;
 
     return moduleCode.join('\n\n') + '\n\n' + code;
 }
