@@ -314,9 +314,12 @@ class FrameParser {
 
             try {
                 const data = JSON.parse(payload);
+                // Call specific handler if registered
                 if (this.handlers[type]) {
                     this.handlers[type](data);
-                } else if (this.handlers['*']) {
+                }
+                // Always notify wildcard handler (used for verification, debugging)
+                if (this.handlers['*']) {
                     this.handlers['*'](data, type);
                 }
             } catch (e) {
@@ -329,6 +332,10 @@ class FrameParser {
 
     on(type: string, handler: (data: any, type?: string) => void): void {
         this.handlers[type] = handler;
+    }
+
+    off(type: string): void {
+        delete this.handlers[type];
     }
 
     clear(): void {
@@ -730,6 +737,7 @@ async function verifyFirmwareUpload(): Promise<boolean> {
             if (!resolved && type === 'FW' && data && (data.id || data.name)) {
                 resolved = true;
                 clearTimeout(timeoutId);
+                frameParser.off('*'); // Clean up
                 log(`[UPLOAD] Verified: ${data.name || data.id} v${data.version || '?'}`, 'success');
                 resolve(true);
             }
@@ -742,6 +750,7 @@ async function verifyFirmwareUpload(): Promise<boolean> {
         timeoutId = setTimeout(() => {
             if (!resolved) {
                 resolved = true;
+                frameParser.off('*'); // Clean up
                 log('[UPLOAD] Verification timeout - no firmware response', 'warn');
                 resolve(false);
             }
@@ -752,6 +761,7 @@ async function verifyFirmwareUpload(): Promise<boolean> {
             if (err && !resolved) {
                 resolved = true;
                 clearTimeout(timeoutId);
+                frameParser.off('*'); // Clean up
                 resolve(false);
             }
         });
