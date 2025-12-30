@@ -1,171 +1,182 @@
-# Magnetometer Calibration Analysis - 2025-12-30
+# Magnetometer Calibration Investigation - Updated Findings
 
 **Session:** `2025-12-30T22_46_28.771Z`
-**Device:** GAMBIT (Firmware 0.4.2)
-**Magnet Config:** None (no finger magnets present)
-**Expected Result:** Near-zero residual (~<10µT)
-**Actual Result:** 67µT residual with min-max calibration
+**Updated:** Based on codebase analysis
 
-## Executive Summary
+## Summary of Implemented Features
 
-This analysis investigates why the magnetometer calibration auto-completes at 100% but produces a high Earth field residual (~67µT) when no finger magnets are present. Expected residual with no magnets should be near zero.
+### What's Already Working ✅
 
-### Key Findings
+| Feature | Status | Location |
+|---------|--------|----------|
+| Outlier filtering | ✅ Working (150µT per axis) | `unified-mag-calibration.ts:1241-1262` |
+| Full 3x3 soft iron matrix | ✅ Implemented | `unified-mag-calibration.ts:274-276` |
+| Orientation-aware calibration | ✅ Implemented but buggy | `unified-mag-calibration.ts:972-1216` |
+| Progressive trust scaling | ✅ Working | Lines 456-497 |
+| Bootstrap from previous session | ✅ Working | Lines 317-327 |
 
-1. **Z-axis interference spikes**: 10 samples (0.2%) have extreme Z values up to 2569µT, corrupting min-max calibration
-2. **Excessive raw data ranges**: Even clean data shows 207µT average range (expected ~100µT)
-3. **Diagonal soft iron is inadequate**: H/V ratio with min-max = 10.36 (expected 0.33) - completely wrong
-4. **Orientation-aware calibration works**: Reduces residual from 38.8µT to 12.1µT (69% improvement)
-5. **Full 3x3 soft iron matrix required**: Significant off-diagonal terms detected
+### Key Issues Found ❌
 
-## Detailed Analysis
+## Issue 1: Orientation-Aware Calibration Epsilon Bug
 
-### 1. Z-Axis Anomaly Investigation
+**Location:** `unified-mag-calibration.ts:1071`
 
-The session contained brief magnetic interference events:
-
-| Period | Samples | Duration | Max |Z| |
-|--------|---------|----------|--------|
-| 1 | 553-554 | 0.04s | 2569µT |
-| 2 | 4188-4193 | 0.1s | 245µT |
-| 3 | 4282-4283 | 0.04s | 281µT |
-
-**Impact:** These 10 outlier samples inflate the Z-axis range from 233µT to 2814µT, causing the soft iron Z scale to be compressed to 0.036 (destroying Z information).
-
-**Root cause:** Likely external magnetic interference (phone, cable, nearby magnet) during brief moments.
-
-### 2. Clean Data Analysis
-
-After filtering samples with |mz| > 150µT:
-
-| Metric | Clean Data | Expected |
-|--------|------------|----------|
-| X range | 159µT | ~100µT |
-| Y range | 229µT | ~100µT |
-| Z range | 233µT | ~100µT |
-| Raw magnitude | 114 ± 36 µT | ~50µT |
-
-The raw magnitude being 2x expected suggests:
-- Strong hard iron offset in the environment
-- Or sensor gain calibration issue
-
-### 3. Calibration Method Comparison
-
-| Method | Magnitude | Residual | H/V Ratio |
-|--------|-----------|----------|-----------|
-| Min-Max (diagonal) | 49.0 ± 17.1 µT | 38.8 µT | 10.36 |
-| Orientation-Aware (3x3) | 46.4 ± 8.9 µT | **12.1 µT** | 1.10 |
-| Target | 50.4 µT | <10 µT | 0.33 |
-
-### 4. Why Calibration Auto-Completes Too Fast
-
-The min-max calibration declares 100% progress when each axis has covered sufficient range. With the session's large ranges:
-
-| Time | X Range | Y Range | Z Range | Progress |
-|------|---------|---------|---------|----------|
-| 0.5s | 10µT | 9µT | 35µT | 18% |
-| 1.0s | 13µT | 21µT | 53µT | 25% |
-| **2.5s** | **60µT** | **52µT** | **93µT** | **100%** |
-| Final | 199µT | 229µT | 2814µT | 100% |
-
-Calibration completes in 2.5s because the ranges quickly exceed the 50µT threshold, but:
-- The ranges continue growing (indicating problem data)
-- The Z-axis spikes weren't filtered out
-- No quality gate checks H/V ratio or sphericity
-
-### 5. Orientation-Aware Calibration Results
-
-The full 3x3 soft iron matrix from optimization:
-
+```typescript
+const epsilon = 0.5;  // For numerical gradient - SAME FOR ALL PARAMETERS!
 ```
-Hard iron: [35.97, -50.67, 58.49] µT
 
+**Problem:**
+- For hard iron offset (in µT), epsilon=0.5 is reasonable
+- For soft iron matrix elements (dimensionless, ~1.0), epsilon=0.5 is a **50% perturbation**
+- This produces extremely noisy gradients that don't converge
+
+**Evidence from session logs:**
+```
 Soft iron matrix:
-  [1.4425, 0.4451, -0.1405]
-  [0.3589, 0.9821, 0.2789]
-  [-0.3868, 0.4126, 0.9915]
+  [0.5000, -0.4386, -0.5000]  ← Hit clamp limits
+  [-0.1315, 0.7445, -0.2248]
+  [-0.5000, 0.5000, 0.5000]   ← Hit clamp limits
+Corrected magnitude: 16.5 µT (expected 50.4 µT, error: 67.2%)
 ```
 
-Note the significant off-diagonal terms - the diagonal-only assumption is fundamentally wrong for this sensor.
+**Fix:**
+```typescript
+const epsilonOffset = 0.5;   // For hard iron (µT)
+const epsilonMatrix = 0.01;  // For soft iron matrix (dimensionless)
+```
 
-## Root Causes
+## Issue 2: H/V Ratio Not Used as Quality Gate
 
-1. **Outlier sensitivity**: Min-max calibration is destroyed by a single outlier
-2. **Diagonal assumption**: The sensor has significant cross-axis coupling requiring full 3x3 matrix
-3. **No quality gates**: Calibration declares "complete" without validating results
-4. **H/V ratio check missing**: Would catch inverted calibrations
+**Current behavior:**
+- H/V ratio is computed and logged
+- But calibration is NOT blocked when H/V is inverted
 
-## Recommendations
+**Session data:**
+- H/V ratio = 10.81 (expected 0.33)
+- Calibration still marked as "complete"
 
-### Immediate Fixes
-
-1. **Outlier filtering**: Use robust statistics (median, IQR) instead of min-max
-   ```typescript
-   // Instead of min/max
-   const offset = (percentile(data, 95) + percentile(data, 5)) / 2;
-   const range = percentile(data, 95) - percentile(data, 5);
-   ```
-
-2. **Quality gate**: Don't trust calibration if H/V ratio > 0.8 (inverted)
-   ```typescript
-   if (hvRatio > 0.8) {
-     console.warn('[MagCal] H/V ratio inverted - calibration failed');
-     return false;
-   }
-   ```
-
-3. **Sphericity check**: Require sphericity > 0.5 for valid calibration
-   ```typescript
-   const sphericity = Math.min(...ranges) / Math.max(...ranges);
-   if (sphericity < 0.5) {
-     console.warn('[MagCal] Poor sphericity - retry calibration');
-   }
-   ```
-
-### Longer-term Improvements
-
-1. **Full 3x3 soft iron matrix**: Already implemented in `UnifiedMagCalibration.ts` but needs more samples and better convergence
-
-2. **Progressive quality feedback**: Show user calibration quality during collection:
-   - "Rotate more around X axis"
-   - "Avoid magnetic interference"
-
-3. **Environmental baseline**: Record baseline magnetic environment before session
-
-## Files Generated
-
-- `ml/analyze_mag_calibration_session.py` - Main analysis script
-- `ml/analyze_z_axis_anomaly.py` - Z-axis spike investigation
-- `ml/analyze_clean_residual.py` - Clean data calibration comparison
-- `ml/mag_calibration_diagnostic.png` - Diagnostic visualization
-- `ml/z_axis_anomaly_analysis.png` - Z-axis anomaly plot
-- `ml/clean_data_calibration_comparison.png` - Calibration method comparison
-
-## Session Metadata
-
-```json
-{
-  "sample_rate": 26,
-  "device": "GAMBIT",
-  "firmware_version": "0.4.2",
-  "magnet_config": "none",
-  "location": "Edinburgh",
-  "geomagnetic_field": {
-    "horizontal_intensity": 16.0,
-    "vertical_intensity": 47.8,
-    "total_intensity": 50.5
-  }
+**Recommended fix:**
+```typescript
+if (hRatio > 0.8) {
+  this._log('[UnifiedMagCal] ⚠️ Calibration failed: H/V ratio inverted');
+  this._orientationAwareCalReady = false;
+  return;  // Don't use bad calibration
 }
 ```
 
-## Conclusion
+## Issue 3: Sphericity Computed But Not Gated
 
-The high residual is caused by:
-1. Brief magnetic interference spikes corrupting min-max calibration
-2. Fundamental inadequacy of diagonal soft iron correction
-3. Lack of quality gates to detect poor calibration
+**Location:** `unified-mag-calibration.ts:1310-1313`
 
-**The orientation-aware calibration reduces residual by 69%** (38.8µT → 12.1µT) by using a full 3x3 matrix. Further improvement requires:
-- Better outlier rejection
-- More rotation coverage during calibration
-- Possible sensor alignment calibration
+```typescript
+const sphericity = minRange / maxRange;
+// Sphericity is logged but never checked!
+```
+
+**Session data:**
+- Sphericity = 0.68 (borderline acceptable)
+
+**Recommended fix:**
+```typescript
+if (sphericity < 0.5) {
+  this._log('[UnifiedMagCal] ⚠️ Poor sphericity - calibration unreliable');
+  // Could still use but with reduced trust
+}
+```
+
+## Root Cause Analysis
+
+### Why Magnitude is Correct but Direction is Wrong
+
+1. **Raw magnitude:** 114 µT (2.26x expected)
+2. **After diagonal soft iron:** 49 µT (correct!)
+3. **But H/V ratio:** 10.81 (should be 0.33)
+
+The diagonal soft iron correction:
+- Scales each axis independently
+- Normalizes overall magnitude correctly
+- **Cannot correct cross-axis coupling**
+
+The sensor has significant cross-axis coupling that requires a full 3x3 matrix with off-diagonal terms.
+
+### Why Orientation-Aware Calibration Failed
+
+1. Bad epsilon (0.5) for matrix elements
+2. Only 50 iterations
+3. Optimization diverges → hits clamp limits
+4. Best found result is still bad (67% magnitude error)
+
+## Verification: Outlier Filtering Works
+
+```
+Total samples: 4839
+Rejected by firmware: 10 (0.2%)
+- Sample 553-554: Z=2557-2569µT (rejected)
+- Sample 4188-4193: Z=-245 to -229µT (rejected)
+
+Firmware ranges (metadata): [159, 242, 246]µT
+Python filtered ranges:     [159, 229, 233]µT
+→ Match confirms filtering is active
+```
+
+## Recommended Code Changes
+
+### 1. Fix epsilon for matrix gradients (HIGH PRIORITY)
+
+```typescript
+// unified-mag-calibration.ts line ~1071
+const epsilonOffset = 0.5;   // µT for hard iron
+const epsilonMatrix = 0.01;  // dimensionless for soft iron
+
+// Line ~1086
+gradOffset[axis] = (computeResidual(offsetPlus, S) - computeResidual(offsetMinus, S)) / (2 * epsilonOffset);
+
+// Line ~1097
+gradS[i][j] = (computeResidual(offset, Splus) - computeResidual(offset, Sminus)) / (2 * epsilonMatrix);
+```
+
+### 2. Add H/V ratio quality gate (HIGH PRIORITY)
+
+```typescript
+// After orientation-aware calibration completes
+const hRatio = hComponent / Math.abs(vComponent);
+const expectedRatio = this._geomagneticRef.horizontal / this._geomagneticRef.vertical;
+
+if (hRatio > 0.8 || hRatio < 0.1) {
+  this._log(`[UnifiedMagCal] ⚠️ H/V ratio ${hRatio.toFixed(2)} invalid (expected ${expectedRatio.toFixed(2)})`);
+  this._orientationAwareCalReady = false;
+  // Fall back to diagonal soft iron
+}
+```
+
+### 3. Increase optimization iterations
+
+```typescript
+const maxIterations = 200;  // Was 50
+```
+
+### 4. Use scipy least_squares approach (OPTIONAL)
+
+The Python analysis achieved 12.1µT residual using `scipy.optimize.least_squares`. Consider:
+- Levenberg-Marquardt algorithm
+- Analytical Jacobian instead of numerical gradients
+- Trust-region approach
+
+## Files to Modify
+
+1. `apps/gambit/shared/unified-mag-calibration.ts`
+   - Line 1071: Separate epsilon for offset vs matrix
+   - Line 1086, 1097: Use appropriate epsilon
+   - After line 1153: Add H/V ratio validation
+   - Line 1072: Increase maxIterations
+
+## Test Plan
+
+1. Run with fixed epsilon and verify:
+   - Soft iron matrix doesn't hit clamp limits
+   - Corrected magnitude ~50µT (not 16.5)
+   - H/V ratio improves toward 0.33
+
+2. Test H/V ratio gate:
+   - Verify bad calibrations are rejected
+   - Verify system falls back to diagonal soft iron
