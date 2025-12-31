@@ -208,6 +208,7 @@ import {
 import {
     createGesture,
     createGestureUI,
+    createMagneticFinger,
     isGestureInferenceAvailable
 } from './modules/gesture-inference-module.js';
 import {
@@ -2175,66 +2176,210 @@ window.getdata.onclick = async function() {
     }
 }
 
-// ===== Gesture Inference (using module) =====
-// Note: GestureInference type comes from dynamically loaded script
- 
-let gestureInference: { load: () => Promise<void>; isReady: boolean; addSample: (sample: TelemetrySample) => void; labels: string[] } | null = null;
+// ===== Unified Inference System =====
+// Supports switching between gesture and finger models dynamically
+
+// Current inference instance (type varies based on model)
+let currentInference: any = null;
+let currentModelId: string = '';
 let gestureUI: GestureUIController | null = null;
 
-// Initialize gesture inference using the module
-async function initGestureInference() {
-    console.log('=== GAMBIT Gesture Inference Initialization ===');
-    console.log('[GAMBIT] Checking gesture inference globals:', {
-        GestureInference: typeof (window as any).GestureInference,
-        createGestureInference: typeof (window as any).createGestureInference,
-        MagneticFingerInference: typeof (window as any).MagneticFingerInference,
-        createMagneticFingerInference: typeof (window as any).createMagneticFingerInference,
-        GESTURE_MODELS: typeof (window as any).GESTURE_MODELS,
-        FINGER_MODELS: typeof (window as any).FINGER_MODELS
+// UI element references
+const inferenceUI = {
+    modelSelect: document.getElementById('modelSelect') as HTMLSelectElement | null,
+    modelStatus: document.getElementById('modelStatus'),
+    gestureDisplay: document.getElementById('gestureDisplay'),
+    fingerDisplay: document.getElementById('fingerDisplay'),
+    gestureName: document.getElementById('gestureName'),
+    gestureConfidence: document.getElementById('gestureConfidence'),
+    inferenceTime: document.getElementById('inferenceTime'),
+    gestureProbabilities: document.getElementById('gestureProbabilities'),
+    fingerStates: document.getElementById('fingerStates'),
+    fingerConfidence: document.getElementById('fingerConfidence'),
+    fingerInferenceTime: document.getElementById('fingerInferenceTime')
+};
+
+// Initialize model selector and inference
+async function initInference() {
+    console.log('=== GAMBIT Inference Initialization ===');
+
+    // Check if inference globals are available
+    const win = window as any;
+    console.log('[GAMBIT] Checking inference globals:', {
+        ALL_MODELS: typeof win.ALL_MODELS,
+        getDefaultModel: typeof win.getDefaultModel,
+        MagneticFingerInference: typeof win.MagneticFingerInference,
+        GestureInference: typeof win.GestureInference
     });
 
-    // Create UI controller using the module helper
-    gestureUI = createGestureUI({
-        statusEl: document.getElementById('modelStatus'),
-        nameEl: document.getElementById('gestureName'),
-        confidenceEl: document.getElementById('gestureConfidence'),
-        timeEl: document.getElementById('inferenceTime'),
-        displayEl: document.getElementById('gestureDisplay'),
-        probabilitiesEl: document.getElementById('gestureProbabilities')
-    });
-
-    // Check if gesture inference is available (requires gesture-inference.js loaded)
-    if (!isGestureInferenceAvailable()) {
-        console.warn('[GAMBIT] Gesture inference not available - globals not found');
-        gestureUI.setStatus('error', 'Gesture inference not loaded');
+    if (typeof win.ALL_MODELS === 'undefined') {
+        console.error('[GAMBIT] ALL_MODELS not available');
+        setModelStatus('error', 'Models not loaded');
         return;
     }
 
-    try {
-        // Create gesture inference using the module wrapper
-        gestureInference = createGesture('v1', {
-            confidenceThreshold: 0.3,
-            onPrediction: (result) => {
-                console.log('[GAMBIT] Prediction:', result.gesture, result.confidence.toFixed(2));
-                gestureUI?.updatePrediction(result);
-            },
-            onReady: () => {
-                console.log('[GAMBIT] ✓ Model ready');
-                gestureUI?.setStatus('ready', 'Model ready (v1)');
-                if (gestureInference) {
-                    gestureUI?.initProbabilityBars(gestureInference.labels);
-                }
-            },
-            onError: (error: Error) => {
-                console.error('[GAMBIT] Model error:', error.message);
-                gestureUI?.setStatus('error', 'Model error: ' + error.message);
-            }
-        });
+    // Populate model selector
+    populateModelSelector();
 
-        await gestureInference!.load();
+    // Create gesture UI controller for gesture models
+    gestureUI = createGestureUI({
+        statusEl: inferenceUI.modelStatus,
+        nameEl: inferenceUI.gestureName,
+        confidenceEl: inferenceUI.gestureConfidence,
+        timeEl: inferenceUI.inferenceTime,
+        displayEl: inferenceUI.gestureDisplay,
+        probabilitiesEl: inferenceUI.gestureProbabilities
+    });
+
+    // Load default model
+    const defaultModel = win.getDefaultModel();
+    if (defaultModel) {
+        await loadModel(defaultModel.id);
+    }
+
+    // Handle model selection change
+    inferenceUI.modelSelect?.addEventListener('change', async (e) => {
+        const modelId = (e.target as HTMLSelectElement).value;
+        if (modelId && modelId !== currentModelId) {
+            await loadModel(modelId);
+        }
+    });
+}
+
+function populateModelSelector() {
+    const select = inferenceUI.modelSelect;
+    if (!select) return;
+
+    const models = (window as any).ALL_MODELS || [];
+    select.innerHTML = models.map((m: any) =>
+        `<option value="${m.id}" ${m.active ? 'selected' : ''}>${m.name}</option>`
+    ).join('');
+}
+
+function setModelStatus(status: 'loading' | 'ready' | 'error', message: string) {
+    const statusEl = inferenceUI.modelStatus;
+    if (!statusEl) return;
+
+    statusEl.className = 'model-status ' + status;
+    const textEl = statusEl.querySelector('span:last-child');
+    if (textEl) textEl.textContent = message;
+}
+
+function showUIForModelType(type: string) {
+    const gestureDisplay = inferenceUI.gestureDisplay;
+    const fingerDisplay = inferenceUI.fingerDisplay;
+    const probabilities = inferenceUI.gestureProbabilities;
+
+    if (type === 'gesture') {
+        if (gestureDisplay) gestureDisplay.style.display = '';
+        if (probabilities) probabilities.style.display = '';
+        if (fingerDisplay) fingerDisplay.style.display = 'none';
+    } else {
+        if (gestureDisplay) gestureDisplay.style.display = 'none';
+        if (probabilities) probabilities.style.display = 'none';
+        if (fingerDisplay) fingerDisplay.style.display = '';
+    }
+}
+
+async function loadModel(modelId: string) {
+    const win = window as any;
+    const model = win.getModelById(modelId);
+
+    if (!model) {
+        console.error('[GAMBIT] Model not found:', modelId);
+        setModelStatus('error', 'Model not found');
+        return;
+    }
+
+    console.log('[GAMBIT] Loading model:', model.name, model.type);
+    setModelStatus('loading', `Loading ${model.name}...`);
+    showUIForModelType(model.type);
+
+    // Dispose previous inference
+    if (currentInference?.dispose) {
+        currentInference.dispose();
+    }
+    currentInference = null;
+
+    try {
+        if (model.type === 'gesture') {
+            // Create gesture inference
+            currentInference = createGesture('v1', {
+                confidenceThreshold: 0.3,
+                onPrediction: (result: any) => {
+                    gestureUI?.updatePrediction(result);
+                },
+                onReady: () => {
+                    setModelStatus('ready', `${model.name} ready`);
+                    if (currentInference?.labels) {
+                        gestureUI?.initProbabilityBars(currentInference.labels);
+                    }
+                },
+                onError: (error: Error) => {
+                    setModelStatus('error', error.message);
+                }
+            });
+            await currentInference.load();
+
+        } else if (model.type === 'finger_magnetic') {
+            // Create magnetic finger inference
+            currentInference = createMagneticFinger({
+                modelPath: model.path,
+                inputFeatures: model.inputFeatures || 3,
+                numStates: model.numStates || 2,
+                onPrediction: (result: any) => {
+                    updateFingerUI(result);
+                },
+                onReady: () => {
+                    setModelStatus('ready', `${model.name} ready`);
+                },
+                onError: (error: Error) => {
+                    setModelStatus('error', error.message);
+                }
+            });
+            // Set stats from model config
+            currentInference.setStats(model.stats.mean, model.stats.std);
+            await currentInference.load();
+        }
+
+        currentModelId = modelId;
+        console.log('[GAMBIT] ✓ Model loaded:', model.name);
+
     } catch (error) {
-        console.error('[GAMBIT] Failed to initialize gesture inference:', error);
-        gestureUI?.setStatus('error', 'Model unavailable: ' + (error as Error).message);
+        console.error('[GAMBIT] Failed to load model:', error);
+        setModelStatus('error', (error as Error).message);
+    }
+}
+
+function updateFingerUI(result: any) {
+    if (!result) return;
+
+    // Update finger state indicators
+    const fingerNames = ['thumb', 'index', 'middle', 'ring', 'pinky'];
+    fingerNames.forEach(finger => {
+        const stateEl = inferenceUI.fingerStates?.querySelector(`[data-finger="${finger}"]`);
+        if (stateEl) {
+            const state = result.fingers[finger] || '-';
+            const valueEl = stateEl.querySelector('.finger-value');
+            if (valueEl) valueEl.textContent = state;
+
+            // Update styling based on state
+            stateEl.classList.remove('extended', 'flexed', 'partial');
+            if (state === 'extended') stateEl.classList.add('extended');
+            else if (state === 'flexed') stateEl.classList.add('flexed');
+            else if (state === 'partial') stateEl.classList.add('partial');
+        }
+    });
+
+    // Update confidence
+    if (inferenceUI.fingerConfidence) {
+        const conf = (result.overallConfidence * 100).toFixed(1);
+        inferenceUI.fingerConfidence.textContent = `${conf}% confidence`;
+    }
+
+    // Update inference time
+    if (inferenceUI.fingerInferenceTime && result.inferenceTime) {
+        inferenceUI.fingerInferenceTime.textContent = `${result.inferenceTime.toFixed(1)}ms inference`;
     }
 }
 
@@ -2247,40 +2392,37 @@ const wrappedUpdateData = function(prenorm: ExtendedTelemetry) {
 
     sampleCount++;
 
-    // Feed to gesture inference
-    if (gestureInference && gestureInference.isReady) {
-        gestureInference.addSample(prenorm);
+    // Feed to current inference (type-appropriate)
+    if (currentInference && currentInference.isReady) {
+        const model = (window as any).getModelById?.(currentModelId);
+
+        if (model?.type === 'gesture') {
+            // Gesture model uses addSample with windowing
+            currentInference.addSample(prenorm);
+        } else if (model?.type === 'finger_magnetic') {
+            // Magnetic finger model uses predict with single sample
+            currentInference.predict({
+                mx_ut: prenorm.mx || 0,
+                my_ut: prenorm.my || 0,
+                mz_ut: prenorm.mz || 0,
+                ax_g: prenorm.ax || 0,
+                ay_g: prenorm.ay || 0,
+                az_g: prenorm.az || 0
+            });
+        }
 
         // Log first few samples for debugging
         if (sampleCount <= 3) {
-            console.log(`[GAMBIT] Sample ${sampleCount} fed to inference:`, {
-                ax: prenorm.ax,
-                ay: prenorm.ay,
-                az: prenorm.az,
-                gx: prenorm.gx,
-                gy: prenorm.gy,
-                gz: prenorm.gz,
-                mx: prenorm.mx,
-                my: prenorm.my,
-                mz: prenorm.mz
-            });
-        }
-    } else if (gestureInference && !gestureInference.isReady) {
-        if (sampleCount === 1) {
-            console.warn('[GAMBIT] Data received but model not ready yet');
-        }
-    } else {
-        if (sampleCount === 1) {
-            console.warn('[GAMBIT] Data received but gesture inference not initialized');
+            console.log(`[GAMBIT] Sample ${sampleCount} fed to ${model?.name || 'inference'}`);
         }
     }
 };
 
 // Initialize on page load
 try {
-    initGestureInference();
+    initInference();
 } catch (e) {
-    console.error('[GAMBIT] Failed to init gesture inference:', e);
+    console.error('[GAMBIT] Failed to init inference:', e);
 }
 
 try {

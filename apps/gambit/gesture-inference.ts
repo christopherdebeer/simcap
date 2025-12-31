@@ -1140,6 +1140,89 @@ export function createMagneticFingerInference(versionOrOptions?: string | Magnet
   return inference;
 }
 
+// ===== Unified Model Registry =====
+// Combines all models with metadata for UI display and proper inference class selection
+
+export type ModelType = 'gesture' | 'finger_window' | 'finger_magnetic';
+
+export interface UnifiedModelConfig {
+  id: string;
+  name: string;
+  type: ModelType;
+  path: string;
+  stats: NormalizationStats;
+  description: string;
+  date: string;
+  active: boolean;  // Is this model currently recommended/active?
+  // Type-specific config
+  labels?: string[];  // For gesture models
+  inputFeatures?: number;  // For magnetic finger models
+  numStates?: number;  // 2=binary, 3=extended/partial/flexed
+  windowSize?: number;  // For windowed models
+}
+
+/**
+ * Unified registry of all available inference models.
+ * Order determines default selection (first active model is default).
+ */
+export const ALL_MODELS: UnifiedModelConfig[] = [
+  // === Finger Models (Newest first) ===
+  {
+    id: 'finger_aligned_v1',
+    name: 'Finger (Aligned v1)',
+    type: 'finger_magnetic',
+    path: '/models/finger_aligned_v1/model.json',
+    stats: { mean: [5188, 6179, 17152], std: [5732, 7181, 16189] },
+    description: 'Ground truth aligned - mag only, binary output',
+    date: '2025-12-31',
+    active: true,
+    inputFeatures: 3,
+    numStates: 2
+  },
+  {
+    id: 'finger_contrastive_v1',
+    name: 'Finger (Contrastive v1)',
+    type: 'finger_magnetic',
+    path: '/models/finger_contrastive_v1/model.json',
+    stats: { mean: [31.03, -4.78, 0.10, -0.04, -0.03, 0.34], std: [24.85, 40.71, 48.16, 0.51, 0.53, 0.61] },
+    description: 'Contrastive pre-trained - 6 features (mag+accel)',
+    date: '2025-12-26',
+    active: false,
+    inputFeatures: 6,
+    numStates: 2
+  },
+  // === Gesture Models ===
+  {
+    id: 'gesture_v1',
+    name: 'Gesture (v1)',
+    type: 'gesture',
+    path: '/models/gesture_v1/model.json',
+    stats: {
+      mean: [-1106.31, -3629.05, -2285.71, 2740.34, -14231.48, -19574.75, 509.62, 909.94, -558.86],
+      std: [3468.31, 5655.28, 4552.77, 1781.28, 3627.35, 1845.62, 380.11, 318.77, 409.51]
+    },
+    labels: ['rest', 'fist', 'open_palm', 'index_up', 'peace', 'thumbs_up', 'ok_sign', 'pinch', 'grab', 'wave'],
+    description: 'Cluster-derived gesture classification (10 classes)',
+    date: '2025-12-09',
+    active: false,
+    windowSize: 50
+  }
+];
+
+/**
+ * Get the default (first active) model
+ */
+export function getDefaultModel(): UnifiedModelConfig {
+  return ALL_MODELS.find(m => m.active) || ALL_MODELS[0];
+}
+
+/**
+ * Get model by ID
+ */
+export function getModelById(id: string): UnifiedModelConfig | undefined {
+  return ALL_MODELS.find(m => m.id === id);
+}
+
 // Export as globals for backward compatibility
 declare global {
   interface Window {
@@ -1148,6 +1231,9 @@ declare global {
     MagneticFingerInference: typeof MagneticFingerInference;
     GESTURE_MODELS: typeof GESTURE_MODELS;
     FINGER_MODELS: typeof FINGER_MODELS;
+    ALL_MODELS: typeof ALL_MODELS;
+    getDefaultModel: typeof getDefaultModel;
+    getModelById: typeof getModelById;
     createGestureInference: typeof createGestureInference;
     createFingerTrackingInference: typeof createFingerTrackingInference;
     createMagneticFingerInference: typeof createMagneticFingerInference;
@@ -1160,6 +1246,9 @@ if (typeof window !== 'undefined') {
   window.MagneticFingerInference = MagneticFingerInference;
   window.GESTURE_MODELS = GESTURE_MODELS;
   window.FINGER_MODELS = FINGER_MODELS;
+  window.ALL_MODELS = ALL_MODELS;
+  window.getDefaultModel = getDefaultModel;
+  window.getModelById = getModelById;
   window.createGestureInference = createGestureInference;
   window.createFingerTrackingInference = createFingerTrackingInference;
   window.createMagneticFingerInference = createMagneticFingerInference;
