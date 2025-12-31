@@ -284,3 +284,47 @@ if (this._autoHardIronEnabled) {
 - `ml/analyze_bootstrap_impact.py` - Bootstrap comparison script
 - `ml/bootstrap_analysis_results.json` - Full results data
 - `ml/bootstrap_analysis_plot.png` - Visualization
+
+## Soft Iron Bootstrap Analysis
+
+**Analysis date:** 2025-12-31
+**Sessions analyzed:** 22
+
+### How Soft Iron Scales Are Computed
+
+The firmware computes soft iron scale factors as:
+```
+scale = expectedRange / actualRange
+expectedRange = 2 * expectedMagnitude = 2 * 50.4 = 100.8 µT
+```
+
+### Session Range Statistics
+
+| Axis | Mean Range | Std Dev | Median Range |
+|------|------------|---------|--------------|
+| X | 92.4 µT | 23.3 µT | 84.5 µT |
+| Y | 110.8 µT | 35.8 µT | 99.0 µT |
+| Z | 152.1 µT | 42.2 µT | 143.9 µT |
+
+### Optimal Soft Iron Scale Factors
+
+| Axis | Current | Optimal | Calculation |
+|------|---------|---------|-------------|
+| X | 1.0 | 1.193 | 100.8 / 84.5 |
+| Y | 1.0 | 1.018 | 100.8 / 99.0 |
+| Z | 1.0 | 0.700 | 100.8 / 143.9 |
+
+**Key insight:** Z-axis has significantly larger range (144 µT vs expected 100 µT), requiring 0.7x scale to normalize.
+
+### Applied TypeScript Code
+
+```typescript
+// Location: unified-mag-calibration.ts line 271-273
+private _autoSoftIronScale: Vector3 = { x: 1.193, y: 1.018, z: 0.700 };
+```
+
+### Analysis Files
+
+- `ml/analyze_soft_iron_bootstrap.py` - Soft iron analysis script
+- `ml/soft_iron_analysis_results.json` - Full results data
+- `ml/soft_iron_analysis_plot.png` - Visualization
