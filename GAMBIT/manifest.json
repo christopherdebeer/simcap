@@ -1,3 +1,284 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:382838841dcb368076a3859cda61db277a4f7d98459b60630fe9c07f55059bde
-size 634
+{
+  "generated": "2025-12-31T16:05:54.060003Z",
+  "directory": "GAMBIT",
+  "sessionCount": 31,
+  "sessions": [
+    {
+      "filename": "2025-12-31T14_06_18.270Z.json",
+      "size": 8424950,
+      "modified": "2025-12-31T14:09:06Z",
+      "timestamp": "2025-12-31T14:06:18.270Z",
+      "version": "2.1",
+      "sampleCount": 3807,
+      "durationSec": 190.3
+    },
+    {
+      "filename": "2025-12-31T12_34_54.116Z.json",
+      "size": 11976902,
+      "modified": "2025-12-31T12:36:19Z",
+      "timestamp": "2025-12-31T12:34:54.116Z",
+      "version": "2.1",
+      "sampleCount": 5352,
+      "durationSec": 267.6
+    },
+    {
+      "filename": "2025-12-30T22_46_28.771Z.json",
+      "size": 10750297,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-30T22:46:28.771Z",
+      "version": "2.1",
+      "sampleCount": 4839,
+      "durationSec": 241.9
+    },
+    {
+      "filename": "2025-12-29T22_34_22.919Z.json",
+      "size": 7897489,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-29T22:34:22.919Z",
+      "version": "2.1",
+      "sampleCount": 3572,
+      "durationSec": 178.6
+    },
+    {
+      "filename": "2025-12-29T16_47_12.160Z.json",
+      "size": 3938398,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-29T16:47:12.160Z",
+      "version": "2.1",
+      "sampleCount": 1791,
+      "durationSec": 89.5
+    },
+    {
+      "filename": "2025-12-29T16_32_16.887Z.json",
+      "size": 3707798,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-29T16:32:16.887Z",
+      "version": "2.1",
+      "sampleCount": 1688,
+      "durationSec": 84.4
+    },
+    {
+      "filename": "2025-12-29T15_38_05.178Z.json",
+      "size": 5276357,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-29T15:38:05.178Z",
+      "version": "2.1",
+      "sampleCount": 2395,
+      "durationSec": 119.8
+    },
+    {
+      "filename": "2025-12-29T15_25_45.056Z.json",
+      "size": 1941155,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-29T15:25:45.056Z",
+      "version": "2.1",
+      "sampleCount": 884,
+      "durationSec": 44.2
+    },
+    {
+      "filename": "2025-12-29T14_45_22.542Z.json",
+      "size": 1490109,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-29T14:45:22.542Z",
+      "version": "2.1",
+      "sampleCount": 684,
+      "durationSec": 34.2
+    },
+    {
+      "filename": "2025-12-29T13_34_29.711Z.json",
+      "size": 3968688,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-29T13:34:29.711Z",
+      "version": "2.1",
+      "sampleCount": 1808,
+      "durationSec": 90.4
+    },
+    {
+      "filename": "2025-12-29T13_03_43.384Z.json",
+      "size": 2586650,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-29T13:03:43.384Z",
+      "version": "2.1",
+      "sampleCount": 1182,
+      "durationSec": 59.1
+    },
+    {
+      "filename": "2025-12-29T11_55_20.988Z.json",
+      "size": 651547,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-29T11:55:20.987Z",
+      "version": "2.1",
+      "sampleCount": 309,
+      "durationSec": 15.4
+    },
+    {
+      "filename": "2025-12-19T23_42_32.118Z.json",
+      "size": 2605924,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-19T23:42:32.118Z",
+      "version": "2.1",
+      "sampleCount": 1271,
+      "durationSec": 63.5
+    },
+    {
+      "filename": "2025-12-19T23_09_20.852Z.json",
+      "size": 24528,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-19T23:09:20.852Z",
+      "version": "2.1",
+      "sampleCount": 14,
+      "durationSec": 0.7
+    },
+    {
+      "filename": "2025-12-19T17_16_45.968Z.json",
+      "size": 1046358,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-19T17:16:45.957Z",
+      "version": "2.1",
+      "sampleCount": 521,
+      "durationSec": 26.1
+    },
+    {
+      "filename": "2025-12-19T17_12_49.637Z.json",
+      "size": 922681,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-19T17:12:49.627Z",
+      "version": "2.1",
+      "sampleCount": 453,
+      "durationSec": 22.6
+    },
+    {
+      "filename": "2025-12-19T15_49_49.108Z.json",
+      "size": 850817,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-19T15:49:49.099Z",
+      "version": "2.1",
+      "sampleCount": 418,
+      "durationSec": 20.9
+    },
+    {
+      "filename": "2025-12-19T15_38_28.988Z.json",
+      "size": 1629941,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-19T15:38:28.979Z",
+      "version": "2.1",
+      "sampleCount": 789,
+      "durationSec": 39.5
+    },
+    {
+      "filename": "2025-12-19T13_50_54.287Z.json",
+      "size": 1056285,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-19T13:50:54.277Z",
+      "version": "2.1",
+      "sampleCount": 515,
+      "durationSec": 25.8
+    },
+    {
+      "filename": "2025-12-19T13_48_25.409Z.json",
+      "size": 951390,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-19T13:48:25.397Z",
+      "version": "2.1",
+      "sampleCount": 466,
+      "durationSec": 23.3
+    },
+    {
+      "filename": "2025-12-19T13_16_59.786Z.json",
+      "size": 2676653,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-19T13:16:59.767Z",
+      "version": "2.1",
+      "sampleCount": 1287,
+      "durationSec": 64.3
+    },
+    {
+      "filename": "2025-12-19T12_45_15.927Z.json",
+      "size": 1068412,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-19T12:45:15.919Z",
+      "version": "2.1",
+      "sampleCount": 520,
+      "durationSec": 26.0
+    },
+    {
+      "filename": "2025-12-19T11_30_39.736Z.json",
+      "size": 805438,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-19T11:30:39.727Z",
+      "version": "2.1",
+      "sampleCount": 397,
+      "durationSec": 19.9
+    },
+    {
+      "filename": "2025-12-19T11_27_36.131Z.json",
+      "size": 854869,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-19T11:27:36.125Z",
+      "version": "2.1",
+      "sampleCount": 420,
+      "durationSec": 21.0
+    },
+    {
+      "filename": "2025-12-19T11_15_36.559Z.json",
+      "size": 745272,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-19T11:15:36.552Z",
+      "version": "2.1",
+      "sampleCount": 370,
+      "durationSec": 18.5
+    },
+    {
+      "filename": "2025-12-19T11_01_59.838Z.json",
+      "size": 299373,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-19T11:01:59.836Z",
+      "version": "2.1",
+      "sampleCount": 155,
+      "durationSec": 7.8
+    },
+    {
+      "filename": "2025-12-19T10_56_06.622Z.json",
+      "size": 1021762,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-19T10:56:06.618Z",
+      "version": "2.1",
+      "sampleCount": 501,
+      "durationSec": 25.1
+    },
+    {
+      "filename": "2025-12-19T10_50_44.595Z.json",
+      "size": 891664,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-19T10:50:44.587Z",
+      "version": "2.1",
+      "sampleCount": 448,
+      "durationSec": 22.4
+    },
+    {
+      "filename": "2025-12-19T10_21_39.269Z.json",
+      "size": 1016918,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-19T10:21:39.263Z",
+      "version": "2.1",
+      "sampleCount": 509,
+      "durationSec": 25.4
+    },
+    {
+      "filename": "2025-12-15T22:40:44.984Z.json",
+      "size": 132,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-15T22:40:44.984000+00:00",
+      "version": "unknown",
+      "sampleCount": 0
+    },
+    {
+      "filename": "2025-12-15T22_35_15.567Z.json",
+      "size": 132,
+      "modified": "2025-12-30T22:56:02Z",
+      "timestamp": "2025-12-15T22:35:15.567000+00:00",
+      "version": "unknown",
+      "sampleCount": 0
+    }
+  ]
+}
