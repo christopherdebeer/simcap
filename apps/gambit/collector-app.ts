@@ -791,9 +791,10 @@ function updateUI(): void {
 
     // PERFORMANCE: Only rebuild labels list when labels actually change
     // Compute a simple hash based on labels count and last label's end_sample
+    const lastLabel = state.labels[state.labels.length - 1] as any;
     const currentLabelsHash = state.labels.length === 0
         ? 'empty'
-        : `${state.labels.length}-${state.labels[state.labels.length - 1]?.end_sample ?? state.labels[state.labels.length - 1]?.endIndex ?? 0}`;
+        : `${state.labels.length}-${lastLabel?.end_sample ?? lastLabel?.endIndex ?? 0}`;
 
     if (labelsList && currentLabelsHash !== lastLabelsHash) {
         lastLabelsHash = currentLabelsHash;
