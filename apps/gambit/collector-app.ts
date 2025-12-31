@@ -731,19 +731,32 @@ function updateUI(): void {
     const labelsList = $cached('labelsList');
 
     if (statusIndicator) {
+        let statusText: string;
         if (state.recording && state.paused) {
             statusIndicator.className = 'status connected';
-            statusIndicator.textContent = 'Paused';
+            statusText = 'Paused';
         } else if (state.recording) {
             statusIndicator.className = 'status recording';
-            statusIndicator.textContent = 'Recording...';
+            statusText = 'Recording...';
         } else if (state.connected) {
             statusIndicator.className = 'status connected';
-            statusIndicator.textContent = 'Connected';
+            statusText = 'Connected';
         } else {
             statusIndicator.className = 'status disconnected';
-            statusIndicator.textContent = 'Disconnected';
+            statusText = 'Disconnected';
         }
+
+        // Append device info if connected
+        if (state.connected) {
+            const infoParts: string[] = [];
+            if (state.firmwareVersion) infoParts.push(`v${state.firmwareVersion}`);
+            if (state.samplingMode) infoParts.push(state.samplingMode);
+            if (state.deviceContext && state.deviceContext !== 'unknown') infoParts.push(state.deviceContext);
+            if (infoParts.length > 0) {
+                statusText += ` (${infoParts.join(' | ')})`;
+            }
+        }
+        statusIndicator.textContent = statusText;
     }
 
     if (connectBtn) connectBtn.textContent = state.connected ? 'Disconnect' : 'Connect Device';
