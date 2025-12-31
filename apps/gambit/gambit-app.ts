@@ -18,6 +18,9 @@ import type { GestureUIController } from './modules/gesture-inference-module.js'
 import { GambitClient } from './gambit-client';
 import { KalmanFilter } from '@filters';
 
+// Import gesture-inference to set up window globals before gesture-inference-module uses them
+import './gesture-inference.js';
+
 // ===== Type Definitions =====
 
 interface DataStageInfo {
@@ -2181,6 +2184,14 @@ let gestureUI: GestureUIController | null = null;
 // Initialize gesture inference using the module
 async function initGestureInference() {
     console.log('=== GAMBIT Gesture Inference Initialization ===');
+    console.log('[GAMBIT] Checking gesture inference globals:', {
+        GestureInference: typeof (window as any).GestureInference,
+        createGestureInference: typeof (window as any).createGestureInference,
+        MagneticFingerInference: typeof (window as any).MagneticFingerInference,
+        createMagneticFingerInference: typeof (window as any).createMagneticFingerInference,
+        GESTURE_MODELS: typeof (window as any).GESTURE_MODELS,
+        FINGER_MODELS: typeof (window as any).FINGER_MODELS
+    });
 
     // Create UI controller using the module helper
     gestureUI = createGestureUI({
@@ -2194,7 +2205,7 @@ async function initGestureInference() {
 
     // Check if gesture inference is available (requires gesture-inference.js loaded)
     if (!isGestureInferenceAvailable()) {
-        console.warn('[GAMBIT] Gesture inference not available');
+        console.warn('[GAMBIT] Gesture inference not available - globals not found');
         gestureUI.setStatus('error', 'Gesture inference not loaded');
         return;
     }
