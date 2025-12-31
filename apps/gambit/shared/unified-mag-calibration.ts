@@ -1017,132 +1017,249 @@ export class UnifiedMagCalibration {
             ];
         };
 
-        // Simple gradient descent optimization
+        // Levenberg-Marquardt optimization for magnetometer calibration
         // Parameters: offset (3) + soft iron matrix (9) = 12 parameters
-        // Start from min-max estimate
-        let offset = { ...this._autoHardIronEstimate };
-        let S = [
-            [this._autoSoftIronScale.x, 0, 0],
-            [0, this._autoSoftIronScale.y, 0],
-            [0, 0, this._autoSoftIronScale.z]
+        // Objective: minimize sum of (|corrected_mag| - expected_magnitude)^2
+        //
+        // LM algorithm: (J^T J + λI) δ = J^T r
+        // Where J is the Jacobian, r is the residual vector, λ is damping factor
+
+        // Expected Earth field magnitude
+        const expectedMag = Math.sqrt(earthWorld.x ** 2 + earthWorld.y ** 2 + earthWorld.z ** 2);
+
+        // Pack/unpack parameters: [ox, oy, oz, S00, S01, S02, S10, S11, S12, S20, S21, S22]
+        const packParams = (off: Vector3, S: number[][]): number[] => [
+            off.x, off.y, off.z,
+            S[0][0], S[0][1], S[0][2],
+            S[1][0], S[1][1], S[1][2],
+            S[2][0], S[2][1], S[2][2]
         ];
 
-        // Compute residual for current parameters
-        const computeResidual = (off: Vector3, softIron: number[][]): number => {
-            let totalResidual = 0;
+        const unpackParams = (p: number[]): { off: Vector3; S: number[][] } => ({
+            off: { x: p[0], y: p[1], z: p[2] },
+            S: [
+                [p[3], p[4], p[5]],
+                [p[6], p[7], p[8]],
+                [p[9], p[10], p[11]]
+            ]
+        });
+
+        // Compute residual vector (one residual per sample: magnitude error)
+        const computeResiduals = (params: number[]): number[] => {
+            const { off, S } = unpackParams(params);
+            const residuals: number[] = [];
+
             for (const sample of samples) {
-                // Apply calibration
                 const centered = {
                     x: sample.mx - off.x,
                     y: sample.my - off.y,
                     z: sample.mz - off.z
                 };
                 const corrected = {
-                    x: softIron[0][0] * centered.x + softIron[0][1] * centered.y + softIron[0][2] * centered.z,
-                    y: softIron[1][0] * centered.x + softIron[1][1] * centered.y + softIron[1][2] * centered.z,
-                    z: softIron[2][0] * centered.x + softIron[2][1] * centered.y + softIron[2][2] * centered.z
+                    x: S[0][0] * centered.x + S[0][1] * centered.y + S[0][2] * centered.z,
+                    y: S[1][0] * centered.x + S[1][1] * centered.y + S[1][2] * centered.z,
+                    z: S[2][0] * centered.x + S[2][1] * centered.y + S[2][2] * centered.z
                 };
-
-                // Get orientation from accelerometer
-                const { roll, pitch } = accelToRollPitch(sample.ax, sample.ay, sample.az);
-                const { mx_h, my_h } = tiltCompensate(corrected.x, corrected.y, corrected.z, roll, pitch);
-                const yaw = Math.atan2(-my_h, mx_h);
-
-                // Compute expected Earth field in device frame
-                const R = eulerToRotationMatrix(roll, pitch, yaw);
-                // R^T * earthWorld (transpose to go from world to device)
-                const earthDevice = {
-                    x: R[0][0] * earthWorld.x + R[1][0] * earthWorld.y + R[2][0] * earthWorld.z,
-                    y: R[0][1] * earthWorld.x + R[1][1] * earthWorld.y + R[2][1] * earthWorld.z,
-                    z: R[0][2] * earthWorld.x + R[1][2] * earthWorld.y + R[2][2] * earthWorld.z
-                };
-
-                // Residual = difference between corrected mag and expected Earth
-                const dx = corrected.x - earthDevice.x;
-                const dy = corrected.y - earthDevice.y;
-                const dz = corrected.z - earthDevice.z;
-                totalResidual += dx*dx + dy*dy + dz*dz;
+                const mag = Math.sqrt(corrected.x ** 2 + corrected.y ** 2 + corrected.z ** 2);
+                residuals.push(mag - expectedMag);
             }
-            return Math.sqrt(totalResidual / n);
+            return residuals;
         };
 
-        // Gradient descent with numerical gradients
-        // Use small learning rate and regularization to prevent divergence
-        const learningRateOffset = 0.1;  // Smaller for stability
-        const learningRateMatrix = 0.01;  // Even smaller for matrix (more sensitive)
-        const epsilon = 0.5;  // For numerical gradient
-        const maxIterations = 50;
-        const convergenceThreshold = 0.1;
+        // Compute Jacobian numerically with appropriate epsilon for each parameter type
+        const computeJacobian = (params: number[]): number[][] => {
+            const epsilonOffset = 0.5;   // For offset parameters (µT)
+            const epsilonMatrix = 0.01;  // For matrix parameters (dimensionless)
+            const baseResiduals = computeResiduals(params);
+            const nSamples = baseResiduals.length;
+            const nParams = params.length;
+            const J: number[][] = [];
 
-        let prevResidual = computeResidual(offset, S);
-        let bestResidual = prevResidual;
-        let bestOffset = { ...offset };
-        let bestS = S.map(row => [...row]);
-
-        for (let iter = 0; iter < maxIterations; iter++) {
-            // Compute gradients for offset
-            const gradOffset = { x: 0, y: 0, z: 0 };
-            for (const axis of ['x', 'y', 'z'] as const) {
-                const offsetPlus = { ...offset, [axis]: offset[axis] + epsilon };
-                const offsetMinus = { ...offset, [axis]: offset[axis] - epsilon };
-                gradOffset[axis] = (computeResidual(offsetPlus, S) - computeResidual(offsetMinus, S)) / (2 * epsilon);
+            for (let i = 0; i < nSamples; i++) {
+                J.push(new Array(nParams).fill(0));
             }
 
-            // Compute gradients for soft iron matrix
-            const gradS = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
-            for (let i = 0; i < 3; i++) {
-                for (let j = 0; j < 3; j++) {
-                    const Splus = S.map(row => [...row]);
-                    const Sminus = S.map(row => [...row]);
-                    Splus[i][j] += epsilon;
-                    Sminus[i][j] -= epsilon;
-                    gradS[i][j] = (computeResidual(offset, Splus) - computeResidual(offset, Sminus)) / (2 * epsilon);
+            for (let j = 0; j < nParams; j++) {
+                const epsilon = j < 3 ? epsilonOffset : epsilonMatrix;
+                const paramsPlus = [...params];
+                paramsPlus[j] += epsilon;
+                const residualsPlus = computeResiduals(paramsPlus);
+
+                for (let i = 0; i < nSamples; i++) {
+                    J[i][j] = (residualsPlus[i] - baseResiduals[i]) / epsilon;
                 }
             }
+            return J;
+        };
 
-            // Update parameters with gradient clipping
-            const maxGrad = 10;
-            offset.x -= learningRateOffset * Math.max(-maxGrad, Math.min(maxGrad, gradOffset.x));
-            offset.y -= learningRateOffset * Math.max(-maxGrad, Math.min(maxGrad, gradOffset.y));
-            offset.z -= learningRateOffset * Math.max(-maxGrad, Math.min(maxGrad, gradOffset.z));
+        // Compute sum of squared residuals
+        const computeCost = (residuals: number[]): number => {
+            return residuals.reduce((sum, r) => sum + r * r, 0);
+        };
 
-            for (let i = 0; i < 3; i++) {
-                for (let j = 0; j < 3; j++) {
-                    S[i][j] -= learningRateMatrix * Math.max(-maxGrad, Math.min(maxGrad, gradS[i][j]));
+        // Matrix operations for LM
+        const matMul = (A: number[][], B: number[][]): number[][] => {
+            const m = A.length, n = B[0].length, k = B.length;
+            const C: number[][] = Array.from({ length: m }, () => new Array(n).fill(0));
+            for (let i = 0; i < m; i++) {
+                for (let j = 0; j < n; j++) {
+                    for (let p = 0; p < k; p++) {
+                        C[i][j] += A[i][p] * B[p][j];
+                    }
                 }
             }
+            return C;
+        };
 
-            // Regularization: keep soft iron matrix close to identity-like
-            // Diagonal elements should be positive and near 1
-            // Off-diagonal elements should be small
-            for (let i = 0; i < 3; i++) {
-                // Clamp diagonal to reasonable range [0.5, 2.0]
-                S[i][i] = Math.max(0.5, Math.min(2.0, S[i][i]));
-                for (let j = 0; j < 3; j++) {
-                    if (i !== j) {
-                        // Clamp off-diagonal to [-0.5, 0.5]
-                        S[i][j] = Math.max(-0.5, Math.min(0.5, S[i][j]));
+        const matTranspose = (A: number[][]): number[][] => {
+            const m = A.length, n = A[0].length;
+            const T: number[][] = Array.from({ length: n }, () => new Array(m).fill(0));
+            for (let i = 0; i < m; i++) {
+                for (let j = 0; j < n; j++) {
+                    T[j][i] = A[i][j];
+                }
+            }
+            return T;
+        };
+
+        const matVecMul = (A: number[][], v: number[]): number[] => {
+            return A.map(row => row.reduce((sum, a, i) => sum + a * v[i], 0));
+        };
+
+        // Solve Ax = b using Gauss-Jordan elimination with partial pivoting
+        const solveLinearSystem = (A: number[][], b: number[]): number[] | null => {
+            const n = A.length;
+            // Create augmented matrix
+            const aug: number[][] = A.map((row, i) => [...row, b[i]]);
+
+            for (let col = 0; col < n; col++) {
+                // Find pivot
+                let maxRow = col;
+                for (let row = col + 1; row < n; row++) {
+                    if (Math.abs(aug[row][col]) > Math.abs(aug[maxRow][col])) {
+                        maxRow = row;
+                    }
+                }
+                [aug[col], aug[maxRow]] = [aug[maxRow], aug[col]];
+
+                if (Math.abs(aug[col][col]) < 1e-10) {
+                    return null; // Singular matrix
+                }
+
+                // Eliminate below
+                for (let row = col + 1; row < n; row++) {
+                    const factor = aug[row][col] / aug[col][col];
+                    for (let j = col; j <= n; j++) {
+                        aug[row][j] -= factor * aug[col][j];
                     }
                 }
             }
 
-            // Check convergence and track best
-            const newResidual = computeResidual(offset, S);
-            if (newResidual < bestResidual) {
-                bestResidual = newResidual;
-                bestOffset = { ...offset };
-                bestS = S.map(row => [...row]);
+            // Back substitution
+            const x = new Array(n).fill(0);
+            for (let i = n - 1; i >= 0; i--) {
+                x[i] = aug[i][n];
+                for (let j = i + 1; j < n; j++) {
+                    x[i] -= aug[i][j] * x[j];
+                }
+                x[i] /= aug[i][i];
+            }
+            return x;
+        };
+
+        // Initialize parameters from current estimates
+        let params = packParams(
+            { ...this._autoHardIronEstimate },
+            [
+                [this._autoSoftIronScale.x, 0, 0],
+                [0, this._autoSoftIronScale.y, 0],
+                [0, 0, this._autoSoftIronScale.z]
+            ]
+        );
+
+        // LM parameters
+        let lambda = 0.01;  // Initial damping factor
+        const lambdaUp = 10;    // Increase factor on failure
+        const lambdaDown = 0.1; // Decrease factor on success
+        const maxIterations = 100;
+        const convergenceThreshold = 1e-4;
+        const nParams = 12;
+
+        let residuals = computeResiduals(params);
+        let cost = computeCost(residuals);
+        let bestParams = [...params];
+        let bestCost = cost;
+
+        for (let iter = 0; iter < maxIterations; iter++) {
+            // Compute Jacobian and gradient
+            const J = computeJacobian(params);
+            const JT = matTranspose(J);
+            const JTJ = matMul(JT, J);
+            const JTr = matVecMul(JT, residuals);
+
+            // Add damping: (J^T J + λI)
+            const dampedJTJ = JTJ.map((row, i) => row.map((val, j) =>
+                i === j ? val + lambda : val
+            ));
+
+            // Solve for update step: δ = -(J^T J + λI)^(-1) J^T r
+            const delta = solveLinearSystem(dampedJTJ, JTr.map(x => -x));
+            if (!delta) {
+                // Singular matrix, increase damping and retry
+                lambda *= lambdaUp;
+                continue;
             }
 
-            if (Math.abs(prevResidual - newResidual) < convergenceThreshold) {
-                break;
+            // Compute trial parameters
+            const trialParams = params.map((p, i) => p + delta[i]);
+
+            // Apply constraints to soft iron matrix
+            // Diagonal: [0.5, 2.0], Off-diagonal: [-0.5, 0.5]
+            for (let i = 3; i < 12; i++) {
+                const row = Math.floor((i - 3) / 3);
+                const col = (i - 3) % 3;
+                if (row === col) {
+                    trialParams[i] = Math.max(0.5, Math.min(2.0, trialParams[i]));
+                } else {
+                    trialParams[i] = Math.max(-0.5, Math.min(0.5, trialParams[i]));
+                }
             }
-            prevResidual = newResidual;
+
+            // Evaluate trial solution
+            const trialResiduals = computeResiduals(trialParams);
+            const trialCost = computeCost(trialResiduals);
+
+            if (trialCost < cost) {
+                // Improvement - accept step and decrease damping
+                params = trialParams;
+                residuals = trialResiduals;
+                cost = trialCost;
+                lambda *= lambdaDown;
+
+                // Track best
+                if (cost < bestCost) {
+                    bestParams = [...params];
+                    bestCost = cost;
+                }
+
+                // Check convergence
+                const deltaMax = Math.max(...delta.map(Math.abs));
+                if (deltaMax < convergenceThreshold) {
+                    break;
+                }
+            } else {
+                // No improvement - increase damping
+                lambda *= lambdaUp;
+
+                // Prevent lambda from getting too large
+                if (lambda > 1e10) {
+                    break;
+                }
+            }
         }
 
-        // Use best result found
-        offset = bestOffset;
-        S = bestS;
+        // Use best parameters found
+        const { off: offset, S } = unpackParams(bestParams);
 
         // Store results
         this._autoHardIronEstimate = offset;
@@ -1160,10 +1277,12 @@ export class UnifiedMagCalibration {
 
         // Log results (always log completion, not just in debug mode)
         if (!this._loggedOrientationAwareCal) {
-            const finalResidual = computeResidual(offset, S);
-            this._log(`[UnifiedMagCal] ✓ Orientation-aware calibration complete:`);
+            // Compute final residual (RMS of magnitude errors)
+            const finalResiduals = computeResiduals(bestParams);
+            const finalResidual = Math.sqrt(finalResiduals.reduce((s, r) => s + r * r, 0) / finalResiduals.length);
+            this._log(`[UnifiedMagCal] ✓ Orientation-aware calibration complete (Levenberg-Marquardt):`);
             this._log(`  Samples: ${n}`);
-            this._log(`  Final residual: ${finalResidual.toFixed(1)} µT`);
+            this._log(`  Final RMS residual: ${finalResidual.toFixed(2)} µT (expected ~3-5 µT)`);
             this._log(`  Hard iron: [${offset.x.toFixed(2)}, ${offset.y.toFixed(2)}, ${offset.z.toFixed(2)}] µT`);
             this._log(`  Soft iron matrix:`);
             this._log(`    [${S[0][0].toFixed(4)}, ${S[0][1].toFixed(4)}, ${S[0][2].toFixed(4)}]`);
