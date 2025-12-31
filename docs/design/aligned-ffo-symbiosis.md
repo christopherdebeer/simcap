@@ -548,6 +548,59 @@ The **Aligned Finger Model** and **FFO$$** are not competing approaches but **co
 
 ---
 
+---
+
+## 7. Python Exploration: Hybrid Trajectory Inference
+
+A Python exploration script has been created to validate these symbiosis concepts:
+
+**Location:** [`ml/explore_hybrid_trajectory_inference.py`](../../ml/explore_hybrid_trajectory_inference.py)
+
+### Key Findings from Exploration
+
+```
+Trajectory Type Comparison:
+---------------------------
+Trajectory      Within-Class  Between-Class  Discriminability
+accel                0.292         0.301           1.03x
+mag_raw              0.313         0.333           1.06x
+mag_residual         0.312         0.333           1.07x
+combined             0.312         0.333           1.07x
+```
+
+**Insights:**
+1. **Magnetic residuals preserve pose information** in trajectory space
+2. **Combined trajectories (6D: accel + mag)** enable simultaneous motion + pose inference
+3. **Hybrid recognizer** correctly identifies both motion templates AND finger poses
+
+### Signature Trajectory Concept
+
+The exploration validates that finger flexions create **characteristic paths through signature space**:
+
+```
+Signature Clusters (µT):
+
+00000 (baseline):  [470, 476, 315]      - All fingers extended
+22222 (fist):      [3010, 6521, 6410]   - All fingers flexed
+20000 (thumb):     [1170, 3932, -6383]  - Thumb flexed only
+02000 (index):     [2137, 6372, 10577]  - Index flexed only
+```
+
+These distinct clusters enable FFO$$-style template matching on magnetic data!
+
+### Proposed Unified Pipeline
+
+```
+[IMU Stream] → [Sensor Fusion] → [Residual Extraction] → [Dual Inference]
+                    |                      |                    |
+                    v                      v                    v
+              Orientation           Orientation-           Motion: FFO$$
+              (quaternion)          Independent            Pose: Neural/kNN
+                                    Signature
+```
+
+---
+
 ## References
 
 ### Core Documents
@@ -555,8 +608,9 @@ The **Aligned Finger Model** and **FFO$$** are not competing approaches but **co
 - [FFO$$ Template Matching Analysis](./ffo-template-matching-analysis.md)
 - [FFO$$ Research Overview](./ffo-dollar-research-analysis.md)
 
-### Implementation
+### Implementation & Exploration
 - [`ml/simulation/aligned_generator.py`](../../ml/simulation/aligned_generator.py)
+- [`ml/explore_hybrid_trajectory_inference.py`](../../ml/explore_hybrid_trajectory_inference.py)
 - [`packages/ffo/src/recognizer.ts`](../../packages/ffo/src/recognizer.ts)
 - [`apps/gambit/gesture-inference.ts`](../../apps/gambit/gesture-inference.ts)
 
