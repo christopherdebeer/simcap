@@ -131,7 +131,7 @@ export class GestureInference {
   private inferenceCount: number = 0;
 
   constructor(options: GestureInferenceOptions = {}) {
-    this.modelPath = options.modelPath || 'models/gesture_v1/model.json';
+    this.modelPath = options.modelPath || '/models/gesture_v1/model.json';
     this.windowSize = options.windowSize || 50;
     this.stride = options.stride || 25;
     this.confidenceThreshold = options.confidenceThreshold || 0.5;
@@ -372,7 +372,7 @@ export class GestureInference {
 
 export const GESTURE_MODELS: Record<string, ModelConfig> = {
   'v1': {
-    path: 'models/gesture_v1/model.json',
+    path: '/models/gesture_v1/model.json',
     labels: ['rest', 'fist', 'open_palm', 'index_up', 'peace', 'thumbs_up', 'ok_sign', 'pinch', 'grab', 'wave'],
     stats: {
       mean: [-1106.31, -3629.05, -2285.71, 2740.34, -14231.48, -19574.75, 509.62, 909.94, -558.86],
@@ -405,7 +405,7 @@ export class FingerTrackingInference {
   private lastPrediction: FingerPrediction | null = null;
 
   constructor(options: FingerTrackingOptions = {}) {
-    this.modelPath = options.modelPath || 'models/finger_v1/model.json';
+    this.modelPath = options.modelPath || '/models/finger_v1/model.json';
     this.windowSize = options.windowSize || 50;
     this.stride = options.stride || 10;
     this.confidenceThreshold = options.confidenceThreshold || 0.5;
@@ -744,7 +744,7 @@ export class MagneticFingerInference {
   private lastPrediction: FingerPrediction | null = null;
 
   constructor(options: MagneticFingerOptions = {}) {
-    this.modelPath = options.modelPath || 'models/finger_aligned_v1/model.json';
+    this.modelPath = options.modelPath || '/models/finger_aligned_v1/model.json';
     this.smoothingAlpha = options.smoothingAlpha || 0.4;
     this.inputFeatures = options.inputFeatures || 3;  // Default to mag-only
     this.numStates = options.numStates || 2;  // Default to binary
@@ -1047,7 +1047,7 @@ export class MagneticFingerInference {
 
 export const FINGER_MODELS: Record<string, FingerModelConfig & { inputFeatures?: number; numStates?: number }> = {
   'v1': {
-    path: 'models/finger_v1/model.json',
+    path: '/models/finger_v1/model.json',
     stats: {
       mean: [-1106.31, -3629.05, -2285.71, 2740.34, -14231.48, -19574.75, 509.62, 909.94, -558.86],
       std: [3468.31, 5655.28, 4552.77, 1781.28, 3627.35, 1845.62, 380.11, 318.77, 409.51]
@@ -1056,7 +1056,7 @@ export const FINGER_MODELS: Record<string, FingerModelConfig & { inputFeatures?:
     date: '2025-01-12'
   },
   'contrastive_v1': {
-    path: 'models/finger_contrastive_v1/model.json',
+    path: '/models/finger_contrastive_v1/model.json',
     stats: {
       mean: [31.03, -4.78, 0.10, -0.04, -0.03, 0.34],
       std: [24.85, 40.71, 48.16, 0.51, 0.53, 0.61]
@@ -1065,7 +1065,7 @@ export const FINGER_MODELS: Record<string, FingerModelConfig & { inputFeatures?:
     date: '2025-12-26'
   },
   'aligned_v1': {
-    path: 'models/finger_aligned_v1/model.json',
+    path: '/models/finger_aligned_v1/model.json',
     stats: {
       mean: [5188, 6179, 17152],  // Ground truth aligned stats (mx, my, mz only)
       std: [5732, 7181, 16189]
