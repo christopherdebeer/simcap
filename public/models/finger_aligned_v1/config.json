@@ -1,0 +1,33 @@
+{
+  "stats": {
+    "mean": [
+      5187.919527499799,
+      6178.516489586772,
+      17152.016405032413
+    ],
+    "std": [
+      5731.799360328426,
+      7180.775692177838,
+      16189.361260791851
+    ]
+  },
+  "inputShape": [
+    null,
+    3
+  ],
+  "fingerNames": [
+    "thumb",
+    "index",
+    "middle",
+    "ring",
+    "pinky"
+  ],
+  "stateNames": [
+    "extended",
+    "flexed"
+  ],
+  "description": "Ground truth aligned finger tracking model",
+  "version": "aligned_v1",
+  "date": "2025-12-31",
+  "modelType": "graph"
+}
