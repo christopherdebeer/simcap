@@ -715,14 +715,16 @@ export interface MagneticSample {
 export interface MagneticFingerOptions {
   modelPath?: string;
   smoothingAlpha?: number;
+  inputFeatures?: number;  // 3 for mag-only, 6 for mag+accel
+  numStates?: number;      // 2 for binary, 3 for extended/partial/flexed
   onPrediction?: ((result: FingerPrediction) => void) | null;
   onReady?: (() => void) | null;
   onError?: ((error: Error) => void) | null;
 }
 
 /**
- * Magnetic field-based finger tracking using contrastive pre-trained model.
- * Uses single samples with 6 features (mx, my, mz, ax, ay, az).
+ * Magnetic field-based finger tracking using trained neural network.
+ * Supports both 6-feature (mag+accel) and 3-feature (mag-only) models.
  */
 export class MagneticFingerInference {
   private modelPath: string;
@@ -731,6 +733,8 @@ export class MagneticFingerInference {
   private stats: NormalizationStats;
   private fingerNames: string[];
   private stateNames: string[];
+  private inputFeatures: number;
+  private numStates: number;
   private onPrediction: ((result: FingerPrediction) => void) | null;
   private onReady: (() => void) | null;
   private onError: ((error: Error) => void) | null;
@@ -740,17 +744,19 @@ export class MagneticFingerInference {
   private lastPrediction: FingerPrediction | null = null;
 
   constructor(options: MagneticFingerOptions = {}) {
-    this.modelPath = options.modelPath || 'models/finger_contrastive_v1/model.json';
+    this.modelPath = options.modelPath || 'models/finger_aligned_v1/model.json';
     this.smoothingAlpha = options.smoothingAlpha || 0.4;
+    this.inputFeatures = options.inputFeatures || 3;  // Default to mag-only
+    this.numStates = options.numStates || 2;  // Default to binary
 
-    // Stats from contrastive pre-trained model (6 features: mx, my, mz, ax, ay, az)
+    // Stats from ground truth aligned model (3 features: mx, my, mz)
     this.stats = {
-      mean: [31.03, -4.78, 0.10, -0.04, -0.03, 0.34],
-      std: [24.85, 40.71, 48.16, 0.51, 0.53, 0.61]
+      mean: [5188, 6179, 17152],
+      std: [5732, 7181, 16189]
     };
 
     this.fingerNames = ['thumb', 'index', 'middle', 'ring', 'pinky'];
-    this.stateNames = ['extended', 'partial', 'flexed'];
+    this.stateNames = this.numStates === 2 ? ['extended', 'flexed'] : ['extended', 'partial', 'flexed'];
 
     this.onPrediction = options.onPrediction || null;
     this.onReady = options.onReady || null;
@@ -758,6 +764,8 @@ export class MagneticFingerInference {
 
     console.log('[MagneticFingerInference] Initialized with config:', {
       modelPath: this.modelPath,
+      inputFeatures: this.inputFeatures,
+      numStates: this.numStates,
       fingerNames: this.fingerNames,
       stateNames: this.stateNames
     });
@@ -785,7 +793,7 @@ export class MagneticFingerInference {
 
       // Warmup with single sample
       console.log('[MagneticFingerInference] Warming up model...');
-      const dummyInput = tf.zeros([1, 6]);
+      const dummyInput = tf.zeros([1, this.inputFeatures]);
       const warmup = this.model.predict(dummyInput);
 
       if (Array.isArray(warmup)) {
@@ -826,19 +834,26 @@ export class MagneticFingerInference {
     const startTime = performance.now();
 
     try {
-      // Create feature vector [mx, my, mz, ax, ay, az]
-      const features = [
-        sample.mx_ut, sample.my_ut, sample.mz_ut,
-        sample.ax_g, sample.ay_g, sample.az_g
-      ];
+      // Create feature vector based on inputFeatures setting
+      let features: number[];
+      if (this.inputFeatures === 3) {
+        // Mag-only model
+        features = [sample.mx_ut, sample.my_ut, sample.mz_ut];
+      } else {
+        // Mag + accel model
+        features = [
+          sample.mx_ut, sample.my_ut, sample.mz_ut,
+          sample.ax_g, sample.ay_g, sample.az_g
+        ];
+      }
 
       // Normalize
       const normalized = features.map((val, i) =>
-        (val - this.stats.mean[i]) / this.stats.std[i]
+        (val - this.stats.mean[i]) / (this.stats.std[i] + 1e-8)
       );
 
       // Create tensor and predict
-      const inputTensor = tf.tensor2d([normalized], [1, 6]);
+      const inputTensor = tf.tensor2d([normalized], [1, this.inputFeatures]);
       const outputs = this.model.predict(inputTensor);
 
       const prediction = await this.parseOutputs(outputs);
@@ -953,7 +968,8 @@ export class MagneticFingerInference {
 
   /**
    * Convert prediction to curl values for 3D hand visualization
-   * Maps: extended=0.0, partial=0.5, flexed=1.0
+   * For binary models: extended=0.0, flexed=1.0
+   * For 3-state models: extended=0.0, partial=0.5, flexed=1.0
    */
   toCurls(prediction: FingerPrediction | null = null): FingerPose {
     const pred = prediction || this.lastPrediction;
@@ -962,11 +978,17 @@ export class MagneticFingerInference {
     }
 
     const stateToeCurl = (state: number): number => {
-      switch (state) {
-        case 0: return 0.0;   // extended
-        case 1: return 0.5;   // partial
-        case 2: return 1.0;   // flexed
-        default: return 0.0;
+      if (this.numStates === 2) {
+        // Binary model: 0=extended, 1=flexed
+        return state === 1 ? 1.0 : 0.0;
+      } else {
+        // 3-state model: 0=extended, 1=partial, 2=flexed
+        switch (state) {
+          case 0: return 0.0;
+          case 1: return 0.5;
+          case 2: return 1.0;
+          default: return 0.0;
+        }
       }
     };
 
@@ -1023,7 +1045,7 @@ export class MagneticFingerInference {
 
 // ===== Finger Model Registry =====
 
-export const FINGER_MODELS: Record<string, FingerModelConfig> = {
+export const FINGER_MODELS: Record<string, FingerModelConfig & { inputFeatures?: number; numStates?: number }> = {
   'v1': {
     path: 'models/finger_v1/model.json',
     stats: {
@@ -1041,6 +1063,17 @@ export const FINGER_MODELS: Record<string, FingerModelConfig> = {
     },
     description: 'Contrastive pre-trained model (6 features: mx, my, mz, ax, ay, az)',
     date: '2025-12-26'
+  },
+  'aligned_v1': {
+    path: 'models/finger_aligned_v1/model.json',
+    stats: {
+      mean: [5188, 6179, 17152],  // Ground truth aligned stats (mx, my, mz only)
+      std: [5732, 7181, 16189]
+    },
+    description: 'Ground truth aligned model (3 features: mx, my, mz, binary output)',
+    date: '2025-12-31',
+    inputFeatures: 3,
+    numStates: 2  // Binary: extended/flexed
   }
 };
 
@@ -1079,11 +1112,29 @@ export function createGestureInference(version: string = 'v1', options: GestureI
   return inference;
 }
 
-export function createMagneticFingerInference(options: MagneticFingerOptions = {}): MagneticFingerInference {
-  const modelConfig = FINGER_MODELS['contrastive_v1'];
+export function createMagneticFingerInference(versionOrOptions?: string | MagneticFingerOptions, options?: MagneticFingerOptions): MagneticFingerInference {
+  // Handle both createMagneticFingerInference('aligned_v1', {...}) and createMagneticFingerInference({...})
+  let version: string;
+  let opts: MagneticFingerOptions;
+
+  if (typeof versionOrOptions === 'string') {
+    version = versionOrOptions;
+    opts = options || {};
+  } else {
+    version = 'aligned_v1';  // Default to aligned model
+    opts = versionOrOptions || {};
+  }
+
+  const modelConfig = FINGER_MODELS[version];
+  if (!modelConfig) {
+    throw new Error(`Unknown finger model version: ${version}. Available: ${Object.keys(FINGER_MODELS).join(', ')}`);
+  }
+
   const inference = new MagneticFingerInference({
     modelPath: modelConfig.path,
-    ...options
+    inputFeatures: modelConfig.inputFeatures || 6,
+    numStates: modelConfig.numStates || 3,
+    ...opts
   });
   inference.setStats(modelConfig.stats.mean, modelConfig.stats.std);
   return inference;
