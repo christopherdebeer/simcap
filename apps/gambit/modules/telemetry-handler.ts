@@ -88,6 +88,40 @@ let deps: Dependencies = {
 // Shared telemetry processor instance
 let telemetryProcessor: TelemetryProcessor | null = null;
 
+// ===== Performance Optimizations =====
+
+// DOM element cache for live display (avoid repeated getElementById)
+const liveDisplayCache: Record<string, HTMLElement | null> = {};
+function $cached(id: string): HTMLElement | null {
+    if (!deps.$) return null;
+    if (!(id in liveDisplayCache)) {
+        liveDisplayCache[id] = deps.$(id);
+    }
+    return liveDisplayCache[id];
+}
+
+// requestAnimationFrame throttling for live display
+let liveDisplayPending = false;
+let pendingDisplayData: { raw: RawTelemetry; decorated: DecoratedTelemetry } | null = null;
+
+/**
+ * Schedule a live display update using requestAnimationFrame
+ * This prevents blocking the main thread on every telemetry sample
+ */
+function scheduleLiveDisplayUpdate(raw: RawTelemetry, decorated: DecoratedTelemetry): void {
+    pendingDisplayData = { raw, decorated };
+
+    if (!liveDisplayPending) {
+        liveDisplayPending = true;
+        requestAnimationFrame(() => {
+            liveDisplayPending = false;
+            if (pendingDisplayData) {
+                updateLiveDisplayInternal(pendingDisplayData.raw, pendingDisplayData.decorated);
+            }
+        });
+    }
+}
+
 // ===== Dependency Management =====
 
 /**
@@ -221,9 +255,9 @@ export function onTelemetry(telemetry: RawTelemetry): void {
         }
     }
 
-    // Update live display
+    // Update live display (throttled via requestAnimationFrame)
     if (deps.$) {
-        updateLiveDisplay(telemetry, decoratedTelemetry);
+        scheduleLiveDisplayUpdate(telemetry, decoratedTelemetry);
     }
 
     // Update sample count (throttled)
@@ -233,21 +267,20 @@ export function onTelemetry(telemetry: RawTelemetry): void {
 }
 
 /**
- * Update live sensor display
+ * Update live sensor display (internal - called from RAF callback)
+ * Uses cached DOM elements and is throttled to screen refresh rate
  * @param raw - Raw telemetry
  * @param decorated - Decorated telemetry with processed fields
  */
-function updateLiveDisplay(raw: RawTelemetry, decorated: DecoratedTelemetry): void {
-    const $ = deps.$;
-    if (!$) return;
+function updateLiveDisplayInternal(raw: RawTelemetry, decorated: DecoratedTelemetry): void {
+    // Use cached DOM elements to avoid repeated getElementById calls
+    const axEl = $cached('ax');
+    const ayEl = $cached('ay');
+    const azEl = $cached('az');
+    const gxEl = $cached('gx');
+    const gyEl = $cached('gy');
+    const gzEl = $cached('gz');
 
-    // Raw IMU values
-    const axEl = $('ax');
-    const ayEl = $('ay');
-    const azEl = $('az');
-    const gxEl = $('gx');
-    const gyEl = $('gy');
-    const gzEl = $('gz');
     if (axEl) axEl.textContent = String(raw.ax);
     if (ayEl) ayEl.textContent = String(raw.ay);
     if (azEl) azEl.textContent = String(raw.az);
@@ -256,20 +289,18 @@ function updateLiveDisplay(raw: RawTelemetry, decorated: DecoratedTelemetry): vo
     if (gzEl) gzEl.textContent = String(raw.gz);
 
     // Calibrated magnetometer (show calibrated if available, otherwise raw)
-    // Note: calibrated_mx/my/mz are dynamic fields accessed via index signature
-    const mxEl = $('mx');
-    const myEl = $('my');
-    const mzEl = $('mz');
+    const mxEl = $cached('mx');
+    const myEl = $cached('my');
+    const mzEl = $cached('mz');
     if (mxEl) mxEl.textContent = ((decorated.calibrated_mx as number | undefined) ?? raw.mx).toFixed(2);
     if (myEl) myEl.textContent = ((decorated.calibrated_my as number | undefined) ?? raw.my).toFixed(2);
     if (mzEl) mzEl.textContent = ((decorated.calibrated_mz as number | undefined) ?? raw.mz).toFixed(2);
 
     // Residual magnetic field display (finger magnet signals)
-    // TelemetryProcessor outputs residual_mx/my/mz (Earth field subtracted)
-    const fusedMxEl = $('fused_mx');
-    const fusedMyEl = $('fused_my');
-    const fusedMzEl = $('fused_mz');
-    const residualMagEl = $('residual_magnitude');
+    const fusedMxEl = $cached('fused_mx');
+    const fusedMyEl = $cached('fused_my');
+    const fusedMzEl = $cached('fused_mz');
+    const residualMagEl = $cached('residual_magnitude');
 
     if (decorated.residual_mx !== undefined) {
         if (fusedMxEl) fusedMxEl.textContent = decorated.residual_mx.toFixed(2);

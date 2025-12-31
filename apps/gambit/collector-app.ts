@@ -197,6 +197,30 @@ let lastCalibrationSave = 0;
 const CALIBRATION_SAVE_INTERVAL = 10000;  // Save calibration every 10 seconds when ready
 let wasAutoHardIronReady = false;  // Track transition to ready state
 
+// ===== Performance Optimizations =====
+
+// DOM element cache for frequently accessed elements (avoid repeated getElementById)
+const domCache: Record<string, HTMLElement | null> = {};
+function $cached(id: string): HTMLElement | null {
+    if (!(id in domCache)) {
+        domCache[id] = document.getElementById(id);
+    }
+    return domCache[id];
+}
+
+// Track labels list state to avoid unnecessary rebuilds
+let lastLabelsCount = -1;
+let lastLabelsHash = '';
+
+// requestAnimationFrame throttling for live display
+let liveDisplayRAFPending = false;
+let pendingLiveDisplayData: { raw: any; decorated: any } | null = null;
+
+// Throttle calibration UI updates (use RAF instead of blocking setInterval)
+let calibrationUIRAFPending = false;
+let lastCalibrationUIUpdate = 0;
+const CALIBRATION_UI_MIN_INTERVAL = 200;  // Max 5 updates/second instead of constant 500ms
+
 /**
  * Update calibration confidence UI
  */
@@ -214,22 +238,23 @@ function updateCalibrationConfidenceUI(): void {
     const earthMag = calState.earthMagnitude;
     const totalSamples = calState.totalSamples;
 
-    const overallEl = $('overallConfidence');
-    const hardIronEl = $('hardIronConf');
-    const earthFieldEl = $('earthFieldConf');
-    const samplesEl = $('calibSamples');
-    const fieldMagEl = $('earthFieldMag');
-    const statusEl = $('calibStatus');
-    const barEl = $('confidenceBar');
-    const meanResidualEl = $('meanResidual');
-    const residualQualityEl = $('residualQuality');
+    // Use cached DOM elements to avoid repeated getElementById calls
+    const overallEl = $cached('overallConfidence');
+    const hardIronEl = $cached('hardIronConf');
+    const earthFieldEl = $cached('earthFieldConf');
+    const samplesEl = $cached('calibSamples');
+    const fieldMagEl = $cached('earthFieldMag');
+    const statusEl = $cached('calibStatus');
+    const barEl = $cached('confidenceBar');
+    const meanResidualEl = $cached('meanResidual');
+    const residualQualityEl = $cached('residualQuality');
 
-    // Auto hard iron progress UI elements
-    const autoProgressEl = $('autoHardIronProgress');
-    const autoBarEl = $('autoHardIronBar');
-    const autoStatusEl = $('autoHardIronStatus');
-    const softIronScaleEl = $('softIronScale');
-    const autoRangesEl = $('autoHardIronRanges');
+    // Auto hard iron progress UI elements (cached)
+    const autoProgressEl = $cached('autoHardIronProgress');
+    const autoBarEl = $cached('autoHardIronBar');
+    const autoStatusEl = $cached('autoHardIronStatus');
+    const softIronScaleEl = $cached('softIronScale');
+    const autoRangesEl = $cached('autoHardIronRanges');
 
     // Update auto hard iron progress
     const autoProgress = Math.round(calState.autoHardIronProgress * 100);
@@ -457,10 +482,11 @@ function updateMagnetDetectionUI(): void {
     const magnetState = processor.getMagnetState();
     if (!magnetState) return;
 
-    const statusEl = $('magnetStatusValue');
-    const confEl = $('magnetConfidenceValue');
-    const barEl = $('magnetConfidenceBar');
-    const residualEl = $('magnetAvgResidual');
+    // Use cached DOM elements
+    const statusEl = $cached('magnetStatusValue');
+    const confEl = $cached('magnetConfidenceValue');
+    const barEl = $cached('magnetConfidenceBar');
+    const residualEl = $cached('magnetAvgResidual');
 
     type MagnetStatus = 'none' | 'possible' | 'likely' | 'confirmed';
     const status = magnetState.status as MagnetStatus;
@@ -490,17 +516,36 @@ function updateMagnetDetectionUI(): void {
 }
 
 /**
- * Start periodic calibration UI updates
+ * Start periodic calibration UI updates using requestAnimationFrame
+ * More efficient than setInterval as it:
+ * - Pauses when tab is inactive
+ * - Syncs with screen refresh rate
+ * - Doesn't block main thread
  */
 function startCalibrationUIUpdates(): void {
     if (calibrationUIInterval) return;
 
-    calibrationUIInterval = setInterval(() => {
-        updateCalibrationConfidenceUI();
-        updateMagnetDetectionUI();
-    }, CALIBRATION_UI_UPDATE_INTERVAL);
+    // Use a flag to track if we should continue the loop
+    calibrationUIInterval = 1 as any;  // Non-null to indicate running
 
-    console.log('[GAMBIT Collector] Started calibration UI updates');
+    function calibrationUILoop(): void {
+        if (!calibrationUIInterval) return;  // Stop if cleared
+
+        const now = performance.now();
+
+        // Only update if enough time has passed (throttle to ~5 updates/second)
+        if (now - lastCalibrationUIUpdate >= CALIBRATION_UI_MIN_INTERVAL) {
+            lastCalibrationUIUpdate = now;
+            updateCalibrationConfidenceUI();
+            updateMagnetDetectionUI();
+        }
+
+        // Schedule next frame
+        requestAnimationFrame(calibrationUILoop);
+    }
+
+    requestAnimationFrame(calibrationUILoop);
+    console.log('[GAMBIT Collector] Started calibration UI updates (RAF-based)');
 }
 
 /**
@@ -508,8 +553,7 @@ function startCalibrationUIUpdates(): void {
  */
 function stopCalibrationUIUpdates(): void {
     if (calibrationUIInterval) {
-        clearInterval(calibrationUIInterval);
-        calibrationUIInterval = null;
+        calibrationUIInterval = null;  // Setting to null stops the RAF loop
         console.log('[GAMBIT Collector] Stopped calibration UI updates');
     }
 }
@@ -671,18 +715,20 @@ async function initGeomagneticLocation(): Promise<void> {
 
 /**
  * Update UI state
+ * Performance: Uses cached DOM elements and only rebuilds labels when changed
  */
 function updateUI(): void {
-    const statusIndicator = $('statusIndicator');
-    const connectBtn = $('connectBtn');
-    const startBtn = $('startBtn') as HTMLButtonElement | null;
-    const stopBtn = $('stopBtn') as HTMLButtonElement | null;
-    const clearBtn = $('clearBtn') as HTMLButtonElement | null;
-    const exportBtn = $('exportBtn') as HTMLButtonElement | null;
-    const sampleCount = $('sampleCount');
-    const progressFill = $('progressFill');
-    const labelCount = $('labelCount');
-    const labelsList = $('labelsList');
+    // Use cached DOM elements for frequently accessed elements
+    const statusIndicator = $cached('statusIndicator');
+    const connectBtn = $cached('connectBtn');
+    const startBtn = $cached('startBtn') as HTMLButtonElement | null;
+    const stopBtn = $cached('stopBtn') as HTMLButtonElement | null;
+    const clearBtn = $cached('clearBtn') as HTMLButtonElement | null;
+    const exportBtn = $cached('exportBtn') as HTMLButtonElement | null;
+    const sampleCount = $cached('sampleCount');
+    const progressFill = $cached('progressFill');
+    const labelCount = $cached('labelCount');
+    const labelsList = $cached('labelsList');
 
     if (statusIndicator) {
         if (state.recording && state.paused) {
@@ -703,7 +749,7 @@ function updateUI(): void {
     if (connectBtn) connectBtn.textContent = state.connected ? 'Disconnect' : 'Connect Device';
     if (startBtn) startBtn.disabled = !state.connected || state.recording;
 
-    const pauseBtn = $('pauseBtn') as HTMLButtonElement | null;
+    const pauseBtn = $cached('pauseBtn') as HTMLButtonElement | null;
     if (pauseBtn) {
         pauseBtn.disabled = !state.recording;
         pauseBtn.textContent = state.paused ? 'Resume' : 'Pause';
@@ -714,20 +760,20 @@ function updateUI(): void {
     if (clearBtn) clearBtn.disabled = state.sessionData.length === 0 || state.recording;
     if (exportBtn) exportBtn.disabled = state.sessionData.length === 0 || state.recording;
 
-    const uploadBtn = $('uploadBtn') as HTMLButtonElement | null;
+    const uploadBtn = $cached('uploadBtn') as HTMLButtonElement | null;
     if (uploadBtn) {
         const hasAuth = uploadMethod === 'proxy' ? hasUploadSecret() : !!ghToken;
         uploadBtn.disabled = state.sessionData.length === 0 || state.recording || !hasAuth;
         uploadBtn.title = hasAuth ? 'Upload session data' : `Configure ${uploadMethod === 'proxy' ? 'upload secret' : 'GitHub token'} first`;
     }
 
-    const wizardBtn = $('wizardBtn') as HTMLButtonElement | null;
+    const wizardBtn = $cached('wizardBtn') as HTMLButtonElement | null;
     if (wizardBtn) {
         wizardBtn.disabled = !state.connected;
         wizardBtn.title = state.connected ? 'Start guided data collection' : 'Connect device to enable';
     }
 
-    const poseEstimationBtn = $('poseEstimationBtn') as HTMLButtonElement | null;
+    const poseEstimationBtn = $cached('poseEstimationBtn') as HTMLButtonElement | null;
     if (poseEstimationBtn) {
         poseEstimationBtn.disabled = !state.connected;
         poseEstimationBtn.textContent = poseState.enabled ? '🎯 Disable Pose Tracking' : '🎯 Enable Pose Tracking';
@@ -742,7 +788,16 @@ function updateUI(): void {
     }
 
     if (labelCount) labelCount.textContent = state.labels.length.toString();
-    if (labelsList) {
+
+    // PERFORMANCE: Only rebuild labels list when labels actually change
+    // Compute a simple hash based on labels count and last label's end_sample
+    const currentLabelsHash = state.labels.length === 0
+        ? 'empty'
+        : `${state.labels.length}-${state.labels[state.labels.length - 1]?.end_sample ?? state.labels[state.labels.length - 1]?.endIndex ?? 0}`;
+
+    if (labelsList && currentLabelsHash !== lastLabelsHash) {
+        lastLabelsHash = currentLabelsHash;
+
         if (state.labels.length === 0) {
             labelsList.innerHTML = '<div style="color: #666; text-align: center; padding: 10px;">No labels yet.</div>';
         } else {
@@ -797,7 +852,7 @@ function updateUI(): void {
  * Update active labels display
  */
 function updateActiveLabelsDisplay(): void {
-    const display = $('activeLabelsDisplay');
+    const display = $cached('activeLabelsDisplay');
     if (!display) return;
 
     const tags: string[] = [];
