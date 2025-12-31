@@ -224,3 +224,63 @@ Tested proposed fixes on 22 sessions:
 2. Test H/V ratio gate:
    - Verify bad calibrations are rejected
    - Verify system falls back to diagonal soft iron
+
+## Bootstrap Calibration Analysis
+
+**Analysis date:** 2025-12-31
+**Sessions analyzed:** 22
+
+### Current vs Recommended Bootstrap Values
+
+| Parameter | Current (2025-12-29) | Recommended (Median) | Difference |
+|-----------|---------------------|---------------------|------------|
+| Hard Iron X | -33.0 µT | 29.3 µT | 62.3 µT |
+| Hard Iron Y | -69.1 µT | -9.9 µT | 59.2 µT |
+| Hard Iron Z | -50.8 µT | -20.1 µT | 30.7 µT |
+| **Total Offset Error** | - | - | **91.3 µT** |
+
+### Offset Statistics Across Sessions
+
+| Axis | Mean | Std Dev | Median |
+|------|------|---------|--------|
+| X | 15.6 µT | 24.7 µT | 29.3 µT |
+| Y | -8.9 µT | 27.2 µT | -9.9 µT |
+| Z | -5.9 µT | 48.3 µT | -20.1 µT |
+
+### Range Statistics
+
+| Axis | Mean Range | Std Dev | Median Range |
+|------|------------|---------|--------------|
+| X | 92.4 µT | 23.3 µT | 84.5 µT |
+| Y | 110.8 µT | 35.8 µT | 99.0 µT |
+| Z | 152.1 µT | 42.2 µT | 143.9 µT |
+
+### Validation Results
+
+| Metric | Optimal Bootstrap | No Bootstrap |
+|--------|-------------------|--------------|
+| Mean Residual | 3.4 µT | 3.5 µT |
+| Mean Offset Error | 50.8 µT | - |
+
+**Finding:** Bootstrap values have minimal impact on final calibration quality when using scipy's Levenberg-Marquardt optimizer. However, updated bootstrap values would:
+1. Reduce offset error from 91.3 µT to ~50.8 µT
+2. Provide better starting point for real-time gradient descent
+3. Enable faster convergence in firmware
+
+### Recommended TypeScript Code Update
+
+```typescript
+// Updated bootstrap values from offline analysis of 22 sessions
+// Location: unified-mag-calibration.ts lines 317-327
+if (this._autoHardIronEnabled) {
+    this._autoHardIronEstimate = { x: 29.3, y: -9.9, z: -20.1 };
+    this._autoHardIronMin = { x: 29.3 - 42.3, y: -9.9 - 49.5, z: -20.1 - 72.0 };
+    this._autoHardIronMax = { x: 29.3 + 42.3, y: -9.9 + 49.5, z: -20.1 + 72.0 };
+}
+```
+
+### Analysis Files
+
+- `ml/analyze_bootstrap_impact.py` - Bootstrap comparison script
+- `ml/bootstrap_analysis_results.json` - Full results data
+- `ml/bootstrap_analysis_plot.png` - Visualization
