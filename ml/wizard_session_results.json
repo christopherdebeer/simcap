@@ -1,0 +1,108 @@
+{
+  "session": "2025-12-31T14_06_18.270Z.json",
+  "total_samples": 3807,
+  "total_labels": 35,
+  "label_distribution": {
+    "poses": {
+      "fist": 2,
+      "pinch": 2,
+      "peace": 2
+    },
+    "finger_codes": {
+      "00000": 4,
+      "22222": 2,
+      "20000": 2,
+      "02000": 2,
+      "00200": 2,
+      "00020": 2,
+      "00002": 2,
+      "22000": 2,
+      "00022": 2,
+      "00222": 2
+    },
+    "calibration": {
+      "none": 35
+    },
+    "motion": {
+      "static": 35
+    }
+  },
+  "segment_statistics": {
+    "00000": {
+      "n_segments": 4,
+      "n_samples": 486,
+      "raw_magnitude": 756.9856292307347,
+      "residual_magnitude": null,
+      "calibrated_magnitude": null
+    },
+    "22222": {
+      "n_segments": 2,
+      "n_samples": 185,
+      "raw_magnitude": 9864.37819750348,
+      "residual_magnitude": null,
+      "calibrated_magnitude": null
+    },
+    "20000": {
+      "n_segments": 2,
+      "n_samples": 161,
+      "raw_magnitude": 9320.510229515985,
+      "residual_magnitude": null,
+      "calibrated_magnitude": null
+    },
+    "02000": {
+      "n_segments": 2,
+      "n_samples": 170,
+      "raw_magnitude": 12878.72009672191,
+      "residual_magnitude": null,
+      "calibrated_magnitude": null
+    },
+    "00200": {
+      "n_segments": 2,
+      "n_samples": 174,
+      "raw_magnitude": 12631.442751423134,
+      "residual_magnitude": null,
+      "calibrated_magnitude": null
+    },
+    "00020": {
+      "n_segments": 2,
+      "n_samples": 222,
+      "raw_magnitude": 8323.720398405992,
+      "residual_magnitude": null,
+      "calibrated_magnitude": null
+    },
+    "00002": {
+      "n_segments": 2,
+      "n_samples": 154,
+      "raw_magnitude": 33213.098077439754,
+      "residual_magnitude": null,
+      "calibrated_magnitude": null
+    },
+    "22000": {
+      "n_segments": 2,
+      "n_samples": 222,
+      "raw_magnitude": 8300.66581584437,
+      "residual_magnitude": null,
+      "calibrated_magnitude": null
+    },
+    "00022": {
+      "n_segments": 2,
+      "n_samples": 160,
+      "raw_magnitude": 8102.406034479587,
+      "residual_magnitude": null,
+      "calibrated_magnitude": null
+    },
+    "00222": {
+      "n_segments": 2,
+      "n_samples": 231,
+      "raw_magnitude": 17393.950014627568,
+      "residual_magnitude": null,
+      "calibrated_magnitude": null
+    }
+  },
+  "separability": {
+    "avg_euclidean": 13747.113753106245,
+    "avg_fisher": 6.960305711558007
+  },
+  "has_calibrated": false,
+  "has_residual": false
+}
