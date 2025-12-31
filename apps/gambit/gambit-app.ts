@@ -2403,9 +2403,9 @@ async function initPlayback() {
     sessionPlayback = new SessionPlayback({
         sampleRate: 20,
         
-        // Feed samples through updateData (same as live data)
+        // Feed samples through wrappedUpdateData (same as live data) - includes inference feeding
         onSample: (sample) => {
-            updateData(sample);
+            wrappedUpdateData(sample);
         },
         
         // Update UI on state changes
