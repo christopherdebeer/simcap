@@ -248,17 +248,45 @@ function updateConnectionStatus(connected: boolean): void {
         window.getdata.disabled = true
         isStreaming = false;
         window.getdata.innerHTML = "Get data"
+        // Clear device info on disconnect
+        firmwareVersion = null;
+        samplingMode = null;
+        deviceContext = null;
         if (deviceStatus) {
             deviceStatus.classList.remove('ready');
             deviceStatus.querySelector('span:last-child')!.textContent = 'Disconnected';
         }
     }
+    updateDeviceInfo();
+}
+
+/**
+ * Update device info display (firmware version, sampling mode, context)
+ */
+function updateDeviceInfo(): void {
+    const deviceInfoEl = document.getElementById('deviceInfo');
+    if (!deviceInfoEl) return;
+
+    if (!firmwareVersion && !samplingMode && !deviceContext) {
+        deviceInfoEl.style.display = 'none';
+        return;
+    }
+
+    const parts: string[] = [];
+    if (firmwareVersion) parts.push(`v${firmwareVersion}`);
+    if (samplingMode) parts.push(samplingMode);
+    if (deviceContext && deviceContext !== 'unknown') parts.push(deviceContext);
+
+    deviceInfoEl.textContent = parts.join(' | ');
+    deviceInfoEl.style.display = parts.length > 0 ? 'inline' : 'none';
 }
 
 let ghToken: string | undefined;
 let proxySecret: string | undefined;  // GitHub upload API proxy secret
 let uploadMethod: 'proxy' | 'github' = 'proxy';
 let firmwareVersion: string | null = null;  // Store firmware version for session metadata
+let samplingMode: string | null = null;  // Store sampling mode (v0.4.0+)
+let deviceContext: string | null = null;  // Store device context (v0.4.0+)
 let geomagneticLocation: GeomagneticLocation | null = null;  // Store geomagnetic location for session metadata
 
 let uploadTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -1095,6 +1123,21 @@ gambitClient.on('disconnect', function() {
 gambitClient.on('firmware', function(fw) {
     console.log('[GambitClient] Firmware:', fw);
     firmwareVersion = fw.version || 'unknown';
+    updateDeviceInfo();
+});
+
+// Handle mode changes (v0.4.0+)
+gambitClient.on('mode', function(event) {
+    console.log('[GambitClient] Mode:', event.mode);
+    samplingMode = event.mode;
+    updateDeviceInfo();
+});
+
+// Handle context changes (v0.4.0+)
+gambitClient.on('context', function(event) {
+    console.log('[GambitClient] Context:', event.context);
+    deviceContext = event.context;
+    updateDeviceInfo();
 });
 
 const minMaxs: Record<string, MinMaxEntry> = {}
