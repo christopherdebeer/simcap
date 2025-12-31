@@ -1,0 +1,61 @@
+{
+  "session": "2025-12-31T12_34_54.116Z.json",
+  "total_samples": 5352,
+  "bootstrap": {
+    "offset": [
+      29.3,
+      -9.9,
+      -20.1
+    ],
+    "soft_iron": [
+      1.193,
+      1.018,
+      0.7
+    ],
+    "implied_range": [
+      84.6,
+      99.0,
+      144.0
+    ],
+    "initial_progress_percent": 100.0
+  },
+  "with_bootstrap": {
+    "completion_sample": 0,
+    "completion_time_ms": 0.0
+  },
+  "without_bootstrap": {
+    "completion_sample": 202,
+    "max_progress_percent": 100.0
+  },
+  "minmax_quality": {
+    "offset": [
+      533.5,
+      341.5,
+      429.5
+    ],
+    "mag_error_percent": 389.57666095683356,
+    "hv_ratio": 0.5045499691945786,
+    "rms_residual": 218.63061613405188
+  },
+  "lm_quality": {
+    "offset": [
+      508.66466037292867,
+      321.3361401937717,
+      496.17703937833113
+    ],
+    "soft_iron_diagonal": [
+      0.5000000000000001,
+      0.5000000000000001,
+      0.5000000000000001
+    ],
+    "mag_error_percent": 136.91403257026263,
+    "hv_ratio": 0.5228839171014932,
+    "rms_residual": 92.83313002843974
+  },
+  "magnet_events": {
+    "samples_with_magnet": 5352,
+    "percentage": 100.0,
+    "peak_magnitude": 1592.0185300429139,
+    "n_approach_events": 0
+  }
+}

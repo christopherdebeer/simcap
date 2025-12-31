@@ -302,3 +302,97 @@ private _autoSoftIronScale: Vector3 = { x: 1.193, y: 1.018, z: 0.700 };
 - `ml/analyze_soft_iron_bootstrap.py` - Soft iron analysis script
 - `ml/soft_iron_analysis_results.json` - Full results data
 - `ml/soft_iron_analysis_plot.png` - Visualization
+
+## Issue 4: Bootstrap Bounds Cause Instant 100% Progress
+
+**Analysis date:** 2025-12-31
+**Session analyzed:** `2025-12-31T12_34_54.116Z`
+
+### Problem Description
+
+The UI showed 100% calibration progress immediately on session start, before any device rotation. This was reported in session with finger magnet proximity testing.
+
+### Root Cause Analysis
+
+**Bootstrap bounds exceed the target range threshold:**
+
+| Axis | Bootstrap Min | Bootstrap Max | Implied Range | Target Range | Progress |
+|------|---------------|---------------|---------------|--------------|----------|
+| X | -13.0 µT | 71.6 µT | 84.6 µT | 80.0 µT | 100% |
+| Y | -59.4 µT | 39.6 µT | 99.0 µT | 80.0 µT | 100% |
+| Z | -92.1 µT | 51.9 µT | 144.0 µT | 80.0 µT | 100% |
+
+The calibration progress algorithm computes:
+```typescript
+axisProgress = currentRange / targetRange  // Where targetRange = 80µT
+overallProgress = min(axisProgress)
+```
+
+When bootstrap bounds are applied, the "virtual" range from historical min/max already exceeds 80µT on all axes. The first sample immediately triggers 100% progress.
+
+### Evidence from Session Logs
+
+```
+12:24:25 - Cal progress: 100% (sample 0!)
+           ranges: [109, 99, 174] µT (bootstrap + first samples)
+           offset: [41.3, -9.9, -5.3] µT (close to bootstrap)
+
+12:24:28 - Calibration COMPLETE
+           error: 23.7%, H/V ratio: 0.67 (wrong)
+
+12:24:28 - MINIMAL TRUST: residual 125µT > 60µT threshold
+           Quality gate correctly caught the problem
+
+12:24:33 - LM calibration triggered
+           RMS residual: 0.32 µT (fixed!)
+           error: 0.2%, H/V ratio: 0.45 ✓
+```
+
+### Simulation Results
+
+| Scenario | First 100% at | Notes |
+|----------|---------------|-------|
+| With bootstrap | Sample 0 | Instant completion |
+| Without bootstrap | Sample 202 | After actual rotation |
+
+### Quality Gates Working Correctly
+
+Despite the premature 100% progress, the quality gates correctly detected the poor calibration:
+- `MINIMAL TRUST: residual 125µT > 60µT` triggered
+- LM optimization scheduled and achieved 0.32µT residual
+- Final calibration quality was good
+
+### Recommended Fixes
+
+**Option A: Separate tracking for progress vs bootstrap (Recommended)**
+```typescript
+// Track actual measured min/max separately from bootstrap hints
+private _measuredMin: Vector3;  // From actual samples only
+private _measuredMax: Vector3;  // From actual samples only
+
+// Progress uses measured range, not bootstrap range
+const measuredRange = subtract(this._measuredMax, this._measuredMin);
+const progress = Math.min(...Object.values(measuredRange).map(r => r / 80));
+```
+
+**Option B: Require minimum samples**
+```typescript
+// Don't mark complete until sufficient samples collected
+if (this._sampleCount < 200) {
+  return Math.min(progress, 0.99);  // Cap at 99% until enough samples
+}
+```
+
+**Option C: Increase target range when using bootstrap**
+```typescript
+// Bootstrap provides starting point, but require actual expansion
+const targetRange = this._useBootstrap ? 120 : 80;  // Higher threshold with bootstrap
+```
+
+### Analysis Files
+
+- `ml/analyze_calibration_stages.py` - Calibration stages analysis
+- `ml/analyze_calibration_timeline.py` - Timeline correlation analysis
+- `ml/calibration_stages_analysis.png` - Stages visualization
+- `ml/calibration_timeline_analysis.png` - Timeline visualization
+- `ml/calibration_stages_results.json` - Numerical results
