@@ -206,15 +206,22 @@ export default async function handler(request: Request): Promise<Response> {
     let sessions: SessionInfo[];
     let source: 'manifest' | 'api';
 
-    // Try manifest first (faster, cached)
-    const manifest = await fetchManifest();
+    // Check for ?source=api to force GitHub API (useful for development)
+    // Also auto-detect localhost to use API by default (fresher data for dev)
+    const url = new URL(request.url);
+    const forceApi = url.searchParams.get('source') === 'api';
+    const isLocalhost = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+    const useManifest = !forceApi && !isLocalhost;
+
+    // Try manifest first (faster, cached) unless forced to use API or in local dev
+    const manifest = useManifest ? await fetchManifest() : null;
 
     if (manifest && manifest.sessions && manifest.sessions.length > 0) {
       console.log(`[sessions] Using manifest with ${manifest.sessions.length} sessions`);
       sessions = manifestToSessionInfo(manifest);
       source = 'manifest';
     } else {
-      // Fall back to GitHub API
+      // Fall back to GitHub API (lists actual files from data branch)
       console.log('[sessions] Falling back to GitHub API');
       sessions = await listFromGitHubAPI();
       source = 'api';
