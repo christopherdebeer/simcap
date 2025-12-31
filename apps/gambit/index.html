@@ -241,6 +241,66 @@
                 background: var(--success);
             }
 
+            .model-status.error .status-dot {
+                background: var(--error);
+            }
+
+            /* Finger inference styles */
+            .finger-display {
+                padding: var(--space-md);
+                border-radius: var(--radius);
+                background: var(--bg-card);
+                border: 2px solid var(--border);
+            }
+
+            .finger-states {
+                display: flex;
+                justify-content: space-around;
+                gap: var(--space-sm);
+            }
+
+            .finger-state {
+                text-align: center;
+                padding: var(--space-sm);
+                border-radius: var(--radius-sm);
+                background: var(--bg);
+                min-width: 50px;
+                transition: all 0.2s ease;
+            }
+
+            .finger-state.extended {
+                background: var(--success);
+                color: var(--bg);
+            }
+
+            .finger-state.flexed {
+                background: var(--accent);
+                color: var(--bg);
+            }
+
+            .finger-label {
+                display: block;
+                font-size: 0.65rem;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                opacity: 0.8;
+            }
+
+            .finger-value {
+                display: block;
+                font-size: 0.875rem;
+                font-weight: bold;
+                margin-top: 2px;
+            }
+
+            .finger-display .confidence,
+            .finger-display .inference-time {
+                font-size: 0.75rem;
+                color: var(--fg-muted);
+                text-align: center;
+                margin-top: var(--space-xs);
+            }
+
             .breadcrumb {
                 text-align: center;
             }
@@ -473,13 +533,17 @@
             <details class="card" open>
                 <summary class="card-header">
                     <span class="card-header-content">
-                        Gesture Inference
+                        Inference
+                        <select id="modelSelect" style="font-size: 0.75rem; padding: 2px 6px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--fg);" onclick="event.stopPropagation()">
+                            <!-- Populated by JS from model registry -->
+                        </select>
                         <span class="model-status" id="modelStatus">
                             <span class="status-dot"></span>
                             <span>Loading model...</span>
                         </span>
                     </span>
                 </summary>
+                <!-- Gesture model output (10-class) -->
                 <div class="gesture-display" id="gestureDisplay">
                     <div class="gesture-name" id="gestureName">--</div>
                     <div class="confidence" id="gestureConfidence">Waiting for data...</div>
@@ -487,6 +551,18 @@
                 </div>
                 <div class="gesture-probabilities" id="gestureProbabilities">
                     <!-- Populated by JS -->
+                </div>
+                <!-- Finger model output (5 fingers) -->
+                <div class="finger-display" id="fingerDisplay" style="display: none;">
+                    <div class="finger-states" id="fingerStates">
+                        <div class="finger-state" data-finger="thumb"><span class="finger-label">Thumb</span><span class="finger-value">-</span></div>
+                        <div class="finger-state" data-finger="index"><span class="finger-label">Index</span><span class="finger-value">-</span></div>
+                        <div class="finger-state" data-finger="middle"><span class="finger-label">Middle</span><span class="finger-value">-</span></div>
+                        <div class="finger-state" data-finger="ring"><span class="finger-label">Ring</span><span class="finger-value">-</span></div>
+                        <div class="finger-state" data-finger="pinky"><span class="finger-label">Pinky</span><span class="finger-value">-</span></div>
+                    </div>
+                    <div class="confidence" id="fingerConfidence">Waiting for data...</div>
+                    <div class="inference-time" id="fingerInferenceTime"></div>
                 </div>
             </details>
 

@@ -318,6 +318,25 @@ pip install tensorflow tensorflowjs
 - Reduce tensor arena size
 - Use ESP32-S3 (more RAM)
 
+## Browser Model Deployment
+
+For deploying models to the Gambit web app, see [`public/models/CLAUDE.md`](../public/models/CLAUDE.md) which covers:
+
+1. Converting Keras models to TensorFlow.js format
+2. Registering models in the unified `ALL_MODELS` registry
+3. Keeping training normalization stats in sync with inference
+4. Updating the UI for new model types
+
+**Quick deployment after training:**
+```bash
+# Convert to TensorFlow.js
+tensorflowjs_converter --input_format=keras \
+    ml/models/your_model.keras \
+    public/models/your_model_v1/
+
+# Then add entry to apps/gambit/gesture-inference.ts ALL_MODELS
+```
+
 ## References
 
 - [TensorFlow Lite Micro](https://www.tensorflow.org/lite/microcontrollers)
