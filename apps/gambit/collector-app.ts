@@ -44,6 +44,13 @@ import {
     setUploadSecret,
     hasUploadSecret
 } from './shared/github-upload.js';
+import {
+    SessionPlayback,
+    formatTime,
+    formatSessionDisplay,
+    type SessionMetadata,
+    type PlaybackState
+} from './modules/session-playback.js';
 
 // ===== Type Definitions =====
 
@@ -678,6 +685,9 @@ async function init(): Promise<void> {
 
     updateUI();
     updateCalibrationStatus();
+
+    // Initialize session playback
+    await initSessionPlayback();
 
     log('GAMBIT Collector ready');
 }
@@ -1998,6 +2008,205 @@ function initCollapsibleSections(): void {
             }
         }
     });
+}
+
+// ===== Session Playback =====
+
+let sessionPlayback: SessionPlayback | null = null;
+
+interface PlaybackUIElements {
+    select: HTMLSelectElement | null;
+    playBtn: HTMLButtonElement | null;
+    stopBtn: HTMLButtonElement | null;
+    slider: HTMLInputElement | null;
+    timeEl: HTMLElement | null;
+    statusEl: HTMLElement | null;
+    card: HTMLElement | null;
+    speedSelect: HTMLSelectElement | null;
+}
+
+const playbackElements: PlaybackUIElements = {
+    select: null,
+    playBtn: null,
+    stopBtn: null,
+    slider: null,
+    timeEl: null,
+    statusEl: null,
+    card: null,
+    speedSelect: null
+};
+
+/**
+ * Update playback UI based on state
+ */
+function updatePlaybackUI(playbackState: PlaybackState): void {
+    if (!playbackElements.timeEl) return;
+
+    playbackElements.timeEl.textContent =
+        `${formatTime(playbackState.currentTime)} / ${formatTime(playbackState.duration)}`;
+
+    if (playbackElements.slider) {
+        playbackElements.slider.value = String(playbackState.currentIndex);
+    }
+
+    if (playbackElements.playBtn) {
+        playbackElements.playBtn.textContent = playbackState.isPlaying ? 'Pause' : 'Play';
+    }
+
+    if (playbackElements.card) {
+        if (playbackState.isPlaying) {
+            playbackElements.card.classList.add('playing');
+        } else {
+            playbackElements.card.classList.remove('playing');
+        }
+    }
+
+    if (playbackElements.statusEl) {
+        if (playbackState.isPlaying) {
+            playbackElements.statusEl.textContent = 'Playing...';
+        } else if (playbackState.currentIndex === 0 && !playbackState.isPlaying) {
+            playbackElements.statusEl.textContent = playbackState.session ?
+                `Loaded: ${playbackState.totalSamples} samples` : 'Stopped';
+        } else {
+            playbackElements.statusEl.textContent = 'Paused';
+        }
+    }
+
+    if (playbackElements.stopBtn) {
+        playbackElements.stopBtn.disabled = playbackState.currentIndex === 0 && !playbackState.isPlaying;
+    }
+}
+
+/**
+ * Populate session selector
+ */
+function populateSessionSelect(sessions: SessionMetadata[]): void {
+    if (!playbackElements.select) return;
+
+    playbackElements.select.innerHTML = '<option value="">-- Select a session --</option>';
+
+    sessions.forEach((session: SessionMetadata, index: number) => {
+        const option = document.createElement('option');
+        option.value = String(index);
+        option.textContent = formatSessionDisplay(session);
+        playbackElements.select!.appendChild(option);
+    });
+
+    if (playbackElements.statusEl) {
+        playbackElements.statusEl.textContent = `${sessions.length} sessions available`;
+    }
+}
+
+/**
+ * Initialize session playback system
+ */
+async function initSessionPlayback(): Promise<void> {
+    // Cache UI elements
+    playbackElements.select = $('sessionSelect') as HTMLSelectElement | null;
+    playbackElements.playBtn = $('playBtn') as HTMLButtonElement | null;
+    playbackElements.stopBtn = $('stopBtn') as HTMLButtonElement | null;
+    playbackElements.slider = $('playbackSlider') as HTMLInputElement | null;
+    playbackElements.timeEl = $('playbackTime');
+    playbackElements.statusEl = $('playbackStatus');
+    playbackElements.card = $('playbackCard');
+    playbackElements.speedSelect = $('playbackSpeed') as HTMLSelectElement | null;
+
+    // Create SessionPlayback instance
+    sessionPlayback = new SessionPlayback({
+        sampleRate: 26,  // GAMBIT uses 26Hz
+
+        // Process each sample during playback
+        onSample: (sample, index, total) => {
+            // Log every 100th sample
+            if (index % 100 === 0) {
+                log(`Playback: ${index}/${total}`);
+            }
+        },
+
+        // Update UI on state change
+        onStateChange: updatePlaybackUI,
+
+        // Populate dropdown when manifest loads
+        onManifestLoaded: populateSessionSelect,
+
+        // Handle session loaded
+        onSessionLoaded: ({ session, sampleCount, duration }) => {
+            if (playbackElements.playBtn) {
+                playbackElements.playBtn.disabled = false;
+            }
+            if (playbackElements.slider) {
+                playbackElements.slider.disabled = false;
+                playbackElements.slider.max = String(sampleCount - 1);
+                playbackElements.slider.value = '0';
+            }
+            log(`Session loaded: ${sampleCount} samples, ${formatTime(duration)}`);
+        },
+
+        // Handle errors
+        onError: (error) => {
+            console.error('[Playback] Error:', error);
+            if (playbackElements.statusEl) {
+                playbackElements.statusEl.textContent = 'Error: ' + error.message;
+            }
+            log(`Playback error: ${error.message}`);
+        }
+    });
+
+    // Wire up UI controls
+    if (playbackElements.select) {
+        playbackElements.select.addEventListener('change', async (e: Event) => {
+            sessionPlayback?.stop();
+            if ((e.target as HTMLSelectElement).value !== '') {
+                if (playbackElements.statusEl) {
+                    playbackElements.statusEl.textContent = 'Loading session...';
+                }
+                if (playbackElements.playBtn) {
+                    playbackElements.playBtn.disabled = true;
+                }
+                await sessionPlayback?.loadSession(parseInt((e.target as HTMLSelectElement).value));
+            }
+        });
+    }
+
+    if (playbackElements.playBtn) {
+        playbackElements.playBtn.addEventListener('click', () => {
+            sessionPlayback?.toggle();
+        });
+    }
+
+    if (playbackElements.stopBtn) {
+        playbackElements.stopBtn.addEventListener('click', () => {
+            sessionPlayback?.stop();
+        });
+    }
+
+    if (playbackElements.slider) {
+        playbackElements.slider.addEventListener('input', (e: Event) => {
+            sessionPlayback?.pause();
+            sessionPlayback?.seekTo(parseInt((e.target as HTMLInputElement).value));
+        });
+    }
+
+    if (playbackElements.speedSelect) {
+        playbackElements.speedSelect.addEventListener('change', (e: Event) => {
+            sessionPlayback?.setSpeed(parseFloat((e.target as HTMLSelectElement).value));
+        });
+    }
+
+    // Load manifest
+    try {
+        if (playbackElements.statusEl) {
+            playbackElements.statusEl.textContent = 'Loading sessions...';
+        }
+        await sessionPlayback?.loadManifest();
+    } catch (error) {
+        if (playbackElements.statusEl) {
+            playbackElements.statusEl.textContent = 'Failed to load sessions';
+        }
+        if (playbackElements.select) {
+            playbackElements.select.innerHTML = '<option value="">-- Error loading --</option>';
+        }
+    }
 }
 
 // Initialize on DOM ready

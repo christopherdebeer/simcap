@@ -1194,6 +1194,37 @@
             </div>
         </section>
 
+        <!-- Session Playback -->
+        <section class="card" id="playbackCard">
+            <h2 class="collapsible">Session Playback</h2>
+            <div class="collapse-content">
+                <div style="display: flex; flex-direction: column; gap: var(--space-sm);">
+                    <select id="sessionSelect" style="width: 100%; padding: var(--space-xs); font-size: 0.875rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--fg);">
+                        <option value="">-- Load sessions --</option>
+                    </select>
+                    <div style="display: flex; align-items: center; gap: var(--space-sm);">
+                        <button class="btn-secondary btn-small" id="playBtn" disabled>Play</button>
+                        <button class="btn-secondary btn-small" id="stopBtn" disabled>Stop</button>
+                        <span id="playbackStatus" style="font-size: 0.75rem; color: var(--fg-muted); margin-left: auto;"></span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: var(--space-sm);">
+                        <input type="range" id="playbackSlider" min="0" max="100" value="0" disabled style="flex: 1; height: 6px;">
+                        <span id="playbackTime" style="font-size: 0.75rem; color: var(--fg-muted); min-width: 80px; text-align: right;">0:00 / 0:00</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: var(--space-sm); font-size: 0.75rem;">
+                        <label>Speed:</label>
+                        <select id="playbackSpeed" style="padding: 2px 4px; font-size: 0.75rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--fg);">
+                            <option value="0.25">0.25x</option>
+                            <option value="0.5">0.5x</option>
+                            <option value="1" selected>1x</option>
+                            <option value="2">2x</option>
+                            <option value="4">4x</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <!-- Calibration Wizard Modal -->
         <div class="wizard-overlay" id="wizardOverlay">
             <div class="wizard-modal">
