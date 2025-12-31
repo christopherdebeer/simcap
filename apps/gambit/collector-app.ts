@@ -2115,9 +2115,12 @@ async function initSessionPlayback(): Promise<void> {
     sessionPlayback = new SessionPlayback({
         sampleRate: 26,  // GAMBIT uses 26Hz
 
-        // Process each sample during playback
+        // Process each sample during playback - drive visuals like live data
         onSample: (sample, index, total) => {
-            // Log every 100th sample
+            // Process through telemetry pipeline to update visuals
+            onTelemetry(sample);
+
+            // Log progress periodically
             if (index % 100 === 0) {
                 log(`Playback: ${index}/${total}`);
             }
