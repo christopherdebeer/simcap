@@ -1716,6 +1716,18 @@ function updateHandVisualization(): void {
             fingerStates = { thumb: 0, index: 0, middle: 0, ring: 0, pinky: 0 };
         }
     }
+
+    // Apply finger states to 3D hand skeleton
+    // Convert numeric states (0=extended, 1=partial, 2=flexed) to curl values (0.0-1.0)
+    if (threeHandSkeleton) {
+        threeHandSkeleton.setFingerCurls({
+            thumb: fingerStates.thumb / 2,
+            index: fingerStates.index / 2,
+            middle: fingerStates.middle / 2,
+            ring: fingerStates.ring / 2,
+            pinky: fingerStates.pinky / 2,
+        });
+    }
 }
 
 /**
