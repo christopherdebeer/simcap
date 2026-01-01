@@ -22,6 +22,14 @@ from .dipole import magnetic_dipole_field, compute_total_field
 from .hand_model import HandPoseGenerator, FingerState, HandPose
 from .sensor_model import MMC5603Simulator
 from .generator import MagneticFieldSimulator, generate_synthetic_session
+from .parameterized_generator import (
+    ParameterizedGenerator,
+    HandMagnetSetup,
+    MagnetConfig,
+    compare_magnet_setups,
+    generate_training_dataset,
+    EMPIRICAL_MOMENT_SCALE,
+)
 
 # Optional Magpylib support for high-fidelity simulation
 try:
@@ -67,6 +75,13 @@ __all__ = [
     'MagneticFieldSimulator',
     'generate_synthetic_session',
     'DEFAULT_MAGNET_CONFIG',
+    # Parameterized simulation (new)
+    'ParameterizedGenerator',
+    'HandMagnetSetup',
+    'MagnetConfig',
+    'compare_magnet_setups',
+    'generate_training_dataset',
+    'EMPIRICAL_MOMENT_SCALE',
     # Magpylib (optional)
     'HAS_MAGPYLIB',
     'MagpylibSimulator',
