@@ -1,0 +1,113 @@
+{
+  "information_theoretic": {
+    "single_sample": {
+      "H_measurement": 8.16261681581352,
+      "H_class": 3.2137406904249644,
+      "mutual_information": 4.551200508480049,
+      "normalized_mi": 1.4161691769028852,
+      "n_samples": 2165,
+      "n_classes": 10
+    },
+    "trajectory": {
+      "I_mean_only": 2.3259417059211507,
+      "I_mean_std": 2.0742897932592808,
+      "I_statistics": 0.926329493472287,
+      "I_full_approx": 138.52474638191282,
+      "n_trajectories": 194,
+      "trajectory_dim": 96
+    },
+    "comparison": {
+      "information_gain": -3.624871015007762,
+      "relative_gain": -0.7964648026765806,
+      "theoretical_max": 3.2137406904249644,
+      "single_efficiency": 1.4161691769469513,
+      "trajectory_efficiency": 0.2882402728484591
+    }
+  },
+  "empirical": {
+    "ffo_template": {
+      "accuracy": 0.23076923076923078,
+      "correct": 9,
+      "total": 39
+    },
+    "single_sample_knn": {
+      "accuracy": 0.9930715935334873,
+      "correct": 430,
+      "total": 433
+    },
+    "trajectory_nn": {
+      "accuracy": 0.2564102564102564,
+      "correct": 10,
+      "total": 39
+    },
+    "trajectory_nn_full": {
+      "accuracy": 0.2564102564102564,
+      "correct": 10,
+      "total": 39
+    },
+    "single_sample_knn_matched": {
+      "accuracy": 0.9930715935334873,
+      "correct": 430,
+      "total": 433
+    },
+    "per_class": {
+      "00022": {
+        "knn_accuracy": 0.9375,
+        "ffo_accuracy": 0.5,
+        "n_samples": 32
+      },
+      "00222": {
+        "knn_accuracy": 1.0,
+        "ffo_accuracy": 0.5,
+        "n_samples": 56
+      },
+      "00000": {
+        "knn_accuracy": 1.0,
+        "ffo_accuracy": 0.2,
+        "n_samples": 86
+      },
+      "22222": {
+        "knn_accuracy": 1.0,
+        "ffo_accuracy": 0.25,
+        "n_samples": 36
+      },
+      "00200": {
+        "knn_accuracy": 1.0,
+        "ffo_accuracy": 0.5,
+        "n_samples": 39
+      },
+      "02000": {
+        "knn_accuracy": 1.0,
+        "ffo_accuracy": 0.0,
+        "n_samples": 33
+      },
+      "20000": {
+        "knn_accuracy": 1.0,
+        "ffo_accuracy": 0.0,
+        "n_samples": 29
+      },
+      "00020": {
+        "knn_accuracy": 1.0,
+        "ffo_accuracy": 0.0,
+        "n_samples": 45
+      },
+      "22000": {
+        "knn_accuracy": 1.0,
+        "ffo_accuracy": 0.4,
+        "n_samples": 44
+      },
+      "00002": {
+        "knn_accuracy": 0.9696969696969697,
+        "ffo_accuracy": 0.5,
+        "n_samples": 33
+      }
+    }
+  },
+  "summary": {
+    "predicted_gain": -0.7964648026765806,
+    "actual_gain": -0.7418008347493931,
+    "n_samples": 2165,
+    "n_trajectories": 194,
+    "n_sessions": 17
+  }
+}
