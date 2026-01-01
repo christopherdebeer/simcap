@@ -630,3 +630,181 @@ SENSOR_RANGES = {
 # Feature indices for 9-DoF vector
 FEATURE_NAMES = ['ax', 'ay', 'az', 'gx', 'gy', 'gz', 'mx', 'my', 'mz']
 NUM_FEATURES = 9
+
+
+# =============================================================================
+# EXTENDED TAXONOMY (see docs/design/finger-state-taxonomy.md)
+# =============================================================================
+
+class PhaseType(str, Enum):
+    """Collection phase types for robust model training."""
+    STATIC = "static"          # Hold pose still
+    DYNAMIC = "dynamic"        # Intentional movement
+    ERRATIC = "erratic"        # Random/noise capture
+    SWEEP = "sweep"            # Orientation sweep
+    TRANSITION = "transition"  # Pose-to-pose transition
+
+
+class Orientation(str, Enum):
+    """Palm orientation for multi-orientation capture."""
+    PALM_DOWN = "palm_down"      # Reference orientation
+    PALM_UP = "palm_up"          # 180° roll
+    PALM_LEFT = "palm_left"      # 90° yaw
+    PALM_RIGHT = "palm_right"    # -90° yaw
+    PALM_FORWARD = "palm_forward"  # 90° pitch (away from body)
+    PALM_BACK = "palm_back"        # -90° pitch (toward body)
+    UNKNOWN = "unknown"
+
+
+# All 32 binary finger configurations with semantic mappings
+# Code format: T I M R P (Thumb, Index, Middle, Ring, Pinky)
+# 0 = Extended, 2 = Flexed
+FINGER_CODE_TAXONOMY = {
+    '00000': {'name': 'all_extended', 'semantic': 'open_palm', 'tier': 1},
+    '00002': {'name': 'four_fingers', 'semantic': 'four', 'tier': 2},
+    '00020': {'name': 'ring_flex', 'semantic': None, 'tier': 3},
+    '00022': {'name': 'three_fingers', 'semantic': 'three', 'tier': 2},
+    '00200': {'name': 'middle_flex', 'semantic': None, 'tier': 3},
+    '00202': {'name': 'middle_pinky_flex', 'semantic': None, 'tier': 3},
+    '00220': {'name': 'middle_ring_flex', 'semantic': None, 'tier': 3},
+    '00222': {'name': 'peace', 'semantic': 'peace', 'tier': 1},
+    '02000': {'name': 'index_flex', 'semantic': None, 'tier': 3},
+    '02002': {'name': 'index_pinky_flex', 'semantic': None, 'tier': 3},
+    '02020': {'name': 'index_ring_flex', 'semantic': None, 'tier': 3},
+    '02022': {'name': 'index_ring_pinky_flex', 'semantic': None, 'tier': 3},
+    '02200': {'name': 'index_middle_flex', 'semantic': None, 'tier': 3},
+    '02202': {'name': 'index_middle_pinky_flex', 'semantic': None, 'tier': 3},
+    '02220': {'name': 'index_middle_ring_flex', 'semantic': None, 'tier': 3},
+    '02222': {'name': 'point', 'semantic': 'point', 'tier': 1},
+    '20000': {'name': 'thumb_flex', 'semantic': 'thumbs_up', 'tier': 1},
+    '20002': {'name': 'shaka', 'semantic': 'shaka', 'tier': 2},
+    '20020': {'name': 'thumb_ring_flex', 'semantic': None, 'tier': 3},
+    '20022': {'name': 'thumb_ring_pinky_flex', 'semantic': None, 'tier': 3},
+    '20200': {'name': 'thumb_middle_flex', 'semantic': None, 'tier': 3},
+    '20202': {'name': 'thumb_middle_pinky_flex', 'semantic': None, 'tier': 3},
+    '20220': {'name': 'thumb_middle_ring_flex', 'semantic': None, 'tier': 3},
+    '20222': {'name': 'thumb_mid_ring_pinky_flex', 'semantic': None, 'tier': 3},
+    '22000': {'name': 'thumb_index_flex', 'semantic': 'pinch_closed', 'tier': 2},
+    '22002': {'name': 'thumb_index_pinky_flex', 'semantic': None, 'tier': 3},
+    '22020': {'name': 'thumb_index_ring_flex', 'semantic': None, 'tier': 3},
+    '22022': {'name': 'thumb_index_ring_pinky_flex', 'semantic': None, 'tier': 3},
+    '22200': {'name': 'thumb_index_middle_flex', 'semantic': None, 'tier': 3},
+    '22202': {'name': 'thumb_index_middle_pinky_flex', 'semantic': None, 'tier': 3},
+    '22220': {'name': 'thumb_index_middle_ring_flex', 'semantic': None, 'tier': 3},
+    '22222': {'name': 'all_flexed', 'semantic': 'fist', 'tier': 1},
+}
+
+
+def get_semantic_pose(finger_code: str) -> Optional[str]:
+    """Get semantic pose name for a finger code, if one exists."""
+    if finger_code in FINGER_CODE_TAXONOMY:
+        return FINGER_CODE_TAXONOMY[finger_code].get('semantic')
+    return None
+
+
+def get_tier1_codes() -> List[str]:
+    """Get core/essential finger codes (tier 1)."""
+    return [code for code, info in FINGER_CODE_TAXONOMY.items()
+            if info.get('tier') == 1]
+
+
+def get_tier2_codes() -> List[str]:
+    """Get secondary finger codes (tier 2)."""
+    return [code for code, info in FINGER_CODE_TAXONOMY.items()
+            if info.get('tier') == 2]
+
+
+# Orientation labels for multi-orientation data collection
+ORIENTATION_LABELS = [
+    "orientation:palm_down",
+    "orientation:palm_up",
+    "orientation:palm_left",
+    "orientation:palm_right",
+    "orientation:palm_forward",
+    "orientation:palm_back",
+]
+
+# Phase labels for robustness data collection
+PHASE_LABELS = [
+    "phase:static",
+    "phase:dynamic",
+    "phase:erratic",
+    "phase:sweep",
+    "phase:transition",
+]
+
+# Full range of motion labels
+RANGE_LABELS = [
+    "range:thumb",
+    "range:index",
+    "range:middle",
+    "range:ring",
+    "range:pinky",
+    "range:all",
+    "range:sequential",
+]
+
+# Category labels for wizard organization
+CATEGORY_LABELS = [
+    "category:coarse_state",
+    "category:semantic",
+    "category:robustness",
+    "category:calibration",
+    "category:transition",
+    "category:full_range",
+    "category:orientation_sweep",
+]
+
+
+@dataclass
+class ExtendedLabel(MultiLabel):
+    """
+    Extended label with orientation and phase information.
+
+    Extends MultiLabel with:
+    - orientation: Palm orientation during capture
+    - phase: Collection phase type (static, erratic, sweep, etc.)
+    - finger_code: Direct 5-digit finger state code
+    """
+    orientation: Orientation = Orientation.UNKNOWN
+    phase: PhaseType = PhaseType.STATIC
+    finger_code: Optional[str] = None
+    category: Optional[str] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        result = super().to_dict()
+        result['orientation'] = self.orientation.value
+        result['phase'] = self.phase.value
+        if self.finger_code:
+            result['finger_code'] = self.finger_code
+        if self.category:
+            result['category'] = self.category
+        return result
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> 'ExtendedLabel':
+        base = MultiLabel.from_dict(d)
+        return cls(
+            pose=base.pose,
+            fingers=base.fingers,
+            motion=base.motion,
+            calibration=base.calibration,
+            custom=base.custom,
+            confidence=base.confidence,
+            quality_notes=base.quality_notes,
+            orientation=Orientation(d.get('orientation', 'unknown')),
+            phase=PhaseType(d.get('phase', 'static')),
+            finger_code=d.get('finger_code'),
+            category=d.get('category')
+        )
+
+    def all_labels(self) -> Set[str]:
+        """Return all active labels including orientation and phase."""
+        labels = super().all_labels()
+        labels.add(f"orientation:{self.orientation.value}")
+        labels.add(f"phase:{self.phase.value}")
+        if self.finger_code:
+            labels.add(f"code:{self.finger_code}")
+        if self.category:
+            labels.add(f"category:{self.category}")
+        return labels
