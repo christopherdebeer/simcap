@@ -601,6 +601,89 @@ These distinct clusters enable FFO$$-style template matching on magnetic data!
 
 ---
 
+## 8. Empirical Study: Trajectory vs Single-Sample Inference
+
+An empirical study was conducted to answer the question: **Would training on FFO$-style magnetic trajectories improve model performance compared to single-sample inference?**
+
+**Location:** [`ml/trajectory_vs_single_sample_study.py`](../../ml/trajectory_vs_single_sample_study.py)
+
+### Study Design
+
+The study compared three approaches:
+1. **FFO$ Template Matching**: Trajectory-based matching on magnetic signatures
+2. **Single-Sample KNN**: k-Nearest Neighbors on single magnetometer readings
+3. **Trajectory Neural Network**: Neural network trained on trajectory statistics
+
+### Key Results
+
+```
+Approach                              Accuracy       Data Type     Test N
+------------------------------------------------------------------------
+FFO$ Template Matching                   23.1%      Trajectory         39
+Single-Sample KNN (k=5)                  99.3%    Single Point        433
+Trajectory NN (stats)                    25.6%      Traj Stats         39
+Trajectory NN (full)                     25.6%       Full Traj         39
+```
+
+**Per-Class Accuracy:**
+```
+Code            KNN         FFO$      Samples
+--------------------------------------------------
+00000        100.0%       20.0%           86
+00002         97.0%       50.0%           33
+00020        100.0%        0.0%           45
+00022         93.8%       50.0%           32
+00200        100.0%       50.0%           39
+00222        100.0%       50.0%           56
+02000        100.0%        0.0%           33
+20000        100.0%        0.0%           29
+22000        100.0%       40.0%           44
+22222        100.0%       25.0%           36
+```
+
+### Information-Theoretic Analysis
+
+```
+Feature                    Single Sample    Trajectory Stats
+---------------------------------------------------------------
+Mutual Information              4.55 bits       0.93 bits
+Channel Efficiency              142%            29%
+```
+
+The **Fisher discriminant ratio** (a proxy for mutual information) shows that single samples have **higher class separability** than trajectory statistics for static pose classification.
+
+### Key Finding: Domain Mismatch
+
+**Trajectories are NOT beneficial for static pose classification because:**
+
+1. **Static poses have stable signatures** - A single sample contains the full discriminative information
+2. **Trajectory windows introduce noise** - Averaging over time reduces signal-to-noise ratio
+3. **Wizard labels capture static poses** - The labeled data represents steady-state configurations, not transitions
+
+**However, trajectories ARE beneficial for:**
+- **Gesture detection** (motion patterns)
+- **Transition detection** (pose-to-pose movements)
+- **Activity recognition** (sequence patterns)
+
+### Conclusion: Task-Appropriate Methods
+
+| Task | Recommended Approach | Why |
+|------|---------------------|-----|
+| **Static pose classification** | Single-sample (aligned model) | Full information in one sample |
+| **Gesture recognition** | FFO$ trajectory matching | Motion patterns need time series |
+| **Pose + gesture combined** | Hybrid system | Each approach for its strength |
+
+### Practical Recommendation
+
+For the GAMBIT system, the current **single-sample aligned model** is the correct choice for finger state inference. The **FFO$ trajectory approach** should be reserved for:
+- Detecting hand gestures (wave, swipe, circle)
+- Recognizing pose transitions (open→close)
+- Activity recognition (typing vs. pointing)
+
+The optimal architecture uses **both approaches in parallel**, as described in Architecture A (Dual-Mode Inference).
+
+---
+
 ## References
 
 ### Core Documents
