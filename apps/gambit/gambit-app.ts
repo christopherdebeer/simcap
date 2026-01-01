@@ -2355,7 +2355,7 @@ function updateFingerUI(result: any) {
     if (!result) return;
 
     // Update finger state indicators
-    const fingerNames = ['thumb', 'index', 'middle', 'ring', 'pinky'];
+    const fingerNames = ['thumb', 'index', 'middle', 'ring', 'pinky'] as const;
     fingerNames.forEach(finger => {
         const stateEl = inferenceUI.fingerStates?.querySelector(`[data-finger="${finger}"]`);
         if (stateEl) {
@@ -2380,6 +2380,25 @@ function updateFingerUI(result: any) {
     // Update inference time
     if (inferenceUI.fingerInferenceTime && result.inferenceTime) {
         inferenceUI.fingerInferenceTime.textContent = `${result.inferenceTime.toFixed(1)}ms inference`;
+    }
+
+    // Update 3D hand skeleton with inferred finger states
+    // Convert state strings to curl values: extended=0, partial=0.5, flexed=1.0
+    if (threeHandSkeleton && result.fingers) {
+        const stateToCurl = (state: string): number => {
+            if (state === 'extended') return 0.0;
+            if (state === 'partial') return 0.5;
+            if (state === 'flexed') return 1.0;
+            return 0.0; // default to extended for unknown
+        };
+
+        threeHandSkeleton.setFingerCurls({
+            thumb: stateToCurl(result.fingers.thumb),
+            index: stateToCurl(result.fingers.index),
+            middle: stateToCurl(result.fingers.middle),
+            ring: stateToCurl(result.fingers.ring),
+            pinky: stateToCurl(result.fingers.pinky),
+        });
     }
 }
 
