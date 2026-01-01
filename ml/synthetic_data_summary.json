@@ -1,0 +1,69 @@
+{
+  "real_stats": {
+    "eeeee": {
+      "n": 486,
+      "mag_mean": 73.92437785456393
+    },
+    "fffff": {
+      "n": 185,
+      "mag_mean": 963.3181833499492
+    },
+    "feeee": {
+      "n": 161,
+      "mag_mean": 910.2060771011704
+    },
+    "efeee": {
+      "n": 170,
+      "mag_mean": 1257.687509445499
+    },
+    "eefee": {
+      "n": 174,
+      "mag_mean": 1233.5393311936655
+    },
+    "eeefe": {
+      "n": 222,
+      "mag_mean": 812.8633201568354
+    },
+    "eeeef": {
+      "n": 154,
+      "mag_mean": 3243.4666091249774
+    },
+    "ffeee": {
+      "n": 222,
+      "mag_mean": 810.6118960785519
+    },
+    "eeeff": {
+      "n": 160,
+      "mag_mean": 791.2505893046471
+    },
+    "eefff": {
+      "n": 231,
+      "mag_mean": 1698.6279311159728
+    }
+  },
+  "synthetic_combos": [
+    "eefef",
+    "eeffe",
+    "efeef",
+    "efefe",
+    "efeff",
+    "effee",
+    "effef",
+    "efffe",
+    "effff",
+    "feeef",
+    "feefe",
+    "feeff",
+    "fefee",
+    "fefef",
+    "feffe",
+    "fefff",
+    "ffeef",
+    "ffefe",
+    "ffeff",
+    "fffee",
+    "fffef",
+    "ffffe"
+  ],
+  "n_synthetic_per_combo": 200
+}
