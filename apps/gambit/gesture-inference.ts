@@ -1168,6 +1168,21 @@ export interface UnifiedModelConfig {
 export const ALL_MODELS: UnifiedModelConfig[] = [
   // === Finger Models (Newest first) ===
   {
+    id: 'finger_aligned_v2',
+    name: 'Finger (Aligned v2 - Synthetic)',
+    type: 'finger_window',
+    path: '/models/finger_aligned_v2/model.json',
+    stats: {
+      mean: [0.003, 0.008, -0.974, 0.104, 0.112, -0.766, 696.85, -581.67, 1943.64],
+      std: [0.088, 0.088, 0.196, 13.92, 19.91, 14.46, 693.67, 584.75, 1503.98]
+    },
+    description: 'CNN-LSTM hybrid trained on synthetic+real data (99.6% accuracy)',
+    date: '2026-01-02',
+    active: true,
+    windowSize: 50,
+    numStates: 2
+  },
+  {
     id: 'finger_aligned_v1',
     name: 'Finger (Aligned v1)',
     type: 'finger_magnetic',
@@ -1175,7 +1190,7 @@ export const ALL_MODELS: UnifiedModelConfig[] = [
     stats: { mean: [5188, 6179, 17152], std: [5732, 7181, 16189] },
     description: 'Ground truth aligned - mag only, binary output',
     date: '2025-12-31',
-    active: true,
+    active: false,
     inputFeatures: 3,
     numStates: 2
   },
