@@ -1,0 +1,191 @@
+{
+  "experiments": [
+    {
+      "name": "Real Data Only",
+      "train_samples": 1728,
+      "test_samples": 437,
+      "overall_accuracy": 0.9862700228832952,
+      "per_finger_accuracy": {
+        "thumb": 1.0,
+        "index": 1.0,
+        "middle": 0.9931350114416476,
+        "ring": 1.0,
+        "pinky": 0.988558352402746
+      },
+      "normalization": {
+        "mean": [
+          96.04399881244886,
+          -96.18323055314244,
+          627.9292981810964
+        ],
+        "std": [
+          577.7202219317114,
+          344.27637691115615,
+          875.5107687855821
+        ]
+      }
+    },
+    {
+      "name": "Additive Synthetic",
+      "train_samples": 6400,
+      "test_samples": 437,
+      "overall_accuracy": 0.3684210526315789,
+      "per_finger_accuracy": {
+        "thumb": 0.6636155606407322,
+        "index": 0.6887871853546911,
+        "middle": 0.517162471395881,
+        "ring": 0.7780320366132724,
+        "pinky": 0.7345537757437071
+      },
+      "normalization": {
+        "mean": [
+          577.1353488502136,
+          -262.8375562063539,
+          1401.8925686205444
+        ],
+        "std": [
+          635.8547290796156,
+          498.6864078488162,
+          1001.3425762903953
+        ]
+      }
+    },
+    {
+      "name": "Interaction Synthetic",
+      "train_samples": 6400,
+      "test_samples": 437,
+      "overall_accuracy": 0.34782608695652173,
+      "per_finger_accuracy": {
+        "thumb": 0.8032036613272311,
+        "index": 0.7185354691075515,
+        "middle": 0.597254004576659,
+        "ring": 0.7345537757437071,
+        "pinky": 0.562929061784897
+      },
+      "normalization": {
+        "mean": [
+          372.66510336191806,
+          -167.92671353248068,
+          911.2796373723879
+        ],
+        "std": [
+          425.86156521658563,
+          349.11964987316696,
+          628.2334816094016
+        ]
+      }
+    },
+    {
+      "name": "Hybrid (Real + Interaction)",
+      "train_samples": 6128,
+      "test_samples": 437,
+      "overall_accuracy": 0.8901601830663616,
+      "per_finger_accuracy": {
+        "thumb": 0.9084668192219679,
+        "index": 0.9794050343249427,
+        "middle": 0.988558352402746,
+        "ring": 0.9954233409610984,
+        "pinky": 0.977116704805492
+      },
+      "normalization": {
+        "mean": [
+          333.6228692585052,
+          -166.34722755493547,
+          908.5201505129379
+        ],
+        "std": [
+          505.39818835279186,
+          355.819186464397,
+          717.8804229147653
+        ]
+      }
+    }
+  ],
+  "per_combo_accuracy": {
+    "eeeee": {
+      "accuracy": 1.0,
+      "n_samples": 486,
+      "n_flexed": 0
+    },
+    "fffff": {
+      "accuracy": 0.9945945945945946,
+      "n_samples": 185,
+      "n_flexed": 5
+    },
+    "feeee": {
+      "accuracy": 1.0,
+      "n_samples": 161,
+      "n_flexed": 1
+    },
+    "efeee": {
+      "accuracy": 1.0,
+      "n_samples": 170,
+      "n_flexed": 1
+    },
+    "eefee": {
+      "accuracy": 0.9482758620689655,
+      "n_samples": 174,
+      "n_flexed": 1
+    },
+    "eeefe": {
+      "accuracy": 1.0,
+      "n_samples": 222,
+      "n_flexed": 1
+    },
+    "eeeef": {
+      "accuracy": 1.0,
+      "n_samples": 154,
+      "n_flexed": 1
+    },
+    "ffeee": {
+      "accuracy": 1.0,
+      "n_samples": 222,
+      "n_flexed": 2
+    },
+    "eeeff": {
+      "accuracy": 0.95,
+      "n_samples": 160,
+      "n_flexed": 2
+    },
+    "eefff": {
+      "accuracy": 1.0,
+      "n_samples": 231,
+      "n_flexed": 3
+    }
+  },
+  "interaction_model": {
+    "finger_effects": {
+      "thumb": [
+        249.08525817475694,
+        -78.72018640516714,
+        -314.8031257419453
+      ],
+      "index": [
+        398.22889490051097,
+        -168.60576401347993,
+        1046.166543681221
+      ],
+      "middle": [
+        423.13636105480464,
+        -332.18452427585083,
+        602.0899007368723
+      ],
+      "ring": [
+        -612.9463873153385,
+        526.68252785844,
+        10.509215518520733
+      ],
+      "pinky": [
+        698.6573028837026,
+        -460.49046380666505,
+        1456.1790679813678
+      ]
+    },
+    "interaction_strength": -0.7017877575003981
+  },
+  "baseline": [
+    45.952088155864196,
+    -45.77968267746913,
+    31.34002057613169
+  ]
+}

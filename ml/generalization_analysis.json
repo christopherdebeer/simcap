@@ -1,0 +1,118 @@
+{
+  "real_only": {
+    "fffff": {
+      "accuracy": 0.0,
+      "n_test": 185,
+      "n_train": 1980,
+      "n_flexed": 5
+    },
+    "feeee": {
+      "accuracy": 0.0,
+      "n_test": 161,
+      "n_train": 2004,
+      "n_flexed": 1
+    },
+    "efeee": {
+      "accuracy": 0.0,
+      "n_test": 170,
+      "n_train": 1995,
+      "n_flexed": 1
+    },
+    "eefee": {
+      "accuracy": 0.0,
+      "n_test": 174,
+      "n_train": 1991,
+      "n_flexed": 1
+    },
+    "eeefe": {
+      "accuracy": 0.0,
+      "n_test": 222,
+      "n_train": 1943,
+      "n_flexed": 1
+    },
+    "eeeef": {
+      "accuracy": 0.0,
+      "n_test": 154,
+      "n_train": 2011,
+      "n_flexed": 1
+    },
+    "ffeee": {
+      "accuracy": 0.0,
+      "n_test": 222,
+      "n_train": 1943,
+      "n_flexed": 2
+    },
+    "eeeff": {
+      "accuracy": 0.0,
+      "n_test": 160,
+      "n_train": 2005,
+      "n_flexed": 2
+    },
+    "eefff": {
+      "accuracy": 0.0,
+      "n_test": 231,
+      "n_train": 1934,
+      "n_flexed": 3
+    }
+  },
+  "with_synthetic": {
+    "fffff": {
+      "accuracy": 0.0,
+      "n_test": 185,
+      "n_train": 4280,
+      "n_flexed": 5
+    },
+    "feeee": {
+      "accuracy": 0.4472049689440994,
+      "n_test": 161,
+      "n_train": 4304,
+      "n_flexed": 1
+    },
+    "efeee": {
+      "accuracy": 0.0,
+      "n_test": 170,
+      "n_train": 4295,
+      "n_flexed": 1
+    },
+    "eefee": {
+      "accuracy": 0.0,
+      "n_test": 174,
+      "n_train": 4291,
+      "n_flexed": 1
+    },
+    "eeefe": {
+      "accuracy": 1.0,
+      "n_test": 222,
+      "n_train": 4243,
+      "n_flexed": 1
+    },
+    "eeeef": {
+      "accuracy": 0.0,
+      "n_test": 154,
+      "n_train": 4311,
+      "n_flexed": 1
+    },
+    "ffeee": {
+      "accuracy": 0.0,
+      "n_test": 222,
+      "n_train": 4243,
+      "n_flexed": 2
+    },
+    "eeeff": {
+      "accuracy": 0.0,
+      "n_test": 160,
+      "n_train": 4305,
+      "n_flexed": 2
+    },
+    "eefff": {
+      "accuracy": 0.0,
+      "n_test": 231,
+      "n_train": 4234,
+      "n_flexed": 3
+    }
+  },
+  "mean_accuracy": {
+    "real_only": 0.0,
+    "with_synthetic": 0.16080055210489994
+  }
+}
