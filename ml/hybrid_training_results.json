@@ -1,0 +1,54 @@
+[
+  {
+    "name": "Real Data Only",
+    "train_samples": 1728,
+    "test_samples": 437,
+    "test_accuracy": 0.9725400457665904,
+    "per_finger": {
+      "thumb": 0.9977116704805492,
+      "index": 0.988558352402746,
+      "middle": 0.9931350114416476,
+      "ring": 0.9931350114416476,
+      "pinky": 0.9862700228832952
+    }
+  },
+  {
+    "name": "Real + NN Synthetic (1x)",
+    "train_samples": 6128,
+    "test_samples": 437,
+    "test_accuracy": 0.8947368421052632,
+    "per_finger": {
+      "thumb": 0.9633867276887872,
+      "index": 0.9862700228832952,
+      "middle": 0.9496567505720824,
+      "ring": 0.9794050343249427,
+      "pinky": 0.9153318077803204
+    }
+  },
+  {
+    "name": "Real + NN Synthetic (2x)",
+    "train_samples": 10528,
+    "test_samples": 437,
+    "test_accuracy": 0.8649885583524027,
+    "per_finger": {
+      "thumb": 0.9633867276887872,
+      "index": 0.9862700228832952,
+      "middle": 0.9519450800915332,
+      "ring": 0.954233409610984,
+      "pinky": 0.9130434782608695
+    }
+  },
+  {
+    "name": "Real + NN Synthetic (0.5x)",
+    "train_samples": 3928,
+    "test_samples": 437,
+    "test_accuracy": 0.9519450800915332,
+    "per_finger": {
+      "thumb": 0.9862700228832952,
+      "index": 0.9954233409610984,
+      "middle": 0.9748283752860412,
+      "ring": 0.9977116704805492,
+      "pinky": 0.9794050343249427
+    }
+  }
+]
