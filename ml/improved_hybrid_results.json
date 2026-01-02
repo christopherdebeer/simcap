@@ -1,0 +1,79 @@
+{
+  "experiments": [
+    {
+      "name": "Real Data Only",
+      "overall_accuracy": 0.9976905311778291,
+      "per_finger": {
+        "thumb": 1.0,
+        "index": 1.0,
+        "middle": 0.9976905311778291,
+        "ring": 1.0,
+        "pinky": 1.0
+      },
+      "normalization": {
+        "mean": [
+          101.41705697981273,
+          -95.46683282122956,
+          620.795279564595
+        ],
+        "std": [
+          566.5909282271435,
+          337.05272359248926,
+          872.5030389494297
+        ]
+      }
+    },
+    {
+      "name": "Improved Hybrid (Calibrated)",
+      "overall_accuracy": 0.9588100686498856,
+      "per_finger": {
+        "thumb": 0.988558352402746,
+        "index": 0.9748283752860412,
+        "middle": 0.9954233409610984,
+        "ring": 1.0,
+        "pinky": 0.9908466819221968
+      },
+      "normalization": {
+        "mean": [
+          315.88228954885915,
+          -160.77284848640784,
+          901.0501884621158
+        ],
+        "std": [
+          507.76987290932135,
+          330.9903788972304,
+          857.0923509806847
+        ]
+      }
+    },
+    {
+      "name": "Improved Hybrid (300/combo)",
+      "overall_accuracy": 0.8810068649885584,
+      "per_finger": {
+        "thumb": 0.9610983981693364,
+        "index": 0.9725400457665904,
+        "middle": 0.9336384439359268,
+        "ring": 0.9954233409610984,
+        "pinky": 0.9794050343249427
+      },
+      "normalization": {
+        "mean": [
+          361.8361797205383,
+          -176.20659952096668,
+          941.9939555565653
+        ],
+        "std": [
+          479.7946898386909,
+          328.27596912738016,
+          832.7986725787375
+        ]
+      }
+    }
+  ],
+  "improvements": [
+    "Real data only for observed combos (no synthetic mixing)",
+    "Calibrated noise from nearest observed combo",
+    "Confidence weighting based on distance to observed",
+    "Strict separation of real vs synthetic"
+  ]
+}
