@@ -324,15 +324,81 @@ See: [`ml/generalization_analysis.json`](ml/generalization_analysis.json)
 
 ### 6.2 Medium-Term
 
-1. **Orientation compensation**
-   - Issue: Hand orientation affects magnetic field measurements
-   - Approach: Use quaternion data to rotate residuals to common frame
-   - Reference: [`apps/gambit/shared/orientation-model.ts`](apps/gambit/shared/orientation-model.ts)
+#### 6.2.1 Auto-Calibration Integration (RESEARCHED 2026-01-02)
 
-2. **Earth field subtraction**
-   - Issue: Earth's magnetic field (~50 μT) adds to measurements
-   - Approach: Use IGRF model based on location
-   - Reference: [`apps/gambit/shared/geomagnetic-field.ts`](apps/gambit/shared/geomagnetic-field.ts)
+**Implementation Location:** `apps/gambit/shared/unified-mag-calibration.ts`
+
+The GAMBIT app already implements sophisticated real-time calibration:
+
+| Component | Algorithm | Key Lines | Bootstrap Values |
+|-----------|-----------|-----------|------------------|
+| **Hard Iron** | Min-max tracking | 1357-1430 | `{29.3, -9.9, -20.1}` μT |
+| **Soft Iron** | Diagonal scale | 1436-1464 | `{1.193, 1.018, 0.700}` |
+| **Earth Field** | Orientation-aware averaging | 1923-1953 | ~27 μT magnitude |
+| **Extended Baseline** | Residual at session start | 681-778 | Auto-captured |
+
+**Calibration Chain:**
+```
+raw_mag → hard_iron_subtraction → soft_iron_scaling → earth_subtraction → baseline_subtraction → residual
+```
+
+**ML Opportunity:** Current training uses raw `mx_ut` - baseline. Should use `residual_mx/my/mz` from calibration chain for consistency with runtime behavior.
+
+**Key Files:**
+- `unified-mag-calibration.ts:1580-1605` - `_getEarthResidual()` - orientation-aware residual
+- `unified-mag-calibration.ts:1557-1575` - `getResidual()` - full residual with extended baseline
+- `telemetry-processor.ts:720-774` - Integration point
+
+#### 6.2.2 IMU Fusion for Orientation (RESEARCHED 2026-01-02)
+
+**Implementation Location:** `packages/filters/src/filters.ts`
+
+The Madgwick AHRS provides orientation via 9-DoF sensor fusion:
+
+| Function | Lines | Purpose |
+|----------|-------|---------|
+| `updateWithMag()` | 316-429 | 9-DoF fusion with magnetometer |
+| `_computeMagResidual()` | 431-455 | Expected vs measured in device frame |
+| `getEulerAngles()` | 219-243 | Quaternion → Euler (ZYX convention) |
+| `transformToDeviceFrame()` | 263-281 | World → sensor frame rotation |
+
+**Residual Calculation:**
+```typescript
+// From unified-mag-calibration.ts:1589-1594
+const R = quaternionToRotationMatrix(orientation);
+const earthSensor = R × earthFieldWorld;  // Rotate earth to sensor frame
+const residual = ironCorrected - earthSensor;
+```
+
+**Key Insight:** The residual is already **orientation-compensated** - Earth field is rotated to expected sensor-frame position before subtraction. However, **magnet signal is also orientation-dependent** - it rotates with hand orientation.
+
+**ML Approaches for Orientation-Invariance:**
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| **World-frame residual** | True position-invariance | Requires `R^T × residual` transform |
+| **Orientation as feature** | Simple, preserves info | +4 quaternion features |
+| **Horizontal/Vertical decomposition** | Physics-grounded | 2D projection loses Z |
+| **Data augmentation** | More training data | Synthetic rotation accuracy |
+
+**Available in Training Data:**
+```json
+{
+  "orientation_w": 0.685, "orientation_x": -0.285,
+  "orientation_y": 0.633, "orientation_z": 0.218,
+  "euler_roll": -72.8, "euler_pitch": 83.1, "euler_yaw": -31.0,
+  "residual_mx": -23.2, "residual_my": -32.7, "residual_mz": 32.1,
+  "ahrs_mag_residual_x": -12.6, "ahrs_mag_residual_y": -85.9, "ahrs_mag_residual_z": 89.6
+}
+```
+
+**Recommended Implementation:**
+```python
+# Transform sensor-frame residual to world frame
+def residual_to_world(residual, quaternion):
+    R = quaternion_to_rotation_matrix(quaternion)
+    return R.T @ residual  # Inverse rotation
+```
 
 3. **Transfer learning across sessions**
    - Issue: Calibration varies between sessions
@@ -363,6 +429,7 @@ See: [`ml/generalization_analysis.json`](ml/generalization_analysis.json)
 2. **CNN-LSTM hybrid:** Best architecture for windowed inference
 3. **Interaction model:** Captures non-linear finger physics
 4. **Calibrated noise:** Use observed combo stats for synthetic
+5. **GAMBIT calibration pipeline:** Sophisticated real-time iron/earth compensation already exists
 
 ### 7.2 What Didn't Work
 
@@ -438,8 +505,48 @@ combo_to_labels = lambda c: [1.0 if x == 'f' else 0.0 for x in c]
 
 ---
 
+## Appendix B: Calibration & Orientation Reference
+
+### B.1 Key Calibration Files
+
+| File | Purpose |
+|------|---------|
+| `apps/gambit/shared/unified-mag-calibration.ts` | Full calibration implementation (2000+ lines) |
+| `apps/gambit/shared/telemetry-processor.ts` | Telemetry processing with calibration integration |
+| `packages/filters/src/filters.ts` | Madgwick AHRS implementation |
+| `apps/gambit/shared/geomagnetic-field.ts` | IGRF-13 Earth field model |
+| `ml/calibration.py` | Python equivalent for offline processing |
+
+### B.2 Residual Types in Session Data
+
+| Field | Description | Use For ML |
+|-------|-------------|------------|
+| `mx_ut, my_ut, mz_ut` | Raw magnetometer in μT | Legacy baseline-subtraction |
+| `iron_mx, iron_my, iron_mz` | Hard+soft iron corrected | Iron-aware training |
+| `residual_mx, my, mz` | Full calibration residual | **Recommended** |
+| `ahrs_mag_residual_x/y/z` | AHRS expected-vs-measured | Orientation-aware detection |
+
+### B.3 Orientation Fields
+
+| Field | Description |
+|-------|-------------|
+| `orientation_w/x/y/z` | Quaternion from Madgwick AHRS |
+| `euler_roll/pitch/yaw` | Euler angles in degrees (ZYX) |
+
+### B.4 Calibration State Fields
+
+| Field | Description |
+|-------|-------------|
+| `mag_cal_ready` | Calibration fully initialized |
+| `mag_cal_confidence` | 0-1 based on residual stability |
+| `mag_cal_earth_magnitude` | Estimated Earth field (μT) |
+| `magnet_baseline_residual` | Session-start magnet baseline |
+
+---
+
 **Document History:**
+- 2026-01-02: Added 6.2.1 Auto-Calibration and 6.2.2 IMU Fusion research
 - 2026-01-02: Created comprehensive design document
 - Based on work from Dec 2025 - Jan 2026
 
-**Next Update:** After additional data collection or significant model improvements
+**Next Update:** After implementing orientation-invariant training or collecting new data
