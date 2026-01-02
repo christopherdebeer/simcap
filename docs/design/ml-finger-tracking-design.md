@@ -14,11 +14,12 @@ This document tracks the evolution of machine learning approaches for **finger s
 **Current Best Results:**
 | Approach | Accuracy | Use Case |
 |----------|----------|----------|
-| Real Data Only (single-sample) | **99.8%** | Observed combos (10/32) |
-| Calibrated Hybrid | **95.9%** | All 32 combos coverage |
+| Real Data Only (3-feature residual) | **97.8% ± 0.4%** | Observed combos (10/32) |
 | Deployed Model (finger_aligned_v2) | **99.6%** | Windowed CNN-LSTM (50×9) |
 
-**Key Challenge:** Only 10 of 32 finger combinations have real training data. Physics-based synthetic data generation is needed for full coverage.
+**Key Challenge:** Only 10 of 32 finger combinations have real training data.
+
+**Critical Finding (2026-01-02):** Synthetic data from interaction model has 39% prediction error and **hurts accuracy** when mixed with real data. Orientation compensation does not help. Priority: collect more real data.
 
 ---
 
@@ -305,22 +306,24 @@ See: [`ml/generalization_analysis.json`](ml/generalization_analysis.json)
 
 ## 6. Future Directions
 
-### 6.1 Near-Term (Priority)
+### 6.1 Near-Term (Priority) - UPDATED 2026-01-02
 
-1. **Collect more real data**
-   - Priority: Multi-finger combos (ffeee, eeeff, eefff already have data)
-   - Target: Adjacent finger pairs (fefee, effee, eefef)
-   - Impact: Each new combo should improve generalization significantly
+1. **Collect more real data (CRITICAL)**
+   - Current state: 10/32 combos, 97.8% accuracy on observed
+   - Synthetic data HARMS accuracy (39% prediction error)
+   - Priority combos: Adjacent pairs (fefee, effee, eefef)
+   - Each new combo directly improves coverage
 
-2. **Per-finger physics calibration**
-   - Current: Global interaction strength (-0.702)
-   - Better: Per-pair interaction terms (thumb-index, index-middle, etc.)
-   - Impact: Could reduce 39% prediction error
+2. **Abandon synthetic data generation**
+   - Interaction model too inaccurate (39% mean error)
+   - Hybrid training hurts: 97.8% → 51.7%
+   - Focus resources on real data collection instead
 
-3. **Noise model improvement**
-   - Current: Magnitude-proportional Gaussian
-   - Better: Per-combo covariance from observed data
-   - Impact: Better synthetic distribution matching
+3. **Orientation findings (research complete)**
+   - World-frame transform: HURTS (52.2% vs 97.8%)
+   - Orientation as features: NO BENEFIT
+   - Sensor-frame residual alone is sufficient
+   - Pre-calibrated `residual_mx/my/mz` available but unused
 
 ### 6.2 Medium-Term
 
@@ -437,6 +440,9 @@ def residual_to_world(residual, quaternion):
 2. **Magnitude-based noise:** Doesn't match real distribution
 3. **Too much synthetic:** Dilutes real data signal (300/combo < 150/combo)
 4. **Global interaction:** Need per-pair terms for accuracy
+5. **World-frame transformation:** Reduced accuracy from 97.8% → 52.2%
+6. **Orientation as features:** No improvement (euler hurt, quaternion neutral)
+7. **Any synthetic mixing:** 39% prediction error makes synthetic harmful
 
 ### 7.3 Design Principles
 

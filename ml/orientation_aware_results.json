@@ -1,0 +1,77 @@
+{
+  "baseline": [
+    45.952088155864196,
+    -45.77968267746913,
+    31.34002057613169
+  ],
+  "observed_combos": [
+    "eeeee",
+    "fffff",
+    "feeee",
+    "efeee",
+    "eefee",
+    "eeefe",
+    "eeeef",
+    "ffeee",
+    "eeeff",
+    "eefff"
+  ],
+  "results": {
+    "sensor": {
+      "name": "Real-only (sensor)",
+      "combo_accuracy": 0.9792147806004619,
+      "per_finger": {
+        "thumb": 0.9861431870669746,
+        "index": 0.9953810623556582,
+        "middle": 0.9907621247113164,
+        "ring": 0.9930715935334873,
+        "pinky": 0.9884526558891455
+      },
+      "n_train": 1732,
+      "n_test": 433
+    },
+    "world": {
+      "name": "Real-only (world)",
+      "combo_accuracy": 0.5219399538106235,
+      "per_finger": {
+        "thumb": 0.8036951501154734,
+        "index": 0.8244803695150116,
+        "middle": 0.8498845265588915,
+        "ring": 0.7875288683602771,
+        "pinky": 0.8013856812933026
+      },
+      "n_train": 1732,
+      "n_test": 433
+    },
+    "calibrated": {
+      "name": "Real-only (calibrated)",
+      "combo_accuracy": 0.8914549653579676,
+      "per_finger": {
+        "thumb": 0.9076212471131639,
+        "index": 0.976905311778291,
+        "middle": 0.9815242494226328,
+        "ring": 0.9515011547344111,
+        "pinky": 0.9468822170900693
+      },
+      "n_train": 1732,
+      "n_test": 433
+    },
+    "hybrid_world": {
+      "name": "Hybrid (world-frame)",
+      "combo_accuracy": 0.20335110434120335,
+      "per_finger": {
+        "thumb": 0.6519421172886519,
+        "index": 0.6991622239146992,
+        "middle": 0.6793602437166794,
+        "ring": 0.76999238385377,
+        "pinky": 0.7174409748667174
+      },
+      "n_train": 5252,
+      "n_test": 1313
+    }
+  },
+  "comparison": {
+    "previous_baseline": 0.959,
+    "sensor_vs_world": -0.45727482678983833
+  }
+}
