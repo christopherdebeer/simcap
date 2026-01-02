@@ -1,0 +1,58 @@
+{
+  "date": "2026-01-02",
+  "experiment": "Orientation-Aware Training Analysis",
+  "findings": {
+    "sensor_frame_residual_only": {
+      "accuracy": 0.978,
+      "std": 0.004,
+      "features": 3,
+      "description": "Best result - raw magnetometer minus baseline"
+    },
+    "world_frame_residual": {
+      "accuracy": 0.522,
+      "description": "Quaternion rotation to world frame - MUCH WORSE"
+    },
+    "calibrated_residual": {
+      "accuracy": 0.891,
+      "description": "Using pre-calibrated residual_mx/my/mz fields"
+    },
+    "residual_plus_euler": {
+      "accuracy": 0.950,
+      "std": 0.005,
+      "features": 6,
+      "description": "3 residual + 3 euler angles - slightly WORSE"
+    },
+    "residual_plus_quaternion": {
+      "accuracy": 0.977,
+      "std": 0.005,
+      "features": 7,
+      "description": "3 residual + 4 quaternion - NO IMPROVEMENT"
+    },
+    "hybrid_with_synthetic": {
+      "accuracy": 0.517,
+      "description": "Real + synthetic world-frame - HARMFUL"
+    }
+  },
+  "interaction_model_error": {
+    "mean_absolute_error_ut": 491.4,
+    "mean_relative_error_pct": 39.1,
+    "worst_combos": {
+      "eeeff": 93.1,
+      "eefff": 84.9,
+      "eeeef": 46.0
+    }
+  },
+  "conclusions": [
+    "Orientation does NOT help - sensor-frame residual alone achieves 97.8%",
+    "World-frame transform HURTS accuracy significantly (52% vs 98%)",
+    "Synthetic data HARMS model due to 39% prediction error",
+    "Real data collection is the only path to improved coverage",
+    "Pre-calibrated residual fields available but provide no advantage"
+  ],
+  "recommendations": [
+    "Use simple 3-feature sensor-frame residual (mx-bx, my-by, mz-bz)",
+    "Abandon synthetic data generation - too inaccurate",
+    "Collect real data for remaining 22 finger combinations",
+    "Focus on adjacent finger pairs first (easier to perform)"
+  ]
+}
