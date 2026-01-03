@@ -38,7 +38,7 @@ import {
     GeomagneticLocation
 } from './shared/geomagnetic-field.js';
 import {
-    uploadSessionWithRetry,
+    uploadSessionSmart,
     uploadToGitHub as uploadDirectToGitHub,
     getUploadSecret,
     setUploadSecret,
@@ -1809,7 +1809,7 @@ async function uploadToProxy(): Promise<void> {
         const filename = `${timestamp}.json`;
         const content = JSON.stringify(data, null, 2);
 
-        const result = await uploadSessionWithRetry({
+        const result = await uploadSessionSmart({
             branch: 'data',
             filename,
             content,
@@ -1821,6 +1821,11 @@ async function uploadToProxy(): Promise<void> {
 
         log(`Uploaded: ${result.filename} (${(result.size / 1024).toFixed(1)} KB)`);
         log(`URL: ${result.url}`);
+
+        // Log chunk info if session was split
+        if (result.chunks) {
+            log(`Session split into ${result.chunks.totalChunks} chunks (${result.chunks.totalSamples} total samples)`);
+        }
 
     } catch (e) {
         console.error('[GAMBIT] GitHub upload failed:', e);
