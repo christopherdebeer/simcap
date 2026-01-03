@@ -250,6 +250,32 @@ The session data contains multiple magnetometer representations:
 
 **Recommendation:** Use raw magnetometer for simplicity. Iron correction or Earth subtraction provide no accuracy benefit when z-score normalization is applied.
 
+### 4.7 Real-Time Inference: Calibration Requirements
+
+**Key Discovery:** The magnetic signatures are so distinctive that **no calibration is needed** for real-time inference.
+
+| Calibration Strategy | Samples Needed | Accuracy | Notes |
+|---------------------|----------------|----------|-------|
+| **None (raw values)** | 0 | **99.7%** | Instant startup |
+| Reference pose (open hand) | 1-10 | 99.7% | Compensates for drift |
+| Running EMA (α=0.1) | 30-50 to converge | ~99% | Continuous adaptation |
+| Full session mean (hindsight) | All | 99.7% | Not real-time |
+
+**Why no calibration works:**
+- Finger magnets create signals 100-3000 μT above Earth's field (~50 μT)
+- Inter-class distances (214-3222 μT) >> sensor noise (~1-5 μT)
+- k-NN matches actual samples, not centroids, handling variance naturally
+
+**Practical Real-Time Implementation:**
+```
+For Puck.js on-device inference:
+1. No startup delay - classify immediately with raw values
+2. Optional: collect 10 "open hand" samples for session drift compensation
+3. Use k-NN (k=1) with stored templates
+4. Memory: 1.5KB (5 templates/class) or 30KB (100 templates/class)
+5. Latency: <0.1ms per classification
+```
+
 ---
 
 ## 5. Key Findings
