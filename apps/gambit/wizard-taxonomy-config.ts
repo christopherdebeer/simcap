@@ -402,9 +402,100 @@ function generateCalibrationSteps(): ExtendedWizardStep[] {
   ];
 }
 
+// ===== Pairwise Calibration Steps =====
+
+/**
+ * Generate pairwise calibration steps for physics model fitting.
+ * These combinations are critical for understanding finger interaction effects.
+ *
+ * Priority pairings:
+ * - Adjacent pairs: T-I, I-M, M-R, R-P (strongest magnetic coupling)
+ * - Non-adjacent pairs: T-M, T-R, T-P, I-R, I-P, M-P
+ */
+function generatePairwiseCalibrationSteps(): ExtendedWizardStep[] {
+  const steps: ExtendedWizardStep[] = [];
+
+  // Reference baseline (all extended)
+  steps.push({
+    ...generatePoseStep('00000', 'palm_down', H_LONG),
+    id: 'pair_cal:baseline',
+    label: 'Baseline (All Extended)',
+    desc: 'Reference position: palm down, all fingers fully extended',
+  });
+
+  // All single-finger flexes (ground truth for individual magnets)
+  const singleFlexCodes = ['20000', '02000', '00200', '00020', '00002'];
+  const fingerNames = ['Thumb', 'Index', 'Middle', 'Ring', 'Pinky'];
+
+  for (let i = 0; i < 5; i++) {
+    steps.push({
+      ...generatePoseStep(singleFlexCodes[i], 'palm_down', H_MED),
+      id: `pair_cal:single:${fingerNames[i].toLowerCase()}`,
+      label: `${fingerNames[i]} Only`,
+      desc: `Flex only ${fingerNames[i].toLowerCase()}, all others extended`,
+    });
+  }
+
+  // Adjacent pairs (critical for understanding coupling)
+  const adjacentPairs = [
+    { code: '22000', name: 'Thumb+Index', desc: 'Adjacent pair: strongest coupling expected' },
+    { code: '02200', name: 'Index+Middle', desc: 'Adjacent pair: strong coupling' },
+    { code: '00220', name: 'Middle+Ring', desc: 'Adjacent pair with opposite polarity' },
+    { code: '00022', name: 'Ring+Pinky', desc: 'Adjacent pair with opposite polarity' },
+  ];
+
+  for (const pair of adjacentPairs) {
+    steps.push({
+      ...generatePoseStep(pair.code, 'palm_down', H_MED),
+      id: `pair_cal:adjacent:${pair.name.toLowerCase().replace('+', '_')}`,
+      label: pair.name,
+      desc: pair.desc,
+    });
+  }
+
+  // Non-adjacent pairs (for understanding distant interactions)
+  const nonAdjacentPairs = [
+    { code: '20200', name: 'Thumb+Middle', desc: 'Skip-1 pair' },
+    { code: '20020', name: 'Thumb+Ring', desc: 'Skip-2 pair (opposite polarity)' },
+    { code: '20002', name: 'Thumb+Pinky', desc: 'Skip-3 pair (shaka)' },
+    { code: '02020', name: 'Index+Ring', desc: 'Skip-1 pair (opposite polarity)' },
+    { code: '02002', name: 'Index+Pinky', desc: 'Skip-2 pair' },
+    { code: '00202', name: 'Middle+Pinky', desc: 'Skip-1 pair' },
+  ];
+
+  for (const pair of nonAdjacentPairs) {
+    steps.push({
+      ...generatePoseStep(pair.code, 'palm_down', H_MED),
+      id: `pair_cal:nonadj:${pair.name.toLowerCase().replace('+', '_')}`,
+      label: pair.name,
+      desc: pair.desc,
+    });
+  }
+
+  // All flexed (for full interaction measurement)
+  steps.push({
+    ...generatePoseStep('22222', 'palm_down', H_LONG),
+    id: 'pair_cal:all_flexed',
+    label: 'All Flexed (Fist)',
+    desc: 'All fingers flexed for full interaction measurement',
+  });
+
+  return steps;
+}
+
 // ===== Wizard Mode Definitions =====
 
 export const WIZARD_MODES: WizardMode[] = [
+  // Pairwise Calibration for Physics Model (5 min)
+  {
+    id: 'pairwise_cal',
+    name: 'Pairwise Calibration',
+    description: 'All single + pairwise combos for physics model fitting',
+    duration: '~5 min',
+    priority: 'required',
+    steps: generatePairwiseCalibrationSteps(),
+  },
+
   // Quick Calibration (2 min)
   {
     id: 'quick_cal',
