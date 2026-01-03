@@ -1,9 +1,18 @@
 /**
  * Data Collection Wizard Module
  * Guided multi-step data collection with automatic label application
+ *
+ * Integrates with wizard-taxonomy-config.ts for comprehensive finger state collection.
  */
 
 import type { FingerStates, MotionType } from '@core/types';
+import {
+  WIZARD_MODES,
+  type WizardMode,
+  type ExtendedWizardStep,
+  parseExtendedStepLabels,
+  FINGER_CODES,
+} from '../wizard-taxonomy-config';
 
 // ===== Type Definitions =====
 
@@ -16,6 +25,10 @@ export interface WizardStep {
   desc: string;
   title?: string;
   description?: string;
+  // Extended properties from taxonomy
+  fingerCode?: string;
+  orientation?: string;
+  phase?: 'static' | 'dynamic' | 'erratic' | 'sweep';
 }
 
 export interface WizardState {
@@ -187,35 +200,64 @@ function showWizardModeSelection(): void {
     if (timeText) timeText.textContent = '';
     if (stats) (stats as HTMLElement).style.display = 'none';
 
+    // Get taxonomy modes for display
+    const pairwiseMode = WIZARD_MODES.find(m => m.id === 'pairwise_cal');
+    const fullTaxonomy = WIZARD_MODES.find(m => m.id === 'full_taxonomy');
+    const robustnessMode = WIZARD_MODES.find(m => m.id === 'robustness');
+    const comprehensiveMode = WIZARD_MODES.find(m => m.id === 'comprehensive');
+
     if (content) {
         content.innerHTML = `
             <div class="wizard-instruction">Choose a data collection mode</div>
 
-            <div style="font-size: 11px; color: var(--accent); margin: 10px 0 5px; font-weight: 500;">General Collection</div>
+            <div style="font-size: 11px; color: var(--accent); margin: 10px 0 5px; font-weight: 500;">Quick Collection</div>
             <div class="wizard-start-options">
                 <div class="wizard-option" onclick="window.startWizardMode('quick')">
-                    <h4>⚡ Quick Collection</h4>
+                    <h4>⚡ Quick</h4>
                     <p>Reference poses + finger isolation</p>
                     <div class="duration">~50 seconds • 7 steps</div>
                 </div>
-                <div class="wizard-option" onclick="window.startWizardMode('full')">
-                    <h4>📚 Full Collection</h4>
-                    <p>Quick + common gestures</p>
-                    <div class="duration">~80 seconds • 13 steps</div>
-                </div>
-            </div>
-
-            <div style="font-size: 11px; color: var(--accent); margin: 15px 0 5px; font-weight: 500;">Magnetic Finger Tracking</div>
-            <div class="wizard-start-options">
-                <div class="wizard-option" onclick="window.startWizardMode('ft5mag')" style="border-color: var(--success);">
-                    <h4>🧲 5 Magnets (Standard)</h4>
-                    <p>All fingers with magnets - full tracking data</p>
+                <div class="wizard-option" onclick="window.startWizardMode('ft5mag')">
+                    <h4>🧲 5 Magnets</h4>
+                    <p>Standard 5-magnet tracking data</p>
                     <div class="duration">~85 seconds • 11 steps</div>
                 </div>
             </div>
 
+            <div style="font-size: 11px; color: var(--success); margin: 15px 0 5px; font-weight: 500;">🎯 Physics Model Calibration (Recommended)</div>
+            <div class="wizard-start-options">
+                <div class="wizard-option" onclick="window.startWizardMode('pairwise_cal')" style="border-color: var(--success); background: rgba(var(--success-rgb), 0.05);">
+                    <h4>🔬 Pairwise Calibration</h4>
+                    <p>${pairwiseMode?.description || 'All single + pairwise combos for physics model'}</p>
+                    <div class="duration">${pairwiseMode?.duration || '~5 min'} • ${pairwiseMode?.steps.length || 17} steps</div>
+                </div>
+            </div>
+
+            <div style="font-size: 11px; color: var(--accent); margin: 15px 0 5px; font-weight: 500;">Complete Taxonomy Collection</div>
+            <div class="wizard-start-options">
+                <div class="wizard-option" onclick="window.startWizardMode('full_taxonomy')">
+                    <h4>📊 Full Taxonomy</h4>
+                    <p>${fullTaxonomy?.description || 'All 32 binary configurations'}</p>
+                    <div class="duration">${fullTaxonomy?.duration || '~15 min'} • ${fullTaxonomy?.steps.length || 32} steps</div>
+                </div>
+                <div class="wizard-option" onclick="window.startWizardMode('robustness')">
+                    <h4>🔄 Robustness</h4>
+                    <p>${robustnessMode?.description || 'Erratic movement + orientation sweeps'}</p>
+                    <div class="duration">${robustnessMode?.duration || '~10 min'} • ${robustnessMode?.steps.length || 14} steps</div>
+                </div>
+            </div>
+
+            <div style="font-size: 11px; color: var(--fg-muted); margin: 15px 0 5px; font-weight: 500;">Extended Sessions</div>
+            <div class="wizard-start-options">
+                <div class="wizard-option" onclick="window.startWizardMode('comprehensive')" style="opacity: 0.8;">
+                    <h4>🎓 Comprehensive</h4>
+                    <p>${comprehensiveMode?.description || 'Complete collection: calibration + all poses + robustness'}</p>
+                    <div class="duration">${comprehensiveMode?.duration || '~45 min'} • ${comprehensiveMode?.steps.length || 60}+ steps</div>
+                </div>
+            </div>
+
             <div style="margin-top: 15px; padding: 10px; background: var(--bg); border-radius: 4px; font-size: 11px; color: var(--fg-muted);">
-                <strong>Note:</strong> Complete magnetometer calibration before collecting finger tracking data. Calibration removes environmental interference to isolate magnet signals.
+                <strong>Tip:</strong> For best physics model accuracy, run <strong>Pairwise Calibration</strong> first. This captures all finger interaction patterns needed for synthetic data generation.
             </div>
         `;
     }
@@ -251,6 +293,50 @@ function parseStepLabels(id: string): WizardLabels {
 
     if (!id) return labels;
 
+    // Handle taxonomy-style step IDs (pose:CODE:orientation, pair_cal:*, etc.)
+    if (id.startsWith('pose:') && id.includes(':')) {
+        const parts = id.split(':');
+        if (parts.length >= 2) {
+            const code = parts[1];
+            // Check if it's a finger code (5 digits)
+            if (code && /^[02]{5}$/.test(code)) {
+                const codeInfo = FINGER_CODES[code];
+                if (codeInfo) {
+                    // Parse finger code to states
+                    const fingers = ['thumb', 'index', 'middle', 'ring', 'pinky'] as const;
+                    for (let i = 0; i < 5; i++) {
+                        labels.fingers[fingers[i]] = code[i] === '0' ? 'extended' : 'flexed';
+                    }
+                    if (codeInfo.semantic) {
+                        labels.pose = codeInfo.semantic;
+                    }
+                    labels.custom.push(`code:${code}`);
+                    if (parts.length >= 3) {
+                        labels.custom.push(`orientation:${parts[2]}`);
+                    }
+                    return labels;
+                }
+            } else {
+                // Legacy pose:name format
+                labels.pose = parts[1];
+                return labels;
+            }
+        }
+    }
+
+    // Handle pairwise calibration steps
+    if (id.startsWith('pair_cal:')) {
+        const parts = id.split(':');
+        labels.custom.push('pairwise_calibration');
+        labels.custom.push(id);
+
+        // Extract finger code from step if present in current step
+        // The actual finger states are set from the step's fingerCode property
+        // This is handled in startWizardCollection when using taxonomy modes
+        return labels;
+    }
+
+    // Handle legacy pose: format
     if (id.startsWith('pose:')) {
         labels.pose = id.replace('pose:', '');
         return labels;
@@ -307,11 +393,62 @@ function parseStepLabels(id: string): WizardLabels {
         return labels;
     }
 
+    // Handle calibration and range steps from taxonomy
+    if (id.startsWith('cal:') || id.startsWith('range:') || id.startsWith('sweep:') || id.startsWith('trans:') || id.startsWith('erratic:')) {
+        labels.custom.push(id);
+        labels.motion = 'dynamic';
+        return labels;
+    }
+
     if (id === 'reference_pose' || id === 'magnet_baseline') {
         labels.custom.push(id);
         labels.fingers = { thumb: 'extended', index: 'extended', middle: 'extended', ring: 'extended', pinky: 'extended' };
         return labels;
     }
+
+    return labels;
+}
+
+/**
+ * Parse labels from a taxonomy ExtendedWizardStep.
+ * Uses the fingerCode property to set finger states correctly.
+ */
+function parseExtendedStepToLabels(step: WizardStep & { fingerCode?: string; orientation?: string; phase?: string }): WizardLabels {
+    const labels: WizardLabels = {
+        pose: null,
+        fingers: { thumb: undefined, index: undefined, middle: undefined, ring: undefined, pinky: undefined },
+        motion: 'static',
+        custom: []
+    };
+
+    // Parse finger code if present
+    if (step.fingerCode && /^[02]{5}$/.test(step.fingerCode)) {
+        const fingers = ['thumb', 'index', 'middle', 'ring', 'pinky'] as const;
+        for (let i = 0; i < 5; i++) {
+            labels.fingers[fingers[i]] = step.fingerCode[i] === '0' ? 'extended' : 'flexed';
+        }
+        labels.custom.push(`code:${step.fingerCode}`);
+
+        // Check for semantic pose name
+        const codeInfo = FINGER_CODES[step.fingerCode];
+        if (codeInfo?.semantic) {
+            labels.pose = codeInfo.semantic;
+        }
+    }
+
+    // Add orientation and phase
+    if (step.orientation) {
+        labels.custom.push(`orientation:${step.orientation}`);
+    }
+    if (step.phase) {
+        labels.custom.push(`phase:${step.phase}`);
+        if (step.phase === 'dynamic' || step.phase === 'erratic' || step.phase === 'sweep') {
+            labels.motion = 'dynamic';
+        }
+    }
+
+    // Add step ID as custom tag
+    labels.custom.push(step.id);
 
     return labels;
 }
@@ -437,7 +574,11 @@ async function startWizardCollection(): Promise<void> {
 
     const transitionTime = (step.transition || TRANSITION_TIME) * 1000;
     const holdTime = (step.hold || HOLD_TIME) * 1000;
-    const stepLabels = parseStepLabels(step.id);
+
+    // Use extended label parsing if step has fingerCode, otherwise fall back to ID parsing
+    const stepLabels = step.fingerCode
+        ? parseExtendedStepToLabels(step)
+        : parseStepLabels(step.id);
 
     if (!deps.state?.recording && deps.startRecording) {
         await deps.startRecording();
@@ -537,25 +678,48 @@ export async function startWizardMode(mode: string): Promise<void> {
     wizard.mode = mode;
     wizard.currentStep = 0;
 
-    switch (mode) {
-        case 'quick':
-            wizard.steps = [
-                ...WIZARD_STEPS.reference,
-                ...WIZARD_STEPS.fingers
-            ];
-            break;
-        case 'full':
-            wizard.steps = [
-                ...WIZARD_STEPS.reference,
-                ...WIZARD_STEPS.fingers,
-                ...WIZARD_STEPS.gestures
-            ];
-            break;
-        case 'ft5mag':
-            wizard.steps = [...WIZARD_STEPS.fingerTracking5Mag];
-            break;
-        default:
-            wizard.steps = [...WIZARD_STEPS.reference, ...WIZARD_STEPS.fingers];
+    // First check taxonomy modes
+    const taxonomyMode = WIZARD_MODES.find(m => m.id === mode);
+    if (taxonomyMode) {
+        // Use taxonomy mode - convert ExtendedWizardStep to WizardStep format
+        // Preserve fingerCode, orientation, and phase for proper labeling
+        wizard.steps = taxonomyMode.steps.map(step => ({
+            id: step.id,
+            label: step.label,
+            icon: step.icon,
+            transition: step.transition,
+            hold: step.hold,
+            desc: step.desc,
+            title: step.label,
+            description: step.desc,
+            fingerCode: step.fingerCode,
+            orientation: step.orientation,
+            phase: step.phase,
+        }));
+        deps.log?.(`Wizard mode: ${taxonomyMode.name} (${wizard.steps.length} steps)`);
+    } else {
+        // Fall back to legacy modes
+        switch (mode) {
+            case 'quick':
+                wizard.steps = [
+                    ...WIZARD_STEPS.reference,
+                    ...WIZARD_STEPS.fingers
+                ];
+                break;
+            case 'full':
+                wizard.steps = [
+                    ...WIZARD_STEPS.reference,
+                    ...WIZARD_STEPS.fingers,
+                    ...WIZARD_STEPS.gestures
+                ];
+                break;
+            case 'ft5mag':
+                wizard.steps = [...WIZARD_STEPS.fingerTracking5Mag];
+                break;
+            default:
+                wizard.steps = [...WIZARD_STEPS.reference, ...WIZARD_STEPS.fingers];
+        }
+        deps.log?.(`Wizard mode: ${mode} (${wizard.steps.length} steps)`);
     }
 
     const stats = deps.$?.('wizardStats');
@@ -565,7 +729,6 @@ export async function startWizardMode(mode: string): Promise<void> {
         await deps.startRecording();
     }
 
-    deps.log?.(`Wizard mode: ${mode} (${wizard.steps.length} steps)`);
     renderWizardStep();
 }
 
