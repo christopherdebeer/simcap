@@ -45,6 +45,13 @@ const UPLOAD_API_ENDPOINT = '/api/github-upload';
 // Compression threshold: compress if content exceeds 100KB
 const COMPRESSION_THRESHOLD = 100 * 1024;
 
+// Chunk size targets (in bytes)
+// Target ~2MB per chunk to stay safely under Vercel's 4.5MB limit
+// After base64 encoding (+33%) and JSON wrapper, this keeps us safe
+const DEFAULT_CHUNK_SIZE = 2 * 1024 * 1024; // 2MB
+const MIN_CHUNK_SIZE = 256 * 1024; // 256KB minimum
+const CHUNK_REDUCTION_FACTOR = 0.5; // Halve chunk size on 413 error
+
 // ===== Types =====
 
 export interface GitHubUploadOptions {
@@ -88,6 +95,34 @@ export interface GitHubUploadResult extends UploadResult {
   htmlUrl?: string;
   /** Raw content URL */
   rawUrl?: string;
+  /** For chunked uploads: manifest with all chunk URLs */
+  chunks?: ChunkManifest;
+}
+
+/** Manifest for chunked uploads */
+export interface ChunkManifest {
+  /** Total number of chunks */
+  totalChunks: number;
+  /** Original filename (without chunk suffix) */
+  originalFilename: string;
+  /** Timestamp of the session */
+  timestamp: string;
+  /** URLs of all chunk files */
+  chunkUrls: string[];
+  /** Sample counts per chunk */
+  sampleCounts: number[];
+  /** Total sample count across all chunks */
+  totalSamples: number;
+}
+
+/** Options for chunked session upload */
+export interface ChunkedUploadOptions {
+  branch?: string;
+  filename: string;
+  content: string;
+  maxRetries?: number;
+  initialChunkSize?: number;
+  onProgress?: (progress: UploadProgress) => void;
 }
 
 interface GitHubContentResponse {
@@ -234,6 +269,109 @@ export function getRawUrl(
   path: string
 ): string {
   return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}`;
+}
+
+// ===== Chunking Helpers =====
+
+/**
+ * Estimate the JSON size of an object in bytes
+ */
+function estimateJsonSize(obj: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(obj)).length;
+}
+
+/**
+ * Parse session data from JSON string
+ */
+function parseSessionData(content: string): {
+  version: string;
+  timestamp: string;
+  samples: unknown[];
+  labels: unknown[];
+  metadata?: unknown;
+} | null {
+  try {
+    const data = JSON.parse(content);
+    if (data && Array.isArray(data.samples)) {
+      return data;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Split session samples into chunks that fit within target size
+ */
+function splitIntoChunks(
+  samples: unknown[],
+  targetChunkSize: number,
+  baseOverhead: number
+): unknown[][] {
+  if (samples.length === 0) {
+    return [[]];
+  }
+
+  // Estimate average sample size from first few samples
+  const sampleSlice = samples.slice(0, Math.min(10, samples.length));
+  const avgSampleSize = estimateJsonSize(sampleSlice) / sampleSlice.length;
+
+  // Calculate samples per chunk (leaving room for JSON structure overhead)
+  const availableSize = targetChunkSize - baseOverhead - 1000; // 1KB safety margin
+  const samplesPerChunk = Math.max(1, Math.floor(availableSize / avgSampleSize));
+
+  const chunks: unknown[][] = [];
+  for (let i = 0; i < samples.length; i += samplesPerChunk) {
+    chunks.push(samples.slice(i, i + samplesPerChunk));
+  }
+
+  return chunks;
+}
+
+/**
+ * Create a chunk payload from session data
+ */
+function createChunkPayload(
+  sessionData: {
+    version: string;
+    timestamp: string;
+    samples: unknown[];
+    labels: unknown[];
+    metadata?: unknown;
+  },
+  chunkSamples: unknown[],
+  chunkIndex: number,
+  totalChunks: number,
+  startIndex: number
+): string {
+  const chunkData = {
+    version: sessionData.version,
+    timestamp: sessionData.timestamp,
+    samples: chunkSamples,
+    labels: sessionData.labels, // Include all labels in each chunk for simplicity
+    metadata: {
+      ...(sessionData.metadata as object || {}),
+      chunk_info: {
+        chunk_index: chunkIndex,
+        total_chunks: totalChunks,
+        start_sample_index: startIndex,
+        sample_count: chunkSamples.length,
+      },
+    },
+  };
+  return JSON.stringify(chunkData, null, 2);
+}
+
+/**
+ * Check if an error is a 413 Payload Too Large error
+ */
+function is413Error(error: Error): boolean {
+  const msg = error.message.toLowerCase();
+  return msg.includes('413') ||
+         msg.includes('payload too large') ||
+         msg.includes('request entity too large') ||
+         msg.includes('body exceeded');
 }
 
 // ===== Upload Functions =====
@@ -472,6 +610,311 @@ export async function uploadSessionWithRetry(options: {
   throw lastError;
 }
 
+/**
+ * Upload a single chunk with retry logic
+ * Used internally by uploadSessionChunked
+ */
+async function uploadChunkWithRetry(
+  branch: string,
+  path: string,
+  content: string,
+  message: string,
+  maxRetries: number,
+  onProgress?: (progress: UploadProgress) => void
+): Promise<GitHubUploadResult> {
+  let lastError: Error | undefined;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await uploadViaProxy({
+        branch,
+        path,
+        content,
+        message,
+        onProgress,
+      });
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      // Don't retry auth errors
+      if (
+        lastError.message.includes('Unauthorized') ||
+        lastError.message.includes('secret') ||
+        lastError.message.includes('401')
+      ) {
+        throw lastError;
+      }
+
+      // Don't retry 413 errors at this level - let caller handle chunking
+      if (is413Error(lastError)) {
+        throw lastError;
+      }
+
+      if (attempt < maxRetries) {
+        const delay = Math.pow(2, attempt) * 1000;
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+  }
+
+  throw lastError;
+}
+
+/**
+ * Upload session data in chunks
+ * Splits large sessions into multiple files to avoid payload limits
+ */
+export async function uploadSessionChunked(
+  options: ChunkedUploadOptions
+): Promise<GitHubUploadResult> {
+  const {
+    branch = 'data',
+    filename,
+    content,
+    maxRetries = 3,
+    initialChunkSize = DEFAULT_CHUNK_SIZE,
+    onProgress,
+  } = options;
+
+  // Parse the session data
+  const sessionData = parseSessionData(content);
+  if (!sessionData) {
+    throw new Error('Invalid session data format - cannot parse for chunking');
+  }
+
+  const totalSamples = sessionData.samples.length;
+  let currentChunkSize = initialChunkSize;
+
+  // Calculate base overhead (everything except samples)
+  const baseSession = {
+    version: sessionData.version,
+    timestamp: sessionData.timestamp,
+    samples: [],
+    labels: sessionData.labels,
+    metadata: sessionData.metadata,
+  };
+  const baseOverhead = estimateJsonSize(baseSession);
+
+  onProgress?.({
+    stage: 'preparing',
+    message: `Preparing upload: ${totalSamples} samples...`,
+  });
+
+  // Try progressively smaller chunk sizes until upload succeeds
+  while (currentChunkSize >= MIN_CHUNK_SIZE) {
+    try {
+      const sampleChunks = splitIntoChunks(
+        sessionData.samples,
+        currentChunkSize,
+        baseOverhead
+      );
+      const totalChunks = sampleChunks.length;
+
+      onProgress?.({
+        stage: 'preparing',
+        message: `Splitting into ${totalChunks} chunks (~${(currentChunkSize / 1024 / 1024).toFixed(1)}MB each)...`,
+      });
+
+      // For single chunk, just upload directly
+      if (totalChunks === 1) {
+        onProgress?.({
+          stage: 'uploading',
+          message: 'Uploading (single file)...',
+        });
+
+        return await uploadChunkWithRetry(
+          branch,
+          `GAMBIT/${filename}`,
+          content,
+          `GAMBIT session: ${filename}`,
+          maxRetries,
+          onProgress
+        );
+      }
+
+      // Upload chunks
+      const chunkUrls: string[] = [];
+      const sampleCounts: number[] = [];
+      const baseFilename = filename.replace(/\.json$/, '');
+      let sampleIndex = 0;
+
+      for (let i = 0; i < totalChunks; i++) {
+        const chunkFilename = `${baseFilename}_part_${String(i + 1).padStart(3, '0')}.json`;
+        const chunkContent = createChunkPayload(
+          sessionData,
+          sampleChunks[i],
+          i,
+          totalChunks,
+          sampleIndex
+        );
+
+        onProgress?.({
+          stage: 'uploading',
+          message: `Uploading chunk ${i + 1}/${totalChunks}...`,
+        });
+
+        const result = await uploadChunkWithRetry(
+          branch,
+          `GAMBIT/${chunkFilename}`,
+          chunkContent,
+          `GAMBIT session: ${filename} (part ${i + 1}/${totalChunks})`,
+          maxRetries,
+          onProgress
+        );
+
+        chunkUrls.push(result.url || result.rawUrl || '');
+        sampleCounts.push(sampleChunks[i].length);
+        sampleIndex += sampleChunks[i].length;
+      }
+
+      // Upload manifest file
+      const manifest: ChunkManifest = {
+        totalChunks,
+        originalFilename: filename,
+        timestamp: sessionData.timestamp,
+        chunkUrls,
+        sampleCounts,
+        totalSamples,
+      };
+
+      const manifestFilename = `${baseFilename}_manifest.json`;
+      const manifestContent = JSON.stringify(
+        {
+          version: sessionData.version,
+          timestamp: sessionData.timestamp,
+          type: 'chunked_session_manifest',
+          manifest,
+          metadata: sessionData.metadata,
+        },
+        null,
+        2
+      );
+
+      onProgress?.({
+        stage: 'uploading',
+        message: 'Uploading manifest...',
+      });
+
+      const manifestResult = await uploadChunkWithRetry(
+        branch,
+        `GAMBIT/${manifestFilename}`,
+        manifestContent,
+        `GAMBIT session manifest: ${filename}`,
+        maxRetries,
+        onProgress
+      );
+
+      onProgress?.({
+        stage: 'complete',
+        message: `Upload complete! ${totalChunks} chunks uploaded.`,
+        url: manifestResult.url,
+      });
+
+      return {
+        success: true,
+        url: manifestResult.url || '',
+        pathname: `GAMBIT/${manifestFilename}`,
+        size: new TextEncoder().encode(content).length,
+        filename: manifestFilename,
+        commitSha: manifestResult.commitSha,
+        htmlUrl: manifestResult.htmlUrl,
+        rawUrl: manifestResult.rawUrl,
+        chunks: manifest,
+      };
+
+    } catch (error) {
+      const uploadError = error instanceof Error ? error : new Error(String(error));
+
+      // If we get a 413 error, reduce chunk size and retry
+      if (is413Error(uploadError)) {
+        const previousSize = currentChunkSize;
+        currentChunkSize = Math.floor(currentChunkSize * CHUNK_REDUCTION_FACTOR);
+
+        if (currentChunkSize >= MIN_CHUNK_SIZE) {
+          onProgress?.({
+            stage: 'retry',
+            message: `Payload too large. Reducing chunk size from ${(previousSize / 1024 / 1024).toFixed(1)}MB to ${(currentChunkSize / 1024 / 1024).toFixed(1)}MB...`,
+          });
+          continue; // Retry with smaller chunks
+        }
+      }
+
+      // Other errors or chunk size too small - propagate
+      throw uploadError;
+    }
+  }
+
+  throw new Error('Unable to upload: chunks too small. Session data may be too complex.');
+}
+
+/**
+ * Smart upload that automatically chunks large sessions
+ * First tries direct upload, falls back to chunked on 413 error
+ */
+export async function uploadSessionSmart(options: {
+  branch?: string;
+  filename: string;
+  content: string;
+  maxRetries?: number;
+  onProgress?: (progress: UploadProgress) => void;
+}): Promise<GitHubUploadResult> {
+  const {
+    branch = 'data',
+    filename,
+    content,
+    maxRetries = 3,
+    onProgress,
+  } = options;
+
+  const contentSize = new TextEncoder().encode(content).length;
+
+  // If content is small enough, try direct upload first
+  if (contentSize < DEFAULT_CHUNK_SIZE) {
+    try {
+      return await uploadSessionWithRetry({
+        branch,
+        filename,
+        content,
+        maxRetries,
+        onProgress,
+      });
+    } catch (error) {
+      const uploadError = error instanceof Error ? error : new Error(String(error));
+
+      // Fall back to chunked upload on 413 error
+      if (is413Error(uploadError)) {
+        onProgress?.({
+          stage: 'retry',
+          message: 'Payload too large, switching to chunked upload...',
+        });
+        return await uploadSessionChunked({
+          branch,
+          filename,
+          content,
+          maxRetries,
+          onProgress,
+        });
+      }
+
+      throw uploadError;
+    }
+  }
+
+  // Large content - go directly to chunked upload
+  onProgress?.({
+    stage: 'preparing',
+    message: `Large session (${(contentSize / 1024 / 1024).toFixed(1)}MB), using chunked upload...`,
+  });
+
+  return await uploadSessionChunked({
+    branch,
+    filename,
+    content,
+    maxRetries,
+    onProgress,
+  });
+}
+
 // ===== User Interaction =====
 
 /**
@@ -533,6 +976,8 @@ export default {
   uploadToGitHub,
   uploadViaProxy,
   uploadSessionWithRetry,
+  uploadSessionChunked,
+  uploadSessionSmart,
   promptForUploadSecret,
   validateUploadSecret,
   getRawUrl,
