@@ -26,6 +26,7 @@ export interface ExtendedWizardStep {
   phase?: 'static' | 'dynamic' | 'erratic' | 'sweep';
   motion?: MotionType;
   category?: string;            // For grouping in UI
+  aslLetter?: string;           // ASL letter for Gallaudet font display
 }
 
 export interface WizardMode {
@@ -49,46 +50,112 @@ const H_LONG = 8;     // Long hold (for robust capture)
 const H_ERRATIC = 10; // Erratic phase
 const H_SWEEP = 12;   // Orientation sweep
 
+// ===== ASL Letter Mapping =====
+
+/**
+ * Maps finger configurations to ASL letters (A-Z) for Gallaudet font display.
+ * The Gallaudet font renders letters as ASL hand signs.
+ *
+ * Key ASL hand shapes:
+ * - A: Fist with thumb alongside (not over)
+ * - B: Flat hand, fingers together, thumb across palm
+ * - C: Curved hand (cupped shape)
+ * - D: Index up, others curved to touch thumb
+ * - E: Fingers curled, thumb across
+ * - F: Index-thumb circle, others extended
+ * - I: Pinky up only
+ * - L: Thumb and index extended (L shape)
+ * - O: Fingertips touch thumb (O shape)
+ * - S: Fist with thumb over fingers
+ * - U: Index and middle up together
+ * - V: Index and middle spread (peace/victory)
+ * - W: Index, middle, ring up
+ * - Y: Thumb and pinky extended (shaka/hang loose)
+ */
+export const ASL_LETTER_MAP: Record<string, string> = {
+  // Exact matches (binary states)
+  '00000': 'B', // All extended = B (flat hand)
+  '22222': 'S', // All flexed = S (fist)
+  '02222': 'D', // Point = D (index up)
+  '00222': 'V', // Peace = V (index + middle up spread)
+  '00022': 'W', // Three fingers = W
+  '20002': 'Y', // Shaka = Y (thumb + pinky)
+  '20000': 'A', // Thumb flex = A (fist-like with thumb)
+  '22002': 'I', // Index + middle + ring flex = I (pinky up)
+
+  // Common curled/intermediate states
+  '11111': 'C', // All curled = C (cupped hand)
+  '01111': 'O', // Thumb extended, others curled = O shape
+  '21111': 'E', // All curled, thumb flex = E
+
+  // Compound poses with curled states
+  '00002': '4', // Four fingers (use number 4)
+  '02000': 'G', // Index only flex (pointing sideways)
+  '22000': 'L', // Thumb + index flex (inverted L shape - use for pinch)
+};
+
+/**
+ * Get ASL letter for a finger code, if available.
+ * Returns undefined if no mapping exists.
+ */
+export function getASLLetter(fingerCode: string): string | undefined {
+  return ASL_LETTER_MAP[fingerCode];
+}
+
 // ===== Finger Code Definitions =====
 
 /**
- * All 32 binary finger configurations
+ * Finger configurations with optional curled (intermediate) states.
  * Code: T I M R P (Thumb, Index, Middle, Ring, Pinky)
- * 0 = Extended, 2 = Flexed
+ * 0 = Extended, 1 = Curled (partial), 2 = Flexed (full)
+ *
+ * Binary states (0/2 only) give 32 configurations.
+ * Ternary states (0/1/2) give 243 configurations for fine-grained capture.
  */
-export const FINGER_CODES: Record<string, { name: string; semantic?: string }> = {
-  '00000': { name: 'all_extended', semantic: 'open_palm' },
-  '00002': { name: 'four_fingers', semantic: 'four' },
+export const FINGER_CODES: Record<string, { name: string; semantic?: string; aslLetter?: string }> = {
+  // === Binary states (0 = extended, 2 = flexed) ===
+  '00000': { name: 'all_extended', semantic: 'open_palm', aslLetter: 'B' },
+  '00002': { name: 'four_fingers', semantic: 'four', aslLetter: '4' },
   '00020': { name: 'ring_flex' },
-  '00022': { name: 'three_fingers', semantic: 'three' },
+  '00022': { name: 'three_fingers', semantic: 'three', aslLetter: 'W' },
   '00200': { name: 'middle_flex' },
   '00202': { name: 'middle_pinky_flex' },
   '00220': { name: 'middle_ring_flex' },
-  '00222': { name: 'peace', semantic: 'peace' },
-  '02000': { name: 'index_flex' },
+  '00222': { name: 'peace', semantic: 'peace', aslLetter: 'V' },
+  '02000': { name: 'index_flex', aslLetter: 'G' },
   '02002': { name: 'index_pinky_flex' },
   '02020': { name: 'index_ring_flex' },
   '02022': { name: 'index_ring_pinky_flex' },
-  '02200': { name: 'index_middle_flex' },
+  '02200': { name: 'index_middle_flex', aslLetter: 'U' },
   '02202': { name: 'index_middle_pinky_flex' },
   '02220': { name: 'index_middle_ring_flex' },
-  '02222': { name: 'point', semantic: 'point' },
-  '20000': { name: 'thumb_flex', semantic: 'thumbs_down' },
-  '20002': { name: 'shaka', semantic: 'shaka' },
+  '02222': { name: 'point', semantic: 'point', aslLetter: 'D' },
+  '20000': { name: 'thumb_flex', semantic: 'thumbs_down', aslLetter: 'A' },
+  '20002': { name: 'shaka', semantic: 'shaka', aslLetter: 'Y' },
   '20020': { name: 'thumb_ring_flex' },
   '20022': { name: 'thumb_ring_pinky_flex' },
   '20200': { name: 'thumb_middle_flex' },
   '20202': { name: 'thumb_middle_pinky_flex' },
   '20220': { name: 'thumb_middle_ring_flex' },
   '20222': { name: 'thumb_mid_ring_pinky_flex' },
-  '22000': { name: 'thumb_index_flex' },
-  '22002': { name: 'thumb_index_pinky_flex' },
+  '22000': { name: 'thumb_index_flex', aslLetter: 'L' },
+  '22002': { name: 'thumb_index_pinky_flex', aslLetter: 'I' },
   '22020': { name: 'thumb_index_ring_flex' },
   '22022': { name: 'thumb_index_ring_pinky_flex' },
   '22200': { name: 'thumb_index_middle_flex' },
   '22202': { name: 'thumb_index_middle_pinky_flex' },
   '22220': { name: 'thumb_index_middle_ring_flex' },
-  '22222': { name: 'all_flexed', semantic: 'fist' },
+  '22222': { name: 'all_flexed', semantic: 'fist', aslLetter: 'S' },
+
+  // === Curled/intermediate states (1 = curled) ===
+  '11111': { name: 'all_curled', semantic: 'claw', aslLetter: 'C' },
+  '01111': { name: 'thumb_ext_curled', semantic: 'grasp', aslLetter: 'O' },
+  '21111': { name: 'thumb_flex_curled', semantic: 'claw_closed', aslLetter: 'E' },
+  '10000': { name: 'thumb_curled' },
+  '01000': { name: 'index_curled', aslLetter: 'X' },
+  '00100': { name: 'middle_curled' },
+  '00010': { name: 'ring_curled' },
+  '00001': { name: 'pinky_curled' },
 };
 
 // ===== Orientation Definitions =====
@@ -110,7 +177,14 @@ function fingerCodeToStates(code: string): Partial<FingerStates> {
 
   for (let i = 0; i < 5; i++) {
     const digit = code[i];
-    states[fingers[i]] = digit === '0' ? 'extended' : 'flexed';
+    // 0 = extended, 1 = curled, 2 = flexed
+    if (digit === '0') {
+      states[fingers[i]] = 'extended';
+    } else if (digit === '1') {
+      states[fingers[i]] = 'curled' as any; // curled is now a valid FingerLabel
+    } else {
+      states[fingers[i]] = 'flexed';
+    }
   }
 
   return states;
@@ -127,7 +201,7 @@ function generatePoseStep(
   return {
     id: `pose:${code}:${orientation}`,
     label: `${info.semantic || info.name} (${orientInfo.icon})`,
-    icon: orientInfo.icon,
+    icon: info.aslLetter ? info.aslLetter : orientInfo.icon, // Use ASL letter as icon if available
     transition: T_MED,
     hold: hold,
     desc: `Hold ${info.name} pose with ${orientInfo.desc.toLowerCase()}`,
@@ -135,6 +209,7 @@ function generatePoseStep(
     orientation: orientation,
     phase: 'static',
     category: 'coarse_state',
+    aslLetter: info.aslLetter, // Include ASL letter for font display
   };
 }
 
@@ -483,6 +558,113 @@ function generatePairwiseCalibrationSteps(): ExtendedWizardStep[] {
   return steps;
 }
 
+// ===== Curled/Intermediate State Steps =====
+
+/**
+ * Generate steps for curled (intermediate) finger states.
+ * These capture partial flexion for finer-grained training data.
+ */
+function generateCurledStateSteps(): ExtendedWizardStep[] {
+  const steps: ExtendedWizardStep[] = [];
+
+  // Reference poses
+  steps.push({
+    ...generatePoseStep('00000', 'palm_down', H_MED),
+    id: 'curled:baseline',
+    label: 'Baseline (All Extended)',
+    desc: 'Start with all fingers fully extended',
+  });
+
+  // All curled (claw pose)
+  steps.push({
+    id: 'curled:all',
+    label: 'Claw (All Curled)',
+    icon: 'C',
+    transition: T_MED,
+    hold: H_MED,
+    desc: 'Curl all fingers like a claw - partial flexion, not fully closed',
+    fingerCode: '11111',
+    phase: 'static',
+    category: 'curled',
+    aslLetter: 'C',
+  });
+
+  // Individual finger curls
+  const fingers = [
+    { code: '10000', name: 'Thumb', desc: 'Curl only thumb halfway' },
+    { code: '01000', name: 'Index', desc: 'Curl only index finger halfway', asl: 'X' },
+    { code: '00100', name: 'Middle', desc: 'Curl only middle finger halfway' },
+    { code: '00010', name: 'Ring', desc: 'Curl only ring finger halfway' },
+    { code: '00001', name: 'Pinky', desc: 'Curl only pinky finger halfway' },
+  ];
+
+  for (const finger of fingers) {
+    steps.push({
+      id: `curled:single:${finger.name.toLowerCase()}`,
+      label: `${finger.name} Curled`,
+      icon: finger.asl || '🦎',
+      transition: T_SHORT,
+      hold: H_MED,
+      desc: finger.desc,
+      fingerCode: finger.code,
+      phase: 'static',
+      category: 'curled',
+      aslLetter: finger.asl,
+    });
+  }
+
+  // Grasp pose (thumb extended, others curled)
+  steps.push({
+    id: 'curled:grasp',
+    label: 'Grasp (O-shape)',
+    icon: 'O',
+    transition: T_MED,
+    hold: H_MED,
+    desc: 'Fingertips curled toward thumb - like holding a ball',
+    fingerCode: '01111',
+    phase: 'static',
+    category: 'curled',
+    aslLetter: 'O',
+  });
+
+  // E pose (all curled, thumb flexed across)
+  steps.push({
+    id: 'curled:e_pose',
+    label: 'E Pose',
+    icon: 'E',
+    transition: T_MED,
+    hold: H_MED,
+    desc: 'All fingers curled, thumb tucked - ASL letter E',
+    fingerCode: '21111',
+    phase: 'static',
+    category: 'curled',
+    aslLetter: 'E',
+  });
+
+  // Transition from extended to curled to flexed
+  steps.push({
+    id: 'curled:range:all',
+    label: 'Full Range (Ext→Curl→Flex)',
+    icon: '🔄',
+    transition: T_SHORT,
+    hold: H_LONG,
+    desc: 'Slowly transition: fully extended → curled → fully flexed → back (3 cycles)',
+    phase: 'dynamic',
+    motion: 'dynamic',
+    category: 'curled',
+  });
+
+  // All flexed as endpoint
+  steps.push({
+    ...generatePoseStep('22222', 'palm_down', H_MED),
+    id: 'curled:endpoint',
+    label: 'Fist (All Flexed)',
+    desc: 'End with all fingers fully flexed',
+  });
+
+  return steps;
+}
+
 // ===== Wizard Mode Definitions =====
 
 export const WIZARD_MODES: WizardMode[] = [
@@ -494,6 +676,16 @@ export const WIZARD_MODES: WizardMode[] = [
     duration: '~5 min',
     priority: 'required',
     steps: generatePairwiseCalibrationSteps(),
+  },
+
+  // Curled/Intermediate States (3 min)
+  {
+    id: 'curled_states',
+    name: 'Curled States',
+    description: 'Intermediate finger positions (partial flexion)',
+    duration: '~3 min',
+    priority: 'recommended',
+    steps: generateCurledStateSteps(),
   },
 
   // Quick Calibration (2 min)
@@ -766,6 +958,8 @@ export default {
   FINGER_CODES,
   ORIENTATIONS,
   WIZARD_MODES,
+  ASL_LETTER_MAP,
+  getASLLetter,
   getWizardMode,
   parseExtendedStepLabels,
   getTotalDuration,
