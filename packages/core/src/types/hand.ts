@@ -22,8 +22,34 @@ export const FINGER_NAMES: readonly FingerName[] = ['thumb', 'index', 'middle', 
 /**
  * Finger flexion label for data annotation.
  * Used when labeling recorded sessions with discrete finger states.
+ *
+ * - extended: Finger fully straight (0 flexion)
+ * - curled: Finger partially bent/hooked (intermediate flexion)
+ * - flexed: Finger fully bent/closed (full flexion)
+ * - unknown: State not determined
  */
-export type FingerLabel = 'extended' | 'flexed' | 'unknown';
+export type FingerLabel = 'extended' | 'curled' | 'flexed' | 'unknown';
+
+/**
+ * Numeric codes for finger states in compact notation.
+ * Used in finger code strings (e.g., "01210" = thumb extended, index curled, etc.)
+ */
+export const FINGER_STATE_CODES = {
+  extended: '0',
+  curled: '1',
+  flexed: '2',
+  unknown: '?',
+} as const;
+
+/**
+ * Map from numeric code to FingerLabel
+ */
+export const CODE_TO_FINGER_STATE: Record<string, FingerLabel> = {
+  '0': 'extended',
+  '1': 'curled',
+  '2': 'flexed',
+  '?': 'unknown',
+};
 
 /**
  * Labels for all five fingers.

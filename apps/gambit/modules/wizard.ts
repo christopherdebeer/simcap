@@ -29,6 +29,7 @@ export interface WizardStep {
   fingerCode?: string;
   orientation?: string;
   phase?: 'static' | 'dynamic' | 'erratic' | 'sweep';
+  aslLetter?: string;  // ASL letter for Gallaudet font display
 }
 
 export interface WizardState {
@@ -202,6 +203,7 @@ function showWizardModeSelection(): void {
 
     // Get taxonomy modes for display
     const pairwiseMode = WIZARD_MODES.find(m => m.id === 'pairwise_cal');
+    const curledMode = WIZARD_MODES.find(m => m.id === 'curled_states');
     const fullTaxonomy = WIZARD_MODES.find(m => m.id === 'full_taxonomy');
     const robustnessMode = WIZARD_MODES.find(m => m.id === 'robustness');
     const comprehensiveMode = WIZARD_MODES.find(m => m.id === 'comprehensive');
@@ -231,6 +233,11 @@ function showWizardModeSelection(): void {
                     <p>${pairwiseMode?.description || 'All single + pairwise combos for physics model'}</p>
                     <div class="duration">${pairwiseMode?.duration || '~5 min'} • ${pairwiseMode?.steps.length || 17} steps</div>
                 </div>
+                <div class="wizard-option" onclick="window.startWizardMode('curled_states')" style="border-color: var(--success);">
+                    <h4><span class="asl-icon">C</span> Curled States</h4>
+                    <p>${curledMode?.description || 'Intermediate finger positions'}</p>
+                    <div class="duration">${curledMode?.duration || '~3 min'} • ${curledMode?.steps.length || 10} steps</div>
+                </div>
             </div>
 
             <div style="font-size: 11px; color: var(--accent); margin: 15px 0 5px; font-weight: 500;">Complete Taxonomy Collection</div>
@@ -257,7 +264,9 @@ function showWizardModeSelection(): void {
             </div>
 
             <div style="margin-top: 15px; padding: 10px; background: var(--bg); border-radius: 4px; font-size: 11px; color: var(--fg-muted);">
-                <strong>Tip:</strong> For best physics model accuracy, run <strong>Pairwise Calibration</strong> first. This captures all finger interaction patterns needed for synthetic data generation.
+                <strong>Tip:</strong> For best physics model accuracy, run <strong>Pairwise Calibration</strong> first, then <strong>Curled States</strong> for intermediate positions.
+                <br><br>
+                <span class="asl-icon" style="font-size: 24px;">BSVYD</span> <span style="font-size: 10px; vertical-align: middle;">← ASL hand signs (Gallaudet font)</span>
             </div>
         `;
     }
@@ -467,7 +476,11 @@ function renderWizardStep(): void {
     const labelsText = deps.$?.('wizardLabels');
 
     const stepTitle = step.label || step.title || 'Step';
-    const stepInstruction = `${step.icon || '📍'} ${stepTitle}`;
+    // Use ASL letter with Gallaudet font if available, otherwise use icon
+    const iconDisplay = step.aslLetter
+        ? `<span class="asl-icon" style="font-size: 32px;">${step.aslLetter}</span>`
+        : (step.icon || '📍');
+    const stepInstruction = `${iconDisplay} ${stepTitle}`;
     const stepDescription = step.desc || step.description || '';
     const totalDuration = (step.transition || 0) + (step.hold || 0);
 
@@ -483,8 +496,17 @@ function renderWizardStep(): void {
     if (labelsText && deps.state) labelsText.textContent = String(deps.state.labels.length);
 
     if (content) {
+        // Show large ASL letter reference if available
+        const aslDisplay = step.aslLetter
+            ? `<div class="asl-reference" style="text-align: center; margin: 15px 0;">
+                <span class="asl-icon" style="font-size: 80px; line-height: 1;">${step.aslLetter}</span>
+                <div style="font-size: 10px; color: var(--fg-muted); margin-top: 5px;">ASL Reference</div>
+               </div>`
+            : '';
+
         let html = `
             <div class="wizard-instruction">${stepInstruction}</div>
+            ${aslDisplay}
             <div class="wizard-description">${stepDescription}</div>
         `;
 
@@ -682,7 +704,7 @@ export async function startWizardMode(mode: string): Promise<void> {
     const taxonomyMode = WIZARD_MODES.find(m => m.id === mode);
     if (taxonomyMode) {
         // Use taxonomy mode - convert ExtendedWizardStep to WizardStep format
-        // Preserve fingerCode, orientation, and phase for proper labeling
+        // Preserve fingerCode, orientation, phase, and aslLetter for proper labeling
         wizard.steps = taxonomyMode.steps.map(step => ({
             id: step.id,
             label: step.label,
@@ -695,6 +717,7 @@ export async function startWizardMode(mode: string): Promise<void> {
             fingerCode: step.fingerCode,
             orientation: step.orientation,
             phase: step.phase,
+            aslLetter: step.aslLetter,
         }));
         deps.log?.(`Wizard mode: ${taxonomyMode.name} (${wizard.steps.length} steps)`);
     } else {
