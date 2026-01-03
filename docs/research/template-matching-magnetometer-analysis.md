@@ -340,6 +340,43 @@ The asymmetry in cross-orientation results reveals the physical reality:
 3. **Location calibration** - Account for different Earth fields and environmental interference
 4. **Orientation-conditioned models** - Explicitly model how signatures change with orientation
 
+#### 4.8.6 Deep Dive: World Frame Residual Analysis
+
+**Hypothesis:** If we rotate magnetometer readings to a world frame and subtract Earth field, we should get an orientation-independent finger-only signal.
+
+**Results:**
+| Representation | Cross-Pitch Accuracy |
+|----------------|----------------------|
+| Raw mag (sensor frame) | 61.6% |
+| Rotated to world frame | 17.9% |
+| World frame - Earth field | 17.9% |
+
+**Why world frame is WORSE:**
+- In **sensor frame**: finger magnets are ~constant, Earth field rotates
+- In **world frame**: Earth field is constant, finger magnets rotate
+- We're trading one orientation-dependent component for another
+
+**Class-Specific Orientation Effects:**
+
+The centroid shift between high-pitch and low-pitch samples varies per class:
+```
+Class   Centroid Shift (high - low pitch)
+00000:  [-35, +23, -72] μT
+00002:  [-241, -15, -169] μT
+00020:  [+68, +13, +143] μT
+00022:  [-7, +12, +64] μT
+Mean:   [-80, +21, -37] μT
+Std:    [100, 38, 134] μT
+```
+
+**Key insight:** Each finger state has magnets at different positions, so orientation affects each class DIFFERENTLY. Global correction cannot work.
+
+**Implications for Physics Simulation:**
+1. Must model each magnet's position relative to sensor
+2. Must compute how Earth field projects onto sensor at each orientation
+3. Must generate synthetic samples across orientation space
+4. Single-orientation templates are fundamentally insufficient
+
 ---
 
 ## 5. Key Findings
