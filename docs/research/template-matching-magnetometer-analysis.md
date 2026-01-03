@@ -230,6 +230,26 @@ Using all training samples as "templates" (k-NN, $P-style point cloud matching):
 3. **The data is highly separable** - near-perfect classification with simple distance metrics
 4. This is essentially the **$P point-cloud approach** applied to static poses instead of trajectories
 
+### 4.6 Residual vs Raw Magnetometer Fields
+
+The session data contains multiple magnetometer representations:
+
+| Field | Description | Accuracy |
+|-------|-------------|----------|
+| `mx_ut, my_ut, mz_ut` | Raw magnetometer (μT) | **99.7%** |
+| `ahrs_mag_residual_*` | Expected Earth field from geomagnetic model (constant per location) | N/A (constant) |
+| `iron_mx, iron_my, iron_mz` | Hard/soft iron corrected | **99.7%** |
+| `raw - ahrs_residual` | True residual (finger magnets only) | **99.7%** |
+
+**Key Finding:** The `ahrs_mag_residual` fields store the **expected** Earth magnetic field based on geolocation, NOT the measured-minus-expected residual. This value is constant per session.
+
+**Why all methods achieve the same accuracy:**
+- Earth field subtraction is a constant offset per session
+- Z-score normalization already handles mean subtraction
+- The relative distances between classes are preserved
+
+**Recommendation:** Use raw magnetometer for simplicity. Iron correction or Earth subtraction provide no accuracy benefit when z-score normalization is applied.
+
 ---
 
 ## 5. Key Findings
