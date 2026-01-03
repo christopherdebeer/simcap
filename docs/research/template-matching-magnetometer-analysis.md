@@ -276,6 +276,70 @@ For Puck.js on-device inference:
 5. Latency: <0.1ms per classification
 ```
 
+### 4.8 ⚠️ CRITICAL: Generalization Analysis
+
+The 99.7% accuracy reported above is **misleading** - it was measured with random train/test splits from a single session. Cross-orientation testing reveals significant generalization gaps.
+
+#### 4.8.1 Orientation Coverage Within Session
+
+The labeled session covers substantial orientation ranges:
+
+| Axis | Range | Mean | Std Dev |
+|------|-------|------|---------|
+| Roll | -180° to +180° | 35.4° | 107.1° |
+| Pitch | -88.8° to +82.0° | 1.3° | 35.9° |
+| Yaw | -179.9° to +179.9° | -5.2° | 110.2° |
+
+#### 4.8.2 Cross-Orientation Split Results
+
+Testing generalization by training on one orientation quartile and testing on another:
+
+| Split | Training Range | Test Range | Accuracy |
+|-------|----------------|------------|----------|
+| **Random 70/30** | Mixed | Mixed | **92.3%** |
+| Roll Q1→Q4 | roll ≤ -5.4° | roll ≥ 122.5° | 80.8% |
+| Roll Q4→Q1 | roll ≥ 122.5° | roll ≤ -5.4° | 96.9% |
+| **Pitch Q1→Q4** | pitch ≤ -26.4° | pitch ≥ 26.9° | 98.5% |
+| **Pitch Q4→Q1** | pitch ≥ 26.9° | pitch ≤ -26.4° | **61.6%** |
+| Yaw Q1→Q4 | yaw ≤ -114.6° | yaw ≥ 116.7° | 99.8% |
+| Yaw Q4→Q1 | yaw ≥ 116.7° | yaw ≤ -114.6° | 68.7% |
+
+**Generalization Gap: 30.7%** (from 92.3% random to 61.6% worst-case cross-pitch)
+
+#### 4.8.3 Root Cause Analysis
+
+The asymmetry in cross-orientation results reveals the physical reality:
+- **Pitch strongly affects magnetometer readings** (correlation: r=-0.65 between mz and pitch)
+- Training on high-pitch samples fails on low-pitch samples and vice versa
+- The magnetic field from finger magnets is sampled from different angles at different orientations
+
+#### 4.8.4 Attempted Mitigations (All Failed)
+
+| Mitigation | Hypothesis | Result |
+|------------|------------|--------|
+| **Orientation as feature** | Learn orientation-conditioned templates | **17.0%** (worse!) |
+| **Gravity-aligned mag** | Rotate to gravity frame for invariance | **8.8%** (much worse!) |
+| **Magnitude only** | Use scalar field strength | **30.0%** (loses direction info) |
+
+**Why mitigations fail:**
+1. **Orientation as feature:** The model memorizes training orientations; fails when testing on unseen orientations
+2. **Gravity alignment:** Removes yaw information but still orientation-dependent; transformation introduces noise
+3. **Magnitude only:** Classes overlap in magnitude (e.g., "ring flexed" 680-1017 μT vs "thumb+index flexed" 741-876 μT)
+
+#### 4.8.5 Implications
+
+**The 99.7% accuracy is NOT generalizable because:**
+
+1. **Same session = same location** - Earth's magnetic field and environmental interference are constant
+2. **Random split = same orientations** - Train and test sets contain similar orientation distributions
+3. **Magnetic signatures are fundamentally orientation-dependent** - The same finger pose creates different magnetometer readings at different orientations
+
+**For cross-session generalization, we need:**
+1. **Multi-orientation training data** - Collect samples at diverse orientations per finger state
+2. **Physics-based simulation** - Use physics models to predict magnetometer readings at unseen orientations
+3. **Location calibration** - Account for different Earth fields and environmental interference
+4. **Orientation-conditioned models** - Explicitly model how signatures change with orientation
+
 ---
 
 ## 5. Key Findings
@@ -418,10 +482,13 @@ See `ml/template_analysis.py` for the full implementation including:
 
 1. [x] ~~Complete accuracy analysis with various normalization/distance combinations~~
 2. [x] ~~Analyze failure cases and confusion patterns~~
-3. [ ] Test with different magnet configurations
-4. [ ] Implement trajectory matching for state transitions
-5. [ ] Port k-NN classifier to on-device (Puck.js)
-6. [ ] Compare template matching vs. CNN on full dataset
+3. [x] ~~Analyze cross-orientation generalization~~
+4. [ ] **Collect multi-orientation training data** - Critical for generalization
+5. [ ] **Develop physics-based simulation** - Predict signatures at unseen orientations
+6. [ ] Test with different magnet configurations
+7. [ ] Implement trajectory matching for state transitions
+8. [ ] Port k-NN classifier to on-device (Puck.js)
+9. [ ] Compare template matching vs. CNN on full dataset
 
 ---
 
@@ -431,18 +498,39 @@ See `ml/template_analysis.py` for the full implementation including:
 
 1. **$-family techniques apply beyond trajectories** - Z-score normalization (analogous to $1's translate+scale) dramatically improves magnetometer classification.
 
-2. **99.7% accuracy with simple k-NN** - The magnetic signatures from finger magnets are highly distinctive with proper normalization.
+2. **99.7% accuracy is achievable within-session** - The magnetic signatures from finger magnets are highly distinctive with proper normalization when training and testing on the same session.
 
-3. **Paradigm shift: Point clouds not paths** - Instead of matching gesture trajectories over time, we match static poses as points in magnetic field space.
+3. **⚠️ Critical limitation: Orientation dependence** - Cross-orientation testing shows accuracy dropping to **61.6%** when training on one pitch range and testing on another.
 
-4. **Practical implications:**
-   - Fast prototyping without neural network training
-   - On-device inference feasible (simple distance calculations)
-   - Could complement CNN for ensemble predictions
+4. **Simple mitigations don't work** - Adding orientation as features, gravity alignment, or using magnitude only all degrade performance further.
 
-### 10.2 Novel Contribution
+5. **Paradigm shift: Point clouds not paths** - Instead of matching gesture trajectories over time, we match static poses as points in magnetic field space.
 
-This research demonstrates that **$-family normalization principles** (developed for 2D gesture recognition) can be effectively applied to **3D magnetometer data for static pose classification**, achieving near-perfect accuracy with minimal computational overhead.
+### 10.2 Implications for Data Collection
+
+The generalization gap reveals that **orientation diversity is critical** for training robust models:
+
+| Data Collection Strategy | Expected Generalization |
+|--------------------------|------------------------|
+| Single orientation | Poor (61-70%) |
+| Sweep all orientations | Better (80-90%) |
+| Random orientations (natural use) | Best (92%+) |
+| Physics-augmented simulation | Unknown (research needed) |
+
+### 10.3 Novel Contribution
+
+This research demonstrates:
+
+1. **$-family normalization principles** (developed for 2D gesture recognition) can be applied to **3D magnetometer data for static pose classification**.
+
+2. **High within-session accuracy** (99.7%) is achievable with minimal computational overhead.
+
+3. **The generalization problem is physical, not computational** - magnetic signatures are fundamentally orientation-dependent, and no simple normalization can eliminate this.
+
+4. **Future work should focus on:**
+   - Physics-based simulation to generate orientation-diverse training data
+   - Orientation-conditioned models that explicitly learn signature variations
+   - Multi-session data collection with controlled orientation coverage
 
 ---
 
