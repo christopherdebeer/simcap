@@ -110,35 +110,35 @@ const HOLD_TIME_LONG = 10;
 
 const WIZARD_STEPS: Record<string, WizardStep[]> = {
     reference: [
-        { id: 'reference_pose', label: 'Reference Pose', icon: '✋', transition: TRANSITION_TIME, hold: HOLD_TIME_LONG, desc: 'Hold hand flat, palm down, fingers together.' },
-        { id: 'magnet_baseline', label: 'Magnet Baseline', icon: '📍', transition: TRANSITION_TIME, hold: HOLD_TIME_LONG, desc: 'Keep hand in reference pose with magnets attached.' }
+        { id: 'reference_pose', label: 'Reference Pose', icon: '✋', transition: TRANSITION_TIME, hold: HOLD_TIME_LONG, desc: 'Hold hand flat, palm down, fingers together.', fingerCode: '00000', aslLetter: 'B' },
+        { id: 'magnet_baseline', label: 'Magnet Baseline', icon: '📍', transition: TRANSITION_TIME, hold: HOLD_TIME_LONG, desc: 'Keep hand in reference pose with magnets attached.', fingerCode: '00000', aslLetter: 'B' }
     ],
     fingers: [
-        { id: 'finger_isolation:thumb', label: 'Thumb Isolation', icon: '👍', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Move only your thumb through full range of motion.' },
-        { id: 'finger_isolation:index', label: 'Index Isolation', icon: '☝️', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Move only your index finger through full range.' },
-        { id: 'finger_isolation:middle', label: 'Middle Isolation', icon: '🖕', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Move only your middle finger through full range.' },
-        { id: 'finger_isolation:ring', label: 'Ring Isolation', icon: '💍', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Move only your ring finger through full range.' },
-        { id: 'finger_isolation:pinky', label: 'Pinky Isolation', icon: '🤙', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Move only your pinky finger through full range.' }
+        { id: 'finger_isolation:thumb', label: 'Thumb Isolation', icon: '👍', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Move only your thumb through full range of motion.', phase: 'dynamic' },
+        { id: 'finger_isolation:index', label: 'Index Isolation', icon: '☝️', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Move only your index finger through full range.', phase: 'dynamic' },
+        { id: 'finger_isolation:middle', label: 'Middle Isolation', icon: '🖕', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Move only your middle finger through full range.', phase: 'dynamic' },
+        { id: 'finger_isolation:ring', label: 'Ring Isolation', icon: '💍', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Move only your ring finger through full range.', phase: 'dynamic' },
+        { id: 'finger_isolation:pinky', label: 'Pinky Isolation', icon: '🤙', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Move only your pinky finger through full range.', phase: 'dynamic' }
     ],
     fingerTracking5Mag: [
-        { id: 'ft5:reference', label: 'Reference (5 mag)', icon: '✋', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Palm down, all fingers extended. All 5 magnets attached.' },
-        { id: 'ft5:all_extended', label: 'All Extended', icon: '🖐️', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Spread all fingers wide, fully extended.' },
-        { id: 'ft5:all_flexed', label: 'All Flexed (Fist)', icon: '✊', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Make a tight fist, all fingers flexed.' },
-        { id: 'ft5:thumb_flex', label: 'Thumb Flex Only', icon: '👍', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex only thumb, others extended.' },
-        { id: 'ft5:index_flex', label: 'Index Flex Only', icon: '☝️', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex only index finger, others extended.' },
-        { id: 'ft5:middle_flex', label: 'Middle Flex Only', icon: '🖕', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex only middle finger, others extended.' },
-        { id: 'ft5:ring_flex', label: 'Ring Flex Only', icon: '💍', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex only ring finger, others extended.' },
-        { id: 'ft5:pinky_flex', label: 'Pinky Flex Only', icon: '🤙', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex only pinky finger, others extended.' },
-        { id: 'ft5:thumb_index', label: 'Thumb+Index Flex', icon: '🤏', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex thumb and index only.' },
-        { id: 'ft5:ring_pinky', label: 'Ring+Pinky Flex', icon: '🤟', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex ring and pinky only.' },
-        { id: 'ft5:middle_ring_pinky', label: 'Mid+Ring+Pinky Flex', icon: '✌️', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex middle, ring, pinky (peace sign).' }
+        { id: 'ft5:reference', label: 'Reference (5 mag)', icon: '✋', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Palm down, all fingers extended. All 5 magnets attached.', fingerCode: '00000', aslLetter: 'B' },
+        { id: 'ft5:all_extended', label: 'All Extended', icon: '🖐️', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Spread all fingers wide, fully extended.', fingerCode: '00000', aslLetter: 'B' },
+        { id: 'ft5:all_flexed', label: 'All Flexed (Fist)', icon: '✊', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Make a tight fist, all fingers flexed.', fingerCode: '22222', aslLetter: 'S' },
+        { id: 'ft5:thumb_flex', label: 'Thumb Flex Only', icon: '👍', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex only thumb, others extended.', fingerCode: '20000', aslLetter: 'A' },
+        { id: 'ft5:index_flex', label: 'Index Flex Only', icon: '☝️', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex only index finger, others extended.', fingerCode: '02000', aslLetter: 'G' },
+        { id: 'ft5:middle_flex', label: 'Middle Flex Only', icon: '🖕', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex only middle finger, others extended.', fingerCode: '00200' },
+        { id: 'ft5:ring_flex', label: 'Ring Flex Only', icon: '💍', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex only ring finger, others extended.', fingerCode: '00020' },
+        { id: 'ft5:pinky_flex', label: 'Pinky Flex Only', icon: '🤙', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex only pinky finger, others extended.', fingerCode: '00002', aslLetter: '4' },
+        { id: 'ft5:thumb_index', label: 'Thumb+Index Flex', icon: '🤏', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex thumb and index only.', fingerCode: '22000', aslLetter: 'L' },
+        { id: 'ft5:ring_pinky', label: 'Ring+Pinky Flex', icon: '🤟', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex ring and pinky only.', fingerCode: '00022', aslLetter: 'W' },
+        { id: 'ft5:middle_ring_pinky', label: 'Mid+Ring+Pinky Flex', icon: '✌️', transition: TRANSITION_TIME, hold: HOLD_TIME_MED, desc: 'Flex middle, ring, pinky (peace sign).', fingerCode: '00222', aslLetter: 'V' }
     ],
     gestures: [
-        { id: 'pose:fist', label: 'Fist', icon: '✊', transition: TRANSITION_TIME, hold: HOLD_TIME, desc: 'Make a tight fist.' },
-        { id: 'pose:open_palm', label: 'Open Palm', icon: '🖐️', transition: TRANSITION_TIME, hold: HOLD_TIME, desc: 'Spread all fingers wide.' },
-        { id: 'pose:pinch', label: 'Pinch', icon: '🤏', transition: TRANSITION_TIME, hold: HOLD_TIME, desc: 'Touch thumb and index fingertips.' },
-        { id: 'pose:point', label: 'Point', icon: '👆', transition: TRANSITION_TIME, hold: HOLD_TIME, desc: 'Point with index finger, others closed.' },
-        { id: 'pose:thumbs_up', label: 'Thumbs Up', icon: '👍', transition: TRANSITION_TIME, hold: HOLD_TIME, desc: 'Classic thumbs up gesture.' },
+        { id: 'pose:fist', label: 'Fist', icon: '✊', transition: TRANSITION_TIME, hold: HOLD_TIME, desc: 'Make a tight fist.', fingerCode: '22222', aslLetter: 'S' },
+        { id: 'pose:open_palm', label: 'Open Palm', icon: '🖐️', transition: TRANSITION_TIME, hold: HOLD_TIME, desc: 'Spread all fingers wide.', fingerCode: '00000', aslLetter: 'B' },
+        { id: 'pose:pinch', label: 'Pinch', icon: '🤏', transition: TRANSITION_TIME, hold: HOLD_TIME, desc: 'Touch thumb and index fingertips.', fingerCode: '22000', aslLetter: 'L' },
+        { id: 'pose:point', label: 'Point', icon: '👆', transition: TRANSITION_TIME, hold: HOLD_TIME, desc: 'Point with index finger, others closed.', fingerCode: '02222', aslLetter: 'D' },
+        { id: 'pose:thumbs_up', label: 'Thumbs Up', icon: '👍', transition: TRANSITION_TIME, hold: HOLD_TIME, desc: 'Classic thumbs up gesture.', fingerCode: '02222', aslLetter: 'D' },
         { id: 'pose:ok', label: 'OK Sign', icon: '👌', transition: TRANSITION_TIME, hold: HOLD_TIME, desc: 'Form OK sign with thumb and index.' }
     ]
 };
@@ -307,14 +307,21 @@ function parseStepLabels(id: string): WizardLabels {
         const parts = id.split(':');
         if (parts.length >= 2) {
             const code = parts[1];
-            // Check if it's a finger code (5 digits)
-            if (code && /^[02]{5}$/.test(code)) {
+            // Check if it's a finger code (5 digits, supports 0=extended, 1=curled, 2=flexed)
+            if (code && /^[012]{5}$/.test(code)) {
                 const codeInfo = FINGER_CODES[code];
                 if (codeInfo) {
                     // Parse finger code to states
                     const fingers = ['thumb', 'index', 'middle', 'ring', 'pinky'] as const;
                     for (let i = 0; i < 5; i++) {
-                        labels.fingers[fingers[i]] = code[i] === '0' ? 'extended' : 'flexed';
+                        const digit = code[i];
+                        if (digit === '0') {
+                            labels.fingers[fingers[i]] = 'extended';
+                        } else if (digit === '1') {
+                            labels.fingers[fingers[i]] = 'curled' as any;
+                        } else {
+                            labels.fingers[fingers[i]] = 'flexed';
+                        }
                     }
                     if (codeInfo.semantic) {
                         labels.pose = codeInfo.semantic;
@@ -430,11 +437,18 @@ function parseExtendedStepToLabels(step: WizardStep & { fingerCode?: string; ori
         custom: []
     };
 
-    // Parse finger code if present
-    if (step.fingerCode && /^[02]{5}$/.test(step.fingerCode)) {
+    // Parse finger code if present (supports 0=extended, 1=curled, 2=flexed)
+    if (step.fingerCode && /^[012]{5}$/.test(step.fingerCode)) {
         const fingers = ['thumb', 'index', 'middle', 'ring', 'pinky'] as const;
         for (let i = 0; i < 5; i++) {
-            labels.fingers[fingers[i]] = step.fingerCode[i] === '0' ? 'extended' : 'flexed';
+            const digit = step.fingerCode[i];
+            if (digit === '0') {
+                labels.fingers[fingers[i]] = 'extended';
+            } else if (digit === '1') {
+                labels.fingers[fingers[i]] = 'curled' as any; // curled is now a valid FingerLabel
+            } else {
+                labels.fingers[fingers[i]] = 'flexed';
+            }
         }
         labels.custom.push(`code:${step.fingerCode}`);
 
@@ -496,16 +510,63 @@ function renderWizardStep(): void {
     if (labelsText && deps.state) labelsText.textContent = String(deps.state.labels.length);
 
     if (content) {
-        // Show large ASL letter reference if available
+        // Build finger code display if available
+        let fingerCodeDisplay = '';
+        if (step.fingerCode) {
+            const fingerNames = ['T', 'I', 'M', 'R', 'P'];
+            const stateLabels: Record<string, string> = { '0': 'E', '1': 'C', '2': 'F' };
+            const stateColors: Record<string, string> = {
+                '0': 'var(--success)',  // Extended = green
+                '1': 'var(--warning)',  // Curled = yellow/orange
+                '2': 'var(--error)'     // Flexed = red
+            };
+            const stateNames: Record<string, string> = {
+                '0': 'Extended',
+                '1': 'Curled',
+                '2': 'Flexed'
+            };
+
+            let fingerVisual = '';
+            for (let i = 0; i < 5; i++) {
+                const digit = step.fingerCode[i] || '?';
+                const color = stateColors[digit] || 'var(--fg-muted)';
+                const label = stateLabels[digit] || '?';
+                fingerVisual += `
+                    <div style="display: flex; flex-direction: column; align-items: center; min-width: 36px;">
+                        <span style="font-size: 10px; color: var(--fg-muted);">${fingerNames[i]}</span>
+                        <span style="font-size: 18px; font-weight: bold; color: ${color}; font-family: monospace;">${digit}</span>
+                        <span style="font-size: 9px; color: ${color};">${label}</span>
+                    </div>
+                `;
+            }
+
+            fingerCodeDisplay = `
+                <div class="finger-code-display" style="background: var(--bg-secondary); border-radius: 8px; padding: 12px; margin: 12px 0; text-align: center;">
+                    <div style="font-size: 10px; color: var(--fg-muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">Finger Code</div>
+                    <div style="font-family: monospace; font-size: 24px; font-weight: bold; color: var(--accent); letter-spacing: 4px; margin-bottom: 8px;">${step.fingerCode}</div>
+                    <div style="display: flex; justify-content: center; gap: 8px;">
+                        ${fingerVisual}
+                    </div>
+                    <div style="font-size: 9px; color: var(--fg-muted); margin-top: 8px;">
+                        <span style="color: var(--success);">E=Extended</span> •
+                        <span style="color: var(--warning);">C=Curled</span> •
+                        <span style="color: var(--error);">F=Flexed</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Show ASL letter reference if available (separate from finger code)
         const aslDisplay = step.aslLetter
-            ? `<div class="asl-reference" style="text-align: center; margin: 15px 0;">
-                <span class="asl-icon" style="font-size: 80px; line-height: 1;">${step.aslLetter}</span>
-                <div style="font-size: 10px; color: var(--fg-muted); margin-top: 5px;">ASL Reference</div>
+            ? `<div class="asl-reference" style="text-align: center; margin: 10px 0;">
+                <span class="asl-icon" style="font-size: 64px; line-height: 1;">${step.aslLetter}</span>
+                <div style="font-size: 10px; color: var(--fg-muted); margin-top: 4px;">ASL Reference</div>
                </div>`
             : '';
 
         let html = `
             <div class="wizard-instruction">${stepInstruction}</div>
+            ${fingerCodeDisplay}
             ${aslDisplay}
             <div class="wizard-description">${stepDescription}</div>
         `;
