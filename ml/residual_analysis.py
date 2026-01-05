@@ -468,5 +468,174 @@ def run_analysis():
     return results
 
 
+def run_residual_only_analysis():
+    """
+    Run analysis using ONLY samples with pre-computed residual.
+    Tests if training on residual (despite contamination) provides any benefit.
+    """
+    print("="*70)
+    print("RESIDUAL-ONLY ANALYSIS")
+    print("Training on samples with pre-computed residual from calibration")
+    print("="*70)
+
+    # Load data
+    data = load_labeled_session()
+    samples_by_code = extract_samples_with_orientation(data)
+
+    # Filter to only samples with pre-computed residual
+    filtered = {}
+    for code, samples in samples_by_code.items():
+        with_residual = [s for s in samples if 'pre_residual' in s]
+        if with_residual:
+            filtered[code] = with_residual
+
+    total_original = sum(len(v) for v in samples_by_code.values())
+    total_filtered = sum(len(v) for v in filtered.values())
+    print(f"\nFiltered to {total_filtered}/{total_original} samples with residual")
+    print(f"Classes: {len(filtered)}")
+
+    if total_filtered == 0:
+        print("ERROR: No samples with pre-computed residual!")
+        return {}
+
+    # Show per-class counts
+    print(f"\n{'Class':<10} {'Count':>8}")
+    print("-" * 20)
+    for code in sorted(filtered.keys()):
+        print(f"{code:<10} {len(filtered[code]):>8}")
+
+    # Add world frame mag
+    for code, samples in filtered.items():
+        for s in samples:
+            rot = R.from_quat(s['quat'])
+            s['mag_world'] = rot.inv().apply(s['mag'])
+
+    # Compare different features for cross-pitch accuracy
+    print("\n" + "="*70)
+    print("CROSS-PITCH ACCURACY COMPARISON")
+    print("="*70)
+
+    features_to_test = [
+        ('Iron-corrected (sensor)', 'mag'),
+        ('Pre-computed residual', 'pre_residual'),
+        ('World frame', 'mag_world'),
+    ]
+
+    results = {}
+
+    for name, key in features_to_test:
+        acc_q4_q1, acc_q1_q4 = evaluate_cross_orientation(
+            filtered, feature_key=key, split_axis='pitch'
+        )
+        print(f"\n{name}:")
+        print(f"  Q4→Q1: {acc_q4_q1:.1%}, Q1→Q4: {acc_q1_q4:.1%}")
+        print(f"  Worst: {min(acc_q4_q1, acc_q1_q4):.1%}")
+        results[key] = {
+            'q4_to_q1': acc_q4_q1,
+            'q1_to_q4': acc_q1_q4,
+            'worst': min(acc_q4_q1, acc_q1_q4),
+        }
+
+    # Check variance within classes
+    print("\n" + "="*70)
+    print("WITHIN-CLASS VARIANCE COMPARISON")
+    print("="*70)
+    print(f"\n{'Class':<10} {'Iron Var':>12} {'Residual Var':>14} {'Reduction':>12}")
+    print("-" * 50)
+
+    total_iron_var = 0
+    total_res_var = 0
+
+    for code in sorted(filtered.keys()):
+        samples = filtered[code]
+        iron_vecs = np.array([s['mag'] for s in samples])
+        res_vecs = np.array([s['pre_residual'] for s in samples])
+
+        iron_var = np.sum(np.var(iron_vecs, axis=0))
+        res_var = np.sum(np.var(res_vecs, axis=0))
+        reduction = (iron_var - res_var) / iron_var * 100 if iron_var > 0 else 0
+
+        total_iron_var += iron_var
+        total_res_var += res_var
+
+        print(f"{code:<10} {iron_var:>12.0f} {res_var:>14.0f} {reduction:>+11.1f}%")
+
+    overall_reduction = (total_iron_var - total_res_var) / total_iron_var * 100
+    print("-" * 50)
+    print(f"{'TOTAL':<10} {total_iron_var:>12.0f} {total_res_var:>14.0f} {overall_reduction:>+11.1f}%")
+
+    # Check if residual provides class separation
+    print("\n" + "="*70)
+    print("CLASS SEPARATION ANALYSIS")
+    print("="*70)
+
+    # Compute between-class vs within-class variance ratio (Fisher criterion)
+    for feat_name, feat_key in [('Iron-corrected', 'mag'), ('Residual', 'pre_residual')]:
+        all_vecs = []
+        labels = []
+        for code, samples in filtered.items():
+            for s in samples:
+                all_vecs.append(s[feat_key])
+                labels.append(code)
+
+        all_vecs = np.array(all_vecs)
+        labels = np.array(labels)
+
+        # Overall mean
+        overall_mean = np.mean(all_vecs, axis=0)
+
+        # Within-class scatter
+        within_scatter = 0
+        between_scatter = 0
+
+        for code in set(labels):
+            class_vecs = all_vecs[labels == code]
+            class_mean = np.mean(class_vecs, axis=0)
+
+            # Within-class variance
+            within_scatter += np.sum((class_vecs - class_mean) ** 2)
+
+            # Between-class variance
+            n_class = len(class_vecs)
+            between_scatter += n_class * np.sum((class_mean - overall_mean) ** 2)
+
+        fisher = between_scatter / within_scatter if within_scatter > 0 else 0
+        print(f"\n{feat_name}:")
+        print(f"  Within-class scatter:  {within_scatter:.0f}")
+        print(f"  Between-class scatter: {between_scatter:.0f}")
+        print(f"  Fisher ratio (higher=better): {fisher:.3f}")
+
+    # Summary
+    print("\n" + "="*70)
+    print("SUMMARY")
+    print("="*70)
+
+    iron_worst = results['mag']['worst']
+    res_worst = results['pre_residual']['worst']
+
+    print(f"\nWorst-case cross-pitch accuracy:")
+    print(f"  Iron-corrected: {iron_worst:.1%}")
+    print(f"  Residual:       {res_worst:.1%}")
+    print(f"  Difference:     {res_worst - iron_worst:+.1%}")
+
+    if res_worst > iron_worst:
+        print("\n✓ Residual IMPROVES cross-orientation generalization!")
+        print("  → Despite calibration contamination, residual provides value")
+    else:
+        print("\n✗ Residual does NOT improve generalization")
+        print(f"  → Variance reduction: {overall_reduction:.1f}%")
+
+    return results
+
+
 if __name__ == "__main__":
+    # Run both analyses
+    print("\n" + "#"*70)
+    print("# PART 1: Full Analysis (all samples)")
+    print("#"*70 + "\n")
     results = run_analysis()
+
+    print("\n\n" + "#"*70)
+    print("# PART 2: Residual-Only Analysis (samples with calibration)")
+    print("#"*70 + "\n")
+    residual_results = run_residual_only_analysis()
