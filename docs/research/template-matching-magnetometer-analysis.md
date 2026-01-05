@@ -571,6 +571,102 @@ This research demonstrates:
 
 ---
 
+## 11. Residual Signal Analysis (January 2026)
+
+### 11.1 Hypothesis
+
+The magnetic residual signal (after subtracting Earth field) should be **orientation-independent** because:
+1. Finger magnets are rigidly attached to fingers
+2. Sensor is rigidly attached to hand
+3. Magnet-to-sensor relationship only changes with finger flexion, not hand orientation
+
+If `residual = magnetometer - Earth_in_sensor_frame` is computed correctly, this residual should only contain finger magnet contribution and be invariant to orientation changes.
+
+### 11.2 Implementation
+
+The residual computation follows the calibration pipeline (`unified-mag-calibration.ts`):
+
+```python
+def compute_residual(mag, quat, earth_world):
+    # R @ world_vec = sensor_vec (world-to-sensor rotation)
+    rot = R.from_quat(quat)
+    earth_sensor = rot.apply(earth_world)  # Rotate Earth to sensor frame
+    return mag - earth_sensor              # Subtract to get magnet-only signal
+```
+
+### 11.3 Results
+
+Testing cross-pitch accuracy with different features:
+
+| Feature | Q4→Q1 Accuracy |
+|---------|----------------|
+| **Iron-corrected (sensor)** | **61.6%** |
+| Residual (Earth from data) | 60.0% |
+| Residual (scaled 50μT) | 55.4% |
+| Pre-computed residual (calibration) | 55.2% |
+| World frame | 9.5% |
+
+**Critical finding**: The pre-computed residual from the actual calibration pipeline performs **worse** than sensor-frame iron-corrected readings.
+
+### 11.4 Diagnosis: Calibration Contamination
+
+The calibration cannot distinguish Earth field from magnet contribution:
+
+1. **Earth magnitude varies wildly**: 28.9 - 106.7 μT
+   - Real Earth field is constant (~50 μT)
+   - Variation indicates magnet contamination in "Earth" estimate
+
+2. **Reference class residual not zero**: Mean = [2.8, -0.5, 31.5] μT
+   - For all-fingers-extended, residual should be ~0 if Earth correctly subtracted
+   - 31.5 μT Z-component shows significant miscalibration
+
+3. **Variance increases**: Reference class variance goes from 180 → 1515 (739.6% increase!)
+   - Residual computation introduces more variance, not less
+   - The "Earth estimate" is orientation-specific (contains magnet contribution)
+
+### 11.5 Root Cause
+
+The fundamental issue is that **Earth field cannot be calibrated while wearing the magnets**:
+
+```
+Sensor measures:  mag_sensor = Earth + Magnets
+
+During calibration (all orientations, magnets present):
+  World estimate = median(R^T @ mag_sensor)
+                 = median(R^T @ (Earth + Magnets))
+                 = Earth + R^T @ Magnets  ← Contaminated!
+
+The magnet contribution varies with orientation in world frame,
+so the "Earth" estimate is wrong for any specific orientation.
+```
+
+### 11.6 Solutions
+
+| Approach | Description | Feasibility |
+|----------|-------------|-------------|
+| **Magnet-free calibration** | Remove glove/magnets during Earth calibration | Impractical for users |
+| **Physics model** | Predict magnet contribution at each position | Complex, requires geometry |
+| **Orientation-diverse training** | Learn invariance implicitly (current CNN approach) | Already deployed |
+| **Per-session re-calibration** | Capture baseline at session start | May help incrementally |
+
+### 11.7 Implications
+
+1. **The deployed CNN-LSTM model works despite this issue** - It learns orientation invariance implicitly from training data diversity.
+
+2. **Template matching cannot easily use residual** - The residual computation introduces more noise than it removes.
+
+3. **Data collection protocol matters** - Training data must cover orientation diversity to achieve generalization.
+
+4. **Future calibration improvement** - Would require detecting when magnets are definitely at known positions (e.g., all extended during specific gesture) to estimate magnet contribution separately.
+
+### 11.8 See Also
+
+- `ml/residual_analysis.py` - Detailed analysis code
+- `apps/gambit/shared/unified-mag-calibration.ts` - Calibration pipeline
+- `apps/gambit/shared/telemetry-processor.ts` - Residual field computation
+
+---
+
 ## References
 
 1. Wobbrock, J.O., Wilson, A.D., Li, Y. (2007). "Gestures without libraries, toolkits or training: A $1 recognizer for user interface prototypes" - UIST
