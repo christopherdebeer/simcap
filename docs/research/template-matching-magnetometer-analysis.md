@@ -667,6 +667,63 @@ so the "Earth" estimate is wrong for any specific orientation.
 
 ---
 
+## 12. CNN-LSTM Model Orientation Invariance (January 2026)
+
+### 12.1 Motivation
+
+After discovering the k-NN template matching approach has a **30.7% generalization gap** across orientations, we tested whether the deployed CNN-LSTM model (`finger_aligned_v2`) achieves orientation invariance.
+
+### 12.2 Experimental Setup
+
+- **Model**: `finger_aligned_v2` - CNN-LSTM hybrid trained on synthetic + real data
+- **Test data**: Same session used for k-NN analysis (not in training set)
+- **Features**: 50-sample windows × 9 channels (ax, ay, az, gx, gy, gz, mx, my, mz)
+- **Evaluation**: Split by pitch quartiles (Q1 ≤ -24.5°, Q3 ≥ 35.5°)
+
+### 12.3 Results
+
+| Metric | k-NN (template) | CNN-LSTM |
+|--------|-----------------|----------|
+| High pitch accuracy | 92.3% | 73.9% |
+| Low pitch accuracy | 61.6% | 72.4% |
+| **Gap** | **30.7%** | **1.5%** |
+
+**Per-finger accuracy (all data)**:
+- Thumb: 88.4%
+- Index: 86.4%
+- Middle: 92.8%
+- Ring: 92.2%
+- Pinky: 95.5%
+- **Overall (all 5 correct)**: 67.6%
+
+### 12.4 Key Findings
+
+1. **Orientation invariance achieved**: Only 1.5% gap between high and low pitch subsets (vs k-NN's 30.7%)
+
+2. **Cross-orientation improvement**: CNN-LSTM achieves 72.4% on low-pitch data vs k-NN's 61.6% (+10.8%)
+
+3. **Lower overall accuracy explained**: The test session wasn't in training data - this is true out-of-distribution generalization
+
+4. **Model learned orientation-invariant features**: The temporal/spatial patterns in CNN-LSTM capture relationships that generalize across orientations, unlike k-NN which memorizes orientation-specific signatures
+
+### 12.5 Implications
+
+1. **Template matching is orientation-dependent**: k-NN excels when test orientation matches training orientation but fails on new orientations
+
+2. **Deep learning achieves invariance**: CNN-LSTM learns to extract features robust to orientation changes through:
+   - Temporal patterns in sensor readings
+   - Multi-modal feature fusion (accel + gyro + mag)
+   - Training augmentation with diverse orientations
+
+3. **Residual computation unnecessary**: The model achieves orientation invariance without explicit Earth field subtraction or coordinate transforms
+
+### 12.6 See Also
+
+- `ml/test_model_orientation.py` - Test script for orientation invariance
+- `public/models/finger_aligned_v2/` - Deployed model
+
+---
+
 ## References
 
 1. Wobbrock, J.O., Wilson, A.D., Li, Y. (2007). "Gestures without libraries, toolkits or training: A $1 recognizer for user interface prototypes" - UIST
