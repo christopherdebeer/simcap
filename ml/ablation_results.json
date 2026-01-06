@@ -1,0 +1,330 @@
+{
+  "raw_9dof_w25": {
+    "feature_set": "raw_9dof",
+    "window_size": 25,
+    "n_features": 9,
+    "description": "Standard 9-DoF: accel + gyro + mag",
+    "n_windows": 329,
+    "n_classes": 10,
+    "train_acc_mean": 0.28313252329826355,
+    "test_acc_mean": 0.1204819306731224,
+    "test_acc_std": 0.1204819306731224,
+    "runs": [
+      {
+        "train_acc": 0.3855421543121338,
+        "test_acc": 0.0,
+        "per_class_acc": {
+          "1": 0.0,
+          "3": 0.0,
+          "4": 0.0,
+          "5": 0.0,
+          "8": 0.0
+        },
+        "epochs_trained": 6,
+        "final_train_loss": 1.4891091585159302,
+        "final_val_loss": 2.3949341773986816
+      },
+      {
+        "train_acc": 0.1807228922843933,
+        "test_acc": 0.2409638613462448,
+        "per_class_acc": {
+          "1": 0.0,
+          "3": 0.0,
+          "4": 0.0,
+          "5": 0.5405405405405406,
+          "8": 0.0
+        },
+        "epochs_trained": 6,
+        "final_train_loss": 1.6157104969024658,
+        "final_val_loss": 2.3215882778167725
+      }
+    ],
+    "orientation_gap": 0.16265059262514114
+  },
+  "raw_9dof_w50": {
+    "feature_set": "raw_9dof",
+    "window_size": 50,
+    "n_features": 9,
+    "description": "Standard 9-DoF: accel + gyro + mag",
+    "n_windows": 219,
+    "n_classes": 10,
+    "train_acc_mean": 0.2181818187236786,
+    "test_acc_mean": 0.027272727340459824,
+    "test_acc_std": 0.027272727340459824,
+    "runs": [
+      {
+        "train_acc": 0.16363635659217834,
+        "test_acc": 0.05454545468091965,
+        "per_class_acc": {
+          "2": 0.0,
+          "3": 0.16666666666666666,
+          "5": 0.08,
+          "8": 0.0
+        },
+        "epochs_trained": 6,
+        "final_train_loss": 1.6510425806045532,
+        "final_val_loss": 2.475787401199341
+      },
+      {
+        "train_acc": 0.27272728085517883,
+        "test_acc": 0.0,
+        "per_class_acc": {
+          "2": 0.0,
+          "3": 0.0,
+          "5": 0.0,
+          "8": 0.0
+        },
+        "epochs_trained": 6,
+        "final_train_loss": 1.4117919206619263,
+        "final_val_loss": 2.3318910598754883
+      }
+    ],
+    "orientation_gap": 0.19090909138321877
+  },
+  "mag_only_w25": {
+    "feature_set": "mag_only",
+    "window_size": 25,
+    "n_features": 3,
+    "description": "Magnetometer only (3 features)",
+    "n_windows": 329,
+    "n_classes": 10,
+    "train_acc_mean": 0.620481938123703,
+    "test_acc_mean": 0.0,
+    "test_acc_std": 0.0,
+    "runs": [
+      {
+        "train_acc": 0.6867470145225525,
+        "test_acc": 0.0,
+        "per_class_acc": {
+          "1": 0.0,
+          "3": 0.0,
+          "4": 0.0,
+          "5": 0.0,
+          "8": 0.0
+        },
+        "epochs_trained": 6,
+        "final_train_loss": 1.0522116422653198,
+        "final_val_loss": 2.2864882946014404
+      },
+      {
+        "train_acc": 0.5542168617248535,
+        "test_acc": 0.0,
+        "per_class_acc": {
+          "1": 0.0,
+          "3": 0.0,
+          "4": 0.0,
+          "5": 0.0,
+          "8": 0.0
+        },
+        "epochs_trained": 6,
+        "final_train_loss": 1.464315414428711,
+        "final_val_loss": 2.4072422981262207
+      }
+    ],
+    "orientation_gap": 0.620481938123703
+  },
+  "mag_only_w50": {
+    "feature_set": "mag_only",
+    "window_size": 50,
+    "n_features": 3,
+    "description": "Magnetometer only (3 features)",
+    "n_windows": 219,
+    "n_classes": 10,
+    "train_acc_mean": 0.6727272868156433,
+    "test_acc_mean": 0.22727273404598236,
+    "test_acc_std": 0.22727273404598236,
+    "runs": [
+      {
+        "train_acc": 0.7272727489471436,
+        "test_acc": 0.0,
+        "per_class_acc": {
+          "2": 0.0,
+          "3": 0.0,
+          "5": 0.0,
+          "8": 0.0
+        },
+        "epochs_trained": 14,
+        "final_train_loss": 0.49765804409980774,
+        "final_val_loss": 2.3329949378967285
+      },
+      {
+        "train_acc": 0.6181818246841431,
+        "test_acc": 0.4545454680919647,
+        "per_class_acc": {
+          "2": 0.0,
+          "3": 0.0,
+          "5": 1.0,
+          "8": 0.0
+        },
+        "epochs_trained": 6,
+        "final_train_loss": 1.1612293720245361,
+        "final_val_loss": 2.3958587646484375
+      }
+    ],
+    "orientation_gap": 0.44545455276966095
+  },
+  "iron_mag_w25": {
+    "feature_set": "iron_mag",
+    "window_size": 25,
+    "n_features": 3,
+    "description": "Iron-corrected magnetometer (3 features)",
+    "n_windows": 329,
+    "n_classes": 10,
+    "train_acc_mean": 0.4277108460664749,
+    "test_acc_mean": 0.0,
+    "test_acc_std": 0.0,
+    "runs": [
+      {
+        "train_acc": 0.4939759075641632,
+        "test_acc": 0.0,
+        "per_class_acc": {
+          "1": 0.0,
+          "3": 0.0,
+          "4": 0.0,
+          "5": 0.0,
+          "8": 0.0
+        },
+        "epochs_trained": 6,
+        "final_train_loss": 1.1403402090072632,
+        "final_val_loss": 2.3974242210388184
+      },
+      {
+        "train_acc": 0.3614457845687866,
+        "test_acc": 0.0,
+        "per_class_acc": {
+          "1": 0.0,
+          "3": 0.0,
+          "4": 0.0,
+          "5": 0.0,
+          "8": 0.0
+        },
+        "epochs_trained": 6,
+        "final_train_loss": 1.1015266180038452,
+        "final_val_loss": 2.333740711212158
+      }
+    ],
+    "orientation_gap": 0.4277108460664749
+  },
+  "iron_mag_w50": {
+    "feature_set": "iron_mag",
+    "window_size": 50,
+    "n_features": 3,
+    "description": "Iron-corrected magnetometer (3 features)",
+    "n_windows": 219,
+    "n_classes": 10,
+    "train_acc_mean": 0.5727272778749466,
+    "test_acc_mean": 0.0,
+    "test_acc_std": 0.0,
+    "runs": [
+      {
+        "train_acc": 0.800000011920929,
+        "test_acc": 0.0,
+        "per_class_acc": {
+          "2": 0.0,
+          "3": 0.0,
+          "5": 0.0,
+          "8": 0.0
+        },
+        "epochs_trained": 6,
+        "final_train_loss": 1.274545669555664,
+        "final_val_loss": 2.456411123275757
+      },
+      {
+        "train_acc": 0.34545454382896423,
+        "test_acc": 0.0,
+        "per_class_acc": {
+          "2": 0.0,
+          "3": 0.0,
+          "5": 0.0,
+          "8": 0.0
+        },
+        "epochs_trained": 6,
+        "final_train_loss": 1.3090211153030396,
+        "final_val_loss": 2.2892160415649414
+      }
+    ],
+    "orientation_gap": 0.5727272778749466
+  },
+  "mag_euler_w25": {
+    "feature_set": "mag_euler",
+    "window_size": 25,
+    "n_features": 6,
+    "description": "Magnetometer + Euler angles (6 features)",
+    "n_windows": 329,
+    "n_classes": 10,
+    "train_acc_mean": 0.5963855385780334,
+    "test_acc_mean": 0.0,
+    "test_acc_std": 0.0,
+    "runs": [
+      {
+        "train_acc": 0.8072289228439331,
+        "test_acc": 0.0,
+        "per_class_acc": {
+          "1": 0.0,
+          "3": 0.0,
+          "4": 0.0,
+          "5": 0.0,
+          "8": 0.0
+        },
+        "epochs_trained": 13,
+        "final_train_loss": 0.49042677879333496,
+        "final_val_loss": 2.24637770652771
+      },
+      {
+        "train_acc": 0.3855421543121338,
+        "test_acc": 0.0,
+        "per_class_acc": {
+          "1": 0.0,
+          "3": 0.0,
+          "4": 0.0,
+          "5": 0.0,
+          "8": 0.0
+        },
+        "epochs_trained": 6,
+        "final_train_loss": 1.388331413269043,
+        "final_val_loss": 2.432063102722168
+      }
+    ],
+    "orientation_gap": 0.5963855385780334
+  },
+  "mag_euler_w50": {
+    "feature_set": "mag_euler",
+    "window_size": 50,
+    "n_features": 6,
+    "description": "Magnetometer + Euler angles (6 features)",
+    "n_windows": 219,
+    "n_classes": 10,
+    "train_acc_mean": 0.1090909093618393,
+    "test_acc_mean": 0.22727273404598236,
+    "test_acc_std": 0.22727273404598236,
+    "runs": [
+      {
+        "train_acc": 0.2181818187236786,
+        "test_acc": 0.0,
+        "per_class_acc": {
+          "2": 0.0,
+          "3": 0.0,
+          "5": 0.0,
+          "8": 0.0
+        },
+        "epochs_trained": 6,
+        "final_train_loss": 1.409002661705017,
+        "final_val_loss": 2.4087021350860596
+      },
+      {
+        "train_acc": 0.0,
+        "test_acc": 0.4545454680919647,
+        "per_class_acc": {
+          "2": 0.0,
+          "3": 0.0,
+          "5": 1.0,
+          "8": 0.0
+        },
+        "epochs_trained": 6,
+        "final_train_loss": 1.5101032257080078,
+        "final_val_loss": 2.40437912940979
+      }
+    ],
+    "orientation_gap": -0.11818182468414307
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "mag_only_w1": {
+    "train_samples": 542,
+    "test_samples": 542,
+    "train_acc": 0.9797047972679138,
+    "test_acc": 0.4797047972679138,
+    "gap": 0.5
+  },
+  "mag_only_w2": {
+    "train_samples": 536,
+    "test_samples": 536,
+    "train_acc": 0.97947758436203,
+    "test_acc": 0.48134326934814453,
+    "gap": 0.4981343150138855
+  },
+  "mag_only_w5": {
+    "train_samples": 520,
+    "test_samples": 520,
+    "train_acc": 0.9788461327552795,
+    "test_acc": 0.41730770468711853,
+    "gap": 0.561538428068161
+  },
+  "mag_only_w12": {
+    "train_samples": 122,
+    "test_samples": 122,
+    "train_acc": 0.8524590134620667,
+    "test_acc": 0.5163934230804443,
+    "gap": 0.3360655903816223
+  },
+  "iron_mag_w2": {
+    "train_samples": 536,
+    "test_samples": 536,
+    "train_acc": 0.8376865386962891,
+    "test_acc": 0.2518656849861145,
+    "gap": 0.5858208537101746
+  },
+  "iron_mag_w12": {
+    "train_samples": 122,
+    "test_samples": 122,
+    "train_acc": 0.868852436542511,
+    "test_acc": 0.4508196711540222,
+    "gap": 0.41803276538848877
+  },
+  "raw_9dof_w2": {
+    "train_samples": 536,
+    "test_samples": 536,
+    "train_acc": 0.9011194109916687,
+    "test_acc": 0.15485075116157532,
+    "gap": 0.7462686598300934
+  },
+  "raw_9dof_w5": {
+    "train_samples": 520,
+    "test_samples": 520,
+    "train_acc": 0.8846153616905212,
+    "test_acc": 0.12115384638309479,
+    "gap": 0.7634615153074265
+  },
+  "mag_euler_w2": {
+    "train_samples": 536,
+    "test_samples": 536,
+    "train_acc": 0.9720149040222168,
+    "test_acc": 0.15858209133148193,
+    "gap": 0.8134328126907349
+  },
+  "mag_euler_w5": {
+    "train_samples": 520,
+    "test_samples": 520,
+    "train_acc": 0.9711538553237915,
+    "test_acc": 0.32307693362236023,
+    "gap": 0.6480769217014313
+  },
+  "iron_euler_w2": {
+    "train_samples": 536,
+    "test_samples": 536,
+    "train_acc": 0.8171641826629639,
+    "test_acc": 0.20708955824375153,
+    "gap": 0.6100746244192123
+  },
+  "iron_euler_w5": {
+    "train_samples": 520,
+    "test_samples": 520,
+    "train_acc": 0.9461538195610046,
+    "test_acc": 0.1288461536169052,
+    "gap": 0.8173076659440994
+  }
+}
