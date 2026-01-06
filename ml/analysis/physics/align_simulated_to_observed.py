@@ -18,9 +18,8 @@ from typing import Dict, Tuple, List
 import sys
 
 # Add parent to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
-from simulation.dipole import magnetic_dipole_field, estimate_dipole_moment
+from ml.simulation.dipole import magnetic_dipole_field, estimate_dipole_moment
 
 
 def load_measured_signatures(session_path: Path) -> Dict[str, np.ndarray]:

@@ -22,7 +22,7 @@ import json
 import numpy as np
 from pathlib import Path
 from datetime import datetime
-from sensor_units import MAG_SPEC, mag_lsb_to_microtesla
+from ml.sensor_units import MAG_SPEC, mag_lsb_to_microtesla
 
 
 def analyze_session(session_path: Path) -> dict:

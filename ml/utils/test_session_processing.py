@@ -11,10 +11,9 @@ import numpy as np
 from pathlib import Path
 import sys
 
-sys.path.insert(0, str(Path(__file__).parent))
 
-from calibration import EnvironmentalCalibration, decorate_telemetry_with_calibration
-from filters import KalmanFilter3D, decorate_telemetry_with_filtering
+from ml.calibration import EnvironmentalCalibration, decorate_telemetry_with_calibration
+from ml.filters import KalmanFilter3D, decorate_telemetry_with_filtering
 
 
 def process_session(session_file, calibration_file):
