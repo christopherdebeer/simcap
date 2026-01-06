@@ -1,0 +1,74 @@
+{
+  "title": "UniMTS-Inspired Orientation Invariance Experiments",
+  "date": "2026-01-06",
+  "summary": "SO(3) rotation augmentation hurts magnetometer-based finger classification because absolute magnetic field direction is discriminative",
+
+  "baseline_v3": {
+    "test_accuracy": 0.964,
+    "train_accuracy": 0.999,
+    "gap": 0.035,
+    "description": "mag_only, w=10, 50% synthetic"
+  },
+
+  "augmentation_comparison": {
+    "so3_rotation": {
+      "test_accuracy_range": [0.589, 0.680],
+      "impact": "Hurts significantly (-28% to -37%)",
+      "reason": "Destroys absolute magnetic field direction which is discriminative"
+    },
+    "physics_augmentation": {
+      "test_accuracy": 0.766,
+      "impact": "Hurts moderately (-20%)",
+      "reason": "Bias and rotation perturbations shift the signal too much"
+    },
+    "svd_transform": {
+      "test_accuracy": 0.642,
+      "impact": "Hurts significantly (-32%)",
+      "reason": "Removes absolute orientation information"
+    },
+    "oit_features": {
+      "test_accuracy": 0.480,
+      "impact": "Hurts severely (-48%)",
+      "reason": "9-element heuristic features lose too much information"
+    },
+    "contrastive_pretrain": {
+      "test_accuracy": 0.924,
+      "impact": "Slight hurt (-4%)",
+      "reason": "Best augmentation method but still worse than baseline"
+    }
+  },
+
+  "small_angle_rotation": {
+    "0_degrees": 0.935,
+    "5_degrees": 0.966,
+    "10_degrees": 0.954,
+    "15_degrees": 0.935,
+    "25_degrees": 0.901,
+    "45_degrees": 0.745,
+    "90_degrees": 0.859,
+    "180_degrees": 0.478,
+    "finding": "5° rotation slightly improves over baseline (96.6% vs 93.5%)"
+  },
+
+  "feature_representation": {
+    "3d_vector": {"test_acc": 0.924, "note": "Standard 3D magnetometer"},
+    "magnitude_only": {"test_acc": 0.688, "note": "Loses directional information"},
+    "magnitude_and_angles": {"test_acc": 0.872, "note": "Spherical coordinates"}
+  },
+
+  "key_insights": [
+    "Magnetometer readings shift 348-2155% of std between orientations",
+    "SO(3) rotation randomizes absolute position, destroying signal",
+    "Small-angle rotation (5°) may slightly help without destroying signal",
+    "3D vector representation outperforms magnitude-only or spherical",
+    "Orientation-invariance is the WRONG goal for this task",
+    "V3 baseline achieves 96.4% without any rotation augmentation"
+  ],
+
+  "fundamental_difference": {
+    "gesture_recognition": "Same gesture at different orientations should match -> want invariance",
+    "finger_classification": "Same finger state produces different mag values at different orientations -> want sensitivity"
+  },
+
+  "recommendation": "Keep V3 baseline. Optionally add 5° small-angle rotation for slight improvement. Do not use full SO(3) rotation or orientation-invariant transforms."
+}
