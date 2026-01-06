@@ -1,5 +1,7 @@
 # SIMCAP Documentation
 
+📖 **[View Complete Documentation Index](./INDEX.md)** - Searchable catalog of all 60+ documentation files
+
 ## Guides
 
 | Guide | Description |
@@ -17,7 +19,8 @@ For documentation on what's actually implemented, see the README files in each c
 | Component | Status | Description |
 |-----------|--------|-------------|
 | [ML Pipeline](../ml/) | Active | Gesture classification training pipeline |
-| [Clustering Guide](../ml/CLUSTERING.md) | Active | Unsupervised clustering for gesture discovery |
+| [ML Documentation](./ml/) | Active | Machine learning pipeline and physics-based models |
+| [Clustering Guide](./ml/clustering-analysis.md) | Active | Unsupervised clustering for gesture discovery |
 
 ### Device Firmware
 
