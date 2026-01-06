@@ -210,6 +210,41 @@ python scripts/generate-manifests.py --all --upload
    python scripts/generate-manifests.py --all --upload
    ```
 
+## Documentation Structure
+
+### Creating New Documentation
+
+All documentation should be placed in the `docs/` directory with proper front-matter:
+
+```yaml
+---
+title: Document Title
+created: YYYY-MM-DD
+updated: YYYY-MM-DD
+status: Draft|In Progress|Complete
+tags: [tag1, tag2, tag3]
+related:
+  - path/to/related-doc.md
+---
+```
+
+### Documentation Categories
+
+| Category | Path | Purpose |
+|----------|------|---------|
+| **Machine Learning** | `docs/ml/` | ML models, training, and analysis |
+| **Research** | `docs/research/` | Experimental findings and studies |
+| **Technical** | `docs/technical/` | Implementation details and bugs |
+| **Design** | `docs/design/` | System architecture and design decisions |
+| **Procedures** | `docs/procedures/` | Operational guides and protocols |
+| **GAMBIT Hardware** | `docs/gambit/` | Hardware-specific documentation |
+
+### After Creating Documentation
+
+1. Add entry to `docs/INDEX.md` in the appropriate category
+2. Update related documents with cross-references
+3. If documenting new findings, consider updating `ml/README.md` or `docs/README.md`
+
 ## Notes
 
 - Session data goes to `data` branch, images to `images` branch

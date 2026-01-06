@@ -46,6 +46,12 @@ docs/
 ### Research
 | Document | Description | Updated |
 |----------|-------------|---------|
+| [Literature Techniques Summary](./research/literature-techniques-summary.md) | **Summary of all 3 experiments (all negative)** | 2026-01-06 |
+| [arXiv Literature Review](./research/arxiv-literature-review.md) | Survey of small model training techniques | 2026-01-06 |
+| [V5 Context-Aware Experiment](./research/v5-context-experiment-results.md) | Context-aware gated fusion (negative result) | 2026-01-06 |
+| [DropDim Experiment](./research/dropdim-experiment-results.md) | DropDim regularization (negative result) | 2026-01-06 |
+| [V4 Architecture Exploration](./research/v4-architecture-exploration.md) | New architectures for improved generalization | 2026-01-06 |
+| [V2 vs V3 Benchmark](./research/v2-v3-benchmark-comparison.md) | Model comparison with held-out validation | 2026-01-06 |
 | [Physics Model Analysis](./research/physics-model-analysis.md) | Physics-based model evaluation | 2025-12-30 |
 | [Ablation Study](./research/ablation-study-results.md) | Model component analysis | 2025-12-29 |
 | [Cross-Orientation Study](./research/cross-orientation-ablation-results.md) | Orientation robustness | 2025-12-29 |

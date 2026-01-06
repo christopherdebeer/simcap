@@ -1,0 +1,36 @@
+{
+  "baseline": {
+    "test_acc": 0.7221052631578947,
+    "test_per_finger": {
+      "thumb": 0.5684210526315789,
+      "index": 0.6526315789473685,
+      "middle": 0.7894736842105263,
+      "ring": 0.9263157894736842,
+      "pinky": 0.6736842105263158
+    }
+  },
+  "finetuned": {
+    "test_acc": 0.6526315789473685,
+    "test_per_finger": {
+      "thumb": 0.5473684210526316,
+      "index": 0.631578947368421,
+      "middle": 0.7578947368421053,
+      "ring": 0.49473684210526314,
+      "pinky": 0.8315789473684211
+    },
+    "confidence_stats": {
+      "mean_confidence": 0.6686903834342957,
+      "high_conf_count": 11,
+      "low_conf_count": 35,
+      "active_count": 30,
+      "high_conf_threshold": 0.9,
+      "low_conf_threshold": 0.6
+    },
+    "training_data": {
+      "source": 121,
+      "pseudo": 11,
+      "active": 30,
+      "total": 162
+    }
+  }
+}

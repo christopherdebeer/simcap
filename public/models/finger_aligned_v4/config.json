@@ -1,0 +1,67 @@
+{
+  "stats": {
+    "mean": [
+      696.8216957912753,
+      -581.6548952560661,
+      1944.0524191301613
+    ],
+    "std": [
+      692.7624479928086,
+      584.1524782649699,
+      1501.760462237891
+    ]
+  },
+  "inputShape": [
+    null,
+    10,
+    3
+  ],
+  "fingerNames": [
+    "thumb",
+    "index",
+    "middle",
+    "ring",
+    "pinky"
+  ],
+  "stateNames": [
+    "extended",
+    "flexed"
+  ],
+  "description": "V4-Regularized: 70.1% cross-orientation, 21.8% gap, dramatic pinky improvement",
+  "version": "aligned_v4",
+  "date": "2026-01-06",
+  "modelType": "layers",
+  "windowSize": 10,
+  "numFeatures": 3,
+  "featureNames": [
+    "mx",
+    "my",
+    "mz"
+  ],
+  "architecture": {
+    "type": "v4_regularized",
+    "dropout_rates": [
+      0.4,
+      0.5,
+      0.4
+    ],
+    "l2_weight_decay": 0.01,
+    "label_smoothing": 0.1
+  },
+  "accuracy": {
+    "overall": 0.8704225352112676,
+    "per_finger": {
+      "thumb": 0.6654929577464789,
+      "index": 0.9964788732394366,
+      "middle": 0.7394366197183099,
+      "ring": 0.954225352112676,
+      "pinky": 0.9964788732394366
+    }
+  },
+  "improvements_over_v3": {
+    "cross_orientation_accuracy": "+1.7% (70.1% vs 68.4%)",
+    "generalization_gap": "-4.0% (21.8% vs 25.8%)",
+    "pinky_accuracy": "+20.0% (74.7% vs 54.7%)",
+    "regularization": "Stronger dropout + L2 + label smoothing"
+  }
+}

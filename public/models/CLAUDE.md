@@ -14,7 +14,15 @@ public/models/
 │   ├── model.json
 │   ├── config.json
 │   └── group1-shard1of1.bin
-└── finger_aligned_v1/     # 3-feature binary finger model (CURRENT)
+├── finger_aligned_v1/     # V1: 3-feature binary finger model
+│   ├── model.json
+│   ├── config.json
+│   └── group1-shard1of1.bin
+├── finger_aligned_v3/     # V3: 3-feature, w=10, 50% synthetic (91% cross-orient)
+│   ├── model.json
+│   ├── config.json
+│   └── group1-shard1of1.bin
+└── finger_aligned_v4/     # V4-Regularized: 70.1% cross-orient, best generalization (CURRENT)
     ├── model.json
     ├── config.json
     ├── group1-shard1of1.bin
