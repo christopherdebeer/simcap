@@ -1,3 +1,10 @@
+---
+title: Physics-to-ML Pipeline - Key Insights and Recommendations
+created: 2026-01-06
+updated: 2026-01-06
+original_location: ml/analysis/physics/PHYSICS_TO_ML_INSIGHTS.md
+---
+
 # Physics-to-ML Pipeline: Key Insights and Recommendations
 
 ## Your Questions Answered
