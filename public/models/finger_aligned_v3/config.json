@@ -1,0 +1,58 @@
+{
+  "stats": {
+    "mean": [
+      696.4443997341011,
+      -581.8009713311853,
+      1943.2519873956492
+    ],
+    "std": [
+      693.4131139380034,
+      584.2718922467757,
+      1507.0931157524114
+    ]
+  },
+  "inputShape": [
+    null,
+    10,
+    3
+  ],
+  "fingerNames": [
+    "thumb",
+    "index",
+    "middle",
+    "ring",
+    "pinky"
+  ],
+  "stateNames": [
+    "extended",
+    "flexed"
+  ],
+  "description": "V3: mag_only, w=10, 50% tight synthetic (91% cross-orientation)",
+  "version": "aligned_v3",
+  "date": "2026-01-06",
+  "modelType": "layers",
+  "windowSize": 10,
+  "numFeatures": 3,
+  "featureNames": [
+    "mx",
+    "my",
+    "mz"
+  ],
+  "accuracy": {
+    "overall": 0.9964788732394366,
+    "per_finger": {
+      "thumb": 0.9964788732394366,
+      "index": 0.9964788732394366,
+      "middle": 0.9964788732394366,
+      "ring": 0.9964788732394366,
+      "pinky": 0.9964788732394366
+    },
+    "cross_orientation": 0.9726315789473684
+  },
+  "improvements_over_v2": {
+    "cross_orientation_accuracy": "+55.3%",
+    "window_size": "50 -> 10 (5x smaller)",
+    "features": "9 -> 3 (3x fewer)",
+    "latency": "Reduced inference latency due to smaller window"
+  }
+}
