@@ -1,3 +1,10 @@
+---
+title: Physics-Based Magnetic Model Optimization - Final Report
+created: 2026-01-06
+updated: 2026-01-06
+original_location: ml/analysis/physics/FINAL_PHYSICS_OPTIMIZATION_REPORT.md
+---
+
 # Physics-Based Magnetic Model Optimization - Final Report
 
 **Date**: January 6, 2026

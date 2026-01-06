@@ -1,3 +1,10 @@
+---
+title: Physics-Based Magnetic Model Optimization Analysis
+created: 2026-01-06
+updated: 2026-01-06
+original_location: ml/analysis/physics/PHYSICS_OPTIMIZATION_ANALYSIS.md
+---
+
 # Physics-Based Magnetic Model Optimization Analysis
 
 ## Session: 2025-12-31T14_06_18.270Z

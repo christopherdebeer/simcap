@@ -1,3 +1,10 @@
+---
+title: Physics-Based Model Improvement Action Plan
+created: 2026-01-06
+updated: 2026-01-06
+original_location: ml/analysis/physics/ACTION_PLAN.md
+---
+
 # Physics-Based Model Improvement: Action Plan
 
 ## What We Built (Complete ✅)
