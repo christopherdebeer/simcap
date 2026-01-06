@@ -1,0 +1,56 @@
+{
+  "physics_classifier": {
+    "exact_match_accuracy": 0.14272517321016168,
+    "per_finger_accuracy": [
+      0.2535796766743649,
+      0.6387990762124711,
+      0.5773672055427251,
+      0.5866050808314087,
+      0.7829099307159353
+    ],
+    "mean_hamming_distance": 2.1607390300230946,
+    "mean_template_distance_ut": 351.74453228658507
+  },
+  "ml_baseline": {
+    "train_metrics": {
+      "training_time": 0.09727287292480469,
+      "train_accuracy": 0.9994226327944573
+    },
+    "test_metrics": {
+      "exact_match_accuracy": 1.0,
+      "per_finger_accuracy": {
+        "thumb": 1.0,
+        "index": 1.0,
+        "middle": 1.0,
+        "ring": 1.0,
+        "pinky": 1.0
+      },
+      "mean_hamming_distance": 0.0
+    }
+  },
+  "ml_augmented": {
+    "train_metrics": {
+      "training_time": 0.14006686210632324,
+      "train_accuracy": 0.9963108706345303
+    },
+    "test_metrics": {
+      "exact_match_accuracy": 0.9884526558891455,
+      "per_finger_accuracy": {
+        "thumb": 0.9930715935334873,
+        "index": 1.0,
+        "middle": 0.9907621247113164,
+        "ring": 0.9976905311778291,
+        "pinky": 0.9976905311778291
+      },
+      "mean_hamming_distance": 0.020785219399538105
+    }
+  },
+  "dataset_info": {
+    "n_real_samples": 2165,
+    "n_synthetic_samples": 6400,
+    "n_train": 8132,
+    "n_test": 433,
+    "n_combos_observed": 10,
+    "n_combos_generated": 32
+  }
+}
