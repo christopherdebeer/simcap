@@ -1168,6 +1168,21 @@ export interface UnifiedModelConfig {
 export const ALL_MODELS: UnifiedModelConfig[] = [
   // === Finger Models (Newest first) ===
   {
+    id: 'finger_aligned_v4',
+    name: 'Finger (Aligned v4 - Regularized)',
+    type: 'finger_window',
+    path: '/models/finger_aligned_v4/model.json',
+    stats: {
+      mean: [696.82, -581.65, 1944.05],
+      std: [692.76, 584.15, 1501.76]
+    },
+    description: 'V4: Strong regularization, 70% cross-orientation, best generalization',
+    date: '2026-01-06',
+    active: false,
+    windowSize: 10,
+    numStates: 2
+  },
+  {
     id: 'finger_aligned_v3',
     name: 'Finger (Aligned v3 - Optimized)',
     type: 'finger_window',
