@@ -18,7 +18,7 @@ from pathlib import Path
 from datetime import datetime
 import shutil
 
-from sensor_units import MAG_SPEC, mag_lsb_to_microtesla
+from ml.sensor_units import MAG_SPEC, mag_lsb_to_microtesla
 
 
 def convert_calibration_file(filepath: Path, dry_run: bool = False, backup: bool = True):

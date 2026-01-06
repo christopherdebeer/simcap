@@ -9,7 +9,7 @@ to identify where the high residual values come from.
 import json
 import numpy as np
 from pathlib import Path
-from sensor_units import MAG_SPEC
+from ml.sensor_units import MAG_SPEC
 
 
 def load_calibration(cal_path: Path) -> dict:

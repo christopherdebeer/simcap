@@ -13,9 +13,8 @@ import os
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
-sys.path.insert(0, str(Path(__file__).parent))
 
-from simulation.aligned_generator import AlignedGenerator
+from ml.simulation.aligned_generator import AlignedGenerator
 
 
 def build_model(input_dim: int = 3) -> 'keras.Model':

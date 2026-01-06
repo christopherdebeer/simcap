@@ -16,9 +16,9 @@ from datetime import datetime
 
 import numpy as np
 
-from .schema import Gesture
-from .data_loader import GambitDataset
-from .model import (
+from ml.schema import Gesture
+from ml.data_loader import GambitDataset
+from ml.model import (
     create_cnn_model_keras, train_model_keras,
     evaluate_model, save_model_for_inference,
     HAS_TF, HAS_TORCH
@@ -26,7 +26,7 @@ from .model import (
 
 # Import clustering functions (optional dependency)
 try:
-    from .cluster import (
+    from ml.cluster import (
         load_unlabeled_windows, extract_features_from_windows,
         cluster_kmeans, cluster_dbscan, compute_cluster_metrics,
         analyze_clusters, reduce_dimensions, ClusterResult,

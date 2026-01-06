@@ -16,11 +16,11 @@ from datetime import datetime
 
 import numpy as np
 
-from .simulation import (
+from ml.simulation import (
     MagneticFieldSimulator, DEFAULT_MAGNET_CONFIG,
     generate_synthetic_session
 )
-from .simulation.hand_model import POSE_TEMPLATES
+from ml.simulation.hand_model import POSE_TEMPLATES
 
 
 def generate_synthetic_dataset(

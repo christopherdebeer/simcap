@@ -11,9 +11,8 @@ import numpy as np
 from pathlib import Path
 import sys
 
-sys.path.insert(0, str(Path(__file__).parent))
 
-from simulation.aligned_generator import AlignedGenerator
+from ml.simulation.aligned_generator import AlignedGenerator
 
 
 def main():

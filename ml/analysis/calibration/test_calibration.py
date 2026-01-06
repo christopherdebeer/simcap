@@ -12,9 +12,8 @@ import sys
 from pathlib import Path
 
 # Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent))
 
-from calibration import EnvironmentalCalibration, quaternion_to_rotation_matrix
+from ml.calibration import EnvironmentalCalibration, quaternion_to_rotation_matrix
 
 
 def test_quaternion_to_rotation_matrix():
