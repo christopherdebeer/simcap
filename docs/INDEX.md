@@ -46,7 +46,8 @@ docs/
 ### Research
 | Document | Description | Updated |
 |----------|-------------|---------|
-| [Literature Techniques Summary](./research/literature-techniques-summary.md) | **Summary of all 3 experiments (all negative)** | 2026-01-06 |
+| [V6 Physics-Constrained Architecture](./research/v6-physics-constrained-architecture.md) | **Physics-constrained inverse magnetometry (+48.8% accuracy)** | 2026-01-07 |
+| [Literature Techniques Summary](./research/literature-techniques-summary.md) | Summary of all 3 experiments (all negative) | 2026-01-06 |
 | [arXiv Literature Review](./research/arxiv-literature-review.md) | Survey of small model training techniques | 2026-01-06 |
 | [V5 Context-Aware Experiment](./research/v5-context-experiment-results.md) | Context-aware gated fusion (negative result) | 2026-01-06 |
 | [DropDim Experiment](./research/dropdim-experiment-results.md) | DropDim regularization (negative result) | 2026-01-06 |
