@@ -4,20 +4,21 @@
  * Uploads session data files to GitHub using the Contents API.
  * Files are committed directly to a specified branch (e.g., 'data').
  *
- * This module supports two modes:
- * 1. Direct upload with GitHub PAT (for local development)
+ * This module supports three modes:
+ * 1. Local filesystem (for local development - auto-detected)
  * 2. Proxied upload via API endpoint (for production - keeps PAT server-side)
+ * 3. Direct upload with GitHub PAT (legacy, requires client-side token)
+ *
+ * In local mode, uploads are redirected to /api/local-storage for direct
+ * filesystem writes, bypassing GitHub entirely.
  *
  * Usage:
  *   import { uploadToGitHub, uploadViaProxy } from './shared/github-upload.js';
  *
- *   // Direct upload (requires PAT)
- *   const result = await uploadToGitHub({
- *     token: 'ghp_xxx',
- *     branch: 'data',
- *     path: 'GAMBIT/2025-01-01T00_00_00.000Z.json',
- *     content: '{"version": "2.1", ...}',
- *     message: 'GAMBIT Data ingest'
+ *   // Smart upload (auto-detects local vs remote)
+ *   const result = await uploadSessionSmart({
+ *     filename: '2025-01-01T00_00_00.000Z.json',
+ *     content: '{"version": "2.1", ...}'
  *   });
  *
  *   // Proxied upload (uses server-side PAT)
@@ -41,6 +42,72 @@ const DEFAULT_OWNER = 'christopherdebeer';
 const DEFAULT_REPO = 'simcap';
 const STORAGE_KEY = 'simcap_upload_secret';
 const UPLOAD_API_ENDPOINT = '/api/github-upload';
+const LOCAL_STORAGE_ENDPOINT = '/api/local-storage';
+
+// ===== Local Mode Detection =====
+
+let localModeCache: boolean | null = null;
+let localModeCheckPromise: Promise<boolean> | null = null;
+
+/**
+ * Check if we're running in local development mode
+ * Returns true if running on localhost and local storage API is available
+ */
+export async function isLocalMode(forceCheck = false): Promise<boolean> {
+  // Return cached value if available and not forcing a check
+  if (localModeCache !== null && !forceCheck) {
+    return localModeCache;
+  }
+
+  // Check if we're on localhost
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    if (!['localhost', '127.0.0.1', '::1'].includes(hostname)) {
+      localModeCache = false;
+      return false;
+    }
+  }
+
+  // If already checking, wait for that check
+  if (localModeCheckPromise) {
+    return localModeCheckPromise;
+  }
+
+  // Check server endpoint
+  localModeCheckPromise = (async () => {
+    try {
+      const response = await fetch(LOCAL_STORAGE_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'status' })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        localModeCache = data.mode === 'local';
+        return localModeCache;
+      }
+
+      localModeCache = false;
+      return false;
+    } catch {
+      localModeCache = false;
+      return false;
+    } finally {
+      localModeCheckPromise = null;
+    }
+  })();
+
+  return localModeCheckPromise;
+}
+
+/**
+ * Clear the local mode cache (for testing)
+ */
+export function clearLocalModeCache(): void {
+  localModeCache = null;
+  localModeCheckPromise = null;
+}
 
 // Compression threshold: compress if content exceeds 100KB
 const COMPRESSION_THRESHOLD = 100 * 1024;
@@ -548,6 +615,65 @@ export async function uploadViaProxy(
 }
 
 /**
+ * Upload file to local filesystem via API
+ *
+ * Only works in local development mode. Uses /api/local-storage endpoint.
+ */
+export async function uploadToLocal(
+  options: ProxyUploadOptions
+): Promise<GitHubUploadResult> {
+  const { path, content, onProgress } = options;
+
+  onProgress?.({ stage: 'preparing', message: 'Preparing local write...' });
+
+  const contentSize = new TextEncoder().encode(content).length;
+  const filename = path.split('/').pop() || path;
+
+  onProgress?.({ stage: 'uploading', message: 'Writing to local filesystem...' });
+
+  const response = await fetch(LOCAL_STORAGE_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      action: 'write',
+      filename,
+      content,
+    }),
+  });
+
+  if (!response.ok) {
+    let errorMessage: string;
+    try {
+      const error = await response.json();
+      errorMessage = error.error || `HTTP ${response.status}`;
+    } catch {
+      errorMessage = `HTTP ${response.status}: Local write failed`;
+    }
+    onProgress?.({ stage: 'error', message: `Local write failed: ${errorMessage}` });
+    throw new Error(errorMessage);
+  }
+
+  const result = await response.json();
+
+  onProgress?.({
+    stage: 'complete',
+    message: 'Local write complete!',
+    url: result.path,
+  });
+
+  return {
+    success: true,
+    url: `file://${result.path}`,
+    pathname: path,
+    size: contentSize,
+    filename,
+    rawUrl: `file://${result.path}`,
+  };
+}
+
+/**
  * Upload session data with retry logic
  */
 export async function uploadSessionWithRetry(options: {
@@ -848,14 +974,19 @@ export async function uploadSessionChunked(
 }
 
 /**
- * Smart upload that automatically chunks large sessions
- * First tries direct upload, falls back to chunked on 413 error
+ * Smart upload that automatically chooses the best upload method
+ *
+ * Priority:
+ * 1. Local mode: Write directly to filesystem (no auth required)
+ * 2. Proxy mode: Upload via API proxy (server-side auth)
+ * 3. Chunked mode: Split large files and upload in parts
  */
 export async function uploadSessionSmart(options: {
   branch?: string;
   filename: string;
   content: string;
   maxRetries?: number;
+  forceRemote?: boolean;
   onProgress?: (progress: UploadProgress) => void;
 }): Promise<GitHubUploadResult> {
   const {
@@ -863,10 +994,39 @@ export async function uploadSessionSmart(options: {
     filename,
     content,
     maxRetries = 3,
+    forceRemote = false,
     onProgress,
   } = options;
 
   const contentSize = new TextEncoder().encode(content).length;
+
+  // Check for local mode first (unless explicitly forced to remote)
+  if (!forceRemote) {
+    const isLocal = await isLocalMode();
+    if (isLocal) {
+      onProgress?.({
+        stage: 'preparing',
+        message: `Local mode detected, writing to filesystem (${(contentSize / 1024).toFixed(1)}KB)...`,
+      });
+
+      try {
+        return await uploadToLocal({
+          branch,
+          path: `GAMBIT/${filename}`,
+          content,
+          message: `GAMBIT session: ${filename}`,
+          onProgress,
+        });
+      } catch (error) {
+        // Log but don't fail - fall back to remote upload
+        console.warn('[uploadSessionSmart] Local write failed, falling back to remote:', error);
+        onProgress?.({
+          stage: 'retry',
+          message: 'Local write failed, trying remote upload...',
+        });
+      }
+    }
+  }
 
   // If content is small enough, try direct upload first
   if (contentSize < DEFAULT_CHUNK_SIZE) {
@@ -970,14 +1130,21 @@ export async function validateUploadSecret(): Promise<boolean> {
 // ===== Default Export =====
 
 export default {
+  // Local mode
+  isLocalMode,
+  clearLocalModeCache,
+  uploadToLocal,
+  // Secret management
   getUploadSecret,
   setUploadSecret,
   hasUploadSecret,
+  // Upload functions
   uploadToGitHub,
   uploadViaProxy,
   uploadSessionWithRetry,
   uploadSessionChunked,
   uploadSessionSmart,
+  // User interaction
   promptForUploadSecret,
   validateUploadSecret,
   getRawUrl,

@@ -101,6 +101,31 @@
             gap: 10px;
             margin-bottom: 8px;
             flex-wrap: wrap;
+            align-items: center;
+        }
+
+        /* Badge styles for status indicators */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
+        }
+        .badge-info {
+            background: var(--accent);
+            color: white;
+        }
+        .badge-success {
+            background: var(--success);
+            color: white;
+        }
+        .badge-warning {
+            background: var(--warning);
+            color: #333;
         }
         .row > * {
             flex: 1;
@@ -703,7 +728,9 @@
             <div class="row">
                 <button id="connectBtn" class="btn-primary">Connect Device</button>
                 <div id="statusIndicator" class="status disconnected">Disconnected</div>
+                <span id="streamingMode" class="badge badge-info" style="display: none; margin-left: 8px;" title="Local development mode">📁 LOCAL</span>
             </div>
+            <div id="streamingStatus" style="font-size: 11px; color: var(--fg-muted); margin-top: 4px; display: none;"></div>
         </section>
 
         <!-- Live Calibration Confidence -->

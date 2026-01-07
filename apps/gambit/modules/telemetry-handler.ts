@@ -12,6 +12,7 @@
 import { state } from './state.js';
 import { log } from './logger.js';
 import { TelemetryProcessor } from '../shared/telemetry-processor.js';
+import { addStreamingSample, isStreamingEnabled } from './recording-controls.js';
 import type {
   EulerAngles,
   Quaternion,
@@ -240,6 +241,11 @@ export function onTelemetry(telemetry: RawTelemetry): void {
     // Store decorated telemetry (includes raw + processed fields) - skip if paused
     if (shouldStore) {
         state.sessionData.push(decoratedTelemetry as any);
+
+        // Also send to streaming writer if enabled (for continuous local writes)
+        if (isStreamingEnabled()) {
+            addStreamingSample(decoratedTelemetry as any);
+        }
     }
 
     // Collect samples for calibration buffers during wizard
