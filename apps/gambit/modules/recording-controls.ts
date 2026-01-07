@@ -321,7 +321,7 @@ export function initRecordingUI(buttons: RecordingButtons | null): void {
     if (!buttons) return;
 
     if (buttons.start) {
-        buttons.start.addEventListener('click', startRecording);
+        buttons.start.addEventListener('click', () => startRecording());
     }
 
     if (buttons.pause) {
