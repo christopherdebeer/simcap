@@ -18,7 +18,18 @@ import {
 } from './modules/calibration-ui.js';
 import { onTelemetry, setDependencies as setTelemetryDeps, resetIMU, getProcessor } from './modules/telemetry-handler.js';
 import { setCallbacks as setConnectionCallbacks, initConnectionUI } from './modules/connection-manager.js';
-import { setCallbacks as setRecordingCallbacks, initRecordingUI, startRecording, pauseRecording, resumeRecording } from './modules/recording-controls.js';
+import {
+    setCallbacks as setRecordingCallbacks,
+    initRecordingUI,
+    startRecording,
+    pauseRecording,
+    resumeRecording,
+    initStreaming,
+    isStreamingEnabled,
+    getStreamingState,
+    type StreamingConfig
+} from './modules/recording-controls.js';
+import type { StreamingProgress } from './shared/streaming-writer.js';
 import {
     initWizard,
     setDependencies as setWizardDeps,
@@ -566,6 +577,42 @@ function stopCalibrationUIUpdates(): void {
 }
 
 /**
+ * Handle streaming progress updates
+ */
+function onStreamingProgress(progress: StreamingProgress): void {
+    // Update streaming status indicator
+    const streamingStatus = $cached('streamingStatus');
+    if (streamingStatus) {
+        streamingStatus.style.display = 'block';
+
+        if (progress.stage === 'idle' && progress.isLocal && progress.chunksWritten > 0) {
+            streamingStatus.textContent = `✓ Local: ${progress.chunksWritten} chunks, ${progress.samplesWritten} samples`;
+            streamingStatus.style.color = 'var(--success)';
+        } else if (progress.stage === 'flushing') {
+            streamingStatus.textContent = `⏳ Writing chunk ${progress.chunksWritten + 1}...`;
+            streamingStatus.style.color = 'var(--warning)';
+        } else if (progress.stage === 'finalizing') {
+            streamingStatus.textContent = `📦 Finalizing session...`;
+            streamingStatus.style.color = 'var(--accent)';
+        } else if (progress.stage === 'error') {
+            streamingStatus.textContent = `❌ ${progress.message}`;
+            streamingStatus.style.color = 'var(--danger)';
+        } else if (progress.stage === 'idle' && progress.isLocal) {
+            streamingStatus.textContent = `📁 Ready for local streaming`;
+            streamingStatus.style.color = 'var(--fg-muted)';
+        }
+    }
+
+    // Log significant events
+    if (progress.stage === 'flushing' || progress.stage === 'finalizing') {
+        console.log(`[Streaming] ${progress.message}`);
+    }
+
+    // Update UI to refresh streaming state
+    if (updateUI) updateUI();
+}
+
+/**
  * Initialize application
  */
 async function init(): Promise<void> {
@@ -595,7 +642,7 @@ async function init(): Promise<void> {
     });
 
     setConnectionCallbacks(updateUI, updateCalibrationStatus, startCalibrationUIUpdates, stopCalibrationUIUpdates);
-    setRecordingCallbacks(updateUI, closeCurrentLabel);
+    setRecordingCallbacks(updateUI, closeCurrentLabel, onStreamingProgress);
 
     initConnectionUI($('connectBtn') as HTMLButtonElement);
     initRecordingUI({
@@ -616,6 +663,16 @@ async function init(): Promise<void> {
     initMagneticTrajectory();
     initCollapsibleSections();
     loadCustomLabels();
+
+    // Initialize streaming mode (auto-detects local vs remote)
+    await initStreaming({
+        samplesPerChunk: 500,
+        maxFlushInterval: 30000,
+        metadata: {
+            device: 'GAMBIT',
+            firmware_version: state.firmwareVersion || 'unknown'
+        }
+    });
 
     // Load GitHub token
     try {
@@ -767,6 +824,26 @@ function updateUI(): void {
             }
         }
         statusIndicator.textContent = statusText;
+    }
+
+    // Update streaming mode indicator
+    const streamingMode = $cached('streamingMode');
+    if (streamingMode) {
+        if (isStreamingEnabled()) {
+            const streamState = getStreamingState();
+            streamingMode.style.display = 'inline-flex';
+            if (streamState.isActive) {
+                streamingMode.textContent = `📝 LOCAL STREAM`;
+                streamingMode.className = 'badge badge-success';
+                streamingMode.title = `Writing continuously to local filesystem (${streamState.chunksWritten} chunks)`;
+            } else {
+                streamingMode.textContent = `📁 LOCAL MODE`;
+                streamingMode.className = 'badge badge-info';
+                streamingMode.title = 'Local development mode: files written to data/GAMBIT/';
+            }
+        } else {
+            streamingMode.style.display = 'none';
+        }
     }
 
     if (connectBtn) connectBtn.textContent = state.connected ? 'Disconnect' : 'Connect Device';
