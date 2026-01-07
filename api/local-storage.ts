@@ -12,17 +12,18 @@
  *
  * Request Body (POST):
  *   {
- *     action: 'write' | 'append' | 'finalize',
+ *     action: 'write' | 'append' | 'finalize' | 'status' | 'list',
  *     filename: string,       // e.g., '2025-01-07T12_00_00.000Z.json'
  *     content: string,        // JSON content to write
- *     chunkIndex?: number,    // For chunked writes
- *     isManifest?: boolean,   // Whether this is a manifest file
  *   }
  */
 
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-import * as fs from 'fs';
-import * as path from 'path';
+// CORS headers for all responses
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
 
 // Only allow local storage on localhost
 const ALLOWED_HOSTS = ['localhost', '127.0.0.1', '::1'];
@@ -34,8 +35,6 @@ interface LocalStorageRequest {
   action: 'write' | 'append' | 'finalize' | 'status' | 'list';
   filename?: string;
   content?: string;
-  chunkIndex?: number;
-  isManifest?: boolean;
 }
 
 interface LocalStorageResponse {
@@ -50,42 +49,57 @@ interface LocalStorageResponse {
 /**
  * Check if we're running in local development mode
  */
-function isLocalMode(req: VercelRequest): boolean {
-  const host = req.headers.host || '';
-  const hostname = host.split(':')[0];
+function isLocalMode(request: Request): boolean {
+  const url = new URL(request.url);
+  const hostname = url.hostname;
   return ALLOWED_HOSTS.includes(hostname);
 }
 
 /**
- * Get the data directory path
+ * Get the data directory path and fs module (dynamic import for SSR)
  */
-function getDataDir(): string {
-  // Try worktree path first (project root)
-  const worktreePath = path.resolve(process.cwd(), DATA_DIR);
-  if (fs.existsSync(worktreePath)) {
-    return worktreePath;
-  }
+async function getFileSystem(): Promise<{
+  fs: typeof import('fs');
+  path: typeof import('path');
+  dataDir: string;
+} | null> {
+  try {
+    // Dynamic import for Node.js modules (works in Vite SSR and Vercel Node.js runtime)
+    const fs = await import('fs');
+    const path = await import('path');
 
-  // Fall back to .worktrees path
-  const directPath = path.resolve(process.cwd(), '.worktrees/data/GAMBIT');
-  if (fs.existsSync(directPath)) {
-    return directPath;
-  }
+    // Try worktree path first (project root)
+    const worktreePath = path.resolve(process.cwd(), DATA_DIR);
+    if (fs.existsSync(worktreePath)) {
+      return { fs, path, dataDir: worktreePath };
+    }
 
-  // Create the directory if it doesn't exist
-  fs.mkdirSync(worktreePath, { recursive: true });
-  return worktreePath;
+    // Fall back to .worktrees path
+    const directPath = path.resolve(process.cwd(), '.worktrees/data/GAMBIT');
+    if (fs.existsSync(directPath)) {
+      return { fs, path, dataDir: directPath };
+    }
+
+    // Create the directory if it doesn't exist
+    fs.mkdirSync(worktreePath, { recursive: true });
+    return { fs, path, dataDir: worktreePath };
+  } catch {
+    // fs module not available (Edge runtime)
+    return null;
+  }
 }
 
 /**
  * List files in the data directory
  */
-function listFiles(): string[] {
+async function listFiles(): Promise<string[]> {
+  const fsInfo = await getFileSystem();
+  if (!fsInfo) return [];
+
   try {
-    const dataDir = getDataDir();
-    const files = fs.readdirSync(dataDir);
+    const files = fsInfo.fs.readdirSync(fsInfo.dataDir);
     return files
-      .filter(f => f.endsWith('.json'))
+      .filter((f: string) => f.endsWith('.json'))
       .sort()
       .reverse(); // Most recent first
   } catch {
@@ -96,9 +110,17 @@ function listFiles(): string[] {
 /**
  * Write content to a file
  */
-function writeFile(filename: string, content: string): { success: boolean; path?: string; bytesWritten?: number; error?: string } {
+async function writeFile(
+  filename: string,
+  content: string
+): Promise<{ success: boolean; path?: string; bytesWritten?: number; error?: string }> {
+  const fsInfo = await getFileSystem();
+  if (!fsInfo) {
+    return { success: false, error: 'Filesystem not available (Edge runtime)' };
+  }
+
   try {
-    const dataDir = getDataDir();
+    const { fs, path, dataDir } = fsInfo;
     const filePath = path.join(dataDir, filename);
 
     // Security: Ensure filename doesn't escape the data directory
@@ -125,9 +147,17 @@ function writeFile(filename: string, content: string): { success: boolean; path?
 /**
  * Append content to a file
  */
-function appendFile(filename: string, content: string): { success: boolean; path?: string; bytesWritten?: number; error?: string } {
+async function appendFile(
+  filename: string,
+  content: string
+): Promise<{ success: boolean; path?: string; bytesWritten?: number; error?: string }> {
+  const fsInfo = await getFileSystem();
+  if (!fsInfo) {
+    return { success: false, error: 'Filesystem not available (Edge runtime)' };
+  }
+
   try {
-    const dataDir = getDataDir();
+    const { fs, path, dataDir } = fsInfo;
     const filePath = path.join(dataDir, filename);
 
     // Security check
@@ -151,136 +181,146 @@ function appendFile(filename: string, content: string): { success: boolean; path
   }
 }
 
-export default async function handler(
-  req: VercelRequest,
-  res: VercelResponse
-): Promise<void> {
-  // CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+function jsonResponse(data: LocalStorageResponse, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      ...CORS_HEADERS,
+    },
+  });
+}
 
+export default async function handler(request: Request): Promise<Response> {
   // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    res.status(204).end();
-    return;
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: CORS_HEADERS,
+    });
   }
 
   // Check if we're in local mode
-  if (!isLocalMode(req)) {
-    res.status(403).json({
+  if (!isLocalMode(request)) {
+    return jsonResponse({
       success: false,
       mode: 'production',
       error: 'Local storage is only available in development mode'
-    } as LocalStorageResponse);
-    return;
+    }, 403);
+  }
+
+  // Check if filesystem is available
+  const fsInfo = await getFileSystem();
+  if (!fsInfo) {
+    return jsonResponse({
+      success: false,
+      error: 'Filesystem not available in this runtime'
+    }, 500);
   }
 
   // GET: Return status and list files
-  if (req.method === 'GET') {
-    const files = listFiles();
-    res.status(200).json({
+  if (request.method === 'GET') {
+    const files = await listFiles();
+    return jsonResponse({
       success: true,
       mode: 'local',
       files
-    } as LocalStorageResponse);
-    return;
+    });
   }
 
   // POST: Write data
-  if (req.method === 'POST') {
-    const body = req.body as LocalStorageRequest;
+  if (request.method === 'POST') {
+    let body: LocalStorageRequest;
+    try {
+      body = await request.json();
+    } catch {
+      return jsonResponse({
+        success: false,
+        error: 'Invalid JSON body'
+      }, 400);
+    }
 
     if (!body.action) {
-      res.status(400).json({
+      return jsonResponse({
         success: false,
         error: 'Missing action'
-      } as LocalStorageResponse);
-      return;
+      }, 400);
     }
 
     // Status check action
     if (body.action === 'status') {
-      res.status(200).json({
+      return jsonResponse({
         success: true,
         mode: 'local'
-      } as LocalStorageResponse);
-      return;
+      });
     }
 
     // List files action
     if (body.action === 'list') {
-      const files = listFiles();
-      res.status(200).json({
+      const files = await listFiles();
+      return jsonResponse({
         success: true,
         mode: 'local',
         files
-      } as LocalStorageResponse);
-      return;
+      });
     }
 
     // Write/append actions require filename and content
     if (!body.filename) {
-      res.status(400).json({
+      return jsonResponse({
         success: false,
         error: 'Missing filename'
-      } as LocalStorageResponse);
-      return;
+      }, 400);
     }
 
     if (!body.content && body.action !== 'finalize') {
-      res.status(400).json({
+      return jsonResponse({
         success: false,
         error: 'Missing content'
-      } as LocalStorageResponse);
-      return;
+      }, 400);
     }
 
     let result: { success: boolean; path?: string; bytesWritten?: number; error?: string };
 
     switch (body.action) {
       case 'write':
-        result = writeFile(body.filename, body.content!);
+        result = await writeFile(body.filename, body.content!);
         break;
 
       case 'append':
-        result = appendFile(body.filename, body.content!);
+        result = await appendFile(body.filename, body.content!);
         break;
 
       case 'finalize':
         // Finalize is just a marker that the session is complete
-        // For now, it doesn't do anything special but could trigger
-        // post-processing in the future
         result = { success: true };
         break;
 
       default:
-        res.status(400).json({
+        return jsonResponse({
           success: false,
           error: `Unknown action: ${body.action}`
-        } as LocalStorageResponse);
-        return;
+        }, 400);
     }
 
     if (result.success) {
-      res.status(200).json({
+      return jsonResponse({
         success: true,
         mode: 'local',
         path: result.path,
         bytesWritten: result.bytesWritten
-      } as LocalStorageResponse);
+      });
     } else {
-      res.status(500).json({
+      return jsonResponse({
         success: false,
         error: result.error
-      } as LocalStorageResponse);
+      }, 500);
     }
-    return;
   }
 
   // Method not allowed
-  res.status(405).json({
+  return jsonResponse({
     success: false,
     error: 'Method not allowed'
-  } as LocalStorageResponse);
+  }, 405);
 }
