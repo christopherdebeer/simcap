@@ -57,6 +57,8 @@ export interface FingerTrackingOptions {
   stride?: number;
   confidenceThreshold?: number;
   smoothingAlpha?: number;
+  useDerivatives?: boolean;  // V6+: compute velocity/acceleration from mag
+  inputFeatures?: number;    // Number of input features per timestep
   onPrediction?: ((result: FingerPrediction) => void) | null;
   onReady?: (() => void) | null;
   onError?: ((error: Error) => void) | null;
@@ -403,6 +405,8 @@ export class FingerTrackingInference {
   private inferenceCount: number = 0;
   private smoothingAlpha: number;
   private lastPrediction: FingerPrediction | null = null;
+  private useDerivatives: boolean;
+  private inputFeatures: number;
 
   constructor(options: FingerTrackingOptions = {}) {
     this.modelPath = options.modelPath || '/models/finger_v1/model.json';
@@ -410,6 +414,8 @@ export class FingerTrackingInference {
     this.stride = options.stride || 10;
     this.confidenceThreshold = options.confidenceThreshold || 0.5;
     this.smoothingAlpha = options.smoothingAlpha || 0.3;
+    this.useDerivatives = options.useDerivatives || false;
+    this.inputFeatures = options.inputFeatures || 9;
 
     this.stats = {
       mean: [-1106.31, -3629.05, -2285.71, 2740.34, -14231.48, -19574.75, 509.62, 909.94, -558.86],
@@ -428,7 +434,9 @@ export class FingerTrackingInference {
       windowSize: this.windowSize,
       stride: this.stride,
       fingerNames: this.fingerNames,
-      stateNames: this.stateNames
+      stateNames: this.stateNames,
+      useDerivatives: this.useDerivatives,
+      inputFeatures: this.inputFeatures
     });
   }
 
@@ -453,7 +461,7 @@ export class FingerTrackingInference {
       }
 
       console.log('[FingerTracking] Warming up model...');
-      const dummyInput = tf.zeros([1, this.windowSize, 9]);
+      const dummyInput = tf.zeros([1, this.windowSize, this.inputFeatures]);
       const warmup = this.model.predict(dummyInput);
 
       if (Array.isArray(warmup)) {
@@ -512,6 +520,47 @@ export class FingerTrackingInference {
     });
   }
 
+  /**
+   * Compute temporal derivatives from raw magnetometer buffer.
+   * Input: window of [mx, my, mz, ...] samples
+   * Output: window of [mx, my, mz, dmx/dt, dmy/dt, dmz/dt, d²mx/dt², d²my/dt², d²mz/dt²]
+   */
+  private computeDerivatives(window: number[][]): number[][] {
+    const result: number[][] = [];
+
+    for (let t = 0; t < window.length; t++) {
+      // Get raw mag values (first 3 features: mx, my, mz)
+      const mag = window[t].slice(0, 3);
+
+      // Compute velocity (first-order derivative)
+      let velocity: number[];
+      if (t === 0) {
+        // Replicate first sample for padding
+        velocity = [0, 0, 0];
+      } else {
+        const prevMag = window[t - 1].slice(0, 3);
+        velocity = mag.map((m, i) => m - prevMag[i]);
+      }
+
+      // Compute acceleration (second-order derivative)
+      let acceleration: number[];
+      if (t <= 1) {
+        // Replicate for padding
+        acceleration = [0, 0, 0];
+      } else {
+        const prevMag = window[t - 1].slice(0, 3);
+        const prevPrevMag = window[t - 2].slice(0, 3);
+        const prevVelocity = prevMag.map((m, i) => m - prevPrevMag[i]);
+        acceleration = velocity.map((v, i) => v - prevVelocity[i]);
+      }
+
+      // Concatenate: [mx, my, mz, dmx/dt, dmy/dt, dmz/dt, d²mx/dt², d²my/dt², d²mz/dt²]
+      result.push([...mag, ...velocity, ...acceleration]);
+    }
+
+    return result;
+  }
+
   async runInference(): Promise<FingerPrediction | null> {
     if (!this.isReady || this.buffer.length < this.windowSize || !this.model) {
       return null;
@@ -520,7 +569,16 @@ export class FingerTrackingInference {
     const startTime = performance.now();
 
     try {
-      const normalizedWindow = this.normalize(this.buffer);
+      // Prepare input: optionally compute derivatives for V6+ models
+      let processedWindow: number[][];
+      if (this.useDerivatives) {
+        // Compute velocity and acceleration from raw mag data
+        processedWindow = this.computeDerivatives(this.buffer);
+      } else {
+        processedWindow = this.buffer;
+      }
+
+      const normalizedWindow = this.normalize(processedWindow);
       const inputTensor = tf.tensor3d([normalizedWindow]);
       const outputs = this.model.predict(inputTensor);
 
@@ -1045,7 +1103,20 @@ export class MagneticFingerInference {
 
 // ===== Finger Model Registry =====
 
-export const FINGER_MODELS: Record<string, FingerModelConfig & { inputFeatures?: number; numStates?: number }> = {
+export const FINGER_MODELS: Record<string, FingerModelConfig & { inputFeatures?: number; numStates?: number; windowSize?: number; useDerivatives?: boolean }> = {
+  'v6': {
+    path: '/models/finger_v6/model.json',
+    stats: {
+      mean: [-89.93, -77.50, 113.95, -0.78, -0.34, 0.28, -0.37, -0.21, 0.19],
+      std: [368.69, 204.38, 314.84, 98.87, 56.64, 79.98, 152.62, 86.21, 123.67]
+    },
+    description: 'V6: Physics-constrained inverse magnetometry, 57% cross-orientation accuracy',
+    date: '2026-01-07',
+    inputFeatures: 9,  // mag + velocity + acceleration
+    numStates: 2,
+    windowSize: 8,
+    useDerivatives: true  // Computes velocity/acceleration from mag
+  },
   'v1': {
     path: '/models/finger_v1/model.json',
     stats: {
@@ -1087,7 +1158,10 @@ export function createFingerTrackingInference(version: string = 'v1', options: F
 
   const inference = new FingerTrackingInference({
     modelPath: modelConfig.path,
-    ...options
+    windowSize: modelConfig.windowSize,
+    inputFeatures: modelConfig.inputFeatures,
+    useDerivatives: modelConfig.useDerivatives,
+    ...options  // Allow overrides
   });
 
   inference.setStats(modelConfig.stats.mean, modelConfig.stats.std);
@@ -1159,6 +1233,7 @@ export interface UnifiedModelConfig {
   inputFeatures?: number;  // For magnetic finger models
   numStates?: number;  // 2=binary, 3=extended/partial/flexed
   windowSize?: number;  // For windowed models
+  useDerivatives?: boolean;  // V6+: compute velocity/acceleration from raw mag
 }
 
 /**
@@ -1167,6 +1242,22 @@ export interface UnifiedModelConfig {
  */
 export const ALL_MODELS: UnifiedModelConfig[] = [
   // === Finger Models (Newest first) ===
+  {
+    id: 'finger_v6',
+    name: 'Finger (V6 - Physics-Constrained)',
+    type: 'finger_window',
+    path: '/models/finger_v6/model.json',
+    stats: {
+      mean: [-89.93, -77.50, 113.95, -0.78, -0.34, 0.28, -0.37, -0.21, 0.19],
+      std: [368.69, 204.38, 314.84, 98.87, 56.64, 79.98, 152.62, 86.21, 123.67]
+    },
+    description: 'V6: Physics-constrained inverse magnetometry, 57% cross-orientation accuracy',
+    date: '2026-01-07',
+    active: true,
+    windowSize: 8,
+    numStates: 2,
+    useDerivatives: true  // Computes velocity/acceleration from mag
+  },
   {
     id: 'finger_aligned_v3',
     name: 'Finger (Aligned v3 - Optimized)',
@@ -1178,7 +1269,7 @@ export const ALL_MODELS: UnifiedModelConfig[] = [
     },
     description: 'V3: mag_only, w=10, 97% cross-orientation accuracy',
     date: '2026-01-06',
-    active: true,
+    active: false,
     windowSize: 10,
     numStates: 2
   },
@@ -1253,6 +1344,48 @@ export function getModelById(id: string): UnifiedModelConfig | undefined {
   return ALL_MODELS.find(m => m.id === id);
 }
 
+/**
+ * Create appropriate inference instance from UnifiedModelConfig
+ */
+export function createInferenceFromConfig(
+  config: UnifiedModelConfig
+): GestureInference | FingerTrackingInference | MagneticFingerInference {
+  switch (config.type) {
+    case 'gesture': {
+      const inference = new GestureInference({
+        modelPath: config.path,
+        windowSize: config.windowSize
+      });
+      inference.setStats(config.stats.mean, config.stats.std);
+      if (config.labels) {
+        inference.setLabels(config.labels);
+      }
+      return inference;
+    }
+    case 'finger_window': {
+      const inference = new FingerTrackingInference({
+        modelPath: config.path,
+        windowSize: config.windowSize,
+        inputFeatures: config.useDerivatives ? 9 : (config.stats.mean.length || 9),
+        useDerivatives: config.useDerivatives || false
+      });
+      inference.setStats(config.stats.mean, config.stats.std);
+      return inference;
+    }
+    case 'finger_magnetic': {
+      const inference = new MagneticFingerInference({
+        modelPath: config.path,
+        inputFeatures: config.inputFeatures || 3,
+        numStates: config.numStates || 2
+      });
+      inference.setStats(config.stats.mean, config.stats.std);
+      return inference;
+    }
+    default:
+      throw new Error(`Unknown model type: ${(config as UnifiedModelConfig).type}`);
+  }
+}
+
 // Export as globals for backward compatibility
 declare global {
   interface Window {
@@ -1267,6 +1400,7 @@ declare global {
     createGestureInference: typeof createGestureInference;
     createFingerTrackingInference: typeof createFingerTrackingInference;
     createMagneticFingerInference: typeof createMagneticFingerInference;
+    createInferenceFromConfig: typeof createInferenceFromConfig;
   }
 }
 
@@ -1282,4 +1416,5 @@ if (typeof window !== 'undefined') {
   window.createGestureInference = createGestureInference;
   window.createFingerTrackingInference = createFingerTrackingInference;
   window.createMagneticFingerInference = createMagneticFingerInference;
+  window.createInferenceFromConfig = createInferenceFromConfig;
 }
