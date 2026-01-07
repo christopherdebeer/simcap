@@ -1,0 +1,299 @@
+[
+  {
+    "name": "LSTM_derivatives_w8",
+    "window_size": 8,
+    "model_type": "lstm",
+    "use_derivatives": true,
+    "cross_orientation": true,
+    "train_samples": 108,
+    "test_samples": 119,
+    "train_metrics": {
+      "exact_match_accuracy": 0.9907407407407407,
+      "mean_finger_accuracy": 0.9981481481481481,
+      "per_finger_accuracy": {
+        "thumb": 0.9907407407407407,
+        "index": 1.0,
+        "middle": 1.0,
+        "ring": 1.0,
+        "pinky": 1.0
+      },
+      "mean_hamming_distance": 0.009259259259259259
+    },
+    "test_metrics": {
+      "exact_match_accuracy": 0.5294117647058824,
+      "mean_finger_accuracy": 0.8033613445378152,
+      "per_finger_accuracy": {
+        "thumb": 0.5966386554621849,
+        "index": 0.8319327731092437,
+        "middle": 0.8487394957983193,
+        "ring": 0.8823529411764706,
+        "pinky": 0.8571428571428571
+      },
+      "mean_hamming_distance": 0.9831932773109243
+    }
+  },
+  {
+    "name": "Transformer_derivatives_w16",
+    "window_size": 16,
+    "model_type": "transformer",
+    "use_derivatives": true,
+    "cross_orientation": true,
+    "train_samples": 97,
+    "test_samples": 104,
+    "train_metrics": {
+      "exact_match_accuracy": 1.0,
+      "mean_finger_accuracy": 1.0,
+      "per_finger_accuracy": {
+        "thumb": 1.0,
+        "index": 1.0,
+        "middle": 1.0,
+        "ring": 1.0,
+        "pinky": 1.0
+      },
+      "mean_hamming_distance": 0.0
+    },
+    "test_metrics": {
+      "exact_match_accuracy": 0.4230769230769231,
+      "mean_finger_accuracy": 0.6673076923076924,
+      "per_finger_accuracy": {
+        "thumb": 0.4326923076923077,
+        "index": 0.8076923076923077,
+        "middle": 0.6442307692307693,
+        "ring": 0.7307692307692307,
+        "pinky": 0.7211538461538461
+      },
+      "mean_hamming_distance": 1.6634615384615385
+    }
+  },
+  {
+    "name": "LSTM_w16",
+    "window_size": 16,
+    "model_type": "lstm",
+    "use_derivatives": false,
+    "cross_orientation": true,
+    "train_samples": 97,
+    "test_samples": 104,
+    "train_metrics": {
+      "exact_match_accuracy": 0.979381443298969,
+      "mean_finger_accuracy": 0.9917525773195877,
+      "per_finger_accuracy": {
+        "thumb": 1.0,
+        "index": 1.0,
+        "middle": 0.979381443298969,
+        "ring": 0.979381443298969,
+        "pinky": 1.0
+      },
+      "mean_hamming_distance": 0.041237113402061855
+    },
+    "test_metrics": {
+      "exact_match_accuracy": 0.4230769230769231,
+      "mean_finger_accuracy": 0.6961538461538461,
+      "per_finger_accuracy": {
+        "thumb": 0.4230769230769231,
+        "index": 0.8076923076923077,
+        "middle": 0.7884615384615384,
+        "ring": 0.8846153846153846,
+        "pinky": 0.5769230769230769
+      },
+      "mean_hamming_distance": 1.5192307692307692
+    }
+  },
+  {
+    "name": "LSTM_derivatives_w16",
+    "window_size": 16,
+    "model_type": "lstm",
+    "use_derivatives": true,
+    "cross_orientation": true,
+    "train_samples": 97,
+    "test_samples": 104,
+    "train_metrics": {
+      "exact_match_accuracy": 0.9896907216494846,
+      "mean_finger_accuracy": 0.9938144329896907,
+      "per_finger_accuracy": {
+        "thumb": 1.0,
+        "index": 1.0,
+        "middle": 0.9896907216494846,
+        "ring": 0.9896907216494846,
+        "pinky": 0.9896907216494846
+      },
+      "mean_hamming_distance": 0.030927835051546393
+    },
+    "test_metrics": {
+      "exact_match_accuracy": 0.4230769230769231,
+      "mean_finger_accuracy": 0.7576923076923078,
+      "per_finger_accuracy": {
+        "thumb": 0.4230769230769231,
+        "index": 0.8076923076923077,
+        "middle": 0.7980769230769231,
+        "ring": 0.8846153846153846,
+        "pinky": 0.875
+      },
+      "mean_hamming_distance": 1.2115384615384615
+    }
+  },
+  {
+    "name": "LSTM_derivatives_w32",
+    "window_size": 32,
+    "model_type": "lstm",
+    "use_derivatives": true,
+    "cross_orientation": true,
+    "train_samples": 73,
+    "test_samples": 70,
+    "train_metrics": {
+      "exact_match_accuracy": 1.0,
+      "mean_finger_accuracy": 1.0,
+      "per_finger_accuracy": {
+        "thumb": 1.0,
+        "index": 1.0,
+        "middle": 1.0,
+        "ring": 1.0,
+        "pinky": 1.0
+      },
+      "mean_hamming_distance": 0.0
+    },
+    "test_metrics": {
+      "exact_match_accuracy": 0.35714285714285715,
+      "mean_finger_accuracy": 0.6971428571428572,
+      "per_finger_accuracy": {
+        "thumb": 0.35714285714285715,
+        "index": 0.7571428571428571,
+        "middle": 0.7571428571428571,
+        "ring": 0.8714285714285714,
+        "pinky": 0.7428571428571429
+      },
+      "mean_hamming_distance": 1.5142857142857142
+    }
+  },
+  {
+    "name": "Baseline_CNN_w16",
+    "window_size": 16,
+    "model_type": "cnn",
+    "use_derivatives": false,
+    "cross_orientation": true,
+    "train_samples": 97,
+    "test_samples": 104,
+    "train_metrics": {
+      "exact_match_accuracy": 0.8144329896907216,
+      "mean_finger_accuracy": 0.9525773195876288,
+      "per_finger_accuracy": {
+        "thumb": 1.0,
+        "index": 0.9896907216494846,
+        "middle": 0.845360824742268,
+        "ring": 0.9484536082474226,
+        "pinky": 0.979381443298969
+      },
+      "mean_hamming_distance": 0.23711340206185566
+    },
+    "test_metrics": {
+      "exact_match_accuracy": 0.3557692307692308,
+      "mean_finger_accuracy": 0.751923076923077,
+      "per_finger_accuracy": {
+        "thumb": 0.4230769230769231,
+        "index": 0.7788461538461539,
+        "middle": 0.7692307692307693,
+        "ring": 0.9326923076923077,
+        "pinky": 0.8557692307692307
+      },
+      "mean_hamming_distance": 1.2403846153846154
+    }
+  },
+  {
+    "name": "LSTM_derivatives_w24",
+    "window_size": 24,
+    "model_type": "lstm",
+    "use_derivatives": true,
+    "cross_orientation": true,
+    "train_samples": 82,
+    "test_samples": 88,
+    "train_metrics": {
+      "exact_match_accuracy": 1.0,
+      "mean_finger_accuracy": 1.0,
+      "per_finger_accuracy": {
+        "thumb": 1.0,
+        "index": 1.0,
+        "middle": 1.0,
+        "ring": 1.0,
+        "pinky": 1.0
+      },
+      "mean_hamming_distance": 0.0
+    },
+    "test_metrics": {
+      "exact_match_accuracy": 0.3522727272727273,
+      "mean_finger_accuracy": 0.6,
+      "per_finger_accuracy": {
+        "thumb": 0.3522727272727273,
+        "index": 0.7613636363636364,
+        "middle": 0.8068181818181818,
+        "ring": 0.6136363636363636,
+        "pinky": 0.4659090909090909
+      },
+      "mean_hamming_distance": 2.0
+    }
+  },
+  {
+    "name": "Transformer_w16",
+    "window_size": 16,
+    "model_type": "transformer",
+    "use_derivatives": false,
+    "cross_orientation": true,
+    "train_samples": 97,
+    "test_samples": 104,
+    "train_metrics": {
+      "exact_match_accuracy": 0.9690721649484536,
+      "mean_finger_accuracy": 0.9876288659793815,
+      "per_finger_accuracy": {
+        "thumb": 1.0,
+        "index": 1.0,
+        "middle": 1.0,
+        "ring": 0.9690721649484536,
+        "pinky": 0.9690721649484536
+      },
+      "mean_hamming_distance": 0.061855670103092786
+    },
+    "test_metrics": {
+      "exact_match_accuracy": 0.27884615384615385,
+      "mean_finger_accuracy": 0.6634615384615385,
+      "per_finger_accuracy": {
+        "thumb": 0.4326923076923077,
+        "index": 0.8076923076923077,
+        "middle": 0.6442307692307693,
+        "ring": 0.8846153846153846,
+        "pinky": 0.5480769230769231
+      },
+      "mean_hamming_distance": 1.6826923076923077
+    }
+  },
+  {
+    "name": "CNN_derivatives_w16",
+    "window_size": 16,
+    "model_type": "cnn",
+    "use_derivatives": true,
+    "cross_orientation": true,
+    "train_samples": 97,
+    "test_samples": 104,
+    "train_metrics": {
+      "exact_match_accuracy": 0.8350515463917526,
+      "mean_finger_accuracy": 0.9154639175257732,
+      "per_finger_accuracy": {
+        "thumb": 0.9175257731958762,
+        "index": 0.9175257731958762,
+        "middle": 0.9690721649484536,
+        "ring": 0.8865979381443299,
+        "pinky": 0.8865979381443299
+      },
+      "mean_hamming_distance": 0.422680412371134
+    },
+    "test_metrics": {
+      "exact_match_accuracy": 0.23076923076923078,
+      "mean_finger_accuracy": 0.7346153846153847,
+      "per_finger_accuracy": {
+        "thumb": 0.33653846153846156,
+        "index": 0.7211538461538461,
+        "middle": 0.7884615384615384,
+        "ring": 0.8557692307692307,
+        "pinky": 0.9711538461538461
+      },
+      "mean_hamming_distance": 1.3269230769230769
+    }
+  }
+]
