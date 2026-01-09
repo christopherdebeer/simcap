@@ -46,6 +46,7 @@ docs/
 ### Research
 | Document | Description | Updated |
 |----------|-------------|---------|
+| [IMU Hand Pose Literature Review](./research/imu-hand-pose-literature-review.md) | **Comprehensive literature review + next steps** | 2026-01-09 |
 | [V6 Physics-Constrained Architecture](./research/v6-physics-constrained-architecture.md) | **Physics-constrained inverse magnetometry (+48.8% accuracy)** | 2026-01-07 |
 | [Literature Techniques Summary](./research/literature-techniques-summary.md) | Summary of all 3 experiments (all negative) | 2026-01-06 |
 | [arXiv Literature Review](./research/arxiv-literature-review.md) | Survey of small model training techniques | 2026-01-06 |
@@ -171,6 +172,6 @@ When adding new documentation:
 
 ---
 
-**Index Last Updated:** 2026-01-06
+**Index Last Updated:** 2026-01-09
 **Total Documents:** 60+
 **Categories:** 6
