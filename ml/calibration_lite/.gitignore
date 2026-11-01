@@ -1,0 +1,3 @@
+__pycache__/
+generated/*.so
+results/parity_*.npz

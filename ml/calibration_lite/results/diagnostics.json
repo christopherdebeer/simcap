@@ -1,0 +1,629 @@
+{
+  "note": "Secondary same-session orientation diagnostic; no new untouched final test. Fixed centroid, no tuning.",
+  "pitch_definition": "degrees(atan2(-ax,sqrt(ay^2+az^2))); not ground-truth orientation during motion",
+  "orientation": [
+    {
+      "direction": 1,
+      "train_count": 277,
+      "test_count": 560,
+      "train_class_counts": {
+        "eeeee": 26,
+        "eeeef": 15,
+        "eeefe": 26,
+        "eeeff": 42,
+        "eefee": 3,
+        "eefff": 44,
+        "efeee": 32,
+        "feeee": 20,
+        "ffeee": 15,
+        "fffff": 54
+      },
+      "test_class_counts": {
+        "eeeee": 28,
+        "eeeef": 6,
+        "eeefe": 88,
+        "eeeff": 17,
+        "eefee": 41,
+        "eefff": 75,
+        "efeee": 79,
+        "feeee": 99,
+        "ffeee": 69,
+        "fffff": 58
+      },
+      "models": {
+        "raw": {
+          "n": 560,
+          "exact_chord_accuracy": 0.825,
+          "macro_recall": 0.8241818181818182,
+          "per_finger_accuracy": 0.9182142857142858,
+          "coverage": 1.0,
+          "accepted_count": 560,
+          "accepted_accuracy": 0.825,
+          "correct_accepted_fraction": 0.825,
+          "per_class": {
+            "eeeee": {
+              "n": 28,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            },
+            "eeeef": {
+              "n": 6,
+              "accuracy": 0.8333333333333334,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.8333333333333334
+            },
+            "eeefe": {
+              "n": 88,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            },
+            "eeeff": {
+              "n": 17,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            },
+            "eefee": {
+              "n": 41,
+              "accuracy": 0.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.0
+            },
+            "eefff": {
+              "n": 75,
+              "accuracy": 0.8933333333333333,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.8933333333333333
+            },
+            "efeee": {
+              "n": 79,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            },
+            "feeee": {
+              "n": 99,
+              "accuracy": 0.5151515151515151,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.5151515151515151
+            },
+            "ffeee": {
+              "n": 69,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            },
+            "fffff": {
+              "n": 58,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            }
+          }
+        },
+        "relative": {
+          "n": 560,
+          "exact_chord_accuracy": 0.825,
+          "macro_recall": 0.8241818181818182,
+          "per_finger_accuracy": 0.9182142857142858,
+          "coverage": 1.0,
+          "accepted_count": 560,
+          "accepted_accuracy": 0.825,
+          "correct_accepted_fraction": 0.825,
+          "per_class": {
+            "eeeee": {
+              "n": 28,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            },
+            "eeeef": {
+              "n": 6,
+              "accuracy": 0.8333333333333334,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.8333333333333334
+            },
+            "eeefe": {
+              "n": 88,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            },
+            "eeeff": {
+              "n": 17,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            },
+            "eefee": {
+              "n": 41,
+              "accuracy": 0.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.0
+            },
+            "eefff": {
+              "n": 75,
+              "accuracy": 0.8933333333333333,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.8933333333333333
+            },
+            "efeee": {
+              "n": 79,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            },
+            "feeee": {
+              "n": 99,
+              "accuracy": 0.5151515151515151,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.5151515151515151
+            },
+            "ffeee": {
+              "n": 69,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            },
+            "fffff": {
+              "n": 58,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            }
+          }
+        },
+        "soft_direction": {
+          "n": 560,
+          "exact_chord_accuracy": 0.7589285714285714,
+          "macro_recall": 0.7155303030303031,
+          "per_finger_accuracy": 0.8878571428571429,
+          "coverage": 1.0,
+          "accepted_count": 560,
+          "accepted_accuracy": 0.7589285714285714,
+          "correct_accepted_fraction": 0.7589285714285714,
+          "per_class": {
+            "eeeee": {
+              "n": 28,
+              "accuracy": 0.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.0
+            },
+            "eeeef": {
+              "n": 6,
+              "accuracy": 0.8333333333333334,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.8333333333333334
+            },
+            "eeefe": {
+              "n": 88,
+              "accuracy": 0.8068181818181818,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.8068181818181818
+            },
+            "eeeff": {
+              "n": 17,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            },
+            "eefee": {
+              "n": 41,
+              "accuracy": 0.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.0
+            },
+            "eefff": {
+              "n": 75,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            },
+            "efeee": {
+              "n": 79,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            },
+            "feeee": {
+              "n": 99,
+              "accuracy": 0.5151515151515151,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.5151515151515151
+            },
+            "ffeee": {
+              "n": 69,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            },
+            "fffff": {
+              "n": 58,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            }
+          }
+        }
+      }
+    },
+    {
+      "direction": -1,
+      "train_count": 560,
+      "test_count": 277,
+      "train_class_counts": {
+        "eeeee": 28,
+        "eeeef": 6,
+        "eeefe": 88,
+        "eeeff": 17,
+        "eefee": 41,
+        "eefff": 75,
+        "efeee": 79,
+        "feeee": 99,
+        "ffeee": 69,
+        "fffff": 58
+      },
+      "test_class_counts": {
+        "eeeee": 26,
+        "eeeef": 15,
+        "eeefe": 26,
+        "eeeff": 42,
+        "eefee": 3,
+        "eefff": 44,
+        "efeee": 32,
+        "feeee": 20,
+        "ffeee": 15,
+        "fffff": 54
+      },
+      "models": {
+        "raw": {
+          "n": 277,
+          "exact_chord_accuracy": 0.8483754512635379,
+          "macro_recall": 0.7433862433862435,
+          "per_finger_accuracy": 0.9314079422382672,
+          "coverage": 1.0,
+          "accepted_count": 277,
+          "accepted_accuracy": 0.8483754512635379,
+          "correct_accepted_fraction": 0.8483754512635379,
+          "per_class": {
+            "eeeee": {
+              "n": 26,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            },
+            "eeeef": {
+              "n": 15,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            },
+            "eeefe": {
+              "n": 26,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            },
+            "eeeff": {
+              "n": 42,
+              "accuracy": 0.9523809523809523,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.9523809523809523
+            },
+            "eefee": {
+              "n": 3,
+              "accuracy": 0.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.0
+            },
+            "eefff": {
+              "n": 44,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            },
+            "efeee": {
+              "n": 32,
+              "accuracy": 0.5,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.5
+            },
+            "feeee": {
+              "n": 20,
+              "accuracy": 0.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.0
+            },
+            "ffeee": {
+              "n": 15,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            },
+            "fffff": {
+              "n": 54,
+              "accuracy": 0.9814814814814815,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.9814814814814815
+            }
+          }
+        },
+        "relative": {
+          "n": 277,
+          "exact_chord_accuracy": 0.8483754512635379,
+          "macro_recall": 0.7433862433862435,
+          "per_finger_accuracy": 0.9314079422382672,
+          "coverage": 1.0,
+          "accepted_count": 277,
+          "accepted_accuracy": 0.8483754512635379,
+          "correct_accepted_fraction": 0.8483754512635379,
+          "per_class": {
+            "eeeee": {
+              "n": 26,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            },
+            "eeeef": {
+              "n": 15,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            },
+            "eeefe": {
+              "n": 26,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            },
+            "eeeff": {
+              "n": 42,
+              "accuracy": 0.9523809523809523,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.9523809523809523
+            },
+            "eefee": {
+              "n": 3,
+              "accuracy": 0.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.0
+            },
+            "eefff": {
+              "n": 44,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            },
+            "efeee": {
+              "n": 32,
+              "accuracy": 0.5,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.5
+            },
+            "feeee": {
+              "n": 20,
+              "accuracy": 0.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.0
+            },
+            "ffeee": {
+              "n": 15,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            },
+            "fffff": {
+              "n": 54,
+              "accuracy": 0.9814814814814815,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.9814814814814815
+            }
+          }
+        },
+        "soft_direction": {
+          "n": 277,
+          "exact_chord_accuracy": 0.779783393501805,
+          "macro_recall": 0.6546362433862434,
+          "per_finger_accuracy": 0.9018050541516246,
+          "coverage": 1.0,
+          "accepted_count": 277,
+          "accepted_accuracy": 0.779783393501805,
+          "correct_accepted_fraction": 0.779783393501805,
+          "per_class": {
+            "eeeee": {
+              "n": 26,
+              "accuracy": 0.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.0
+            },
+            "eeeef": {
+              "n": 15,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            },
+            "eeefe": {
+              "n": 26,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            },
+            "eeeff": {
+              "n": 42,
+              "accuracy": 0.9523809523809523,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.9523809523809523
+            },
+            "eefee": {
+              "n": 3,
+              "accuracy": 0.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.0
+            },
+            "eefff": {
+              "n": 44,
+              "accuracy": 1.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 1.0
+            },
+            "efeee": {
+              "n": 32,
+              "accuracy": 0.8125,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.8125
+            },
+            "feeee": {
+              "n": 20,
+              "accuracy": 0.0,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.0
+            },
+            "ffeee": {
+              "n": 15,
+              "accuracy": 0.8,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.8
+            },
+            "fffff": {
+              "n": 54,
+              "accuracy": 0.9814814814814815,
+              "coverage": 1.0,
+              "correct_accepted_fraction": 0.9814814814814815
+            }
+          }
+        }
+      }
+    }
+  ],
+  "quality": {
+    "train": {
+      "eeeee": {
+        "n": 27,
+        "anomalous_timestamp": 0
+      },
+      "eeeef": {
+        "n": 30,
+        "anomalous_timestamp": 1
+      },
+      "eeefe": {
+        "n": 49,
+        "anomalous_timestamp": 0
+      },
+      "eeeff": {
+        "n": 30,
+        "anomalous_timestamp": 0
+      },
+      "eefee": {
+        "n": 46,
+        "anomalous_timestamp": 0
+      },
+      "eefff": {
+        "n": 59,
+        "anomalous_timestamp": 0
+      },
+      "efeee": {
+        "n": 53,
+        "anomalous_timestamp": 0
+      },
+      "feeee": {
+        "n": 27,
+        "anomalous_timestamp": 27
+      },
+      "ffeee": {
+        "n": 56,
+        "anomalous_timestamp": 0
+      },
+      "fffff": {
+        "n": 38,
+        "anomalous_timestamp": 0
+      }
+    },
+    "development": {
+      "eeeee": {
+        "n": 13,
+        "anomalous_timestamp": 0
+      },
+      "eeeef": {
+        "n": 7,
+        "anomalous_timestamp": 0
+      },
+      "eeefe": {
+        "n": 28,
+        "anomalous_timestamp": 0
+      },
+      "eeeff": {
+        "n": 16,
+        "anomalous_timestamp": 7
+      },
+      "eefee": {
+        "n": 27,
+        "anomalous_timestamp": 0
+      },
+      "eefff": {
+        "n": 35,
+        "anomalous_timestamp": 0
+      },
+      "efeee": {
+        "n": 31,
+        "anomalous_timestamp": 0
+      },
+      "feeee": {
+        "n": 13,
+        "anomalous_timestamp": 13
+      },
+      "ffeee": {
+        "n": 33,
+        "anomalous_timestamp": 0
+      },
+      "fffff": {
+        "n": 21,
+        "anomalous_timestamp": 0
+      }
+    },
+    "test": {
+      "eeeee": {
+        "n": 371,
+        "anomalous_timestamp": 0
+      },
+      "eeeef": {
+        "n": 28,
+        "anomalous_timestamp": 0
+      },
+      "eeefe": {
+        "n": 120,
+        "anomalous_timestamp": 0
+      },
+      "eeeff": {
+        "n": 89,
+        "anomalous_timestamp": 2
+      },
+      "eefee": {
+        "n": 76,
+        "anomalous_timestamp": 4
+      },
+      "eefff": {
+        "n": 112,
+        "anomalous_timestamp": 0
+      },
+      "efeee": {
+        "n": 61,
+        "anomalous_timestamp": 6
+      },
+      "feeee": {
+        "n": 96,
+        "anomalous_timestamp": 4
+      },
+      "ffeee": {
+        "n": 108,
+        "anomalous_timestamp": 0
+      },
+      "fffff": {
+        "n": 101,
+        "anomalous_timestamp": 0
+      }
+    }
+  },
+  "warning": "Timestamp anomalies suggest integrity problems but do not prove corrupted magnetometer axes. No silent correction applied."
+}
